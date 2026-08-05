@@ -36,7 +36,9 @@ router.post('/request-otp', async (req, res) => {
         const existingUser = await prisma.user.findUnique({ where: { phone } });
         if (existingUser) return res.status(400).json({ error: 'Ce numéro est déjà inscrit.' });
 
-        const code = Math.floor(1000 + Math.random() * 9000).toString(); // 4 chiffres
+        // Mode Démo Automatique : si Twilio n'est pas configuré, le code est toujours 1234
+        const useDemoMode = !process.env.TWILIO_ACCOUNT_SID;
+        const code = useDemoMode ? '1234' : Math.floor(1000 + Math.random() * 9000).toString();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
         await prisma.verificationCode.upsert({
@@ -45,7 +47,11 @@ router.post('/request-otp', async (req, res) => {
             create: { phone, code, expiresAt }
         });
 
-        await sendSms(phone, `Votre code de vérification Mongain est : ${code}. Il expire dans 10 minutes.`);
+        if (useDemoMode) {
+            console.log(`[DEMO MODE] Code 1234 auto-approuvé pour ${phone}`);
+        } else {
+            await sendSms(phone, `Votre code de vérification Mongain est : ${code}. Il expire dans 10 minutes.`);
+        }
 
         return res.json({ message: 'Code envoyé avec succès.' });
     } catch (e: any) {
@@ -63,7 +69,8 @@ router.post('/request-reset-otp', async (req, res) => {
         const existingUser = await prisma.user.findUnique({ where: { phone } });
         if (!existingUser) return res.status(400).json({ error: 'Ce numéro n\'est pas reconnu.' });
 
-        const code = Math.floor(1000 + Math.random() * 9000).toString(); // 4 chiffres
+        const useDemoMode = !process.env.TWILIO_ACCOUNT_SID;
+        const code = useDemoMode ? '1234' : Math.floor(1000 + Math.random() * 9000).toString();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
         await prisma.verificationCode.upsert({
@@ -72,7 +79,11 @@ router.post('/request-reset-otp', async (req, res) => {
             create: { phone, code, expiresAt }
         });
 
-        await sendSms(phone, `[Mongain] Réinitialisation demandée. Votre code de sécurité est : ${code}. Valable 10 min.`);
+        if (useDemoMode) {
+            console.log(`[DEMO MODE] Code Reset 1234 auto-approuvé pour ${phone}`);
+        } else {
+            await sendSms(phone, `[Mongain] Réinitialisation demandée. Votre code de sécurité est : ${code}. Valable 10 min.`);
+        }
         return res.json({ message: 'Code envoyé.' });
     } catch (e: any) {
         return res.status(500).json({ error: e.message });
