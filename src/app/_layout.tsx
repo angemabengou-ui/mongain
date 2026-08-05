@@ -4,7 +4,11 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 
-SplashScreen.preventAutoHideAsync();
+try {
+  SplashScreen.preventAutoHideAsync();
+} catch (e) {
+  // Ignorer si déjà masqué nativement
+}
 
 function RootLayoutNav() {
   const { token, isLoading } = useAuth();
