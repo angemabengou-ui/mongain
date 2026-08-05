@@ -1,0 +1,91 @@
+import { API_URL } from './config';
+import { Activity } from 'lucide-react';
+import { useEffect, useState } from 'react';
+
+export default function AuditLogs({ token }: { token: string }) {
+    const [logs, setLogs] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchLogs = async () => {
+        setLoading(true);
+        try {
+            const resp = await fetch(API_URL + '/api/admin/logs', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await resp.json();
+            if (resp.ok) setLogs(data);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchLogs();
+    }, []);
+
+    const formatDate = (iso: string) => {
+        return new Date(iso).toLocaleString('fr-FR', {
+            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+    };
+
+    return (
+        <div className="dashboard-content">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <div>
+                    <h2>Journaux d'Audit (Sécurité)</h2>
+                    <p style={{ color: 'var(--text-secondary)' }}>Trace complète des actions administratives sensibles.</p>
+                </div>
+            </div>
+
+            <div className="stat-card" style={{ padding: 0, overflow: 'hidden' }}>
+                {loading ? (
+                    <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Chargement des logs...</div>
+                ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                        <thead>
+                            <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                                <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Horodatage</th>
+                                <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Administrateur</th>
+                                <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Action</th>
+                                <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Détails de l'évènement</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {logs.map(log => (
+                                <tr key={log.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                                    <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                                        {formatDate(log.createdAt)}
+                                    </td>
+                                    <td style={{ padding: '16px', fontWeight: 'bold' }}>
+                                        {log.admin.name} <br />
+                                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{log.admin.phone}</span>
+                                    </td>
+                                    <td style={{ padding: '16px' }}>
+                                        <span style={{
+                                            padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold',
+                                            backgroundColor: '#4F46E520', color: '#4F46E5'
+                                        }}>
+                                            {log.action}
+                                        </span>
+                                    </td>
+                                    <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '14px' }}>
+                                        <Activity size={12} style={{ marginRight: '6px', display: 'inline-block' }} />
+                                        {log.details}
+                                    </td>
+                                </tr>
+                            ))}
+                            {logs.length === 0 && (
+                                <tr>
+                                    <td colSpan={4} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Aucun log d'audit disponible.</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+        </div>
+    );
+}

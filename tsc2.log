@@ -1,0 +1,6 @@
+admin-web/src/main.tsx(4,17): error TS5097: An import path can only end with a '.tsx' extension when 'allowImportingTsExtensions' is enabled.
+backend/prisma.config.ts(4,30): error TS2307: Cannot find module 'prisma/config' or its corresponding type declarations.
+backend/test.ts(1,19): error TS7016: Could not find a declaration file for module 'node-fetch'. 'D:/Users/om0886/Desktop/mongain/node_modules/node-fetch/lib/index.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/node-fetch` if it exists or add a new declaration (.d.ts) file containing `declare module 'node-fetch';`
+src/app/transfer-confirm.tsx(144,47): error TS18047: 'success' is possibly 'null'.
+src/app/transfer-confirm.tsx(195,129): error TS2339: Property 'border' does not exist on type '{ primary: string; surface: string; background: string; textPrimary: string; textSecondary: string; error: string; success: string; }'.

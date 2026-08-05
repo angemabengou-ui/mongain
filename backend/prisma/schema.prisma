@@ -1,0 +1,86 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String        @id @default(uuid())
+  name              String
+  phone             String        @unique
+  pin               String // hashed pin code
+  failedPinAttempts Int           @default(0)
+  lockedUntil       DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  role              String        @default("USER") // USER, AGENT, ADMIN, MERCHANT
+  isActive          Boolean       @default(true)
+  jwtVersion        Int           @default(0) // Invalidates sessions when logged in elsewhere
+  pushToken         String?
+  wallet            Wallet?
+  reclamations      Reclamation[]
+  auditLogs         AuditLog[]
+}
+
+model Reclamation {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  status      String   @default("OPEN") // OPEN, CLOSED
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Wallet {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  balance   Float    @default(0.0)
+  currency  String   @default("FCFA")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations inverses pour les transactions
+  sentTransactions     Transaction[] @relation("SenderWallet")
+  receivedTransactions Transaction[] @relation("ReceiverWallet")
+}
+
+model Transaction {
+  id        String   @id @default(uuid())
+  amount    Float
+  status    String   @default("COMPLETED") // PENDING, COMPLETED, FAILED
+  reference String   @unique @default(cuid()) // Ref unique pour traçage
+  createdAt DateTime @default(now())
+
+  // Relations
+  senderWalletId   String?
+  receiverWalletId String
+
+  senderWallet   Wallet? @relation("SenderWallet", fields: [senderWalletId], references: [id])
+  receiverWallet Wallet  @relation("ReceiverWallet", fields: [receiverWalletId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  adminId   String
+  admin     User     @relation(fields: [adminId], references: [id])
+  action    String
+  details   String
+  createdAt DateTime @default(now())
+}
+
+model VerificationCode {
+  id        String   @id @default(uuid())
+  phone     String   @unique
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}

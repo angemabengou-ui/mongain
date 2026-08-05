@@ -1,0 +1,41 @@
+Starting project at D:\Users\om0886\Desktop\mongain
+Using src/app as the root directory for Expo Router.
+React Compiler enabled
+Starting Metro Bundler
+
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8081
+
+Logs for your project will appear below.
+Android Bundled 1338ms node_modules\expo-router\entry.js (2155 modules)
+Android Bundled 1864ms node_modules\expo-router\entry.js (1 module)
+Web Bundled 25441ms node_modules\expo-router\entry.js (1451 modules)
+Î» Bundled 26015ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1524 modules)
+Warning: Failed to write source map for D:/Users/om0886/Desktop/mongain/node_modules/expo/node_modules/@expo/cli/node_modules/@expo/router-server/node/render.js.bundle?platform=web&dev=true&hot=false&transform.engine=hermes&transform.routerRoot=src%2Fapp&resolver.environment=node&transform.environment=node&unstable_transformProfile=hermes-stable to undefined. Source maps will be unavailable for this module.
+ENOSPC: no space left on device, write
+"shadow*" style props are deprecated. Use "boxShadow".
+Web Bundled 12933ms node_modules\expo-router\entry.js (1451 modules)
+[metro-file-map] Cache write error
+: Error: ENOSPC: no space left on device, write
+    at async write (node:internal/fs/promises:745:8)
+    at async writeFileHandle (node:internal/fs/promises:502:7)
+    at async D:\Users\om0886\Desktop\mongain\node_modules\@expo\metro-file-map\build\cache\DiskCacheManager.js:78:17 {
+  errno: -4055,
+  code: 'ENOSPC',
+  syscall: 'write'
+}
+Web  INFO  %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+Web  LOG  Running application "main" with appParams:
+ {"hydrate": undefined, "rootTag": "#root"} 
+Development-level warnings: ON.
+Performance optimizations: OFF.
+Web  WARN  "shadow*" style props are deprecated. Use "boxShadow".
+Web  WARN  Animated: `useNativeDriver` is not supported because the native animated module is missing. Falling back to JS-based animation. To resolve this, add `RCTAnimation` module to this app, or remove `useNativeDriver`. Make sure to run `bundle exec pod install` first. Read more about autolinking: https://github.com/react-native-community/cli/blob/master/docs/autolinking.md
+Web  ERROR  [TypeError: NetworkError when attempting to fetch resource.] NamelessError@http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:141201:3
+captureCurrentStack@http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:141206:12
+addErrorStacks@http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:141188:21
+console[level]@http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:141153:58
+consoleErrorMiddleware@http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:9095:27
+install/console.error@http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:9035:29
+DashboardScreen/loadData<@http://localhost:8081/node_modules/expo-router/entry.bundle?platform=web&dev=true&hot=false&lazy=true&transform.routerRoot=src%2Fapp&transform.reactCompiler=true:76163:17
+Terminer le programme de commandes (O/N)ÿ? 
