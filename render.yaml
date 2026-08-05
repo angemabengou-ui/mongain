@@ -1,7 +1,8 @@
 services:
   - type: web
     name: mongain-backend
-    env: node
+    runtime: node
+    plan: free
     rootDir: backend
     buildCommand: npm install && npx prisma generate
     startCommand: npm start
