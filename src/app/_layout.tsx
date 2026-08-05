@@ -2,6 +2,7 @@ import { Stack, useRootNavigationState, useRouter, useSegments } from 'expo-rout
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import 'react-native-get-random-values'; // REQUIRED POLYFILL FOR SOCKET.IO ON ANDROID
 import { AuthProvider, useAuth } from '../context/AuthContext';
 
 try {
