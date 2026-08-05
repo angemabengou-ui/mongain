@@ -47,14 +47,17 @@ function RootLayoutNav() {
   );
 }
 
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SecurityWrapper } from '../components/SecurityWrapper';
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <SecurityWrapper>
-        <RootLayoutNav />
-      </SecurityWrapper>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <SecurityWrapper>
+          <RootLayoutNav />
+        </SecurityWrapper>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
