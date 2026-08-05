@@ -5,9 +5,7 @@ import { Platform } from 'react-native';
 // • Téléphone Android physique (même réseau WiFi) : http://192.168.1.108:3000
 // • Émulateur Android (AVD)                       : http://10.0.2.2:3000
 // • Simulateur iOS / navigateur web               : http://localhost:3000
-export const BASE_URL = process.env.EXPO_PUBLIC_API_URL || (Platform.OS === 'web'
-    ? 'http://localhost:3000'
-    : 'http://192.168.1.108:3000');
+export const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://mongain-backend.onrender.com';
 
 const TOKEN_KEY = 'mongain_token';
 
