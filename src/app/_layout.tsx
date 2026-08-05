@@ -22,6 +22,9 @@ function RootLayoutNav() {
     } else if (token && inAuthGroup) {
       router.replace('/');
     }
+
+    // Libérer l'écran de chargement natif une fois que le routage est décidé
+    SplashScreen.hideAsync();
   }, [token, isLoading, segments, rootNavigationState?.key]);
 
   return (

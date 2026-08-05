@@ -19,7 +19,13 @@
     "android": {
       "package": "com.mongain.superapp",
       "permissions": [
-        "NOTIFICATIONS"
+        "NOTIFICATIONS",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -66,6 +72,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": false
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "62c3cfa7-ad7e-4ec8-8c22-df55b5c34464"
+      }
     }
   }
 }
