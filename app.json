@@ -9,17 +9,11 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.mongain.superapp",
-      "infoPlist": {
-        "UIBackgroundModes": [
-          "remote-notification"
-        ]
-      }
+      "bundleIdentifier": "com.mongain.superapp"
     },
     "android": {
       "package": "com.mongain.superapp",
       "permissions": [
-        "NOTIFICATIONS",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_CONTACTS",

@@ -1,52 +1,11 @@
-import Constants from 'expo-constants';
-import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Alert } from 'react-native';
 import { io, Socket } from 'socket.io-client';
 import { apiGetMe, apiLogin, apiRegister, apiUpdatePushToken, BASE_URL, deleteToken, getToken, saveToken, setUnauthorizedHandler, User } from '../services/api';
 
-Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-        shouldShowBanner: true,
-        shouldShowList: true,
-    }),
-});
-
 async function registerForPushNotificationsAsync() {
-    let token;
-    if (Platform.OS === 'android') {
-        Notifications.setNotificationChannelAsync('default', {
-            name: 'default',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#4F46E5',
-        });
-    }
-    if (Device.isDevice) {
-        const { status: existingStatus } = await Notifications.getPermissionsAsync();
-        let finalStatus = existingStatus;
-        if (existingStatus !== 'granted') {
-            const { status } = await Notifications.requestPermissionsAsync();
-            finalStatus = status;
-        }
-        if (finalStatus !== 'granted') {
-            console.log('Push permission denied.');
-            return;
-        }
-        try {
-            token = await Notifications.getExpoPushTokenAsync({
-                projectId: Constants.expoConfig?.extra?.eas?.projectId ?? 'mock-project-id',
-            });
-        } catch (e) {
-            console.log('Push token init error:', e);
-            // Allow app to continue even if push notifications fail locally
-        }
-    }
-    return token?.data;
+    // Push notifications are temporarily disabled for stability (requires google-services.json)
+    return null;
 }
 
 interface AuthContextType {
