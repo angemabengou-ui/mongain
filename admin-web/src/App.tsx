@@ -9,6 +9,7 @@ import Reclamations from './Reclamations';
 import Settings from './Settings';
 import Treasury from './Treasury';
 import Users from './Users';
+import { API_URL } from './config';
 
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('admin_token'));
@@ -25,6 +26,16 @@ export default function App() {
     localStorage.removeItem('admin_phone');
     setToken(null);
   };
+
+  useEffect(() => {
+    if (token) {
+      fetch(API_URL + '/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+        .then(res => {
+          if (res.status === 401 || res.status === 403) logout();
+        })
+        .catch(console.error);
+    }
+  }, [token]);
 
   if (!token) return <Login setToken={(t, r, n, p) => {
     localStorage.setItem('admin_token', t);

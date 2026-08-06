@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { AuthRequest, JWT_SECRET, authMiddleware } from '../middleware/auth';
@@ -24,8 +25,16 @@ const loginSchema = z.object({
     pin: z.string(),
 });
 
+const smsLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // Limit each IP to 5 SMS requests per windowMs
+    message: { error: 'Trop de requêtes SMS pour cette adresse IP, veuillez réessayer après 15 minutes.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
 // POST /api/auth/request-otp
-router.post('/request-otp', async (req, res) => {
+router.post('/request-otp', smsLimiter, async (req, res) => {
     const parsed = requestOtpSchema.safeParse(req.body);
     if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -60,7 +69,7 @@ router.post('/request-otp', async (req, res) => {
 });
 
 // POST /api/auth/request-reset-otp
-router.post('/request-reset-otp', async (req, res) => {
+router.post('/request-reset-otp', smsLimiter, async (req, res) => {
     const parsed = requestOtpSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
