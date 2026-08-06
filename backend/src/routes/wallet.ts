@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { getSystemSettings } from './settings';
 
 const router = Router();
 
@@ -77,8 +78,10 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
         });
         if (!receiver || !receiver.wallet) return res.status(404).json({ error: 'Destinataire introuvable.' });
 
-        // Taxe Mongain de 1% sur le paiement P2P
-        const taxVal = Math.ceil(amount * 0.01);
+        const settings = await getSystemSettings();
+
+        // Taxe Mongain Dynamique sur le paiement P2P
+        const taxVal = Math.ceil(amount * settings.taxP2P);
         const totalDebit = amount + taxVal;
 
         if (sender.wallet.balance < totalDebit) {
@@ -324,34 +327,67 @@ router.post('/agent-withdraw', authMiddleware, async (req: AuthRequest, res) => 
             return res.status(400).json({ error: 'Erreur intégrité. Montant corrompu.' });
         }
 
-        // Règle Métier : Le retrait chez un Agent est GRATUIT (sans frais)
-        const totalDebit = amount;
+        const settings = await getSystemSettings();
 
-        if (client.wallet.balance < totalDebit) return res.status(400).json({ error: `Solde insuffisant.` });
+        // --- Commission Partagée Dynamique ---
+        // Le Client paie la taxe globale (ex: 1.3%)
+        const totalTax = Math.ceil(amount * settings.taxWithdraw);
+        const totalDebit = amount + totalTax;
+
+        // L'agent (Commerçant) encaisse la prime (ex: 0.3%)
+        const agentReward = Math.ceil(amount * settings.rewardMerchant);
+
+        // Mongain encaisse le reste (ex: 1.0%)
+        const netMongain = totalTax - agentReward;
+
+        if (client.wallet.balance < totalDebit) return res.status(400).json({ error: `Solde insuffisant pour le retrait (Frais: ${totalTax} FCFA).` });
         if (client.id === agent.id) return res.status(400).json({ error: 'Opération circulaire interdite.' });
+
+        const corporate = await prisma.user.findUnique({
+            where: { phone: '+24100000000' },
+            include: { wallet: true }
+        });
 
         // Transaction atomique
         const transactionResult = await prisma.$transaction(async (tx) => {
-            // Débit client total (Safe Atomic SQL Constraint)
+            // 1. Débit client total
             const clientNav = await tx.wallet.update({
                 where: { id: client.wallet!.id, balance: { gte: totalDebit } },
                 data: { balance: { decrement: totalDebit } }
             });
 
-            // Crédit Agent (Montant exact, retrait gratuit)
+            // 2. Crédit Agent (Montant du retrait + Prime Commerçant)
             await tx.wallet.update({
                 where: { id: agent.wallet!.id },
-                data: { balance: { increment: amount } }
+                data: { balance: { increment: amount + agentReward } }
             });
 
-            // Log de la transaction (Retrait)
+            // 3. Bénéfice Corporate
+            if (corporate && corporate.wallet && netMongain > 0) {
+                await tx.wallet.update({
+                    where: { id: corporate.wallet.id },
+                    data: { balance: { increment: netMongain } }
+                });
+
+                await tx.transaction.create({
+                    data: {
+                        amount: netMongain,
+                        senderWalletId: client.wallet!.id,
+                        receiverWalletId: corporate.wallet.id,
+                        status: 'COMPLETED',
+                        reference: 'FEE-REVENUE-' + Math.random().toString(36).substring(7).toUpperCase(),
+                    }
+                });
+            }
+
+            // Historique Global
             const transactionRecord = await tx.transaction.create({
                 data: {
                     amount,
                     senderWalletId: client.wallet!.id,
                     receiverWalletId: agent.wallet!.id,
                     status: 'COMPLETED',
-                    reference: 'WITHDRAW-' + Math.random().toString(36).substring(7).toUpperCase()
+                    reference: 'WITHDRAW-' + Math.random().toString(36).substring(7).toUpperCase(),
                 }
             });
 

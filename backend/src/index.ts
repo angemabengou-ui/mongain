@@ -4,7 +4,9 @@ import express from 'express';
 import http from 'http';
 import { Server } from 'socket.io';
 import { prisma } from './prisma';
+import adminRoutes from './routes/admin';
 import authRoutes from './routes/auth';
+import settingsRoutes from './routes/settings';
 import walletRoutes from './routes/wallet';
 
 const app = express();
@@ -20,7 +22,6 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-import adminRoutes from './routes/admin';
 import reclamationRoutes from './routes/reclamation';
 
 // Routes
@@ -28,6 +29,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/reclamation', reclamationRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', app: 'Mongain Backend', socket: true }));

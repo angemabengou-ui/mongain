@@ -57,7 +57,7 @@ model Transaction {
   id        String   @id @default(uuid())
   amount    Float
   status    String   @default("COMPLETED") // PENDING, COMPLETED, FAILED
-  reference String   @unique @default(cuid()) // Ref unique pour traçage
+  reference String   @unique @default(cuid()) // Ref unique pour traÃ§age
   createdAt DateTime @default(now())
 
   // Relations
@@ -83,4 +83,12 @@ model VerificationCode {
   code      String
   expiresAt DateTime
   createdAt DateTime @default(now())
+}
+
+model SystemSettings {
+  id             Int      @id @default(autoincrement())
+  taxP2P         Float    @default(0.01) // 1.0% par défaut
+  taxWithdraw    Float    @default(0.013) // 1.3% par défaut
+  rewardMerchant Float    @default(0.003) // 0.3% par défaut
+  updatedAt      DateTime @updatedAt
 }
