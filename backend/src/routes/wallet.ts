@@ -56,6 +56,101 @@ router.post('/generate-withdraw-code', authMiddleware, async (req: AuthRequest, 
     }
 });
 
+// POST /api/wallet/transfer
+router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const parsed = transferSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+        const { receiverPhone, amount } = parsed.data;
+
+        const sender = await prisma.user.findUnique({
+            where: { id: req.userId },
+            include: { wallet: true }
+        });
+        if (!sender || !sender.wallet) return res.status(404).json({ error: 'Expéditeur introuvable.' });
+        if (sender.phone === receiverPhone) return res.status(400).json({ error: 'Vous ne pouvez pas vous transférer des fonds à vous-même.' });
+
+        const receiver = await prisma.user.findUnique({
+            where: { phone: receiverPhone },
+            include: { wallet: true }
+        });
+        if (!receiver || !receiver.wallet) return res.status(404).json({ error: 'Destinataire introuvable.' });
+
+        // Taxe Mongain de 1% sur le paiement P2P
+        const taxVal = Math.ceil(amount * 0.01);
+        const totalDebit = amount + taxVal;
+
+        if (sender.wallet.balance < totalDebit) {
+            return res.status(400).json({ error: `Solde insuffisant. Vous devez disposer de ${totalDebit} FCFA (dont ${taxVal} FCFA de frais de réseau).` });
+        }
+
+        // Compte Corporate
+        const corporate = await prisma.user.findUnique({
+            where: { phone: '+24100000000' },
+            include: { wallet: true }
+        });
+
+        const newBalance = await prisma.$transaction(async (tx) => {
+            // Débit
+            const sWallet = await tx.wallet.update({
+                where: { id: sender.wallet!.id, balance: { gte: totalDebit } },
+                data: { balance: { decrement: totalDebit } }
+            });
+
+            // Crédit destinataire
+            await tx.wallet.update({
+                where: { id: receiver.wallet!.id },
+                data: { balance: { increment: amount } }
+            });
+
+            // Crédit Taxe Corporate
+            if (corporate && corporate.wallet) {
+                await tx.wallet.update({
+                    where: { id: corporate.wallet.id },
+                    data: { balance: { increment: taxVal } }
+                });
+
+                await tx.transaction.create({
+                    data: {
+                        amount: taxVal,
+                        senderWalletId: sender.wallet!.id,
+                        receiverWalletId: corporate.wallet.id,
+                        status: 'COMPLETED',
+                        reference: 'FEE-' + Math.random().toString(36).substring(7).toUpperCase(),
+                    }
+                });
+            }
+
+            // Historique Transfert
+            await tx.transaction.create({
+                data: {
+                    amount,
+                    senderWalletId: sender.wallet!.id,
+                    receiverWalletId: receiver.wallet!.id,
+                    status: 'COMPLETED',
+                    reference: 'TRANSFER-' + Math.random().toString(36).substring(7).toUpperCase(),
+                }
+            });
+
+            return sWallet.balance;
+        });
+
+        // Notifications asynchrones
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`user_${receiverPhone}`).emit('payment_received', {
+                amount,
+                from: sender.name
+            });
+        }
+
+        return res.json({ message: 'Transfert effectué avec succès.', balance: newBalance });
+    } catch (e: any) {
+        return res.status(400).json({ error: e.message || 'Erreur lors du transfert.' });
+    }
+});
+
 // GET /api/wallet/balance
 router.get('/balance', authMiddleware, async (req: AuthRequest, res) => {
     const wallet = await prisma.wallet.findUnique({ where: { userId: req.userId } });
