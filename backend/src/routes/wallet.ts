@@ -164,7 +164,13 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
         // Push Notification to Receiver
         sendPush((receiver as any).pushToken, 'Transfert Reçu 💰', `Vous avez reçu ${amount.toLocaleString('fr-FR')} FCFA de ${sender.name}.`);
 
-        return res.json({ message: 'Transfert effectué avec succès.', balance: newBalance });
+        return res.json({
+            message: 'Transfert effectué avec succès.',
+            data: {
+                remainingBalance: newBalance,
+                receiverName: receiver.name
+            }
+        });
     } catch (e: any) {
         return res.status(400).json({ error: e.message || 'Erreur lors du transfert.' });
     }
