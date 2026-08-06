@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
 
@@ -33,6 +34,19 @@ export default function ProfileScreen() {
                     </View>
                     <Text style={styles.userName}>{user?.name ?? '...'}</Text>
                     <Text style={styles.userPhone}>{user?.phone ?? '...'}</Text>
+
+                    {/* Identity P2P Barcode */}
+                    {user?.phone && (
+                        <View style={{ marginTop: 20, padding: 10, backgroundColor: '#fff', borderRadius: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10 }}>
+                            <QRCode
+                                value={`mongain://transfer?phone=${encodeURIComponent(user.phone)}&name=${encodeURIComponent(user.name || '')}`}
+                                size={120}
+                                color="#1a1d2e"
+                                backgroundColor="#ffffff"
+                            />
+                            <Text style={{ textAlign: 'center', marginTop: 8, fontSize: 11, color: '#64748b', fontWeight: 'bold' }}>SCAN P2P (MONG-ID)</Text>
+                        </View>
+                    )}
                 </View>
 
                 {/* Carte solde */}
