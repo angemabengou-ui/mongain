@@ -1,5 +1,5 @@
-import { API_URL } from './config';
 import { useState } from 'react';
+import { API_URL } from './config';
 
 export default function Login({ setToken }: { setToken: (token: string, role: string, name: string, phone: string) => void }) {
     const [phone, setPhone] = useState('+241');
@@ -20,7 +20,7 @@ export default function Login({ setToken }: { setToken: (token: string, role: st
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Erreur inconnue');
 
-            if (data.user.role !== 'ADMIN' && data.user.role !== 'AGENT') {
+            if (data.user.role !== 'ADMIN' && data.user.role !== 'AGENT' && data.user.role !== 'MERCHANT') {
                 throw new Error('Vous n\'avez pas les droits d\'accès à cette plateforme.');
             }
 

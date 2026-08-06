@@ -2,15 +2,16 @@ import { Activity, BadgeCheck, Banknote, LayoutDashboard, LogOut, MessageSquare,
 import { useEffect, useState } from 'react';
 import Agency from './Agency';
 import AuditLogs from './AuditLogs';
+import { API_URL } from './config';
 import Dashboard from './Dashboard';
 import KycMod from './KycMod';
 import Ledger from './Ledger';
 import Login from './Login';
+import MerchantDashboard from './MerchantDashboard';
 import Reclamations from './Reclamations';
 import Settings from './Settings';
 import Treasury from './Treasury';
 import Users from './Users';
-import { API_URL } from './config';
 
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('admin_token'));
@@ -18,7 +19,7 @@ export default function App() {
   const [userName, setUserName] = useState(localStorage.getItem('admin_name') || 'Admin');
   const [phone, setPhone] = useState(localStorage.getItem('admin_phone') || '');
 
-  const [activeTab, setActiveTab] = useState(role === 'AGENT' ? 'agency' : 'dashboard');
+  const [activeTab, setActiveTab] = useState(role === 'MERCHANT' ? 'merchant-dash' : role === 'AGENT' ? 'agency' : 'dashboard');
 
   const logout = () => {
     localStorage.removeItem('admin_token');
@@ -46,7 +47,7 @@ export default function App() {
     setRole(r);
     setUserName(n);
     setPhone(p);
-    setActiveTab(r === 'AGENT' ? 'agency' : 'dashboard');
+    setActiveTab(r === 'MERCHANT' ? 'merchant-dash' : r === 'AGENT' ? 'agency' : 'dashboard');
     setToken(t);
   }} />;
 
@@ -57,12 +58,18 @@ export default function App() {
       <div className="sidebar">
         <div className="sidebar-logo">
           <div className="logo-icon">M.</div>
-          Mongain {isSuperAdmin ? 'Admin' : 'Agency'}
+          Mongain {isSuperAdmin ? 'Admin' : role === 'MERCHANT' ? 'Marchand' : 'Agency'}
         </div>
         <div className="nav-links">
           {role === 'AGENT' && (
             <div className={`nav-item ${activeTab === 'agency' ? 'active' : ''}`} onClick={() => setActiveTab('agency')}>
               <Store size={20} /> Guichet (Cash)
+            </div>
+          )}
+
+          {role === 'MERCHANT' && (
+            <div className={`nav-item ${activeTab === 'merchant-dash' ? 'active' : ''}`} onClick={() => setActiveTab('merchant-dash')}>
+              <Store size={20} /> Ventes & Encaissements
             </div>
           )}
 
@@ -107,13 +114,14 @@ export default function App() {
         <div className="header">
           <h1>
             {activeTab === 'agency' ? 'Guichet Bancaire' :
-              activeTab === 'dashboard' ? 'Vue Globale' :
-                activeTab === 'treasury' ? 'Gestion Trésorerie' :
-                  activeTab === 'audit' ? 'Audit et Sécurité' :
-                    activeTab === 'users' ? 'Utilisateurs' :
-                      activeTab === 'kyc' ? 'Vérification d\'Identité' :
-                        activeTab === 'ledger' ? 'Grand Livre (AML)' :
-                          activeTab === 'settings' ? 'Paramètres' : 'Réclamations'}
+              activeTab === 'merchant-dash' ? 'Ventes & Encaissements' :
+                activeTab === 'dashboard' ? 'Vue Globale' :
+                  activeTab === 'treasury' ? 'Gestion Trésorerie' :
+                    activeTab === 'audit' ? 'Audit et Sécurité' :
+                      activeTab === 'users' ? 'Utilisateurs' :
+                        activeTab === 'kyc' ? 'Vérification d\'Identité' :
+                          activeTab === 'ledger' ? 'Grand Livre (AML)' :
+                            activeTab === 'settings' ? 'Paramètres' : 'Réclamations'}
           </h1>
           <div className="profile-badge">
             <div className="profile-avatar">{userName.charAt(0).toUpperCase()}</div>
@@ -122,6 +130,7 @@ export default function App() {
         </div>
 
         {activeTab === 'agency' && <Agency token={token} agentPhone={phone} agentName={userName} />}
+        {activeTab === 'merchant-dash' && role === 'MERCHANT' && <MerchantDashboard token={token} />}
         {activeTab === 'dashboard' && isSuperAdmin && <Dashboard token={token} />}
         {activeTab === 'users' && isSuperAdmin && <Users token={token} />}
         {activeTab === 'kyc' && isSuperAdmin && <KycMod token={token} />}
