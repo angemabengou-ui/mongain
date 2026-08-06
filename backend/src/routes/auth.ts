@@ -263,11 +263,16 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
         name: user.name,
         phone: user.phone,
         role: user.role,
+        kycStatus: (user as any).kycStatus,
+        kycLevel: (user as any).kycLevel,
         wallet: user.wallet,
     });
 });
 const updateProfileSchema = z.object({
     name: z.string().min(2, 'Le nom doit comporter au moins 2 caractères.'),
+    idCardFront: z.string().optional(),
+    idCardBack: z.string().optional(),
+    selfie: z.string().optional(),
 });
 
 // PUT /api/auth/profile
@@ -278,17 +283,35 @@ router.put('/profile', authMiddleware, async (req: AuthRequest, res) => {
     }
 
     try {
-        const updatedUser = await prisma.user.update({
+        const { name, idCardFront, idCardBack, selfie } = parsed.data;
+
+        let updates: any = { name };
+
+        if (idCardFront && idCardBack && selfie) {
+            updates.idCardFront = idCardFront;
+            updates.idCardBack = idCardBack;
+            updates.selfie = selfie;
+            updates.kycStatus = 'PENDING';
+        } else {
+            if (idCardFront) updates.idCardFront = idCardFront;
+            if (idCardBack) updates.idCardBack = idCardBack;
+            if (selfie) updates.selfie = selfie;
+        }
+
+        const user = await (prisma.user as any).update({
             where: { id: req.userId },
-            data: { name: parsed.data.name },
+            data: updates,
             include: { wallet: true },
         });
 
         return res.json({
-            id: updatedUser.id,
-            name: updatedUser.name,
-            phone: updatedUser.phone,
-            wallet: updatedUser.wallet,
+            id: user.id,
+            name: user.name,
+            phone: user.phone,
+            role: user.role,
+            kycStatus: user.kycStatus,
+            kycLevel: user.kycLevel,
+            wallet: user.wallet,
         });
     } catch (e) {
         console.error('Erreur mise à jour profil:', e);

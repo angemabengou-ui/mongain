@@ -74,15 +74,30 @@ export default function KycMod({ token }: { token: string }) {
                                 <h3 style={{ margin: 0, color: '#f8fafc' }}>{p.name}</h3>
                                 <p style={{ margin: '5px 0', color: '#94a3b8' }}>{p.phone} - Soumis le {new Date(p.createdAt).toLocaleDateString()}</p>
 
-                                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                                    <div style={{ width: '100px', height: '60px', backgroundColor: '#334155', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        {p.idCardFront ? 'CNI Recto' : 'Manquant'}
+                                <div style={{ display: 'flex', gap: '15px', marginTop: '15px' }}>
+                                    <div style={{ position: 'relative' }}>
+                                        <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '5px' }}>CNI Recto</p>
+                                        {p.idCardFront ? (
+                                            <img src={p.idCardFront} alt="CNI Recto" style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #334155' }} />
+                                        ) : (
+                                            <div style={{ width: '120px', height: '80px', backgroundColor: '#334155', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>Manquant</div>
+                                        )}
                                     </div>
-                                    <div style={{ width: '100px', height: '60px', backgroundColor: '#334155', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        {p.idCardBack ? 'CNI Verso' : 'Manquant'}
+                                    <div style={{ position: 'relative' }}>
+                                        <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '5px' }}>CNI Verso</p>
+                                        {p.idCardBack ? (
+                                            <img src={p.idCardBack} alt="CNI Verso" style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #334155' }} />
+                                        ) : (
+                                            <div style={{ width: '120px', height: '80px', backgroundColor: '#334155', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>Manquant</div>
+                                        )}
                                     </div>
-                                    <div style={{ width: '100px', height: '60px', backgroundColor: '#334155', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        {p.selfie ? 'Selfie' : 'Manquant'}
+                                    <div style={{ position: 'relative' }}>
+                                        <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '5px' }}>Selfie</p>
+                                        {p.selfie ? (
+                                            <img src={p.selfie} alt="Selfie" style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #334155' }} />
+                                        ) : (
+                                            <div style={{ width: '120px', height: '80px', backgroundColor: '#334155', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>Manquant</div>
+                                        )}
                                     </div>
                                 </div>
                             </div>

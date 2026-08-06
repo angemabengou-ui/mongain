@@ -121,8 +121,8 @@ export const apiLogin = (phone: string, pin: string) =>
 export const apiGetMe = () =>
     request('GET', '/api/auth/me', undefined, true) as Promise<User>;
 
-export const apiUpdateProfile = (name: string, email?: string) =>
-    request('PUT', '/api/auth/profile', { name, email }, true) as Promise<User>;
+export const apiUpdateProfile = (name: string, idCardFront?: string, idCardBack?: string, selfie?: string) =>
+    request('PUT', '/api/auth/profile', { name, idCardFront, idCardBack, selfie }, true) as Promise<User>;
 
 export const apiUpdatePin = (oldPin: string, newPin: string) =>
     request('PUT', '/api/auth/pin', { oldPin, newPin }, true) as Promise<{ message: string }>;

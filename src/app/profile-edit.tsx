@@ -1,17 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
+    Image,
     KeyboardAvoidingView,
     Platform,
     SafeAreaView,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
 import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
@@ -25,6 +28,28 @@ export default function ProfileEditScreen() {
 
     const [name, setName] = useState(user?.name ?? '');
     const [loading, setLoading] = useState(false);
+    const [documents, setDocuments] = useState<any>({
+        idCardFront: null,
+        idCardBack: null,
+        selfie: null
+    });
+
+    const pickImage = async (field: string) => {
+        let result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [4, 3],
+            quality: 0.1, // très basse qualité pour limiter la taille en Base64
+            base64: true
+        });
+
+        if (!result.canceled && result.assets[0].base64) {
+            setDocuments((prev: any) => ({
+                ...prev,
+                [field]: `data:image/jpeg;base64,${result.assets[0].base64}`
+            }));
+        }
+    };
 
     const handleSave = async () => {
         if (name.trim().length < 2) {
@@ -34,7 +59,7 @@ export default function ProfileEditScreen() {
 
         setLoading(true);
         try {
-            await apiUpdateProfile(name.trim());
+            await apiUpdateProfile(name.trim(), documents.idCardFront, documents.idCardBack, documents.selfie);
             // Update auth context by re-fetching Me
             const me = await apiGetMe();
             setUser(me);
@@ -89,17 +114,50 @@ export default function ProfileEditScreen() {
                         ) : (
                             <>
                                 <Text style={{ color: COLORS.textSecondary, marginBottom: 16, fontSize: 13 }}>Compte standard plafonné (Max 50.000 FCFA/jour). Envoyez vos documents pour l'augmenter.</Text>
-                                <TouchableOpacity style={{ backgroundColor: '#0f172a', padding: 12, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#334155' }} onPress={() => Alert.alert('KYC Upload', 'Fonctionnalité V4. (Intégration Camera/Fichier à venir)')}>
-                                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Transmettre mes documents</Text>
-                                </TouchableOpacity>
+
+                                <ScrollView horizontal style={{ marginBottom: 15 }} showsHorizontalScrollIndicator={false}>
+                                    <TouchableOpacity style={[styles.docPicker, documents.idCardFront && { borderColor: '#10b981' }]} onPress={() => pickImage('idCardFront')}>
+                                        {documents.idCardFront ? (
+                                            <Image source={{ uri: documents.idCardFront }} style={styles.docImage} />
+                                        ) : (
+                                            <>
+                                                <Ionicons name="card" size={24} color={COLORS.primary} />
+                                                <Text style={styles.docLabel}>CNI Recto</Text>
+                                            </>
+                                        )}
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={[styles.docPicker, documents.idCardBack && { borderColor: '#10b981' }]} onPress={() => pickImage('idCardBack')}>
+                                        {documents.idCardBack ? (
+                                            <Image source={{ uri: documents.idCardBack }} style={styles.docImage} />
+                                        ) : (
+                                            <>
+                                                <Ionicons name="card-outline" size={24} color={COLORS.primary} />
+                                                <Text style={styles.docLabel}>CNI Verso</Text>
+                                            </>
+                                        )}
+                                    </TouchableOpacity>
+                                    <TouchableOpacity style={[styles.docPicker, documents.selfie && { borderColor: '#10b981' }]} onPress={() => pickImage('selfie')}>
+                                        {documents.selfie ? (
+                                            <Image source={{ uri: documents.selfie }} style={styles.docImage} />
+                                        ) : (
+                                            <>
+                                                <Ionicons name="camera-outline" size={24} color={COLORS.primary} />
+                                                <Text style={styles.docLabel}>Selfie Brut</Text>
+                                            </>
+                                        )}
+                                    </TouchableOpacity>
+                                </ScrollView>
+                                {documents.idCardFront && documents.idCardBack && documents.selfie && (
+                                    <Text style={{ color: '#10b981', fontSize: 12, marginBottom: 15, fontWeight: 'bold' }}>Dossier complet ! Enregistrez pour soumettre.</Text>
+                                )}
                             </>
                         )}
                     </View>
 
                     <TouchableOpacity
-                        style={[styles.saveButton, (name.trim() === user?.name || name.trim().length === 0) && styles.disabledButton]}
+                        style={[styles.saveButton, (name.trim() === user?.name || name.trim().length === 0) && !documents.selfie && styles.disabledButton]}
                         onPress={handleSave}
-                        disabled={loading || name.trim() === user?.name || name.trim().length === 0}
+                        disabled={loading || ((name.trim() === user?.name || name.trim().length === 0) && !documents.selfie)}
                     >
                         {loading ? (
                             <ActivityIndicator color={COLORS.surface} />
@@ -137,5 +195,12 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         justifyContent: 'center', alignItems: 'center',
     },
     disabledButton: { opacity: 0.5 },
-    saveButtonText: { color: COLORS.surface, fontSize: 18, fontWeight: '700' }
+    saveButtonText: { color: COLORS.surface, fontSize: 18, fontWeight: '700' },
+    docPicker: {
+        width: 100, height: 100, backgroundColor: COLORS.primary + '11', borderRadius: 12,
+        borderWidth: 1, borderColor: COLORS.primary + '33', borderStyle: 'dashed',
+        justifyContent: 'center', alignItems: 'center', marginRight: 15
+    },
+    docLabel: { fontSize: 11, fontWeight: '600', color: COLORS.primary, marginTop: 5 },
+    docImage: { width: '100%', height: '100%', borderRadius: 12 }
 });
