@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     Dimensions,
     SafeAreaView,
     StyleSheet,
@@ -43,14 +44,22 @@ export default function PayCodeScreen() {
 
     // Compte à rebours animé pour simuler le renouvellement du token Alipay
     useEffect(() => {
+        if (!amountValidated) return; // Ne compte que si le QR est actif
         if (timeLeft === 0) {
-            setTimeLeft(60);
+            setAmountValidated(false);
+            setWithdrawCode('');
+            Alert.alert(
+                'Code Expiré',
+                'Votre code de paiement a expiré. Veuillez en générer un nouveau.',
+                [{ text: 'OK' }]
+            );
+            return;
         }
         const timer = setInterval(() => {
             setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
         }, 1000);
         return () => clearInterval(timer);
-    }, [timeLeft]);
+    }, [timeLeft, amountValidated]);
 
     const handleBiometricAuth = async () => {
         if (!isValidAmount) return;
@@ -86,7 +95,11 @@ export default function PayCodeScreen() {
                     setTimeLeft(300); // 5 min expiry
                 } else {
                     const d = await res.json();
-                    alert("Erreur Serveur: " + d.error);
+                    Alert.alert(
+                        'Erreur Serveur',
+                        d.error || 'Impossible de générer votre code de paiement. Réessayez.',
+                        [{ text: 'OK' }]
+                    );
                 }
             }
         } catch (error) {

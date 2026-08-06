@@ -99,7 +99,7 @@ export interface Transaction {
     amount: number;
     currency: string;
     status: string;
-    reference: string;
+    reference?: string;
     counterpart: string;
     counterpartPhone: string;
     createdAt: string;

@@ -449,7 +449,7 @@ router.post('/agent-withdraw', authMiddleware, async (req: AuthRequest, res) => 
             });
         }
 
-        res.json({ message: 'Retrait autorisé avec succès. Remettez les espèces au client.', transaction: transactionResult });
+        res.json({ message: 'Retrait autorisé avec succès. Remettez les espèces au client.', transaction: transactionResult, agentCommission: agentReward });
     } catch (e: any) {
         console.error('Agent Withdraw Error:', e);
         res.status(400).json({ error: e.message || 'Erreur lors du retrait' });

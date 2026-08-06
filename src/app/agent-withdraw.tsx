@@ -22,16 +22,13 @@ export default function AgentWithdrawScreen() {
     const [commission, setCommission] = useState(0);
 
     const amountNum = parseFloat(amount || '0');
-    // Simulate what the server calculates for display
-    const fee = amountNum * 0.01;
-    const agentComm = fee * 0.5;
 
     const handleConfirm = async () => {
         setLoading(true);
         setError('');
         try {
-            await apiAgentWithdrawConfirm(payerPhone, amountNum, withdrawCode);
-            setCommission(agentComm);
+            const result = await apiAgentWithdrawConfirm(payerPhone, amountNum, withdrawCode);
+            setCommission(result.agentCommission ?? 0);
             setSuccess(true);
         } catch (e: any) {
             setError(e.message || 'Erreur lors du retrait');

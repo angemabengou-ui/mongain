@@ -10,7 +10,7 @@ import {
     StyleSheet,
     Text,
     TextInput,
-    TouchableOpacity, useColorScheme, View
+    TouchableOpacity, View
 } from 'react-native';
 import { useAppTheme } from '../constants/theme';
 import { apiWithdraw } from '../services/api';
@@ -19,7 +19,6 @@ export default function WithdrawScreen() {
     const router = useRouter();
     const params = useLocalSearchParams();
     const COLORS = useAppTheme();
-    const isDark = useColorScheme() === 'dark';
     const [agentPhone, setAgentPhone] = useState(params.agentPhone as string || '');
     const [amount, setAmount] = useState(params.amount as string || '');
     const [pin, setPin] = useState('');

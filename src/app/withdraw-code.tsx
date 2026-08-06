@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     Dimensions,
     SafeAreaView,
     StyleSheet,
@@ -40,14 +41,23 @@ export default function WithdrawCodeScreen() {
     const isValidAmount = !isNaN(amountNum) && amountNum > 0;
 
     useEffect(() => {
+        if (!amountValidated) return; // Ne compte que si le QR est actif
         if (timeLeft === 0) {
-            setTimeLeft(60);
+            // Code expiré — invalider le QR et demander un nouveau
+            setAmountValidated(false);
+            setWithdrawCode('');
+            Alert.alert(
+                'Code Expiré',
+                'Votre jeton de sécurité a expiré. Veuillez en générer un nouveau.',
+                [{ text: 'OK' }]
+            );
+            return;
         }
         const timer = setInterval(() => {
             setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
         }, 1000);
         return () => clearInterval(timer);
-    }, [timeLeft]);
+    }, [timeLeft, amountValidated]);
 
     const handleBiometricAuth = async () => {
         if (!isValidAmount) return;
@@ -82,7 +92,12 @@ export default function WithdrawCodeScreen() {
                     setAmountValidated(true);
                     setTimeLeft(300); // 5 minutes
                 } else {
-                    alert("Erreur Serveur: Impossible de générer le jeton de sécurité.");
+                    const d = await res.json();
+                    Alert.alert(
+                        'Erreur Serveur',
+                        d.error || 'Impossible de générer le jeton de sécurité. Réessayez.',
+                        [{ text: 'OK' }]
+                    );
                 }
             }
         } catch (error) {
