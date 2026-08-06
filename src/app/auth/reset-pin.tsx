@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
     ActivityIndicator,
@@ -14,35 +14,58 @@ import {
     View,
 } from 'react-native';
 import { useAppTheme } from '../../constants/theme';
-import { apiRequestResetOTP } from '../../services/api';
+import { apiResetPIN } from '../../services/api';
 
-export default function ForgotPinScreen() {
+export default function ResetPinScreen() {
     const COLORS = useAppTheme();
     const styles = getStyles(COLORS);
     const router = useRouter();
+    const { phone } = useLocalSearchParams<{ phone: string }>();
 
-    const [phone, setPhone] = useState('');
+    const [otp, setOtp] = useState('');
+    const [newPin, setNewPin] = useState('');
+    const [showPin, setShowPin] = useState(false);
+
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [success, setSuccess] = useState(false);
 
-    const handleRequestOTP = async () => {
+    const handleReset = async () => {
         setError('');
-        if (!phone) {
-            setError('Veuillez entrer votre numéro de téléphone.');
+        if (!otp || !newPin) {
+            setError('Veuillez remplir tous les champs.');
+            return;
+        }
+        if (newPin.length !== 4) {
+            setError('Le nouveau code PIN doit comporter 4 chiffres.');
             return;
         }
         setLoading(true);
         try {
-            const formattedPhone = phone.startsWith('+') ? phone : `+241${phone.replace(/\\s+/g, '')}`;
-            await apiRequestResetOTP(formattedPhone);
-            // Redirige vers reset
-            router.push({ pathname: '/auth/reset-pin' as any, params: { phone: formattedPhone } });
+            await apiResetPIN(phone || '', otp, newPin);
+            setSuccess(true);
         } catch (e: any) {
-            setError(e.message || "Une erreur s'est produite");
+            setError(e.message || "Code incorrect ou expiré.");
         } finally {
             setLoading(false);
         }
     };
+
+    if (success) {
+        return (
+            <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center' }]}>
+                <Ionicons name="checkmark-circle" size={80} color={COLORS.success} />
+                <Text style={[styles.appName, { marginTop: 20 }]}>Code réinitialisé !</Text>
+                <Text style={styles.tagline}>Votre nouveau Code PIN est maintenant actif.</Text>
+                <TouchableOpacity
+                    style={[styles.btn, { marginTop: 40, width: '80%' }]}
+                    onPress={() => router.replace('/auth/login')}
+                >
+                    <Text style={styles.btnText}>Retour à la connexion</Text>
+                </TouchableOpacity>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -55,10 +78,10 @@ export default function ForgotPinScreen() {
 
                     <View style={styles.header}>
                         <View style={styles.logo}>
-                            <Ionicons name="lock-closed" size={36} color={COLORS.primary} />
+                            <Ionicons name="shield-checkmark" size={36} color={COLORS.primary} />
                         </View>
-                        <Text style={styles.appName}>Mot de passe oublié</Text>
-                        <Text style={styles.tagline}>Entrez votre numéro pour recevoir un code par SMS</Text>
+                        <Text style={styles.appName}>Nouveau Code PIN</Text>
+                        <Text style={styles.tagline}>Saisissez le code SMS reçu par le {phone}</Text>
                     </View>
 
                     <View style={styles.card}>
@@ -69,28 +92,47 @@ export default function ForgotPinScreen() {
                             </View>
                         ) : null}
 
-                        <Text style={styles.label}>Numéro de téléphone</Text>
+                        <Text style={styles.label}>Code SMS (OTP)</Text>
                         <View style={styles.inputContainer}>
-                            <Text style={styles.prefix}>+241</Text>
+                            <Ionicons name="chatbubble-ellipses-outline" size={20} color={COLORS.textSecondary} style={styles.inputIcon} />
                             <TextInput
                                 style={styles.input}
-                                placeholder="00 00 00 00"
-                                keyboardType="phone-pad"
-                                value={phone}
-                                onChangeText={setPhone}
+                                placeholder="4 chiffres"
+                                keyboardType="number-pad"
+                                maxLength={4}
+                                value={otp}
+                                onChangeText={setOtp}
                                 placeholderTextColor={COLORS.textSecondary}
                             />
                         </View>
 
+                        <Text style={styles.label}>Nouveau Code PIN</Text>
+                        <View style={styles.inputContainer}>
+                            <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} style={styles.inputIcon} />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="••••"
+                                keyboardType="number-pad"
+                                secureTextEntry={!showPin}
+                                maxLength={4}
+                                value={newPin}
+                                onChangeText={setNewPin}
+                                placeholderTextColor={COLORS.textSecondary}
+                            />
+                            <TouchableOpacity onPress={() => setShowPin(!showPin)} style={styles.eyeIcon}>
+                                <Ionicons name={showPin ? "eye-off-outline" : "eye-outline"} size={20} color={COLORS.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
                         <TouchableOpacity
-                            style={[styles.btn, (!phone || loading) && styles.btnDisabled]}
-                            onPress={handleRequestOTP}
-                            disabled={!phone || loading}
+                            style={[styles.btn, (!otp || !newPin || loading) && styles.btnDisabled]}
+                            onPress={handleReset}
+                            disabled={!otp || !newPin || loading}
                         >
                             {loading ? (
                                 <ActivityIndicator color="#fff" />
                             ) : (
-                                <Text style={styles.btnText}>Envoyer le Code SMS</Text>
+                                <Text style={styles.btnText}>Valider</Text>
                             )}
                         </TouchableOpacity>
                     </View>
@@ -108,13 +150,14 @@ function getStyles(COLORS: any) {
         backButton: { position: 'absolute', top: 16, left: 16, zIndex: 10, padding: 8 },
         header: { alignItems: 'center', marginBottom: 40, marginTop: 40 },
         logo: { width: 80, height: 80, borderRadius: 24, backgroundColor: '#E0F7FA', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-        appName: { fontSize: 28, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 8, letterSpacing: -0.5 },
-        tagline: { fontSize: 16, color: COLORS.textSecondary, textAlign: 'center', paddingHorizontal: 20 },
+        appName: { fontSize: 26, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 8, letterSpacing: -0.5 },
+        tagline: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', paddingHorizontal: 20 },
         card: { backgroundColor: COLORS.surface, borderRadius: 24, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.05, shadowRadius: 20, elevation: 5 },
         label: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary, marginBottom: 8 },
         inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 16, marginBottom: 20, height: 56 },
-        prefix: { fontSize: 16, fontWeight: '600', color: COLORS.textPrimary, marginRight: 8, paddingRight: 8, borderRightWidth: 1, borderRightColor: COLORS.border },
-        input: { flex: 1, fontSize: 16, color: COLORS.textPrimary, height: '100%' },
+        inputIcon: { marginRight: 12 },
+        input: { flex: 1, fontSize: 16, color: COLORS.textPrimary, height: '100%', letterSpacing: 2 },
+        eyeIcon: { padding: 8 },
         btn: { backgroundColor: COLORS.primary, height: 56, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 10, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
         btnDisabled: { backgroundColor: '#94a3b8', shadowOpacity: 0 },
         btnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },

@@ -128,6 +128,12 @@ export const apiUpdatePin = (oldPin: string, newPin: string) =>
 export const apiUpdatePushToken = (pushToken: string) =>
     request('PUT', '/api/auth/push-token', { pushToken }, true) as Promise<{ message: string }>;
 
+export const apiRequestResetOTP = (phone: string) =>
+    request('POST', '/api/auth/request-reset-otp', { phone }, false) as Promise<{ message: string }>;
+
+export const apiResetPIN = (phone: string, otp: string, newPin: string) =>
+    request('POST', '/api/auth/reset-pin', { phone, otp, newPin }, false) as Promise<{ message: string }>;
+
 // ─── API Wallet ───────────────────────────────────────────────────
 
 export const apiLookupUser = (phone: string) =>
