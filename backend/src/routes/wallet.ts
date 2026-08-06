@@ -323,7 +323,7 @@ router.post('/agent-withdraw', authMiddleware, async (req: AuthRequest, res) => 
         });
 
         if (!agent) return res.status(404).json({ error: 'Agent introuvable' });
-        if (agent.role !== 'AGENT') return res.status(403).json({ error: 'Autorisation refusée. Seul un AGENT peut encaisser un retrait physique.' });
+        if (agent.role !== 'AGENT' && agent.role !== 'MERCHANT') return res.status(403).json({ error: 'Autorisation refusée. Seul un AGENT ou COMMEÇANT peut encaisser un retrait physique.' });
 
         const { payerPhone, withdrawCode } = req.body;
         if (!payerPhone || !withdrawCode) {
@@ -354,13 +354,23 @@ router.post('/agent-withdraw', authMiddleware, async (req: AuthRequest, res) => 
 
         const settings = await getSystemSettings();
 
-        // --- Commission Partagée Dynamique ---
-        // Le Client paie la taxe globale (ex: 1.3%)
-        const totalTax = Math.ceil(amount * settings.taxWithdraw);
-        const totalDebit = amount + totalTax;
+        // --- Commission Partagée Dynamique selon le rôle ---
+        let totalTax = 0;
+        let agentReward = 0;
 
-        // L'agent (Commerçant) encaisse la prime (ex: 0.3%)
-        const agentReward = Math.ceil(amount * settings.rewardMerchant);
+        // Si c'est un Commerçant, le retrait est payant (ex: 1.3%)
+        if (agent.role === 'MERCHANT') {
+            totalTax = Math.ceil(amount * settings.taxWithdraw);
+            agentReward = Math.ceil(amount * settings.rewardMerchant);
+        }
+        // Si c'est un Agent Mongain, le retrait est gratuit (0%)
+        else if (agent.role === 'AGENT') {
+            totalTax = 0;
+            agentReward = 0;
+            // Note: Si une prime spécifique agent existe (payée par Mongain), on l'ajoute ici. On reste gratuit pour le client.
+        }
+
+        const totalDebit = amount + totalTax;
 
         // Mongain encaisse le reste (ex: 1.0%)
         const netMongain = totalTax - agentReward;

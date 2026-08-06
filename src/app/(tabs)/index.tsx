@@ -158,7 +158,7 @@ export default function DashboardScreen() {
               ) : user?.role === 'MERCHANT' ? (
                 <ActionItem icon="list" label="Transactions" color="#4F46E5" onPress={() => router.push('/history')} styles={styles} />
               ) : (
-                <ActionItem icon="wallet" label="Retrait" color="#E11D48" onPress={() => router.push('/withdraw-code')} styles={styles} />
+                <ActionItem icon="wallet" label="Retrait" color="#E11D48" onPress={() => router.push('/withdraw-type')} styles={styles} />
               )}
 
               {user?.role !== 'AGENT' && user?.role !== 'MERCHANT' && (

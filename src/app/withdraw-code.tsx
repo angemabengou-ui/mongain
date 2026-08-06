@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -30,6 +30,7 @@ function generateWithdrawData(phone: string, name: string, amount: number, code:
 export default function WithdrawCodeScreen() {
     const { user, token, settings } = useAuth();
     const router = useRouter();
+    const { type } = useLocalSearchParams<{ type: string }>();
     const COLORS = useAppTheme();
     const [timeLeft, setTimeLeft] = useState(60);
     const [amountInput, setAmountInput] = useState('');
@@ -116,8 +117,11 @@ export default function WithdrawCodeScreen() {
     }
 
     const qrValue = generateWithdrawData(user.phone, user.name, amountNum, withdrawCode);
-    // Calculated fee for display
-    const fee = amountNum * 0.01;
+
+    // Frais dynamiques selon le type choisi
+    const isAgent = type === 'agent';
+    const taxRate = settings?.taxWithdraw || 0.013;
+    const fee = isAgent ? 0 : Math.ceil(amountNum * taxRate);
     const totalDeduction = amountNum + fee;
 
     return (
@@ -155,12 +159,12 @@ export default function WithdrawCodeScreen() {
                         </View>
 
                         {isValidAmount && (
-                            <View style={{ marginBottom: 24, padding: 12, backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#e2e8f0', borderWidth: 1 }}>
-                                <Text style={{ fontSize: 13, color: '#475569', marginBottom: 4 }}>
-                                    Frais de réseau ({settings?.taxWithdraw ? (settings.taxWithdraw * 100).toFixed(1) : '1.3'}%) : <Text style={{ fontWeight: 'bold' }}>{Math.ceil(Number(amountInput) * (settings?.taxWithdraw || 0.013))} FCFA</Text>
+                            <View style={{ marginBottom: 24, padding: 12, backgroundColor: isAgent ? '#ECFDF5' : '#FFFBEB', borderRadius: 8, borderColor: isAgent ? '#10B981' : '#F59E0B', borderWidth: 1 }}>
+                                <Text style={{ fontSize: 13, color: isAgent ? '#065F46' : '#92400E', marginBottom: 4 }}>
+                                    Frais {isAgent ? '(Agences Mongain - GRATUIT)' : `(Commerçants - ${taxRate * 100}%)`} : <Text style={{ fontWeight: 'bold' }}>{fee} FCFA</Text>
                                 </Text>
                                 <Text style={{ fontSize: 14, color: '#0f172a', fontWeight: '600' }}>
-                                    Débit Total prévu : <Text style={{ color: '#f59e0b' }}>{Math.ceil(Number(amountInput) + (Number(amountInput) * (settings?.taxWithdraw || 0.013)))} FCFA</Text>
+                                    Débit Total prévu : <Text style={{ color: isAgent ? '#059669' : '#f59e0b' }}>{Math.ceil(Number(amountInput) + fee)} FCFA</Text>
                                 </Text>
                             </View>
                         )}
