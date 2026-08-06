@@ -16,6 +16,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useAuth } from '../context/AuthContext';
 import { apiTransfer } from '../services/api';
 
 const COLORS = {
@@ -30,6 +31,7 @@ const COLORS = {
 };
 
 export default function TransferConfirmScreen() {
+    const { settings } = useAuth();
     const router = useRouter();
     const { receiverPhone, receiverName, isMerchant } = useLocalSearchParams<{ receiverPhone: string; receiverName: string; isMerchant: string }>();
     const isPayment = isMerchant === 'true';
@@ -255,13 +257,13 @@ export default function TransferConfirmScreen() {
                                 <Text style={{ color: COLORS.textPrimary, fontWeight: '600' }}>{Number(amount).toLocaleString('fr-FR')} FCFA</Text>
                             </View>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                                <Text style={{ color: '#F59E0B' }}>Frais (1%)</Text>
-                                <Text style={{ color: '#F59E0B', fontWeight: '600' }}>{Math.ceil(Number(amount) * 0.01).toLocaleString('fr-FR')} FCFA</Text>
+                                <Text style={{ color: '#F59E0B' }}>Frais ({settings?.taxP2P ? settings.taxP2P * 100 : 1}%)</Text>
+                                <Text style={{ color: '#F59E0B', fontWeight: '600' }}>{Math.ceil(Number(amount) * (settings?.taxP2P || 0.01)).toLocaleString('fr-FR')} FCFA</Text>
                             </View>
                             <View style={{ width: '100%', height: 1, backgroundColor: COLORS.border || '#e2e8f0', marginVertical: 4 }} />
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
                                 <Text style={{ color: COLORS.textPrimary, fontWeight: '700' }}>Total à débiter</Text>
-                                <Text style={{ color: COLORS.textPrimary, fontWeight: '800', fontSize: 16 }}>{Math.ceil(Number(amount) + (Number(amount) * 0.01)).toLocaleString('fr-FR')} FCFA</Text>
+                                <Text style={{ color: COLORS.textPrimary, fontWeight: '800', fontSize: 16 }}>{Math.ceil(Number(amount) + (Number(amount) * (settings?.taxP2P || 0.01))).toLocaleString('fr-FR')} FCFA</Text>
                             </View>
                         </View>
                     )}

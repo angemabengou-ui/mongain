@@ -1,4 +1,4 @@
-import { Activity, Banknote, LayoutDashboard, LogOut, MessageSquare, Store, Users as UsersIcon } from 'lucide-react';
+import { Activity, Banknote, LayoutDashboard, LogOut, MessageSquare, Settings as SettingsIcon, Store, Users as UsersIcon } from 'lucide-react';
 import { useState } from 'react';
 import Agency from './Agency';
 import AuditLogs from './AuditLogs';
@@ -6,6 +6,7 @@ import Dashboard from './Dashboard';
 import Ledger from './Ledger';
 import Login from './Login';
 import Reclamations from './Reclamations';
+import Settings from './Settings';
 import Treasury from './Treasury';
 import Users from './Users';
 
@@ -73,6 +74,10 @@ export default function App() {
               <div className={`nav-item ${activeTab === 'audit' ? 'active' : ''}`} onClick={() => setActiveTab('audit')}>
                 <Activity size={20} /> Centre d'Audit
               </div>
+              <div className="nav-divider"></div>
+              <div className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
+                <SettingsIcon size={20} /> Paramètres Frais
+              </div>
             </>
           )}
         </div>
@@ -91,7 +96,8 @@ export default function App() {
                 activeTab === 'treasury' ? 'Gestion Trésorerie' :
                   activeTab === 'audit' ? 'Audit et Sécurité' :
                     activeTab === 'users' ? 'Utilisateurs' :
-                      activeTab === 'ledger' ? 'Grand Livre (AML)' : 'Réclamations'}
+                      activeTab === 'ledger' ? 'Grand Livre (AML)' :
+                        activeTab === 'settings' ? 'Paramètres' : 'Réclamations'}
           </h1>
           <div className="profile-badge">
             <div className="profile-avatar">{userName.charAt(0).toUpperCase()}</div>
@@ -106,6 +112,7 @@ export default function App() {
         {activeTab === 'reclamations' && isSuperAdmin && <Reclamations token={token} />}
         {activeTab === 'treasury' && isSuperAdmin && <Treasury token={token} />}
         {activeTab === 'audit' && isSuperAdmin && <AuditLogs token={token} />}
+        {activeTab === 'settings' && isSuperAdmin && <Settings token={token} />}
       </div>
     </div>
   );

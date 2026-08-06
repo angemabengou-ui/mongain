@@ -27,8 +27,8 @@ function generateWithdrawData(phone: string, name: string, amount: number, code:
 }
 
 export default function WithdrawCodeScreen() {
+    const { user, token, settings } = useAuth();
     const router = useRouter();
-    const { user, token } = useAuth();
     const COLORS = useAppTheme();
     const [timeLeft, setTimeLeft] = useState(60);
     const [amountInput, setAmountInput] = useState('');
@@ -140,9 +140,14 @@ export default function WithdrawCodeScreen() {
                         </View>
 
                         {isValidAmount && (
-                            <Text style={{ fontSize: 12, color: '#64748b', marginBottom: 24, textAlign: 'center' }}>
-                                Frais appliqués: GRATUIT (0 FCFA)
-                            </Text>
+                            <View style={{ marginBottom: 24, padding: 12, backgroundColor: '#f8fafc', borderRadius: 8, borderColor: '#e2e8f0', borderWidth: 1 }}>
+                                <Text style={{ fontSize: 13, color: '#475569', marginBottom: 4 }}>
+                                    Frais de réseau ({settings?.taxWithdraw ? (settings.taxWithdraw * 100).toFixed(1) : '1.3'}%) : <Text style={{ fontWeight: 'bold' }}>{Math.ceil(Number(amountInput) * (settings?.taxWithdraw || 0.013))} FCFA</Text>
+                                </Text>
+                                <Text style={{ fontSize: 14, color: '#0f172a', fontWeight: '600' }}>
+                                    Débit Total prévu : <Text style={{ color: '#f59e0b' }}>{Math.ceil(Number(amountInput) + (Number(amountInput) * (settings?.taxWithdraw || 0.013)))} FCFA</Text>
+                                </Text>
+                            </View>
                         )}
 
                         <TouchableOpacity

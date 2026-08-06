@@ -16,6 +16,7 @@ interface AuthContextType {
     register: (name: string, phone: string, pin: string, otpCode: string) => Promise<void>;
     logout: () => Promise<void>;
     setUser: (user: User | null) => void;
+    settings: any;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -25,6 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [token, setToken] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [socket, setSocket] = useState<Socket | null>(null);
+    const [settings, setSettings] = useState<any>(null);
 
     // Initialiser les WebSockets quand on est connecté
     useEffect(() => {
@@ -87,6 +89,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     // Récupérer le profil complet depuis le backend
                     const me = await apiGetMe();
                     setUser(me);
+
+                    const respSettings = await fetch(BASE_URL + '/api/settings');
+                    if (respSettings.ok) {
+                        setSettings(await respSettings.json());
+                    }
                 }
             } catch {
                 // Token invalide ou expiré → nettoyer
@@ -119,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, isLoading, login, register, logout, setUser }}>
+        <AuthContext.Provider value={{ user, token, isLoading, login, register, logout, setUser, settings }}>
             {children}
         </AuthContext.Provider>
     );
