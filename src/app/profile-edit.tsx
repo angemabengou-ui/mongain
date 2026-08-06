@@ -79,6 +79,23 @@ export default function ProfileEditScreen() {
                         Votre numéro de téléphone ({user?.phone}) vous sert d'identifiant et ne peut pas être modifié.
                     </Text>
 
+                    {/* Section KYC */}
+                    <View style={{ marginTop: 10, padding: 16, backgroundColor: COLORS.surface, borderRadius: 12, borderWidth: 1, borderColor: user?.kycStatus === 'APPROVED' ? '#10b981' : COLORS.border, marginBottom: 24 }}>
+                        <Text style={{ fontSize: 16, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 4 }}>Vérification d'Identité (KYC)</Text>
+                        {user?.kycStatus === 'APPROVED' ? (
+                            <Text style={{ color: '#10b981', fontWeight: '600', marginTop: 5 }}>✅ Compte Certifié (Plafonds maximaux)</Text>
+                        ) : user?.kycStatus === 'PENDING' ? (
+                            <Text style={{ color: '#f59e0b', fontWeight: '600', marginTop: 5 }}>⏳ Dossier en cours de validation</Text>
+                        ) : (
+                            <>
+                                <Text style={{ color: COLORS.textSecondary, marginBottom: 16, fontSize: 13 }}>Compte standard plafonné (Max 50.000 FCFA/jour). Envoyez vos documents pour l'augmenter.</Text>
+                                <TouchableOpacity style={{ backgroundColor: '#0f172a', padding: 12, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#334155' }} onPress={() => Alert.alert('KYC Upload', 'Fonctionnalité V4. (Intégration Camera/Fichier à venir)')}>
+                                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>Transmettre mes documents</Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
+                    </View>
+
                     <TouchableOpacity
                         style={[styles.saveButton, (name.trim() === user?.name || name.trim().length === 0) && styles.disabledButton]}
                         onPress={handleSave}

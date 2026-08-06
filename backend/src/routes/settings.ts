@@ -13,8 +13,10 @@ export const getSystemSettings = async () => {
             data: {
                 taxP2P: 0.01,
                 taxWithdraw: 0.013,
-                rewardMerchant: 0.003
-            }
+                rewardMerchant: 0.003,
+                dailyLimitTier0: 50000,
+                dailyLimitTier1: 2000000
+            } as any
         });
     }
     return settings;
@@ -34,6 +36,8 @@ const settingsSchema = z.object({
     taxP2P: z.number().min(0).max(1),
     taxWithdraw: z.number().min(0).max(1),
     rewardMerchant: z.number().min(0).max(1),
+    dailyLimitTier0: z.number().min(100),
+    dailyLimitTier1: z.number().min(100),
 });
 
 // PUT /api/admin/settings (SuperAdmin only)

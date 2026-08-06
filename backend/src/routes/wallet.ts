@@ -69,6 +69,32 @@ router.post('/generate-withdraw-code', authMiddleware, async (req: AuthRequest, 
         return res.status(500).json({ error: 'Erreur génération code' });
     }
 });
+// --- Valider les Plafonds V4 ---
+async function verifyDailyLimit(userId: string, requestedAmount: number, settings: any) {
+    const user = await prisma.user.findUnique({ where: { id: userId }, include: { wallet: true } });
+    if (!user || !user.wallet) throw new Error("Compte expéditeur introuvable");
+
+    // Seuls les utilisateurs standards (USER) sont soumis aux plafonds
+    if (user.role !== 'USER') return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const txs = await prisma.transaction.aggregate({
+        where: {
+            senderWalletId: user.wallet.id,
+            createdAt: { gte: today }
+        },
+        _sum: { amount: true }
+    });
+
+    const sumToday = txs._sum.amount || 0;
+    const limit = (user as any).kycLevel >= 1 ? settings.dailyLimitTier1 : settings.dailyLimitTier0;
+
+    if (sumToday + requestedAmount > limit) {
+        throw new Error(`Plafond journalier dépassé (Limite: ${limit} FCFA). Montant déjà utilisé aujourd'hui : ${sumToday} FCFA. Pour augmenter votre limite, vérifiez votre compte.`);
+    }
+}
 
 // POST /api/wallet/transfer
 router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
@@ -111,6 +137,9 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
         if (sender.wallet.balance < totalDebit) {
             return res.status(400).json({ error: `Solde insuffisant. Vous devez disposer de ${totalDebit} FCFA (dont ${taxVal} FCFA de frais de réseau).` });
         }
+
+        // Vérification du plafond journalier KYC
+        await verifyDailyLimit(sender.id, totalDebit, settings);
 
         // Compte Corporate
         const corporate = await prisma.user.findUnique({
@@ -388,6 +417,9 @@ router.post('/agent-withdraw', authMiddleware, async (req: AuthRequest, res) => 
 
         if (client.wallet.balance < totalDebit) return res.status(400).json({ error: `Solde insuffisant pour le retrait (Frais: ${totalTax} FCFA).` });
         if (client.id === agent.id) return res.status(400).json({ error: 'Opération circulaire interdite.' });
+
+        // Vérification du plafond pour le retrait client
+        await verifyDailyLimit(client.id, totalDebit, settings);
 
         const corporate = await prisma.user.findUnique({
             where: { phone: '+24100000000' },

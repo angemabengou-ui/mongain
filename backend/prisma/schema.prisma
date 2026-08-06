@@ -23,6 +23,14 @@ model User {
   isActive          Boolean       @default(true)
   jwtVersion        Int           @default(0) // Invalidates sessions when logged in elsewhere
   pushToken         String?
+  
+  // Nouveaux Champs KYC
+  kycLevel          Int           @default(0) // 0: Standard, 1: Vérifié, 2: Premium
+  kycStatus         String        @default("UNVERIFIED") // UNVERIFIED, PENDING, APPROVED, REJECTED
+  idCardFront       String?
+  idCardBack        String?
+  selfie            String?
+
   wallet            Wallet?
   reclamations      Reclamation[]
   auditLogs         AuditLog[]
@@ -86,9 +94,14 @@ model VerificationCode {
 }
 
 model SystemSettings {
-  id             Int      @id @default(autoincrement())
-  taxP2P         Float    @default(0.01) // 1.0% par défaut
-  taxWithdraw    Float    @default(0.013) // 1.3% par défaut
-  rewardMerchant Float    @default(0.003) // 0.3% par défaut
-  updatedAt      DateTime @updatedAt
+  id               Int      @id @default(autoincrement())
+  taxP2P           Float    @default(0.01) // 1.0% par défaut
+  taxWithdraw      Float    @default(0.013) // 1.3% par défaut
+  rewardMerchant   Float    @default(0.003) // 0.3% par défaut
+  
+  // Limites journalières configurables (V4)
+  dailyLimitTier0  Float    @default(50000.0) // Plafond en FCFA par jour pour non-vérifiés
+  dailyLimitTier1  Float    @default(2000000.0) // Plafond en FCFA par jour pour vérifiés
+  
+  updatedAt        DateTime @updatedAt
 }

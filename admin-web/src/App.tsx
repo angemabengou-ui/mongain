@@ -1,8 +1,9 @@
-import { Activity, Banknote, LayoutDashboard, LogOut, MessageSquare, Settings as SettingsIcon, Store, Users as UsersIcon } from 'lucide-react';
-import { useState } from 'react';
+import { Activity, BadgeCheck, Banknote, LayoutDashboard, LogOut, MessageSquare, Settings as SettingsIcon, Store, Users as UsersIcon } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import Agency from './Agency';
 import AuditLogs from './AuditLogs';
 import Dashboard from './Dashboard';
+import KycMod from './KycMod';
 import Ledger from './Ledger';
 import Login from './Login';
 import Reclamations from './Reclamations';
@@ -73,6 +74,9 @@ export default function App() {
               <div className={`nav-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
                 <UsersIcon size={20} /> Utilisateurs
               </div>
+              <div className={`nav-item ${activeTab === 'kyc' ? 'active' : ''}`} onClick={() => setActiveTab('kyc')}>
+                <BadgeCheck size={20} /> Dossiers KYC
+              </div>
               <div className={`nav-item ${activeTab === 'treasury' ? 'active' : ''}`} onClick={() => setActiveTab('treasury')}>
                 <Banknote size={20} /> Trésorerie
               </div>
@@ -107,8 +111,9 @@ export default function App() {
                 activeTab === 'treasury' ? 'Gestion Trésorerie' :
                   activeTab === 'audit' ? 'Audit et Sécurité' :
                     activeTab === 'users' ? 'Utilisateurs' :
-                      activeTab === 'ledger' ? 'Grand Livre (AML)' :
-                        activeTab === 'settings' ? 'Paramètres' : 'Réclamations'}
+                      activeTab === 'kyc' ? 'Vérification d\'Identité' :
+                        activeTab === 'ledger' ? 'Grand Livre (AML)' :
+                          activeTab === 'settings' ? 'Paramètres' : 'Réclamations'}
           </h1>
           <div className="profile-badge">
             <div className="profile-avatar">{userName.charAt(0).toUpperCase()}</div>
@@ -119,6 +124,7 @@ export default function App() {
         {activeTab === 'agency' && <Agency token={token} agentPhone={phone} agentName={userName} />}
         {activeTab === 'dashboard' && isSuperAdmin && <Dashboard token={token} />}
         {activeTab === 'users' && isSuperAdmin && <Users token={token} />}
+        {activeTab === 'kyc' && isSuperAdmin && <KycMod token={token} />}
         {activeTab === 'ledger' && isSuperAdmin && <Ledger token={token} />}
         {activeTab === 'reclamations' && isSuperAdmin && <Reclamations token={token} />}
         {activeTab === 'treasury' && isSuperAdmin && <Treasury token={token} />}

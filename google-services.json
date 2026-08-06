@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "86302826683",
+    "project_id": "mongain-589ab",
+    "storage_bucket": "mongain-589ab.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:86302826683:android:570ef8d0bf9d52c306499e",
+        "android_client_info": {
+          "package_name": "com.mongain.superapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDRX0FEvQT9lTmJ-a4gf_7lvR_gPhnUYmk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -12,6 +12,7 @@
       "bundleIdentifier": "com.mongain.superapp"
     },
     "android": {
+      "googleServicesFile": "./google-services.json",
       "package": "com.mongain.superapp",
       "permissions": [
         "android.permission.CAMERA",

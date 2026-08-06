@@ -10,6 +10,8 @@ export default function Settings({ token }: { token: string }) {
     const [taxP2P, setTaxP2P] = useState('');
     const [taxWithdraw, setTaxWithdraw] = useState('');
     const [rewardMerchant, setRewardMerchant] = useState('');
+    const [dailyLimitTier0, setDailyLimitTier0] = useState('');
+    const [dailyLimitTier1, setDailyLimitTier1] = useState('');
 
     useEffect(() => {
         const fetchSettings = async () => {
@@ -21,6 +23,8 @@ export default function Settings({ token }: { token: string }) {
                     setTaxP2P((data.taxP2P * 100).toString());
                     setTaxWithdraw((data.taxWithdraw * 100).toString());
                     setRewardMerchant((data.rewardMerchant * 100).toString());
+                    setDailyLimitTier0(data.dailyLimitTier0?.toString() || '50000');
+                    setDailyLimitTier1(data.dailyLimitTier1?.toString() || '2000000');
                 }
             } catch (e) {
                 console.error(e);
@@ -36,8 +40,10 @@ export default function Settings({ token }: { token: string }) {
         const floatP2P = parseFloat(taxP2P) / 100;
         const floatWithdraw = parseFloat(taxWithdraw) / 100;
         const floatReward = parseFloat(rewardMerchant) / 100;
+        const numLimit0 = parseInt(dailyLimitTier0, 10);
+        const numLimit1 = parseInt(dailyLimitTier1, 10);
 
-        if (isNaN(floatP2P) || isNaN(floatWithdraw) || isNaN(floatReward)) {
+        if (isNaN(floatP2P) || isNaN(floatWithdraw) || isNaN(floatReward) || isNaN(numLimit0) || isNaN(numLimit1)) {
             setError('Valeurs incorrectes fournies.');
             return;
         }
@@ -58,7 +64,9 @@ export default function Settings({ token }: { token: string }) {
                 body: JSON.stringify({
                     taxP2P: floatP2P,
                     taxWithdraw: floatWithdraw,
-                    rewardMerchant: floatReward
+                    rewardMerchant: floatReward,
+                    dailyLimitTier0: numLimit0,
+                    dailyLimitTier1: numLimit1
                 })
             });
 
@@ -116,6 +124,26 @@ export default function Settings({ token }: { token: string }) {
                     <input
                         type="number" step="0.01" min="0" required
                         value={rewardMerchant} onChange={e => setRewardMerchant(e.target.value)}
+                        style={{ width: '100%', padding: '12px', borderRadius: '6px', backgroundColor: '#334155', border: 'none', color: '#fff' }}
+                    />
+                </div>
+
+                <div style={{ backgroundColor: '#0f172a', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #ef4444' }}>
+                    <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>Plafond Journalier Tier 0 (FCFA)</label>
+                    <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '10px' }}>Limite maximum de débits pour les comptes sans KYC approuvé.</p>
+                    <input
+                        type="number" step="1000" min="0" required
+                        value={dailyLimitTier0} onChange={e => setDailyLimitTier0(e.target.value)}
+                        style={{ width: '100%', padding: '12px', borderRadius: '6px', backgroundColor: '#334155', border: 'none', color: '#fff' }}
+                    />
+                </div>
+
+                <div style={{ backgroundColor: '#0f172a', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #a855f7' }}>
+                    <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>Plafond Journalier Tier 1 (FCFA)</label>
+                    <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '10px' }}>Limite maximum de débits pour les comptes ayant validé leur identité (KYC).</p>
+                    <input
+                        type="number" step="1000" min="0" required
+                        value={dailyLimitTier1} onChange={e => setDailyLimitTier1(e.target.value)}
                         style={{ width: '100%', padding: '12px', borderRadius: '6px', backgroundColor: '#334155', border: 'none', color: '#fff' }}
                     />
                 </div>

@@ -343,4 +343,60 @@ router.get('/ledger', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
+// --- V4: Modération KYC ---
+router.get('/users/kyc', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
+        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+
+        const pendingList = await (prisma.user as any).findMany({
+            where: { kycStatus: 'PENDING' },
+            select: { id: true, name: true, phone: true, kycStatus: true, idCardFront: true, idCardBack: true, selfie: true, createdAt: true }
+        });
+
+        res.json(pendingList);
+    } catch (e: any) {
+        res.status(500).json({ error: 'Erreur réseau (KYC List)' });
+    }
+});
+
+const kycReviewSchema = z.object({
+    status: z.enum(['APPROVED', 'REJECTED']),
+});
+
+router.put('/users/:id/kyc', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
+        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+
+        const parsed = kycReviewSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: 'Statut invalide.' });
+
+        const targetId = req.params.id as string;
+        const targetUser = await prisma.user.findUnique({ where: { id: targetId } });
+        if (!targetUser) return res.status(404).json({ error: 'Utilisateur introuvable.' });
+
+        const newLevel = parsed.data.status === 'APPROVED' ? 1 : 0;
+
+        await (prisma.user as any).update({
+            where: { id: targetId },
+            data: { kycStatus: parsed.data.status, kycLevel: newLevel }
+        });
+
+        await prisma.auditLog.create({
+            data: {
+                adminId: admin.id,
+                action: `KYC_${parsed.data.status}`,
+                details: `KYC for ${targetUser.phone} set to ${parsed.data.status}`
+            }
+        });
+
+        // Optionnel : Notifier le client du succès ou de l'échec (Firebase)
+
+        res.json({ message: 'Dossier KYC traité avec succès.' });
+    } catch (e: any) {
+        res.status(500).json({ error: 'Erreur serveur.' });
+    }
+});
+
 export default router;

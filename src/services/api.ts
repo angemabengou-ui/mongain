@@ -89,6 +89,8 @@ export interface User {
     id: string;
     name: string;
     phone: string;
+    kycStatus?: string;
+    kycLevel?: number;
     role?: string;
     wallet: Wallet | null;
 }
