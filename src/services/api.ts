@@ -169,8 +169,11 @@ export const apiTransfer = (receiverPhone: string, amount: number, pin?: string,
         data: { transaction: any; remainingBalance: number; receiverName: string };
     }>;
 
-export const apiDeposit = (amount: number) =>
-    request('POST', '/api/wallet/deposit', { amount }, true) as Promise<{ message: string; balance: number }>;
+export const apiTopUp = (amount: number, cardToken?: string) =>
+    request('POST', '/api/wallet/topup', { amount, cardToken }, true) as Promise<{ message: string; balance: number }>;
+
+export const apiDeposit = (amount: number, phone?: string) =>
+    request('POST', '/api/wallet/deposit', { amount, phone }, true) as Promise<{ message: string; balance: number }>;
 
 export const apiWithdraw = (amount: number, pin?: string, agentPhone?: string, useBiometrics?: boolean) =>
     request('POST', '/api/wallet/withdraw', { amount, pin, agentPhone, useBiometrics }, true) as Promise<{ message: string; balance: number }>;

@@ -32,6 +32,11 @@ const depositSchema = z.object({
     amount: z.number().int('Les décimales sont interdites pour le FCFA.').positive('Le montant doit être positif.'),
 });
 
+const topUpSchema = z.object({
+    amount: z.number().positive(),
+    cardToken: z.string().optional()
+});
+
 const withdrawSchema = z.object({
     amount: z.number().int('Les décimales sont interdites pour le FCFA.').positive('Le montant doit être positif.'),
     pin: z.string().length(4).optional(),
@@ -870,6 +875,56 @@ router.post('/charge', authMiddleware, async (req: AuthRequest, res) => {
     } catch (e: any) {
         console.error('Merchant Charge Error:', e);
         res.status(400).json({ error: e.message || 'Erreur lors de l\'encaissement' });
+    }
+});
+
+// POST /api/wallet/topup (Rechargement par Carte Bancaire Client)
+router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
+    const parsed = topUpSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+    const { amount } = parsed.data;
+
+    try {
+        const user = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
+        if (!user || user.role !== 'USER') throw new Error('Seuls les clients peuvent utiliser ce service de Top-Up.');
+        if (!user.wallet) throw new Error('Wallet introuvable.');
+
+        const newBalance = await prisma.$transaction(async (tx) => {
+            const w = await tx.wallet.update({
+                where: { id: user.wallet!.id },
+                data: { balance: { increment: amount } }
+            });
+
+            await tx.transaction.create({
+                data: {
+                    amount,
+                    receiverWalletId: w.id,
+                    status: 'COMPLETED',
+                    reference: 'TOPUP-CB-' + Math.random().toString(36).substring(7).toUpperCase(),
+                }
+            });
+
+            // Sauvegarder la notif in-app
+            await (tx as any).notification.create({
+                data: {
+                    userId: user.id,
+                    title: 'Rechargement CB',
+                    body: `Votre compte a été rechargé de ${amount.toLocaleString('fr-FR')} FCFA via Carte Bancaire.`,
+                    type: 'TRANSACTION'
+                }
+            });
+
+            return w.balance;
+        });
+
+        // Trigger socket IO if needed, but the user is the one initiating it.
+        return res.json({
+            message: 'Rechargement réussi.',
+            balance: newBalance
+        });
+    } catch (e: any) {
+        return res.status(400).json({ error: e.message || 'Erreur lors du rechargement.' });
     }
 });
 

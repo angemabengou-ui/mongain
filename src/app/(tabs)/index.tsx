@@ -147,11 +147,10 @@ export default function DashboardScreen() {
               {user?.role === 'MERCHANT' && (
                 <ActionItem icon="qr-code" label="Mon QR Code" color="#F59E0B" onPress={() => router.push('/qr')} styles={styles} />
               )}
-              {user?.role === 'AGENT' && (
-                <ActionItem icon="cash" label="Dépôt" color="#059669" onPress={() => router.push('/deposit')} styles={styles} />
-              )}
+
 
               <ActionItem icon="send" label="Transfert" color="#4F46E5" badge="Nouveau" onPress={() => router.push('/transfer')} styles={styles} />
+              <ActionItem icon="card" label="Recharger" color="#10B981" onPress={() => router.push('/deposit')} styles={styles} />
 
               {user?.role === 'AGENT' ? (
                 <ActionItem icon="scan" label="Retrait Client" color="#E11D48" onPress={() => router.push('/qr')} styles={styles} />
