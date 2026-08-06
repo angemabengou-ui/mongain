@@ -943,8 +943,7 @@ router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
 
         let serviceToken = '';
         if (type === 'ELECTRICITY') {
-            // Générer un faux code EDAN de 20 chiffres
-            serviceToken = Array.from({ length: 5 }, () => Math.floor(1000 + Math.random() * 9000)).join(' ');
+            throw new Error("L'intégration SEEG/EDAN est en cours de finalisation. Les achats d'électricité sont suspendus pour la Bêta.");
         }
 
         const newBalance = await prisma.$transaction(async (tx) => {

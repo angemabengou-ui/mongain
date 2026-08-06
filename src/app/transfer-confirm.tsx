@@ -32,7 +32,7 @@ const COLORS = {
 };
 
 export default function TransferConfirmScreen() {
-    const { settings } = useAuth();
+    const { settings, user } = useAuth();
     const router = useRouter();
     const { receiverPhone, receiverName, isMerchant } = useLocalSearchParams<{ receiverPhone: string; receiverName: string; isMerchant: string }>();
     const isPayment = isMerchant === 'true';
