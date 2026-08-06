@@ -1,6 +1,9 @@
 import { API_URL } from './config';
 import { ArrowDownLeft, ArrowUpRight, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { FileText, Download } from 'lucide-react';
 
 export default function Ledger({ token }: { token: string }) {
     const [transactions, setTransactions] = useState<any[]>([]);
@@ -63,6 +66,27 @@ export default function Ledger({ token }: { token: string }) {
         document.body.removeChild(link);
     };
 
+    const exportPDF = () => {
+        const doc = new jsPDF('landscape');
+        doc.setFontSize(22);
+        doc.setTextColor(29, 197, 233);
+        doc.text("Mongain - Grand Livre (Ledger AML)", 14, 22);
+        doc.setFontSize(12);
+        doc.setTextColor(100);
+        doc.text("Rapport financier general. Genere le : " + new Date().toLocaleString('fr-FR'), 14, 32);
+        const tableColumn = ["Date", "Expediteur", "Beneficiaire", "Montant (FCFA)", "Reference", "Statut"];
+        const tableRows = filteredTransactions.map(tx => [
+            new Date(tx.createdAt).toLocaleString('fr-FR'),
+            (tx.senderWallet?.user?.name || 'Systeme') + ' (' + (tx.senderWallet?.user?.phone || 'N/A') + ')',
+            (tx.receiverWallet?.user?.name || 'Systeme') + ' (' + (tx.receiverWallet?.user?.phone || 'N/A') + ')',
+            tx.amount.toString(),
+            tx.reference || tx.id,
+            tx.status
+        ]);
+        autoTable(doc, { head: [tableColumn], body: tableRows, startY: 40, theme: 'grid', styles: { fontSize: 10, cellPadding: 4 }, headStyles: { fillColor: [41, 128, 185], textColor: 255 } });
+        doc.save('Mongain_Ledger_' + new Date().toISOString().split('T')[0] + '.pdf');
+    };
+
     return (
         <div className="dashboard-content">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -70,11 +94,16 @@ export default function Ledger({ token }: { token: string }) {
                     <h2>Grand Livre (Ledger AML)</h2>
                     <p style={{ color: 'var(--text-secondary)' }}>Surveillance en temps réel de tous les flux financiers de la plateforme.</p>
                 </div>
-                <button
-                    onClick={exportCSV}
-                    style={{ padding: '12px 20px', backgroundColor: '#10B981', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
-                    Télécharger CSV
-                </button>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                    <button onClick={exportCSV} style={{ padding: '12px 20px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
+                        <Download size={18} />
+                        CSV
+                    </button>
+                    <button onClick={exportPDF} style={{ padding: '12px 20px', backgroundColor: '#e11d48', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
+                        <FileText size={18} />
+                        Télécharger PDF
+                    </button>
+                </div>
             </div>
 
             <div style={{ marginBottom: '24px', position: 'relative' }}>
