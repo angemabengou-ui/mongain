@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import cors from 'cors';
 import express from 'express';
+import helmet from 'helmet';
 import http from 'http';
 import { Server } from 'socket.io';
 import { prisma } from './prisma';
@@ -19,7 +20,16 @@ app.set('io', io); // Makes it available to routes via req.app.get('io')
 
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+// Security Middleware (XSS, Clickjacking, Sniffing prevention)
+app.use(helmet());
+
+// CORS configuration (Restrict domains)
+app.use(cors({
+    origin: ['http://localhost:5173', 'http://localhost:3000', 'https://mongain-backend.onrender.com'], // Vite Admin & Local Mobile/Web
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Bypass-Tunnel-Reminder', 'ngrok-skip-browser-warning']
+}));
+
 app.use(express.json());
 
 import reclamationRoutes from './routes/reclamation';
