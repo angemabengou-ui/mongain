@@ -93,8 +93,19 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
 
         const settings = await getSystemSettings();
 
-        // Taxe Mongain Dynamique sur le paiement P2P
-        const taxVal = Math.ceil(amount * settings.taxP2P);
+        // Taxe Mongain Dynamique sur le paiement (P2P et Marchands à 1%)
+        let taxVal = Math.ceil(amount * settings.taxP2P);
+
+        // --- Exemptions de Frais ---
+        // 1. Transfert de l'Agence (Agent) vers un Client
+        if (sender.role === 'AGENT' && receiver.role === 'USER') {
+            taxVal = 0;
+        }
+        // 2. Transfert du Siège (Admin) vers un Agent
+        if (sender.role === 'ADMIN' && receiver.role === 'AGENT') {
+            taxVal = 0;
+        }
+
         const totalDebit = amount + taxVal;
 
         if (sender.wallet.balance < totalDebit) {

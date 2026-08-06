@@ -256,23 +256,29 @@ export default function TransferConfirmScreen() {
                         />
                     </View>
 
-                    {Number(amount) > 0 && (
-                        <View style={{ backgroundColor: 'rgba(29, 197, 233, 0.05)', padding: 16, borderRadius: 16, marginTop: 12, borderWidth: 1, borderColor: 'rgba(29, 197, 233, 0.2)' }}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                                <Text style={{ color: COLORS.textSecondary }}>Montant envoyé</Text>
-                                <Text style={{ color: COLORS.textPrimary, fontWeight: '600' }}>{Number(amount).toLocaleString('fr-FR')} FCFA</Text>
+                    {Number(amount) > 0 && (() => {
+                        const isExempt = (user?.role === 'AGENT' && !isPayment) || user?.role === 'ADMIN';
+                        const p2pFee = isExempt ? 0 : Math.ceil(Number(amount) * (settings?.taxP2P || 0.01));
+                        const totalDebit = Number(amount) + p2pFee;
+
+                        return (
+                            <View style={{ backgroundColor: 'rgba(29, 197, 233, 0.05)', padding: 16, borderRadius: 16, marginTop: 12, borderWidth: 1, borderColor: 'rgba(29, 197, 233, 0.2)' }}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                                    <Text style={{ color: COLORS.textSecondary }}>Montant envoyé</Text>
+                                    <Text style={{ color: COLORS.textPrimary, fontWeight: '600' }}>{Number(amount).toLocaleString('fr-FR')} FCFA</Text>
+                                </View>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                                    <Text style={{ color: isExempt ? '#059669' : '#F59E0B' }}>Frais {isExempt ? '(Gratuit)' : `(${settings?.taxP2P ? settings.taxP2P * 100 : 1}%)`}</Text>
+                                    <Text style={{ color: isExempt ? '#059669' : '#F59E0B', fontWeight: '600' }}>{p2pFee.toLocaleString('fr-FR')} FCFA</Text>
+                                </View>
+                                <View style={{ width: '100%', height: 1, backgroundColor: COLORS.border || '#e2e8f0', marginVertical: 4 }} />
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+                                    <Text style={{ color: COLORS.textPrimary, fontWeight: '700' }}>Total à débiter</Text>
+                                    <Text style={{ color: COLORS.textPrimary, fontWeight: '800', fontSize: 16 }}>{totalDebit.toLocaleString('fr-FR')} FCFA</Text>
+                                </View>
                             </View>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                                <Text style={{ color: '#F59E0B' }}>Frais ({settings?.taxP2P ? settings.taxP2P * 100 : 1}%)</Text>
-                                <Text style={{ color: '#F59E0B', fontWeight: '600' }}>{Math.ceil(Number(amount) * (settings?.taxP2P || 0.01)).toLocaleString('fr-FR')} FCFA</Text>
-                            </View>
-                            <View style={{ width: '100%', height: 1, backgroundColor: COLORS.border || '#e2e8f0', marginVertical: 4 }} />
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-                                <Text style={{ color: COLORS.textPrimary, fontWeight: '700' }}>Total à débiter</Text>
-                                <Text style={{ color: COLORS.textPrimary, fontWeight: '800', fontSize: 16 }}>{Math.ceil(Number(amount) + (Number(amount) * (settings?.taxP2P || 0.01))).toLocaleString('fr-FR')} FCFA</Text>
-                            </View>
-                        </View>
-                    )}
+                        );
+                    })()}
 
                     {/* Raccourcis */}
                     <View style={styles.amountShortcuts}>
