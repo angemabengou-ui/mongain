@@ -1,9 +1,22 @@
 import bcrypt from 'bcryptjs';
+import { Expo } from 'expo-server-sdk';
 import { Router } from 'express';
 import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { getSystemSettings } from './settings';
+
+const expo = new Expo();
+
+export const sendPush = async (token: string | null | undefined, title: string, body: string) => {
+    if (token && Expo.isExpoPushToken(token)) {
+        try {
+            await expo.sendPushNotificationsAsync([{ to: token, sound: 'default', title, body }]);
+        } catch (e) {
+            console.error('Erreur Push Notification:', e);
+        }
+    }
+};
 
 const router = Router();
 
@@ -148,6 +161,9 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
             });
         }
 
+        // Push Notification to Receiver
+        sendPush((receiver as any).pushToken, 'Transfert Reçu 💰', `Vous avez reçu ${amount.toLocaleString('fr-FR')} FCFA de ${sender.name}.`);
+
         return res.json({ message: 'Transfert effectué avec succès.', balance: newBalance });
     } catch (e: any) {
         return res.status(400).json({ error: e.message || 'Erreur lors du transfert.' });
@@ -270,7 +286,7 @@ router.post('/deposit', authMiddleware, async (req: AuthRequest, res) => {
                     reference: 'DEPOSIT-' + Math.random().toString(36).substring(7).toUpperCase(),
                 }
             });
-            return updatedAgentWallet.balance;
+            return { balance: updatedAgentWallet.balance, clientName: client.name, pushToken: (client as any).pushToken };
         });
 
         // Notify Client via Socket.IO
@@ -282,7 +298,10 @@ router.post('/deposit', authMiddleware, async (req: AuthRequest, res) => {
             });
         }
 
-        return res.json({ message: 'Dépôt réussi !', balance: result });
+        // Trigger Push
+        sendPush(result.pushToken, 'Dépôt Réussi 🏦', `L'agent vous a déposé ${amount.toLocaleString('fr-FR')} FCFA. Ton solde est mis à jour.`);
+
+        return res.json({ message: `Dépôt de ${amount} FCFA effectué vers ${result.clientName}.`, balance: result.balance });
     } catch (error: any) {
         return res.status(400).json({ error: error.message });
     }

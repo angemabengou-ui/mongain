@@ -3,6 +3,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as Print from 'expo-print';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
+import LottieView from 'lottie-react-native';
 import { useState } from 'react';
 import {
     ActivityIndicator,
@@ -175,7 +176,12 @@ export default function TransferConfirmScreen() {
         return (
             <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center', padding: 32 }]}>
                 <View style={styles.successIconWrap}>
-                    <Ionicons name="checkmark-circle" size={90} color={COLORS.success} />
+                    <LottieView
+                        source={require('../assets/success.json')}
+                        autoPlay
+                        loop={false}
+                        style={{ width: 150, height: 150 }}
+                    />
                 </View>
                 <Text style={styles.successTitle}>Transfert réussi !</Text>
                 <Text style={styles.successSubtitle}>

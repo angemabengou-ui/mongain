@@ -1,5 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Print from 'expo-print';
 import { useRouter } from 'expo-router';
+import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -56,10 +58,70 @@ export default function HistoryScreen() {
 
     const filtered = transactions.filter(tx => filter === 'all' || tx.type === filter);
 
+    const handleDownloadPDF = async () => {
+        try {
+            const tableRows = filtered.map(tx => `
+                <tr style="border-bottom:1px solid #e5e7eb;">
+                    <td style="padding:10px;text-align:left;">${formatDate(tx.createdAt)}</td>
+                    <td style="padding:10px;text-align:left;color:${tx.type === 'incoming' ? '#059669' : '#E11D48'};font-weight:bold;">${tx.type === 'incoming' ? 'Entrant' : 'Sortant'}</td>
+                    <td style="padding:10px;text-align:left;">${tx.counterpart}</td>
+                    <td style="padding:10px;text-align:left;">${tx.reference || 'Aucune'}</td>
+                    <td style="padding:10px;text-align:right;font-weight:bold;">${formatAmount(tx)}</td>
+                </tr>
+            `).join('');
+
+            const html = `
+                <html>
+                  <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+                    <style>
+                      body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 30px; color: #1E293B; }
+                      h1 { color: #4F46E5; font-size: 28px; }
+                      .header { padding-bottom: 20px; border-bottom: 2px solid #E2E8F0; margin-bottom: 20px; }
+                      table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                      th { background-color: #F8FAFC; padding: 12px; text-align: left; font-size: 13px; color: #64748B; border-bottom: 2px solid #E2E8F0; }
+                    </style>
+                  </head>
+                  <body>
+                      <div class="header">
+                          <h1>Mongain.</h1>
+                          <p style="font-size: 14px; color: #64748B;text-transform:uppercase;">Relevé Bancaire Mensuel</p>
+                          <p style="font-size: 12px;">Édité le ${new Date().toLocaleDateString('fr-FR')}</p>
+                      </div>
+                      <p><b>Période:</b> Les ${filtered.length} dernières transactions</p>
+                      <table>
+                          <thead>
+                              <tr>
+                                  <th>DATE</th>
+                                  <th>TYPE</th>
+                                  <th>TIERS</th>
+                                  <th>RÉFÉRENCE</th>
+                                  <th style="text-align:right;">MONTANT</th>
+                              </tr>
+                          </thead>
+                          <tbody>
+                              ${tableRows}
+                          </tbody>
+                      </table>
+                  </body>
+                </html>
+            `;
+            const { uri } = await Print.printToFileAsync({ html });
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(uri);
+            }
+        } catch (e) {
+            console.error('Erreur génération PDF', e);
+        }
+    };
+
     return (
         <SafeAreaView style={styles.safeArea}>
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Historique</Text>
+                <TouchableOpacity onPress={handleDownloadPDF} style={{ width: 40, height: 40, backgroundColor: COLORS.primary + '15', borderRadius: 20, justifyContent: 'center', alignItems: 'center' }}>
+                    <Ionicons name="download" size={20} color={COLORS.primary} />
+                </TouchableOpacity>
             </View>
 
             <View style={styles.filterContainer}>
@@ -141,6 +203,7 @@ const TransactionItem = ({ tx, styles, colors }: any) => {
 const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: COLORS.background },
     header: {
+        flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
         paddingHorizontal: 20, paddingVertical: 20,
         backgroundColor: COLORS.surface, elevation: 2,
         shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4,
