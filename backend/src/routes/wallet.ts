@@ -928,4 +928,61 @@ router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
+// POST /api/wallet/pay-service (Achat Électricité, etc.)
+router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const { type, amount, reference } = req.body;
+        if (!amount || amount <= 0) throw new Error('Montant invalide');
+
+        const user = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
+        if (!user || user.role !== 'USER') throw new Error('Seuls les clients peuvent utiliser ce service.');
+        if (!user.wallet || user.wallet.balance < amount) throw new Error('Solde insuffisant pour ce paiement.');
+
+        const reserve = await prisma.user.findUnique({ where: { phone: '+24199999999' }, include: { wallet: true } });
+        if (!reserve || !reserve.wallet) throw new Error('Le service est temporairement indisponible (compte central manquant).');
+
+        let serviceToken = '';
+        if (type === 'ELECTRICITY') {
+            // Générer un faux code EDAN de 20 chiffres
+            serviceToken = Array.from({ length: 5 }, () => Math.floor(1000 + Math.random() * 9000)).join(' ');
+        }
+
+        const newBalance = await prisma.$transaction(async (tx) => {
+            const w = await tx.wallet.update({
+                where: { id: user.wallet!.id },
+                data: { balance: { decrement: amount } }
+            });
+
+            await tx.transaction.create({
+                data: {
+                    amount,
+                    senderWalletId: w.id, // Débit
+                    receiverWalletId: reserve!.wallet!.id, // Crédit à la plateforme centrale
+                    status: 'COMPLETED',
+                    reference: `SERVICE-${type}-${Math.random().toString(36).substring(7).toUpperCase()}`,
+                }
+            });
+
+            await (tx as any).notification.create({
+                data: {
+                    userId: user.id,
+                    title: `Achat de Service : ${type}`,
+                    body: `Débit de ${amount.toLocaleString('fr-FR')} FCFA. Référence: ${reference}.`,
+                    type: 'SYSTEM'
+                }
+            });
+
+            return w.balance;
+        });
+
+        return res.json({
+            message: 'Achat effectué avec succès.',
+            balance: newBalance,
+            serviceToken
+        });
+    } catch (e: any) {
+        return res.status(400).json({ error: e.message || 'Erreur lors de l\'achat du service.' });
+    }
+});
+
 export default router;

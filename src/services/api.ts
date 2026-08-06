@@ -187,3 +187,7 @@ export const apiAgentWithdrawConfirm = (payerPhone: string, amount: number, with
 // Reclamations
 export const apiGetReclamations = () => request('GET', '/api/reclamation', undefined, true) as Promise<any[]>;
 export const apiCreateReclamation = (title: string, description: string) => request('POST', '/api/reclamation', { title, description }, true) as Promise<any>;
+
+// Services
+export const apiPayService = (type: string, amount: number, reference?: string) =>
+    request('POST', '/api/wallet/pay-service', { type, amount, reference }, true) as Promise<{ message: string; balance: number; serviceToken?: string }>;

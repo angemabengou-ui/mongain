@@ -189,10 +189,10 @@ export default function DashboardScreen() {
             <View style={styles.serviceSection}>
               <Text style={styles.sectionTitle}>Services & Factures</Text>
               <View style={styles.serviceGrid}>
-                <ServiceItem icon="flash" label="Électricité" color="#f59e0b" onPress={() => Alert.alert('Électricité', 'Le paiement SEEG sera bientôt disponible !')} styles={styles} />
+                <ServiceItem icon="flash" label="Électricité" color="#f59e0b" onPress={() => router.push('/services/electricity')} styles={styles} />
                 <ServiceItem icon="phone-portrait" label="Crédit Air" color="#d946ef" onPress={() => Alert.alert('Crédit & Data', 'Rechargez votre crédit bientôt !')} styles={styles} />
                 <ServiceItem icon="tv" label="Web TV" color="#3b82f6" onPress={() => Alert.alert('Abonnement TV', 'Le renouvellement Canal+ arrive !')} styles={styles} />
-                <ServiceItem icon="lock-closed" label="Tontine" color="#10b981" onPress={() => Alert.alert('Tontine', 'L\'épargne commune arrive en V2 !')} styles={styles} />
+                <ServiceItem icon="lock-closed" label="Tontine" color="#10b981" onPress={() => router.push('/services/tontine')} styles={styles} />
               </View>
             </View>
 
