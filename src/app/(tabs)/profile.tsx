@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
+import { apiGetDailyLimits } from '../../services/api';
 
 export default function ProfileScreen() {
     const { user, logout } = useAuth();
@@ -13,6 +15,14 @@ export default function ProfileScreen() {
 
     const balance = user?.wallet?.balance ?? 0;
     const currency = user?.wallet?.currency ?? 'FCFA';
+
+    const [limits, setLimits] = useState<any>(null);
+
+    useEffect(() => {
+        if (user && user.role === 'USER') {
+            apiGetDailyLimits().then(data => setLimits(data)).catch(console.error);
+        }
+    }, [user]);
 
     const initials = user?.name
         ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -60,12 +70,33 @@ export default function ProfileScreen() {
                     </Text>
                 </View>
 
+                {/* --- Limits Progress Bar --- */}
+                {limits && !limits.skip && (
+                    <View style={{ marginHorizontal: 20, marginTop: 15, padding: 18, backgroundColor: COLORS.surface, borderRadius: 16, elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.textPrimary }}>Plafond Journalier</Text>
+                            <Text style={{ fontSize: 13, fontWeight: '600', color: COLORS.textSecondary }}>{(limits.dailySpend / limits.dailyLimit * 100).toFixed(0)}%</Text>
+                        </View>
+                        <View style={{ width: '100%', height: 8, backgroundColor: COLORS.border, borderRadius: 4, overflow: 'hidden' }}>
+                            <View style={{ width: `${Math.min(100, (limits.dailySpend / limits.dailyLimit) * 100)}%`, height: '100%', backgroundColor: limits.dailySpend > limits.dailyLimit * 0.8 ? '#ef4444' : '#10b981', borderRadius: 4 }} />
+                        </View>
+                        <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 8 }}>
+                            Dépensé : <Text style={{ fontWeight: 'bold', color: COLORS.textPrimary }}>{limits.dailySpend.toLocaleString('fr-FR')}</Text> / {limits.dailyLimit.toLocaleString('fr-FR')} FCFA
+                        </Text>
+                        {limits.kycLevel === 0 && (
+                            <TouchableOpacity onPress={() => router.push('/profile-edit')} style={{ marginTop: 12, backgroundColor: '#fef3c7', padding: 8, borderRadius: 8 }}>
+                                <Text style={{ color: '#d97706', fontSize: 12, fontWeight: '600', textAlign: 'center' }}>+ Débloquer la limite d'envoi jusqu'à 2M (KYC) 🚀</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                )}
+
                 {/* Options */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Compte</Text>
                     <MenuItem icon="person-outline" label="Informations personnelles" onPress={() => router.push('/profile-edit')} styles={styles} colors={COLORS} />
                     <MenuItem icon="shield-checkmark-outline" label="Sécurité & PIN" onPress={() => router.push('/pin-change')} styles={styles} colors={COLORS} />
-                    <MenuItem icon="notifications-outline" label="Notifications" styles={styles} colors={COLORS} />
+                    <MenuItem icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications')} styles={styles} colors={COLORS} />
                 </View>
 
                 <View style={styles.section}>

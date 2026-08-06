@@ -34,6 +34,7 @@ model User {
   wallet            Wallet?
   reclamations      Reclamation[]
   auditLogs         AuditLog[]
+  notifications     Notification[]
 }
 
 model Reclamation {
@@ -104,4 +105,15 @@ model SystemSettings {
   dailyLimitTier1  Float    @default(2000000.0) // Plafond en FCFA par jour pour vérifiés
   
   updatedAt        DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  body      String
+  type      String   @default("INFO") // INFO, TRANSACTION, SECURITY, SYSTEM
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
 }

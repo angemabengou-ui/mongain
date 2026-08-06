@@ -7,6 +7,7 @@ import { Server } from 'socket.io';
 import { prisma } from './prisma';
 import adminRoutes from './routes/admin';
 import authRoutes from './routes/auth';
+import notificationRoutes from './routes/notifications';
 import settingsRoutes from './routes/settings';
 import walletRoutes from './routes/wallet';
 
@@ -41,6 +42,7 @@ app.use('/api/wallet', walletRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/reclamation', reclamationRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', app: 'Mongain Backend', socket: true }));

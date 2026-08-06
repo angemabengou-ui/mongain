@@ -96,6 +96,31 @@ async function verifyDailyLimit(userId: string, requestedAmount: number, setting
     }
 }
 
+// GET /api/wallet/limits
+router.get('/limits', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const user = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
+        if (!user || user.role !== 'USER') return res.json({ skip: true }); // Les Agents/Marchands n'ont pas de limite journalière stricte dans cette V4.
+
+        const settings = await getSystemSettings();
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const txs = await prisma.transaction.aggregate({
+            where: { senderWalletId: user.wallet!.id, createdAt: { gte: today } },
+            _sum: { amount: true }
+        });
+
+        const dailySpend = txs._sum.amount || 0;
+        const dailyLimit = (user as any).kycLevel >= 1 ? (settings as any).dailyLimitTier1 : (settings as any).dailyLimitTier0;
+
+        res.json({ dailySpend, dailyLimit, kycStatus: (user as any).kycStatus, kycLevel: (user as any).kycLevel });
+    } catch (e: any) {
+        res.status(500).json({ error: 'Erreur lors du calcul des limites.' });
+    }
+});
+
 // POST /api/wallet/transfer
 router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
     try {

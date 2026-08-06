@@ -141,6 +141,22 @@ export const apiResetPIN = (phone: string, otp: string, newPin: string) =>
 export const apiLookupUser = (phone: string) =>
     request('GET', `/api/wallet/lookup/${encodeURIComponent(phone)}`, undefined, true) as Promise<{ id: string; name: string; phone: string; role: string }>;
 
+export const apiGetDailyLimits = () =>
+    request('GET', '/api/wallet/limits', undefined, true) as Promise<{ skip?: boolean, dailySpend: number, dailyLimit: number, kycStatus: string, kycLevel: number }>;
+
+export interface AppNotification {
+    id: string; title: string; body: string; type: string; isRead: boolean; createdAt: string;
+}
+
+export const apiGetNotifications = () =>
+    request('GET', '/api/notifications', undefined, true) as Promise<AppNotification[]>;
+
+export const apiGetUnreadCount = () =>
+    request('GET', '/api/notifications/unread-count', undefined, true) as Promise<{ count: number }>;
+
+export const apiMarkAsRead = (id?: string) =>
+    request('PUT', id ? `/api/notifications/${id}/read` : '/api/notifications/read-all', undefined, true);
+
 export const apiGetBalance = () =>
     request('GET', '/api/wallet/balance', undefined, true) as Promise<{ balance: number; currency: string }>;
 
