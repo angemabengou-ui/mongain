@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import React, { useEffect, useRef, useState } from 'react';
 import { AppState, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppTheme } from '../constants/theme';
@@ -8,40 +9,53 @@ import { useAuth } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
-// 1 minute d'inactivité maximum
-const INACTIVITY_LIMIT_MS = 60 * 1000;
-
 let lastInteractionTime = Date.now();
+const INACTIVITY_LIMIT_MS = 60 * 1000;
 
 export function SecurityWrapper({ children }: { children: React.ReactNode }) {
     const { token } = useAuth();
     const router = useRouter();
     const COLORS = useAppTheme();
 
-    // Verrouillé par défaut si on a un token au démarrage
     const [isLocked, setIsLocked] = useState(false);
     const appState = useRef(AppState.currentState);
-
-    // Initialize lock state ONLY on boot (not after fresh login)
     const isBooting = useRef(true);
+
+    const checkLockAndPrompt = async () => {
+        const lockPref = await SecureStore.getItemAsync('appLockEnabled');
+        if (lockPref === 'true') {
+            setIsLocked(true);
+            setTimeout(() => handleUnlock(), 500); // Auto-prompt
+        } else {
+            setIsLocked(false);
+        }
+    };
 
     useEffect(() => {
         if (token && isBooting.current) {
-            setIsLocked(true); // Froid Démarrage : verrouiller
+            checkLockAndPrompt();
         }
         isBooting.current = false;
     }, [token]);
 
     useEffect(() => {
-        const subscription = AppState.addEventListener('change', nextAppState => {
+        const subscription = AppState.addEventListener('change', async nextAppState => {
             if (appState.current.match(/active/) && nextAppState === 'background') {
                 lastInteractionTime = Date.now();
             }
 
             if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
-                // Retour en foreground, vérifier l'inactivité
-                if (token && (Date.now() - lastInteractionTime > INACTIVITY_LIMIT_MS)) {
-                    setIsLocked(true);
+                if (token) {
+                    const lockPref = await SecureStore.getItemAsync('appLockEnabled');
+                    const timeoutExceeded = Date.now() - lastInteractionTime > INACTIVITY_LIMIT_MS;
+
+                    if (lockPref === 'true') {
+                        setIsLocked(true);
+                        handleUnlock();
+                    } else if (timeoutExceeded) {
+                        // Optional: we can force lock if really inactive for a long time, but let's respect preference
+                        // setIsLocked(false);
+                    }
                 }
             }
             appState.current = nextAppState;
@@ -66,7 +80,6 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
                 setIsLocked(false);
             }
         } else {
-            // Pas de biométrie native configurée sur ce téléphone, on déverrouille par défaut (ou on demande le PIN in-app)
             setIsLocked(false);
         }
     };

@@ -4,6 +4,7 @@ import express from 'express';
 import helmet from 'helmet';
 import http from 'http';
 import { Server } from 'socket.io';
+import { initCronJobs } from './cron';
 import { prisma } from './prisma';
 import adminRoutes from './routes/admin';
 import authRoutes from './routes/auth';
@@ -83,6 +84,9 @@ async function initializeApp() {
         });
         console.log('✅ Admin Corporate Account Created.');
     }
+
+    // Init Tontine Cron
+    initCronJobs();
 
     server.listen(PORT, () => {
         console.log(`✅ Serveur Mongain en ligne sur http://localhost:${PORT}`);

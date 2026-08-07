@@ -126,6 +126,7 @@ model TontineGroup {
   frequency    String   @default("MONTHLY") // WEEKLY, MONTHLY
   startDate    DateTime @default(now())
   status       String   @default("ACTIVE") // ACTIVE, COMPLETED, CANCELLED
+  currentCycle Int      @default(1)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

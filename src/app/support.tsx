@@ -96,11 +96,11 @@ export default function SupportScreen() {
                         disabled={loading}
                     >
                         {loading ? (
-                            <ActivityIndicator color={COLORS.buttonText} />
+                            <ActivityIndicator color={COLORS.surface} />
                         ) : (
                             <>
                                 <Text style={styles.submitBtnText}>Envoyer la réclamation</Text>
-                                <Ionicons name="paper-plane" size={20} color={COLORS.buttonText} />
+                                <Ionicons name="paper-plane" size={20} color={COLORS.surface} />
                             </>
                         )}
                     </TouchableOpacity>
@@ -119,7 +119,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         paddingVertical: 16,
         backgroundColor: COLORS.surface,
         borderBottomWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
+        borderColor: '#2D1F4D',
     },
     backBtn: {
         width: 40, height: 40,
@@ -176,7 +176,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     input: {
         backgroundColor: COLORS.background,
         borderWidth: 1,
-        borderColor: COLORS.surfaceHighlight,
+        borderColor: '#2D1F4D',
         borderRadius: 12,
         padding: 16,
         fontSize: 16,
@@ -200,7 +200,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         opacity: 0.7,
     },
     submitBtnText: {
-        color: COLORS.buttonText,
+        color: COLORS.surface,
         fontSize: 16,
         fontWeight: '700',
     },

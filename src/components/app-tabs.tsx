@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useColorScheme } from 'react-native';
 

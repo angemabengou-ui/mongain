@@ -11,17 +11,17 @@ const router = Router();
 
 const registerSchema = z.object({
     name: z.string().min(2, 'Le nom doit comporter au moins 2 caractères.'),
-    phone: z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro de téléphone invalide.'),
+    phone: z.string().regex(/^\+?[0-9\s]{8,15}$/, 'Numéro de téléphone invalide.').transform(val => val.replace(/\s+/g, '').replace(/^\+2410/, '+241')),
     pin: z.string().length(4, 'Le code PIN doit comporter 4 chiffres.').regex(/^\d+$/, 'Le PIN doit être numérique.'),
     otpCode: z.string().length(4, 'Le code de vérification doit comporter 4 chiffres.'),
 });
 
 const requestOtpSchema = z.object({
-    phone: z.string().regex(/^\+?[0-9]{8,15}$/, 'Numéro de téléphone invalide.'),
+    phone: z.string().regex(/^\+?[0-9\s]{8,15}$/, 'Numéro de téléphone invalide.').transform(val => val.replace(/\s+/g, '').replace(/^\+2410/, '+241')),
 });
 
 const loginSchema = z.object({
-    phone: z.string(),
+    phone: z.string().transform(val => val.replace(/\s+/g, '').replace(/^\+2410/, '+241')),
     pin: z.string(),
 });
 
@@ -100,7 +100,7 @@ router.post('/request-reset-otp', smsLimiter, async (req, res) => {
 });
 
 const resetPinSchema = z.object({
-    phone: z.string(),
+    phone: z.string().transform(val => val.replace(/\s+/g, '').replace(/^\+2410/, '+241')),
     otpCode: z.string().length(4),
     newPin: z.string().length(4).regex(/^\d+$/),
 });
