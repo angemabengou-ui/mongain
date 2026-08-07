@@ -191,3 +191,10 @@ export const apiCreateReclamation = (title: string, description: string) => requ
 // Services
 export const apiPayService = (type: string, amount: number, reference?: string) =>
     request('POST', '/api/wallet/pay-service', { type, amount, reference }, true) as Promise<{ message: string; balance: number; serviceToken?: string }>;
+
+// Tontine
+export const apiGetTontineGroups = () =>
+    request('GET', '/api/tontine/groups', undefined, true) as Promise<{ data: { groups: any[]; myParticipations: any[] } }>;
+
+export const apiJoinTontine = (groupId: string) =>
+    request('POST', '/api/tontine/join', { groupId }, true) as Promise<any>;
