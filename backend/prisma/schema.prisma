@@ -35,6 +35,7 @@ model User {
   reclamations      Reclamation[]
   auditLogs         AuditLog[]
   notifications     Notification[]
+  tontineParticipations TontineParticipant[]
 }
 
 model Reclamation {
@@ -116,4 +117,28 @@ model Notification {
   type      String   @default("INFO") // INFO, TRANSACTION, SECURITY, SYSTEM
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+model TontineGroup {
+  id           String   @id @default(uuid())
+  name         String
+  contribution Float
+  frequency    String   @default("MONTHLY") // WEEKLY, MONTHLY
+  startDate    DateTime @default(now())
+  status       String   @default("ACTIVE") // ACTIVE, COMPLETED, CANCELLED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  participants TontineParticipant[]
+}
+
+model TontineParticipant {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  tontineGroupId String
+  group          TontineGroup @relation(fields: [tontineGroupId], references: [id])
+  status         String   @default("ACTIVE") // ACTIVE, PAUSED
+  joinedAt       DateTime @default(now())
+  payoutOrder    Int      @default(0)
 }
