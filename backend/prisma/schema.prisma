@@ -55,6 +55,8 @@ model Wallet {
   user      User     @relation(fields: [userId], references: [id])
   balance   Float    @default(0.0)
   currency  String   @default("FCFA")
+  dailySpent      Float    @default(0.0)    // Dépense journalière (atomique, réinitialisé chaque jour)
+  dailySpentResetAt DateTime @default(now()) // Date dernière remise à zéro
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -127,6 +129,7 @@ model TontineGroup {
   startDate    DateTime @default(now())
   status       String   @default("ACTIVE") // ACTIVE, COMPLETED, CANCELLED
   currentCycle Int      @default(1)
+  lastPayoutDate DateTime? // Date du dernier paiement, pour rattrapage CRON si crash
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

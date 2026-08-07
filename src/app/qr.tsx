@@ -50,27 +50,31 @@ export default function QrScreen() {
         }
     }, [mode, permission]);
 
-    const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
-        setScanned(true);
+    const [scanError, setScanError] = useState<string | null>(null);
 
-        // Parse our money app schema
+    const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
+        if (scanned) return;
+        setScanned(true);
+        setScanError(null);
+
+        const showError = (msg: string) => {
+            setScanError(msg);
+            setTimeout(() => { setScanError(null); setScanned(false); }, 3000);
+        };
+
         if (data.startsWith('mongain://transfer')) {
             try {
-                // Extract params
                 const qs = data.split('?')[1];
                 const params = new URLSearchParams(qs);
                 const phone = params.get('phone');
                 const name = params.get('name');
-
                 if (phone) {
-                    router.push({
-                        pathname: '/transfer-confirm',
-                        params: { receiverPhone: phone, receiverName: name || phone, isMerchant: 'false' }
-                    });
+                    router.push({ pathname: '/transfer-confirm', params: { receiverPhone: phone, receiverName: name || phone, isMerchant: 'false' } });
                     return;
                 }
-            } catch (e) {
-                console.log('Error parsing QR', e);
+                showError('QR de transfert invalide : numéro manquant.');
+            } catch {
+                showError('QR de transfert illisible.');
             }
         } else if (data.startsWith('mongain://withdraw')) {
             try {
@@ -78,16 +82,13 @@ export default function QrScreen() {
                 const params = new URLSearchParams(qs);
                 const agentPhone = params.get('agentPhone');
                 const amount = params.get('amount');
-
                 if (agentPhone) {
-                    router.replace({
-                        pathname: '/withdraw',
-                        params: { agentPhone, amount: amount || '' }
-                    });
+                    router.replace({ pathname: '/withdraw', params: { agentPhone, amount: amount || '' } });
                     return;
                 }
-            } catch (e) {
-                console.log('Error parsing withdraw QR', e);
+                showError('QR de retrait invalide : agent introuvable.');
+            } catch {
+                showError('QR de retrait illisible.');
             }
         } else if (data.startsWith('mongain://payment')) {
             try {
@@ -95,39 +96,28 @@ export default function QrScreen() {
                 const params = new URLSearchParams(qs);
                 const merchantPhone = params.get('merchantPhone');
                 const name = params.get('name');
-
                 if (merchantPhone) {
-                    router.push({
-                        pathname: '/transfer-confirm',
-                        params: { receiverPhone: merchantPhone, receiverName: name || merchantPhone, isMerchant: 'true' }
-                    });
+                    router.push({ pathname: '/transfer-confirm', params: { receiverPhone: merchantPhone, receiverName: name || merchantPhone, isMerchant: 'true' } });
                     return;
                 }
-            } catch (e) {
-                console.log('Error parsing payment QR', e);
+                showError('QR marchand invalide : numéro manquant.');
+            } catch {
+                showError('QR marchand illisible.');
             }
         } else if (data.startsWith('mongain://paycode')) {
             try {
-                // Example: mongain://paycode?phone=...&name=...&amount=5000
                 const qs = data.split('?')[1];
                 const params = new URLSearchParams(qs);
                 const payerPhone = params.get('phone');
                 const payerName = params.get('name');
                 const amount = params.get('amount');
-
                 if (payerPhone && amount) {
-                    router.replace({
-                        pathname: '/merchant-charge',
-                        params: {
-                            payerPhone,
-                            payerName: payerName || payerPhone,
-                            amount
-                        }
-                    });
+                    router.replace({ pathname: '/merchant-charge', params: { payerPhone, payerName: payerName || payerPhone, amount } });
                     return;
                 }
-            } catch (e) {
-                console.log('Error parsing paycode QR', e);
+                showError('QR de paiement invalide : données incomplètes.');
+            } catch {
+                showError('QR de paiement illisible.');
             }
         } else if (data.startsWith('mongain://withdrawcode')) {
             try {
@@ -137,21 +127,13 @@ export default function QrScreen() {
                 const clientName = params.get('name');
                 const amount = params.get('amount');
                 const code = params.get('code');
-
                 if (clientPhone && amount) {
-                    router.replace({
-                        pathname: '/agent-withdraw',
-                        params: {
-                            payerPhone: clientPhone,
-                            payerName: clientName || clientPhone,
-                            amount,
-                            withdrawCode: code || ''
-                        }
-                    });
+                    router.replace({ pathname: '/agent-withdraw', params: { payerPhone: clientPhone, payerName: clientName || clientPhone, amount, withdrawCode: code || '' } });
                     return;
                 }
-            } catch (e) {
-                console.log('Error parsing withdrawcode QR', e);
+                showError('QR de code retrait invalide.');
+            } catch {
+                showError('QR de code retrait illisible.');
             }
         } else if (data.startsWith('mongain://agent-withdraw-desk')) {
             try {
@@ -159,25 +141,19 @@ export default function QrScreen() {
                 const params = new URLSearchParams(qs);
                 const agentPhone = params.get('phone');
                 const agentName = params.get('name');
-
                 if (agentPhone) {
-                    router.replace({
-                        pathname: '/client-withdraw-desk',
-                        params: {
-                            agentPhone,
-                            agentName: agentName || agentPhone,
-                        }
-                    });
+                    router.replace({ pathname: '/client-withdraw-desk', params: { agentPhone, agentName: agentName || agentPhone } });
                     return;
                 }
-            } catch (e) {
-                console.log('Error parsing agent-withdraw-desk QR', e);
+                showError('QR agent bureau invalide.');
+            } catch {
+                showError('QR agent bureau illisible.');
             }
+        } else {
+            showError('Ce QR Code n\'est pas un code Mongain valide.');
         }
-
-        // If not a valid QR, reset after 2 sec
-        setTimeout(() => setScanned(false), 2000);
     };
+
 
     if (!user) {
         return (
@@ -239,6 +215,12 @@ export default function QrScreen() {
                                     }}
                                 />
                                 <View style={styles.scannerOverlay}>
+                                    {scanError ? (
+                                        <View style={styles.errorBanner}>
+                                            <Ionicons name="close-circle" size={22} color="#fff" />
+                                            <Text style={styles.errorBannerText}>{scanError}</Text>
+                                        </View>
+                                    ) : null}
                                     <View style={styles.scanCorners}>
                                         <View style={[styles.corner, styles.topLeft]} />
                                         <View style={[styles.corner, styles.topRight]} />
@@ -316,6 +298,12 @@ const styles = StyleSheet.create({
     bottomLeft: { bottom: -2, left: -2, borderBottomWidth: 4, borderLeftWidth: 4, borderBottomLeftRadius: 16 },
     bottomRight: { bottom: -2, right: -2, borderBottomWidth: 4, borderRightWidth: 4, borderBottomRightRadius: 16 },
     scanInstruction: { color: '#fff', fontSize: 15, fontWeight: '500', textAlign: 'center', marginTop: 32 },
+    errorBanner: {
+        position: 'absolute', top: 32, left: 20, right: 20,
+        backgroundColor: 'rgba(239, 68, 68, 0.92)', borderRadius: 12,
+        flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14,
+    },
+    errorBannerText: { color: '#fff', fontSize: 14, fontWeight: '600', flex: 1 },
     permissionMessage: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
     permissionTitle: { color: '#fff', fontSize: 22, fontWeight: 'bold', marginBottom: 12 },
     permissionSubtitle: { color: '#a0aec0', fontSize: 15, textAlign: 'center', marginBottom: 24, lineHeight: 22 },

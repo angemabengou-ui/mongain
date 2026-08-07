@@ -8,6 +8,8 @@ import { getSystemSettings } from './settings';
 
 const expo = new Expo();
 
+const CORPORATE_PHONE = process.env.CORPORATE_PHONE || '+24100000000';
+
 export const sendPush = async (token: string | null | undefined, title: string, body: string) => {
     if (token && Expo.isExpoPushToken(token)) {
         try {
@@ -74,32 +76,39 @@ router.post('/generate-withdraw-code', authMiddleware, async (req: AuthRequest, 
         return res.status(500).json({ error: 'Erreur génération code' });
     }
 });
-// --- Valider les Plafonds V4 ---
-async function verifyDailyLimit(userId: string, requestedAmount: number, settings: any) {
-    const user = await prisma.user.findUnique({ where: { id: userId }, include: { wallet: true } });
-    if (!user || !user.wallet) throw new Error("Compte expéditeur introuvable");
+// ─── Vérification atomique du plafond journalier ───────────────────────────
+async function verifyAndIncrementDailyLimit(
+    walletId: string,
+    userId: string,
+    requestedAmount: number,
+    settings: any
+): Promise<void> {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new Error('Compte introuvable');
+    if (user.role !== 'USER') return; // Agents/Admins exemptés
 
-    // Seuls les utilisateurs standards (USER) sont soumis aux plafonds
-    if (user.role !== 'USER') return;
+    const wallet = await prisma.wallet.findUnique({ where: { id: walletId } });
+    if (!wallet) throw new Error('Portefeuille introuvable');
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const txs = await prisma.transaction.aggregate({
-        where: {
-            senderWalletId: user.wallet.id,
-            createdAt: { gte: today }
-        },
-        _sum: { amount: true }
-    });
-
-    const sumToday = txs._sum.amount || 0;
-    const limit = (user as any).kycLevel >= 1 ? settings.dailyLimitTier1 : settings.dailyLimitTier0;
-
-    if (sumToday + requestedAmount > limit) {
-        throw new Error(`Plafond journalier dépassé (Limite: ${limit} FCFA). Montant déjà utilisé aujourd'hui : ${sumToday} FCFA. Pour augmenter votre limite, vérifiez votre compte.`);
+    // Remettre à zéro si le dernier reset date d'un jour précédent
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    if (wallet.dailySpentResetAt < todayStart) {
+        await prisma.wallet.update({ where: { id: walletId }, data: { dailySpent: 0, dailySpentResetAt: new Date() } });
+        wallet.dailySpent = 0;
     }
+
+    const limit = (user as any).kycLevel >= 1 ? settings.dailyLimitTier1 : settings.dailyLimitTier0;
+    const newSpent = wallet.dailySpent + requestedAmount;
+
+    if (newSpent > limit) {
+        throw new Error(`Plafond journalier dépassé (Limite: ${limit} FCFA). Déjà utilisé : ${wallet.dailySpent} FCFA. Vérifiez votre compte KYC.`);
+    }
+
+    // Incrémenter atomiquement avant la transaction financière
+    await prisma.wallet.update({ where: { id: walletId }, data: { dailySpent: { increment: requestedAmount } } });
 }
+
 
 // GET /api/wallet/limits
 router.get('/limits', authMiddleware, async (req: AuthRequest, res) => {
@@ -168,12 +177,12 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
             return res.status(400).json({ error: `Solde insuffisant. Vous devez disposer de ${totalDebit} FCFA (dont ${taxVal} FCFA de frais de réseau).` });
         }
 
-        // Vérification du plafond journalier KYC
-        await verifyDailyLimit(sender.id, totalDebit, settings);
+        // Vérification du plafond journalier KYC (atomique)
+        await verifyAndIncrementDailyLimit(sender.wallet!.id, sender.id, totalDebit, settings);
 
         // Compte Corporate
         const corporate = await prisma.user.findUnique({
-            where: { phone: '+24100000000' },
+            where: { phone: CORPORATE_PHONE },
             include: { wallet: true }
         });
 
@@ -448,11 +457,11 @@ router.post('/agent-withdraw', authMiddleware, async (req: AuthRequest, res) => 
         if (client.wallet.balance < totalDebit) return res.status(400).json({ error: `Solde insuffisant pour le retrait (Frais: ${totalTax} FCFA).` });
         if (client.id === agent.id) return res.status(400).json({ error: 'Opération circulaire interdite.' });
 
-        // Vérification du plafond pour le retrait client
-        await verifyDailyLimit(client.id, totalDebit, settings);
+        // Vérification du plafond pour le retrait client (atomique)
+        await verifyAndIncrementDailyLimit(client.wallet!.id, client.id, totalDebit, settings);
 
         const corporate = await prisma.user.findUnique({
-            where: { phone: '+24100000000' },
+            where: { phone: CORPORATE_PHONE },
             include: { wallet: true }
         });
 
@@ -604,7 +613,8 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
             if (!receiver || !receiver.wallet) throw new Error("Le destinataire n'existe pas.");
             if (receiver.id === sender.id) throw new Error("Vous ne pouvez pas vous envoyer de l'argent à vous-même.");
 
-            const corporate = await tx.user.findUnique({ where: { phone: '+24100000000' }, include: { wallet: true } });
+            const corporate = await tx.user.findUnique({ where: { phone: CORPORATE_PHONE }, include: { wallet: true } });
+
             if (!corporate || !corporate.wallet) throw new Error("Erreur critique: Compte corporate introuvable.");
 
             const updatedSenderWallet = await tx.wallet.update({
