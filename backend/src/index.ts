@@ -29,7 +29,7 @@ app.use(helmet());
 
 // CORS configuration (Restrict domains)
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:3000', 'https://mongain-backend.onrender.com'], // Vite Admin & Local Mobile/Web
+    origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:8081', 'https://mongain-backend.onrender.com'], // Vite Admin, Local Mobile/Web & Expo Web
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Bypass-Tunnel-Reminder', 'ngrok-skip-browser-warning']
 }));

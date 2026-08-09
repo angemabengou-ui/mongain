@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     KeyboardAvoidingView,
     Platform,
     SafeAreaView,
@@ -23,49 +24,38 @@ const COLORS = {
     textSecondary: '#6b7280',
     error: '#E11D48',
     airtel: '#E30613', // Rouge Airtel
+    moov: '#005CB9',   // Bleu Moov
 };
 
-type Method = 'CARD' | 'AIRTEL';
+type Method = 'CARD' | 'AIRTEL' | 'MOOV';
 
 export default function DepositScreen() {
     const router = useRouter();
 
     // Sélection de méthode
-    const [method, setMethod] = useState<Method>('CARD');
+    const [method, setMethod] = useState<Method>('AIRTEL');
 
-    // Carte bancaire
+    // Airtel/Moov Mobile Money
+    const [phoneMobile, setPhoneMobile] = useState('');
     const [amount, setAmount] = useState('');
-    const [cardNumber, setCardNumber] = useState('');
-    const [expiry, setExpiry] = useState('');
-    const [cvc, setCvc] = useState('');
-
-    // Airtel Money
-    const [airtelPhone, setAirtelPhone] = useState('');
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState<{ balance: number } | null>(null);
 
-    const handleFormatCard = (text: string) => {
-        const cleaned = text.replace(/\D/g, '');
-        let formatted = '';
-        for (let i = 0; i < cleaned.length; i++) {
-            if (i > 0 && i % 4 === 0) formatted += ' ';
-            formatted += cleaned[i];
-        }
-        setCardNumber(formatted.slice(0, 19));
-    };
-
-    const handleFormatExpiry = (text: string) => {
-        const cleaned = text.replace(/\D/g, '');
-        if (cleaned.length >= 2) {
-            setExpiry(`${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}`);
-        } else {
-            setExpiry(cleaned);
-        }
+    const handleComingSoon = () => {
+        Alert.alert(
+            "⏳ Fonctionnalité en développement",
+            "Cette opération ne peut pas encore être effectuée. Nous travaillons activement pour la rendre disponible très bientôt !"
+        );
     };
 
     const handleDeposit = async () => {
+        if (method === 'CARD') {
+            handleComingSoon();
+            return;
+        }
+
         setError('');
         const amountNum = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
 
@@ -74,24 +64,17 @@ export default function DepositScreen() {
             return;
         }
 
-        if (method === 'CARD') {
-            if (cardNumber.length < 19 || expiry.length < 5 || cvc.length < 3) {
-                setError('Veuillez remplir correctement les informations de votre carte.');
-                return;
-            }
-        }
-
-        if (method === 'AIRTEL') {
-            const phone = airtelPhone.replace(/\s/g, '');
-            if (phone.length < 8) {
-                setError('Veuillez entrer un numéro Airtel valide (ex: 074 000 000).');
-                return;
-            }
+        const phone = phoneMobile.replace(/\s/g, '');
+        if (phone.length < 8) {
+            setError('Veuillez entrer un numéro de téléphone valide (ex: 074 000 000 ou 066 000 000).');
+            return;
         }
 
         setLoading(true);
         try {
-            const result = await apiTopUp(amountNum, method === 'CARD' ? 'tok_visa' : 'tok_airtel');
+            // Note: En mode prototype, apiTopUp s'attend juste à un montant et un token
+            const token = method === 'AIRTEL' ? 'tok_airtel' : 'tok_moov';
+            const result = await apiTopUp(amountNum, token);
             setSuccess({ balance: result.balance });
         } catch (e: any) {
             setError(e.message);
@@ -101,11 +84,10 @@ export default function DepositScreen() {
     };
 
     if (success) {
-        const iconName = method === 'AIRTEL' ? 'phone-portrait' : 'card';
         return (
             <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center', padding: 32 }]}>
                 <View style={[styles.successIconWrap, { backgroundColor: '#10b981' + '15', padding: 24, borderRadius: 50 }]}>
-                    <Ionicons name={iconName} size={80} color="#10b981" />
+                    <Ionicons name="phone-portrait" size={80} color="#10b981" />
                 </View>
                 <Text style={styles.successTitle}>Paiement Confirmé !</Text>
                 <Text style={styles.successSubtitle}>
@@ -140,96 +122,70 @@ export default function DepositScreen() {
 
                     {/* Sélecteur de méthode */}
                     <Text style={[styles.label, { fontSize: 15, marginBottom: 12 }]}>Choisir une méthode</Text>
-                    <View style={styles.methodRow}>
-                        <TouchableOpacity
-                            style={[styles.methodCard, method === 'CARD' && styles.methodCardActive]}
-                            onPress={() => setMethod('CARD')}
-                            activeOpacity={0.8}
-                        >
-                            <Ionicons name="card" size={28} color={method === 'CARD' ? '#fff' : COLORS.textPrimary} />
-                            <Text style={[styles.methodLabel, method === 'CARD' && { color: '#fff' }]}>Carte Bancaire</Text>
-                            <Text style={[styles.methodSub, method === 'CARD' && { color: 'rgba(255,255,255,0.8)' }]}>Visa / Mastercard</Text>
-                        </TouchableOpacity>
 
+                    {/* Method Row 1: Airtel & Moov */}
+                    <View style={styles.methodRow}>
                         <TouchableOpacity
                             style={[styles.methodCard, method === 'AIRTEL' && styles.methodCardAirtel]}
                             onPress={() => setMethod('AIRTEL')}
                             activeOpacity={0.8}
                         >
                             <Ionicons name="phone-portrait" size={28} color={method === 'AIRTEL' ? '#fff' : COLORS.airtel} />
-                            <Text style={[styles.methodLabel, method === 'AIRTEL' && { color: '#fff' }, { color: method === 'AIRTEL' ? '#fff' : COLORS.airtel }]}>Airtel Money</Text>
-                            <Text style={[styles.methodSub, method === 'AIRTEL' && { color: 'rgba(255,255,255,0.8)' }]}>Mobile Money</Text>
+                            <Text style={[styles.methodLabel, method === 'AIRTEL' && { color: '#fff' }, { color: method === 'AIRTEL' ? '#fff' : COLORS.airtel }]}>Airtel</Text>
+                            <Text style={[styles.methodSub, method === 'AIRTEL' && { color: 'rgba(255,255,255,0.8)' }]}>Money</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.methodCard, method === 'MOOV' && styles.methodCardMoov]}
+                            onPress={() => setMethod('MOOV')}
+                            activeOpacity={0.8}
+                        >
+                            <Ionicons name="phone-portrait" size={28} color={method === 'MOOV' ? '#fff' : COLORS.moov} />
+                            <Text style={[styles.methodLabel, method === 'MOOV' && { color: '#fff' }, { color: method === 'MOOV' ? '#fff' : COLORS.moov }]}>Moov</Text>
+                            <Text style={[styles.methodSub, method === 'MOOV' && { color: 'rgba(255,255,255,0.8)' }]}>Africa</Text>
                         </TouchableOpacity>
                     </View>
 
-                    {/* ─────────────── CARTE BANCAIRE ─────────────── */}
+                    {/* Method Row 2: Carte Bancaire (Désactivée) */}
+                    <TouchableOpacity
+                        style={[styles.methodCard, { flexDirection: 'row', alignItems: 'center', marginBottom: 28, padding: 12, opacity: 0.7 }]}
+                        onPress={() => setMethod('CARD')}
+                        activeOpacity={0.8}
+                    >
+                        <Ionicons name="card" size={28} color={COLORS.textPrimary} style={{ marginRight: 12 }} />
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.methodLabel}>Carte Bancaire (Bientôt)</Text>
+                            <Text style={styles.methodSub}>Visa / Mastercard</Text>
+                        </View>
+                        {method === 'CARD' && <Ionicons name="checkmark-circle" size={24} color={COLORS.primary} />}
+                    </TouchableOpacity>
+
+                    {/* ─────────────── CARTE BANCAIRE (EN DEV) ─────────────── */}
                     {method === 'CARD' && (
-                        <>
-                            {/* Visual Card */}
-                            <View style={styles.cardPreview}>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                                    <Ionicons name="hardware-chip" size={36} color="#d4d4d8" />
-                                    <Ionicons name="logo-venmo" size={28} color="#fff" />
-                                </View>
-                                <Text style={{ color: '#fff', fontSize: 20, letterSpacing: 2, fontFamily: 'monospace', marginBottom: 15 }}>
-                                    {cardNumber || '**** **** **** ****'}
-                                </Text>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                    <View>
-                                        <Text style={{ color: '#94a3b8', fontSize: 10 }}>TITULAIRE</Text>
-                                        <Text style={{ color: '#fff', fontSize: 14 }}>Mongain Utilisateur</Text>
-                                    </View>
-                                    <View>
-                                        <Text style={{ color: '#94a3b8', fontSize: 10 }}>EXPIRATION</Text>
-                                        <Text style={{ color: '#fff', fontSize: 14 }}>{expiry || 'MM/AA'}</Text>
-                                    </View>
-                                </View>
-                            </View>
-
-                            {error ? <View style={styles.errorBox}><Ionicons name="alert-circle-outline" size={18} color={COLORS.error} /><Text style={styles.errorText}>{error}</Text></View> : null}
-
-                            <Text style={styles.label}>Montant à recharger (FCFA)</Text>
-                            <View style={styles.inputContainer}>
-                                <Text style={styles.currencyPrefix}>FCFA</Text>
-                                <TextInput style={styles.input} placeholder="Ex: 5000" keyboardType="numeric" value={amount} onChangeText={setAmount} placeholderTextColor={COLORS.textSecondary} />
-                            </View>
-
-                            <Text style={styles.label}>Numéro de carte</Text>
-                            <View style={styles.inputContainer}>
-                                <Ionicons name="card-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 10 }} />
-                                <TextInput style={styles.input} placeholder="0000 0000 0000 0000" keyboardType="numeric" value={cardNumber} onChangeText={handleFormatCard} placeholderTextColor={COLORS.textSecondary} maxLength={19} />
-                            </View>
-
-                            <View style={{ flexDirection: 'row', gap: 15 }}>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.label}>Date d'exp.</Text>
-                                    <View style={styles.inputContainer}>
-                                        <TextInput style={styles.input} placeholder="MM/AA" keyboardType="numeric" value={expiry} onChangeText={handleFormatExpiry} placeholderTextColor={COLORS.textSecondary} maxLength={5} />
-                                    </View>
-                                </View>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.label}>CVC</Text>
-                                    <View style={styles.inputContainer}>
-                                        <TextInput style={styles.input} placeholder="123" keyboardType="numeric" secureTextEntry value={cvc} onChangeText={(t) => setCvc(t.replace(/\D/g, '').slice(0, 3))} placeholderTextColor={COLORS.textSecondary} maxLength={3} />
-                                    </View>
-                                </View>
-                            </View>
-
-                            <View style={{ marginBottom: 20, flexDirection: 'row', alignItems: 'center' }}>
-                                <Ionicons name="lock-closed" size={16} color="#10b981" />
-                                <Text style={{ fontSize: 12, color: '#10b981', marginLeft: 6 }}>Paiement crypté et sécurisé</Text>
-                            </View>
-                        </>
+                        <View style={{ alignItems: 'center', padding: 20 }}>
+                            <Ionicons name="construct-outline" size={60} color="#f59e0b" />
+                            <Text style={{ fontSize: 18, fontWeight: '700', marginTop: 12, color: COLORS.textPrimary }}>Bientôt disponible !</Text>
+                            <Text style={{ fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', marginTop: 8, lineHeight: 20 }}>
+                                Les paiements par carte bancaire sont en cours d'intégration. L'opération ne peut pas encore être effectuée.
+                            </Text>
+                            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#f1f5f9', marginTop: 24, width: '100%' }]} onPress={handleComingSoon}>
+                                <Text style={[styles.actionBtnText, { color: COLORS.textSecondary }]}>Option Indisponible</Text>
+                            </TouchableOpacity>
+                        </View>
                     )}
 
-                    {/* ─────────────── AIRTEL MONEY ─────────────── */}
-                    {method === 'AIRTEL' && (
+                    {/* ─────────────── AIRTEL/MOOV MONEY ─────────────── */}
+                    {(method === 'AIRTEL' || method === 'MOOV') && (
                         <>
-                            <View style={styles.airtelBanner}>
-                                <Ionicons name="phone-portrait" size={50} color={COLORS.airtel} />
+                            <View style={[styles.airtelBanner, method === 'MOOV' && { borderColor: COLORS.moov + '40', shadowColor: COLORS.moov }]}>
+                                <Ionicons name="phone-portrait" size={50} color={method === 'AIRTEL' ? COLORS.airtel : COLORS.moov} />
                                 <View style={{ flex: 1, marginLeft: 16 }}>
-                                    <Text style={{ fontWeight: '800', fontSize: 16, color: COLORS.airtel }}>Airtel Money</Text>
-                                    <Text style={{ fontSize: 13, color: COLORS.textSecondary, marginTop: 4, lineHeight: 18 }}>Un SMS de confirmation sera envoyé à votre numéro Airtel pour autoriser le débit.</Text>
+                                    <Text style={{ fontWeight: '800', fontSize: 16, color: method === 'AIRTEL' ? COLORS.airtel : COLORS.moov }}>
+                                        {method === 'AIRTEL' ? 'Airtel Money' : 'Moov Africa Money'}
+                                    </Text>
+                                    <Text style={{ fontSize: 13, color: COLORS.textSecondary, marginTop: 4, lineHeight: 18 }}>
+                                        Un SMS de confirmation (USSD) sera envoyé à votre numéro pour autoriser le débit.
+                                    </Text>
                                 </View>
                             </View>
 
@@ -241,15 +197,15 @@ export default function DepositScreen() {
                                 <TextInput style={styles.input} placeholder="Ex: 5000" keyboardType="numeric" value={amount} onChangeText={setAmount} placeholderTextColor={COLORS.textSecondary} />
                             </View>
 
-                            <Text style={styles.label}>Numéro Airtel Money</Text>
-                            <View style={[styles.inputContainer, { borderColor: COLORS.airtel + '80' }]}>
-                                <Ionicons name="call-outline" size={20} color={COLORS.airtel} style={{ marginRight: 10 }} />
+                            <Text style={styles.label}>Numéro de Téléphone ({method === 'AIRTEL' ? 'Airtel' : 'Moov'})</Text>
+                            <View style={[styles.inputContainer, { borderColor: (method === 'AIRTEL' ? COLORS.airtel : COLORS.moov) + '80' }]}>
+                                <Ionicons name="call-outline" size={20} color={method === 'AIRTEL' ? COLORS.airtel : COLORS.moov} style={{ marginRight: 10 }} />
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="074 000 000"
+                                    placeholder={method === 'AIRTEL' ? '074 000 000' : '066 000 000'}
                                     keyboardType="phone-pad"
-                                    value={airtelPhone}
-                                    onChangeText={setAirtelPhone}
+                                    value={phoneMobile}
+                                    onChangeText={setPhoneMobile}
                                     placeholderTextColor={COLORS.textSecondary}
                                 />
                             </View>
@@ -257,24 +213,23 @@ export default function DepositScreen() {
                             <View style={{ backgroundColor: '#FEF3C7', borderRadius: 12, padding: 12, marginBottom: 20, flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
                                 <Ionicons name="information-circle-outline" size={18} color="#D97706" />
                                 <Text style={{ fontSize: 12, color: '#92400E', flex: 1, lineHeight: 18 }}>
-                                    Assurez-vous que votre numéro Airtel est actif et dispose d'un solde suffisant. Des frais d'opérateur peuvent s'appliquer.
+                                    Assurez-vous que votre compte Mobile Money {method} est actif et dispose d'un solde suffisant.
                                 </Text>
                             </View>
+
+                            <TouchableOpacity
+                                style={[styles.actionBtn, { backgroundColor: method === 'AIRTEL' ? COLORS.airtel : COLORS.moov }]}
+                                onPress={handleDeposit}
+                                disabled={loading}
+                            >
+                                {loading ? <ActivityIndicator color="#fff" /> : (
+                                    <Text style={styles.actionBtnText}>
+                                        📲 Recharger {amount ? parseFloat(amount.replace(/\s/g, '').replace(',', '.')).toLocaleString('fr-FR') : '0'} FCFA
+                                    </Text>
+                                )}
+                            </TouchableOpacity>
                         </>
                     )}
-
-                    <TouchableOpacity
-                        style={[styles.actionBtn, method === 'AIRTEL' && { backgroundColor: COLORS.airtel }]}
-                        onPress={handleDeposit}
-                        disabled={loading}
-                    >
-                        {loading ? <ActivityIndicator color="#fff" /> : (
-                            <Text style={styles.actionBtnText}>
-                                {method === 'AIRTEL' ? '📲 ' : '💳 '}
-                                Recharger {amount ? parseFloat(amount.replace(/\s/g, '').replace(',', '.')).toLocaleString('fr-FR') : '0'} FCFA
-                            </Text>
-                        )}
-                    </TouchableOpacity>
                 </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>
@@ -293,7 +248,7 @@ const styles = StyleSheet.create({
     content: { padding: 24 },
 
     // Method selector
-    methodRow: { flexDirection: 'row', gap: 12, marginBottom: 28 },
+    methodRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
     methodCard: {
         flex: 1, backgroundColor: COLORS.surface, borderRadius: 16, padding: 16,
         alignItems: 'center', borderWidth: 2, borderColor: '#e2e8f0',
@@ -301,17 +256,10 @@ const styles = StyleSheet.create({
     },
     methodCardActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
     methodCardAirtel: { backgroundColor: COLORS.airtel, borderColor: COLORS.airtel },
+    methodCardMoov: { backgroundColor: COLORS.moov, borderColor: COLORS.moov },
     methodLabel: { fontWeight: '700', fontSize: 14, color: COLORS.textPrimary, marginTop: 8 },
     methodSub: { fontSize: 11, color: COLORS.textSecondary, marginTop: 3 },
 
-    // Card preview
-    cardPreview: {
-        backgroundColor: COLORS.primary,
-        padding: 24, borderRadius: 20, marginBottom: 24,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.2, shadowRadius: 15, elevation: 8
-    },
-
-    // Airtel banner
     airtelBanner: {
         flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface,
         borderRadius: 16, padding: 20, marginBottom: 24,
@@ -326,7 +274,7 @@ const styles = StyleSheet.create({
     currencyPrefix: { fontSize: 15, fontWeight: '700', color: COLORS.textPrimary, marginRight: 12, borderRightWidth: 1, borderRightColor: '#cbd5e1', paddingRight: 12 },
     input: { flex: 1, fontSize: 16, color: COLORS.textPrimary, fontWeight: '600', height: '100%' },
 
-    actionBtn: { backgroundColor: '#10b981', height: 60, borderRadius: 16, justifyContent: 'center', alignItems: 'center', shadowColor: '#10b981', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
+    actionBtn: { height: 60, borderRadius: 16, justifyContent: 'center', alignItems: 'center', shadowColor: '#10b981', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
     actionBtnText: { color: '#fff', fontSize: 17, fontWeight: '800' },
 
     successIconWrap: { marginBottom: 24 },
@@ -338,3 +286,4 @@ const styles = StyleSheet.create({
     doneBtn: { backgroundColor: COLORS.primary, width: '100%', height: 60, justifyContent: 'center', alignItems: 'center', borderRadius: 16 },
     doneBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
 });
+

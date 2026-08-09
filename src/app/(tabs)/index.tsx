@@ -162,7 +162,9 @@ export default function DashboardScreen() {
               )}
 
               {user?.role !== 'AGENT' && user?.role !== 'MERCHANT' && (
-                <ActionItem icon="cart" label="Paiement" color="#F59E0B" onPress={() => router.push('/pay-code')} styles={styles} />
+                <ActionItem icon="cart" label="Paiement" color="#F59E0B" onPress={() => {
+                  Alert.alert("⏳ Bientôt disponible", "Le paiement e-commerce par code est en cours de structuration avec nos marchands partenaires.");
+                }} styles={styles} />
               )}
             </View>
 
@@ -190,9 +192,18 @@ export default function DashboardScreen() {
             <View style={styles.serviceSection}>
               <Text style={styles.sectionTitle}>Services & Factures</Text>
               <View style={styles.serviceGrid}>
-                <ServiceItem icon="flash" label="Électricité" color="#f59e0b" onPress={() => router.push('/services/electricity')} styles={styles} />
-                <ServiceItem icon="phone-portrait" label="Crédit Air" color="#d946ef" onPress={() => Alert.alert('Crédit & Data', 'Rechargez votre crédit bientôt !')} styles={styles} />
-                <ServiceItem icon="tv" label="Web TV" color="#3b82f6" onPress={() => Alert.alert('Abonnement TV', 'Le renouvellement Canal+ arrive !')} styles={styles} />
+                <ServiceItem icon="flash" label="Électricité" color="#f59e0b" onPress={() => {
+                  Alert.alert("⏳ Bientôt disponible", "Le paiement des factures SEEG/Edan est en cours d'intégration.");
+                }} styles={styles} />
+
+                <ServiceItem icon="phone-portrait" label="Crédit Air" color="#d946ef" onPress={() => {
+                  Alert.alert("⏳ Bientôt disponible", "La recharge de crédit et data (Airtel/Moov) arrive très bientôt !");
+                }} styles={styles} />
+
+                <ServiceItem icon="tv" label="Abo TV" color="#3b82f6" onPress={() => {
+                  Alert.alert("⏳ Bientôt disponible", "Le renouvellement des abonnements TV (Canal+) sera bientôt actif !");
+                }} styles={styles} />
+
                 <ServiceItem icon="lock-closed" label="Tontine" color="#10b981" onPress={() => router.push('/services/tontine')} styles={styles} />
               </View>
             </View>

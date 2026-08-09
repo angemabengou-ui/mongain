@@ -3,7 +3,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import React, { useEffect, useRef, useState } from 'react';
-import { AppState, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { AppState, Dimensions, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 
@@ -17,15 +17,18 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
     const router = useRouter();
     const COLORS = useAppTheme();
 
+    // All hooks must be called before any conditional return (React rules of hooks)
     const [isLocked, setIsLocked] = useState(false);
     const appState = useRef(AppState.currentState);
     const isBooting = useRef(true);
 
     const checkLockAndPrompt = async () => {
+        // expo-secure-store is unavailable on web — skip
+        if (Platform.OS === 'web') return;
         const lockPref = await SecureStore.getItemAsync('appLockEnabled');
         if (lockPref === 'true') {
             setIsLocked(true);
-            setTimeout(() => handleUnlock(), 500); // Auto-prompt
+            setTimeout(() => handleUnlock(), 500);
         } else {
             setIsLocked(false);
         }
@@ -39,6 +42,9 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
     }, [token]);
 
     useEffect(() => {
+        // AppState changes are only relevant on native
+        if (Platform.OS === 'web') return;
+
         const subscription = AppState.addEventListener('change', async nextAppState => {
             if (appState.current.match(/active/) && nextAppState === 'background') {
                 lastInteractionTime = Date.now();
@@ -47,14 +53,9 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
             if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
                 if (token) {
                     const lockPref = await SecureStore.getItemAsync('appLockEnabled');
-                    const timeoutExceeded = Date.now() - lastInteractionTime > INACTIVITY_LIMIT_MS;
-
                     if (lockPref === 'true') {
                         setIsLocked(true);
                         handleUnlock();
-                    } else if (timeoutExceeded) {
-                        // Optional: we can force lock if really inactive for a long time, but let's respect preference
-                        // setIsLocked(false);
                     }
                 }
             }
@@ -65,6 +66,11 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
     }, [token]);
 
     const handleUnlock = async () => {
+        // expo-local-authentication is unavailable on web
+        if (Platform.OS === 'web') {
+            setIsLocked(false);
+            return;
+        }
         const hasHardware = await LocalAuthentication.hasHardwareAsync();
         const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
@@ -83,6 +89,11 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
             setIsLocked(false);
         }
     };
+
+    // On web, the biometric lock is not applicable — transparent passthrough
+    if (Platform.OS === 'web') {
+        return <>{children}</>;
+    }
 
     if (token && isLocked) {
         return (
