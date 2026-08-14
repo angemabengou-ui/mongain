@@ -327,6 +327,51 @@ router.post('/users/:id/toggle-status', authMiddleware, async (req: AuthRequest,
     }
 });
 
+// PUT /api/admin/users/:id
+router.put('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
+        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+
+        const schema = z.object({
+            name: z.string().min(2),
+            phone: z.string().transform(val => val.replace(/\s+/g, '').replace(/^\+2410/, '+241')),
+            username: z.string().optional(),
+        });
+        const parsed = schema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: 'Données invalides' });
+
+        const targetId = req.params.id as string;
+        const targetUser = await prisma.user.findUnique({ where: { id: targetId } });
+        if (!targetUser) return res.status(404).json({ error: 'Utilisateur introuvable.' });
+
+        if (targetUser.role === 'ADMIN' && admin.id !== targetUser.id) {
+            return res.status(403).json({ error: 'Impossible de modifier un autre Administrateur.' });
+        }
+
+        const { name, phone, username } = parsed.data;
+
+        // Check uniqueness if changing
+        if (phone !== targetUser.phone) {
+            const exists = await prisma.user.findUnique({ where: { phone } });
+            if (exists) return res.status(400).json({ error: 'Ce numéro est déjà utilisé.' });
+        }
+        if (username && username !== targetUser.username) {
+            const exists = await prisma.user.findUnique({ where: { username } });
+            if (exists) return res.status(400).json({ error: 'Ce pseudo est déjà utilisé.' });
+        }
+
+        const updated = await prisma.user.update({
+            where: { id: targetId },
+            data: { name, phone, username: username || null }
+        });
+
+        res.json({ message: 'Profil mis à jour avec succès.', user: { id: updated.id, name: updated.name, phone: updated.phone } });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // POST /api/admin/users/:id/reset-pin
 router.post('/users/:id/reset-pin', authMiddleware, async (req: AuthRequest, res) => {
     try {
@@ -442,8 +487,8 @@ router.post('/transactions/:id/refund', authMiddleware, async (req: AuthRequest,
             await tx.transaction.create({
                 data: {
                     amount: originalTx.amount,
-                    senderWalletId: originalTx.receiverWalletId,
-                    receiverWalletId: originalTx.senderWalletId,
+                    senderWalletId: originalTx.receiverWalletId!,
+                    receiverWalletId: originalTx.senderWalletId!,
                     status: 'COMPLETED',
                     reference: 'REFUND-' + originalTx.reference,
                 }

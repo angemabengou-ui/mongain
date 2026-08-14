@@ -1,4 +1,4 @@
-import { Briefcase, Lock, ShieldAlert, BadgeCheck as ShieldCheck, Store, User, UserPlus, Users as UsersIcon, X } from 'lucide-react';
+import { Briefcase, Lock, ShieldAlert, BadgeCheck as ShieldCheck, Store, User, UserPlus, Users as UsersIcon, X, Edit2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { API_URL } from './config';
 
@@ -13,6 +13,10 @@ export default function UsersManagement({ token }: { token: string }) {
 
     // Slide-over CRM 360
     const [selectedUser, setSelectedUser] = useState<any>(null);
+    const [isEditingUser, setIsEditingUser] = useState(false);
+    const [editName, setEditName] = useState('');
+    const [editPhone, setEditPhone] = useState('');
+    const [editUsername, setEditUsername] = useState('');
 
     // Modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -110,6 +114,31 @@ export default function UsersManagement({ token }: { token: string }) {
             } else alert(data.error);
         } catch (e) {
             console.error(e);
+        }
+    };
+
+    const handleUpdateUser = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            const resp = await fetch(`${API_URL}/api/admin/users/${selectedUser.id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ name: editName, phone: editPhone, username: editUsername || undefined })
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                alert(data.message);
+                setSelectedUser({ ...selectedUser, name: data.user.name, phone: data.user.phone });
+                setIsEditingUser(false);
+                fetchUsers();
+            } else {
+                alert(data.error);
+            }
+        } catch (e: any) {
+            alert('Erreur: ' + e.message);
         }
     };
 
@@ -332,55 +361,86 @@ export default function UsersManagement({ token }: { token: string }) {
                         </button>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '24px', backgroundColor: 'var(--bg-primary)', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                        <div style={{ width: '64px', height: '64px', borderRadius: '32px', backgroundColor: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
-                            {selectedUser.name?.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                            <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{selectedUser.name}</div>
-                            <div style={{ color: 'var(--text-secondary)' }}>{selectedUser.phone}</div>
-                            {selectedUser.username && <div style={{ color: 'var(--accent)', fontSize: '13px' }}>@{selectedUser.username}</div>}
-                        </div>
-                    </div>
-
-                    <div className="stats-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 0 }}>
-                        <div className="stat-card" style={{ padding: '20px' }}>
-                            <div className="stat-label">Solde Portefeuille</div>
-                            <div className="stat-value" style={{ fontSize: '24px', color: 'var(--success)' }}>{selectedUser.wallet?.balance?.toLocaleString('fr-FR')} F</div>
-                        </div>
-                        <div className="stat-card" style={{ padding: '20px' }}>
-                            <div className="stat-label">Statut KYC</div>
-                            <div style={{ marginTop: '8px' }}>
-                                <span className={`status-pill ${selectedUser.kycStatus === 'UNVERIFIED' ? 'neutral' : selectedUser.kycStatus === 'APPROVED' ? 'success' : 'warning'}`}>
-                                    {selectedUser.kycStatus || 'UNVERIFIED'}
-                                </span>
+                    {isEditingUser ? (
+                        <form onSubmit={handleUpdateUser} style={{ display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'var(--bg-primary)', padding: '24px', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                            <h4 style={{ margin: 0, color: 'var(--text-primary)' }}>Modifier le profil</h4>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>Nom complet</label>
+                                <input type="text" value={editName} onChange={e => setEditName(e.target.value)} required />
                             </div>
-                        </div>
-                    </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>Téléphone</label>
+                                <input type="text" value={editPhone} onChange={e => setEditPhone(e.target.value)} required />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>Pseudo (Optionnel)</label>
+                                <input type="text" value={editUsername} onChange={e => setEditUsername(e.target.value)} placeholder="@pseudo" />
+                            </div>
+                            <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                                <button type="button" onClick={() => setIsEditingUser(false)} style={{ flex: 1, padding: '12px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>Annuler</button>
+                                <button type="submit" className="btn-primary" style={{ flex: 1, padding: '12px' }}>Enregistrer</button>
+                            </div>
+                        </form>
+                    ) : (
+                        <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '24px', backgroundColor: 'var(--bg-primary)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                                <div style={{ width: '64px', height: '64px', borderRadius: '32px', backgroundColor: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+                                    {selectedUser.name?.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{selectedUser.name}</div>
+                                    <div style={{ color: 'var(--text-secondary)' }}>{selectedUser.phone}</div>
+                                    {selectedUser.username && <div style={{ color: 'var(--accent)', fontSize: '13px' }}>@{selectedUser.username}</div>}
+                                </div>
+                                <button onClick={() => {
+                                    setEditName(selectedUser.name);
+                                    setEditPhone(selectedUser.phone);
+                                    setEditUsername(selectedUser.username || '');
+                                    setIsEditingUser(true);
+                                }} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer' }} title="Éditer le profil">
+                                    <Edit2 size={20} />
+                                </button>
+                            </div>
 
-                    <div>
-                        <h4 style={{ color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '0.5px', marginBottom: '16px' }}>
-                            Actions Administratives
-                        </h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            <button onClick={() => { toggleStatus(selectedUser.id); setSelectedUser({ ...selectedUser, isActive: !selectedUser.isActive }); }}
-                                style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: selectedUser.isActive === false ? 'var(--success-bg)' : 'var(--danger-bg)', color: selectedUser.isActive === false ? 'var(--success)' : 'var(--danger)', border: '1px solid transparent', borderRadius: '12px', cursor: 'pointer', fontWeight: '600' }}>
-                                {selectedUser.isActive === false ? <ShieldCheck size={20} /> : <ShieldAlert size={20} />}
-                                {selectedUser.isActive === false ? 'Réactiver le compte' : 'Suspendre le compte'}
-                            </button>
-                            <button onClick={() => resetPin(selectedUser.id)}
-                                style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '12px', cursor: 'pointer', fontWeight: '600' }}>
-                                <Lock size={20} />
-                                Générer un nouveau code PIN
-                            </button>
-                            <button onClick={() => { deleteUser(selectedUser.id); setSelectedUser(null); }}
-                                style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'var(--bg-primary)', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', marginTop: '16px' }}>
-                                🗑️ Clôturer définitivement le compte
-                            </button>
+                            <div className="stats-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 0 }}>
+                                <div className="stat-card" style={{ padding: '20px' }}>
+                                    <div className="stat-label">Solde Portefeuille</div>
+                                    <div className="stat-value" style={{ fontSize: '24px', color: 'var(--success)' }}>{selectedUser.wallet?.balance?.toLocaleString('fr-FR')} F</div>
+                                </div>
+                                <div className="stat-card" style={{ padding: '20px' }}>
+                                    <div className="stat-label">Statut KYC</div>
+                                    <div style={{ marginTop: '8px' }}>
+                                        <span className={`status-pill ${selectedUser.kycStatus === 'UNVERIFIED' ? 'neutral' : selectedUser.kycStatus === 'APPROVED' ? 'success' : 'warning'}`}>
+                                            {selectedUser.kycStatus || 'UNVERIFIED'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <h4 style={{ color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '0.5px', marginBottom: '16px' }}>
+                                    Actions Administratives
+                                </h4>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    <button onClick={() => { toggleStatus(selectedUser.id); setSelectedUser({ ...selectedUser, isActive: !selectedUser.isActive }); }}
+                                        style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: selectedUser.isActive === false ? 'var(--success-bg)' : 'var(--danger-bg)', color: selectedUser.isActive === false ? 'var(--success)' : 'var(--danger)', border: '1px solid transparent', borderRadius: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                                        {selectedUser.isActive === false ? <ShieldCheck size={20} /> : <ShieldAlert size={20} />}
+                                        {selectedUser.isActive === false ? 'Réactiver le compte' : 'Suspendre le compte'}
+                                    </button>
+                                    <button onClick={() => resetPin(selectedUser.id)}
+                                        style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                                        <Lock size={20} />
+                                        Générer un nouveau code PIN
+                                    </button>
+                                    <button onClick={() => { deleteUser(selectedUser.id); setSelectedUser(null); }}
+                                        style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'var(--bg-primary)', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', marginTop: '16px' }}>
+                                        🗑️ Clôturer définitivement le compte
+                                    </button>
+                                </div>
+                            </>
+                    )}
                         </div>
-                    </div>
-                </div>
             )}
-        </div>
-    );
+                </div>
+            );
 }
