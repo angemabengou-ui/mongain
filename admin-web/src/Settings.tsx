@@ -15,11 +15,15 @@ export default function Settings({ token }: { token: string }) {
     const [agencyWithdrawThreshold, setAgencyWithdrawThreshold] = useState('');
     const [agencyTaxWithdraw, setAgencyTaxWithdraw] = useState('');
 
-    // Telecom UI Mock States
+    // Orchestrator States
     const [airtelEnabled, setAirtelEnabled] = useState(true);
     const [moovEnabled, setMoovEnabled] = useState(true);
-    const [airtelFee, setAirtelFee] = useState('1.5');
-    const [moovFee, setMoovFee] = useState('1.0');
+    const [seegEnabled, setSeegEnabled] = useState(true);
+    const [tontineEnabled, setTontineEnabled] = useState(true);
+    const [airtelFee, setAirtelFee] = useState('');
+    const [moovFee, setMoovFee] = useState('');
+    const [airtelApiKey, setAirtelApiKey] = useState('');
+    const [moovApiKey, setMoovApiKey] = useState('');
 
     useEffect(() => {
         const fetchSettings = async () => {
@@ -27,7 +31,6 @@ export default function Settings({ token }: { token: string }) {
                 const resp = await fetch(API_URL + '/api/settings');
                 if (resp.ok) {
                     const data = await resp.json();
-                    // Conversion de Float (0.01) en Pourcentage (1)
                     setTaxP2P((data.taxP2P * 100).toString());
                     setTaxWithdraw((data.taxWithdraw * 100).toString());
                     setRewardMerchant((data.rewardMerchant * 100).toString());
@@ -35,6 +38,17 @@ export default function Settings({ token }: { token: string }) {
                     setDailyLimitTier1(data.dailyLimitTier1?.toString() || '2000000');
                     setAgencyWithdrawThreshold(data.agencyWithdrawThreshold?.toString() || '100000');
                     setAgencyTaxWithdraw((data.agencyTaxWithdraw * 100).toString() || '1');
+
+                    if (data.airtelEnabled !== undefined) setAirtelEnabled(data.airtelEnabled);
+                    if (data.moovEnabled !== undefined) setMoovEnabled(data.moovEnabled);
+                    if (data.seegEnabled !== undefined) setSeegEnabled(data.seegEnabled);
+                    if (data.tontineEnabled !== undefined) setTontineEnabled(data.tontineEnabled);
+
+                    if (data.airtelFee) setAirtelFee((data.airtelFee * 100).toString());
+                    if (data.moovFee) setMoovFee((data.moovFee * 100).toString());
+
+                    if (data.airtelApiKey) setAirtelApiKey(data.airtelApiKey);
+                    if (data.moovApiKey) setMoovApiKey(data.moovApiKey);
                 }
             } catch (e) {
                 console.error(e);
@@ -54,9 +68,11 @@ export default function Settings({ token }: { token: string }) {
         const numLimit1 = parseInt(dailyLimitTier1, 10);
         const floatAgencyTax = parseFloat(agencyTaxWithdraw) / 100;
         const numAgencyThreshold = parseInt(agencyWithdrawThreshold, 10);
+        const floatAirtel = parseFloat(airtelFee) / 100;
+        const floatMoov = parseFloat(moovFee) / 100;
 
         if (isNaN(floatP2P) || isNaN(floatWithdraw) || isNaN(floatReward) || isNaN(numLimit0) || isNaN(numLimit1) || isNaN(floatAgencyTax) || isNaN(numAgencyThreshold)) {
-            setError('Valeurs incorrectes fournies.');
+            setError('Valeurs incorrectes fournies (nombres manquants ou invalides).');
             return;
         }
 
@@ -67,35 +83,46 @@ export default function Settings({ token }: { token: string }) {
 
         setLoading(true);
         try {
+            const payload = {
+                taxP2P: floatP2P,
+                taxWithdraw: floatWithdraw,
+                rewardMerchant: floatReward,
+                dailyLimitTier0: numLimit0,
+                dailyLimitTier1: numLimit1,
+                agencyWithdrawThreshold: numAgencyThreshold,
+                agencyTaxWithdraw: floatAgencyTax,
+                airtelEnabled,
+                moovEnabled,
+                seegEnabled,
+                tontineEnabled,
+                airtelApiKey: airtelApiKey || null,
+                moovApiKey: moovApiKey || null,
+                ...(isNaN(floatAirtel) ? {} : { airtelFee: floatAirtel }),
+                ...(isNaN(floatMoov) ? {} : { moovFee: floatMoov })
+            };
+
             const resp = await fetch(API_URL + '/api/settings', {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    taxP2P: floatP2P,
-                    taxWithdraw: floatWithdraw,
-                    rewardMerchant: floatReward,
-                    dailyLimitTier0: numLimit0,
-                    dailyLimitTier1: numLimit1,
-                    agencyWithdrawThreshold: numAgencyThreshold,
-                    agencyTaxWithdraw: floatAgencyTax
-                })
+                body: JSON.stringify(payload)
             });
 
             const data = await resp.json();
             if (resp.ok) {
-                setMessage('Les paramètres dynamiques ont été enregistrés avec succès au Royaume !');
+                setMessage('Configurations globales synchronisées en direct avec les applications mobiles !');
             } else {
                 setError(data.error || 'Erreur Serveur');
             }
         } catch (err) {
-            setError('Erreur de connexion');
+            setError('Erreur de réseau.');
         } finally {
             setLoading(false);
         }
     };
+
 
     return (
         <div style={{ maxWidth: '600px' }}>
@@ -183,38 +210,84 @@ export default function Settings({ token }: { token: string }) {
                 </div>
 
 
-                <h3 style={{ marginTop: '20px', marginBottom: '10px', color: '#60a5fa', borderBottom: '1px solid #334155', paddingBottom: '10px' }}>Maisons de Téléphonie (API)</h3>
+                <h3 style={{ marginTop: '20px', marginBottom: '10px', color: '#60a5fa', borderBottom: '1px solid #334155', paddingBottom: '10px' }}>Orchestrateur & Télécoms (API)</h3>
 
+                {/* Airtel API Box */}
                 <div style={{ backgroundColor: '#0f172a', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #ef4444' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                         <label style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 10 }}>🔴 Airtel Money API</label>
                         <button type="button" onClick={() => setAirtelEnabled(!airtelEnabled)} style={{ padding: '5px 12px', borderRadius: 20, backgroundColor: airtelEnabled ? '#10b981' : '#334155', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}>
-                            {airtelEnabled ? 'ACTIF' : 'INACTIF'}
+                            {airtelEnabled ? 'ACTIF' : 'SUSPENDU'}
                         </button>
                     </div>
-                    <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '10px' }}>Frais d'intégration (prélevés par l'opérateur en %). (Note: En cours d'intégration technique globale).</p>
-                    <input
-                        type="number" step="0.1" min="0" required
-                        value={airtelFee} onChange={e => setAirtelFee(e.target.value)}
-                        style={{ width: '100%', padding: '12px', borderRadius: '6px', backgroundColor: '#334155', border: 'none', color: '#fff', opacity: airtelEnabled ? 1 : 0.5 }}
-                        disabled={!airtelEnabled}
-                    />
+                    {airtelEnabled && (
+                        <>
+                            <div style={{ marginBottom: 15 }}>
+                                <label style={{ display: 'block', marginBottom: 8, fontSize: 13, color: '#94a3b8' }}>Clé API Airtel (Client Secret)</label>
+                                <input
+                                    type="password" placeholder="api_secret_airtel_..."
+                                    value={airtelApiKey} onChange={e => setAirtelApiKey(e.target.value)}
+                                    style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#334155', border: 'none', color: '#fff' }}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: 8, fontSize: 13, color: '#94a3b8' }}>Frais d'intégration Airtel (%)</label>
+                                <input
+                                    type="number" step="0.1" min="0" required
+                                    value={airtelFee} onChange={e => setAirtelFee(e.target.value)}
+                                    style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#334155', border: 'none', color: '#fff' }}
+                                />
+                            </div>
+                        </>
+                    )}
                 </div>
 
+                {/* Moov API Box */}
                 <div style={{ backgroundColor: '#0f172a', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #3b82f6' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                         <label style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 10 }}>🔵 Moov Africa API</label>
                         <button type="button" onClick={() => setMoovEnabled(!moovEnabled)} style={{ padding: '5px 12px', borderRadius: 20, backgroundColor: moovEnabled ? '#10b981' : '#334155', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}>
-                            {moovEnabled ? 'ACTIF' : 'INACTIF'}
+                            {moovEnabled ? 'ACTIF' : 'SUSPENDU'}
                         </button>
                     </div>
-                    <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '10px' }}>Frais d'intégration (prélevés par l'opérateur en %). (Note: En cours d'intégration technique globale).</p>
-                    <input
-                        type="number" step="0.1" min="0" required
-                        value={moovFee} onChange={e => setMoovFee(e.target.value)}
-                        style={{ width: '100%', padding: '12px', borderRadius: '6px', backgroundColor: '#334155', border: 'none', color: '#fff', opacity: moovEnabled ? 1 : 0.5 }}
-                        disabled={!moovEnabled}
-                    />
+                    {moovEnabled && (
+                        <>
+                            <div style={{ marginBottom: 15 }}>
+                                <label style={{ display: 'block', marginBottom: 8, fontSize: 13, color: '#94a3b8' }}>Clé API Moov (Access Token)</label>
+                                <input
+                                    type="password" placeholder="moov_token_..."
+                                    value={moovApiKey} onChange={e => setMoovApiKey(e.target.value)}
+                                    style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#334155', border: 'none', color: '#fff' }}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: 8, fontSize: 13, color: '#94a3b8' }}>Frais d'intégration Moov (%)</label>
+                                <input
+                                    type="number" step="0.1" min="0" required
+                                    value={moovFee} onChange={e => setMoovFee(e.target.value)}
+                                    style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: '#334155', border: 'none', color: '#fff' }}
+                                />
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                {/* Services Internes */}
+                <h3 style={{ marginTop: '20px', marginBottom: '10px', color: '#a78bfa', borderBottom: '1px solid #334155', paddingBottom: '10px' }}>Mini-Programmes Internes</h3>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                    <div style={{ backgroundColor: '#0f172a', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #f59e0b', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label style={{ fontWeight: 'bold' }}>⚡ Électricité (SEEG)</label>
+                        <button type="button" onClick={() => setSeegEnabled(!seegEnabled)} style={{ padding: '5px 12px', borderRadius: 20, backgroundColor: seegEnabled ? '#10b981' : '#334155', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}>
+                            {seegEnabled ? 'ACTIF' : 'OFF'}
+                        </button>
+                    </div>
+                    <div style={{ backgroundColor: '#0f172a', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #d946ef', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label style={{ fontWeight: 'bold' }}>🤝 Tontine</label>
+                        <button type="button" onClick={() => setTontineEnabled(!tontineEnabled)} style={{ padding: '5px 12px', borderRadius: 20, backgroundColor: tontineEnabled ? '#10b981' : '#334155', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}>
+                            {tontineEnabled ? 'ACTIF' : 'OFF'}
+                        </button>
+                    </div>
                 </div>
 
                 <button

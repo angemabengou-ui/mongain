@@ -119,6 +119,18 @@ model SystemSettings {
   agencyWithdrawThreshold Float @default(500000.0) // Montant au-delà duquel le retrait agence est taxé
   agencyTaxWithdraw       Float @default(0.01) // Taxe de 1% sur la part excédentaire ou globale
   
+  // Opérations & Intégrations Partenaires (V6)
+  airtelEnabled    Boolean @default(true)
+  moovEnabled      Boolean @default(true)
+  seegEnabled      Boolean @default(true)
+  tontineEnabled   Boolean @default(true)
+  
+  airtelFee        Float   @default(0.015) // Frais opérateur Airtel
+  moovFee          Float   @default(0.010) // Frais opérateur Moov
+  
+  airtelApiKey     String?
+  moovApiKey       String?
+
   updatedAt        DateTime @updatedAt
 }
 

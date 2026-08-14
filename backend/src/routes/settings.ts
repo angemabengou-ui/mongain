@@ -17,7 +17,15 @@ export const getSystemSettings = async () => {
                 dailyLimitTier0: 50000,
                 dailyLimitTier1: 2000000,
                 agencyWithdrawThreshold: 500000,
-                agencyTaxWithdraw: 0.01
+                agencyTaxWithdraw: 0.01,
+                airtelEnabled: true,
+                moovEnabled: true,
+                seegEnabled: true,
+                tontineEnabled: true,
+                airtelFee: 0.015,
+                moovFee: 0.010,
+                airtelApiKey: null,
+                moovApiKey: null
             } as any
         });
     }
@@ -42,6 +50,14 @@ const settingsSchema = z.object({
     dailyLimitTier1: z.number().min(100),
     agencyWithdrawThreshold: z.number().min(0),
     agencyTaxWithdraw: z.number().min(0).max(1),
+    airtelEnabled: z.boolean().optional(),
+    moovEnabled: z.boolean().optional(),
+    seegEnabled: z.boolean().optional(),
+    tontineEnabled: z.boolean().optional(),
+    airtelFee: z.number().min(0).max(1).optional(),
+    moovFee: z.number().min(0).max(1).optional(),
+    airtelApiKey: z.string().nullable().optional(),
+    moovApiKey: z.string().nullable().optional(),
 });
 
 // PUT /api/admin/settings (SuperAdmin only)
