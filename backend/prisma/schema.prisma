@@ -81,6 +81,11 @@ model Transaction {
 
   senderWallet   Wallet? @relation("SenderWallet", fields: [senderWalletId], references: [id])
   receiverWallet Wallet  @relation("ReceiverWallet", fields: [receiverWalletId], references: [id])
+
+  // Performance Indexes for Scale
+  @@index([senderWalletId])
+  @@index([receiverWalletId])
+  @@index([createdAt])
 }
 
 model AuditLog {

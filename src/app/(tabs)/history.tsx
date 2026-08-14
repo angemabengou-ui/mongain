@@ -5,19 +5,16 @@ import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    FlatList,
     RefreshControl,
-    ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
     View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
 import { Transaction, apiGetTransactions } from '../../services/api';
-
-// Removed hardcoded COLORS
 
 function formatAmount(tx: Transaction) {
     const prefix = tx.type === 'outgoing' ? '- ' : '+ ';
@@ -131,38 +128,42 @@ export default function HistoryScreen() {
                 <FilterPill label="Reçu" active={filter === 'incoming'} onPress={() => setFilter('incoming')} styles={styles} />
             </View>
 
-            <ScrollView
+            <FlatList
+                data={filtered}
+                keyExtractor={item => item.id}
                 contentContainerStyle={styles.listContainer}
                 showsVerticalScrollIndicator={false}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
-            >
-                {loading ? (
-                    <View style={{ padding: 50, alignItems: 'center' }}>
-                        <ActivityIndicator color={COLORS.primary} size="large" />
+                ListHeaderComponent={() => {
+                    if (loading) {
+                        return (
+                            <View style={{ padding: 50, alignItems: 'center' }}>
+                                <ActivityIndicator color={COLORS.primary} size="large" />
+                            </View>
+                        );
+                    }
+                    return <Text style={styles.dateSeparator}>Ce mois-ci — {filtered.length} transaction(s)</Text>;
+                }}
+                ListEmptyComponent={() => {
+                    if (!loading && filtered.length === 0) {
+                        return (
+                            <View style={styles.emptyContainer}>
+                                <Ionicons name="receipt-outline" size={48} color={COLORS.textSecondary} style={{ marginBottom: 12 }} />
+                                <Text style={styles.emptyText}>Aucune transaction pour l'instant.</Text>
+                            </View>
+                        );
+                    }
+                    return null;
+                }}
+                renderItem={({ item }) => (
+                    <View style={styles.transactionList}>
+                        <TransactionItem tx={item} styles={styles} colors={COLORS} />
                     </View>
-                ) : (
-                    <>
-                        <Text style={styles.dateSeparator}>Ce mois-ci — {filtered.length} transaction(s)</Text>
-                        <View style={styles.transactionList}>
-                            {filtered.length === 0 ? (
-                                <View style={styles.emptyContainer}>
-                                    <Ionicons name="receipt-outline" size={48} color={COLORS.textSecondary} style={{ marginBottom: 12 }} />
-                                    <Text style={styles.emptyText}>Aucune transaction pour l'instant.</Text>
-                                </View>
-                            ) : (
-                                filtered.map(tx => (
-                                    <TransactionItem
-                                        key={tx.id}
-                                        tx={tx}
-                                        styles={styles}
-                                        colors={COLORS}
-                                    />
-                                ))
-                            )}
-                        </View>
-                    </>
                 )}
-            </ScrollView>
+                initialNumToRender={10}
+                maxToRenderPerBatch={10}
+                windowSize={5}
+            />
         </SafeAreaView>
     );
 }
@@ -220,6 +221,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     transactionList: {
         backgroundColor: COLORS.surface, borderRadius: 24, padding: 8,
         shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3,
+        marginBottom: 12
     },
     txContainer: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: COLORS.remaining },
     txIconContainer: { marginRight: 16 },

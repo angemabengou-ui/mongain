@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
+import { apiGetBalance } from '../services/api';
 
 export default function WithdrawScreen() {
     const COLORS = useAppTheme();
@@ -15,6 +15,15 @@ export default function WithdrawScreen() {
 
     const [showCode, setShowCode] = useState(false);
     const [token, setToken] = useState('000 000');
+    const [balance, setBalance] = useState(user?.wallet?.balance || 0);
+
+    useFocusEffect(
+        useCallback(() => {
+            apiGetBalance().then(res => {
+                if (res && res.balance !== undefined) setBalance(res.balance);
+            }).catch(console.error);
+        }, [])
+    );
 
     const generateCode = () => {
         const pass = Math.floor(100000 + Math.random() * 900000).toString();
@@ -59,7 +68,7 @@ export default function WithdrawScreen() {
             <ScrollView contentContainerStyle={styles.container}>
                 <View style={styles.balanceSection}>
                     <Text style={styles.balanceLabel}>Solde Retirable</Text>
-                    <Text style={styles.balanceAmount}>{(user?.wallet?.balance || 0).toLocaleString('fr-FR')} FCFA</Text>
+                    <Text style={styles.balanceAmount}>{balance.toLocaleString('fr-FR')} FCFA</Text>
                 </View>
 
                 <Text style={styles.sectionHeader}>PAR QR SCANCER</Text>

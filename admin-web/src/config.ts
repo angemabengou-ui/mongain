@@ -1,1 +1,1 @@
-export const API_URL = (import.meta as any).env.VITE_API_URL || 'http://127.0.0.1:3000';
+export const API_URL = (import.meta as any).env.VITE_API_URL || 'https://mongain-backend.onrender.com';

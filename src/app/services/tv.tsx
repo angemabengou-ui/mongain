@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -13,10 +13,10 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
+import { apiGetBalance } from '../../services/api';
 
 export default function TvScreen() {
     const COLORS = useAppTheme();
@@ -25,6 +25,15 @@ export default function TvScreen() {
     const { user } = useAuth();
 
     const [account, setAccount] = useState('');
+    const [balance, setBalance] = useState(user?.wallet?.balance || 0);
+
+    useFocusEffect(
+        useCallback(() => {
+            apiGetBalance().then(res => {
+                if (res && res.balance !== undefined) setBalance(res.balance);
+            }).catch(console.error);
+        }, [])
+    );
     const [amount, setAmount] = useState('');
     const [pin, setPin] = useState('');
     const [showPin, setShowPin] = useState(false);
@@ -73,7 +82,7 @@ export default function TvScreen() {
                                 <Ionicons name="tv" size={40} color="#3b82f6" />
                             </View>
                             <Text style={styles.title}>Canal+</Text>
-                            <Text style={styles.subtitle}>Solde disponible: <Text style={{ fontWeight: '700' }}>{(user?.wallet?.balance || 0).toLocaleString('fr-FR')} FCFA</Text></Text>
+                            <Text style={styles.subtitle}>Solde disponible: <Text style={{ fontWeight: '700' }}>{balance.toLocaleString('fr-FR')} FCFA</Text></Text>
                         </View>
 
                         <Text style={styles.label}>Numéro d'Abonné</Text>

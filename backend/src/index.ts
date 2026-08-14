@@ -30,7 +30,25 @@ app.use(helmet());
 
 // CORS configuration (Restrict domains)
 app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:8081', 'https://mongain-backend.onrender.com'], // Vite Admin, Local Mobile/Web & Expo Web
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl, Postman)
+        if (!origin) return callback(null, true);
+        const allowed = [
+            'http://localhost:5173',
+            'http://localhost:3000',
+            'http://localhost:8081',
+            'https://mongain-backend.onrender.com',
+        ];
+        if (
+            allowed.includes(origin) ||
+            origin.endsWith('.vercel.app') ||
+            origin.endsWith('.netlify.app') ||
+            origin.endsWith('.onrender.com')
+        ) {
+            return callback(null, true);
+        }
+        callback(new Error('CORS: origine non autorisée — ' + origin));
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Bypass-Tunnel-Reminder', 'ngrok-skip-browser-warning']
 }));

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -13,11 +13,10 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
-import { BASE_URL, getToken } from '../../services/api';
+import { apiGetBalance, BASE_URL, getToken } from '../../services/api';
 
 export default function SeegPaymentScreen() {
     const COLORS = useAppTheme();
@@ -31,6 +30,15 @@ export default function SeegPaymentScreen() {
     const [showPin, setShowPin] = useState(false);
     const [loading, setLoading] = useState(false);
     const [successData, setSuccessData] = useState<any>(null);
+    const [balance, setBalance] = useState(user?.wallet?.balance || 0);
+
+    useFocusEffect(
+        useCallback(() => {
+            apiGetBalance().then(res => {
+                if (res && res.balance !== undefined) setBalance(res.balance);
+            }).catch(console.error);
+        }, [])
+    );
 
     const handlePayment = async () => {
         if (!account || account.length < 5) {
@@ -125,7 +133,7 @@ export default function SeegPaymentScreen() {
                                 <Ionicons name="flash" size={40} color="#f59e0b" />
                             </View>
                             <Text style={styles.title}>Recharge SEEG</Text>
-                            <Text style={styles.subtitle}>Solde disponible: <Text style={{ fontWeight: '700' }}>{(user?.wallet?.balance || 0).toLocaleString('fr-FR')} FCFA</Text></Text>
+                            <Text style={styles.subtitle}>Solde disponible: <Text style={{ fontWeight: '700' }}>{balance.toLocaleString('fr-FR')} FCFA</Text></Text>
                         </View>
 
                         <Text style={styles.label}>N° de Compteur (Edan)</Text>

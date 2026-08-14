@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -13,11 +13,10 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
-import { BASE_URL, getToken } from '../../services/api';
+import { apiGetBalance } from '../../services/api';
 
 export default function AirtimeScreen() {
     const COLORS = useAppTheme();
@@ -32,6 +31,15 @@ export default function AirtimeScreen() {
     const [showPin, setShowPin] = useState(false);
     const [loading, setLoading] = useState(false);
     const [successData, setSuccessData] = useState<any>(null);
+
+    const [balance, setBalance] = useState(user?.wallet?.balance || 0);
+    useFocusEffect(
+        useCallback(() => {
+            apiGetBalance().then(res => {
+                if (res && res.balance !== undefined) setBalance(res.balance);
+            }).catch(console.error);
+        }, [])
+    );
 
     const handleTopUp = async () => {
         if (!phone || phone.length < 8) {
@@ -50,32 +58,6 @@ export default function AirtimeScreen() {
             return;
         }
 
-        // --- PRODUCTION GUARD ---
-        Alert.alert(
-            "Service Indisponible",
-            "La connexion aux opérateurs télécoms (Airtel/Moov) est actuellement en cours de finalisation technique."
-        );
-        return;
-        // ------------------------
-
-        setLoading(true);
-        try {
-            const token = await getToken();
-            const res = await fetch(`${BASE_URL}/api/services/topup`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ network, phoneNumber: phone, amount: amt, pin })
-            });
-
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Erreur lors de la recharge');
-
-            setSuccessData(data);
-        } catch (e: any) {
-            Alert.alert("Erreur de transaction", e.message);
-        } finally {
-            setLoading(false);
-        }
     };
 
     if (successData) {
@@ -127,7 +109,7 @@ export default function AirtimeScreen() {
                                 <Ionicons name="phone-portrait" size={40} color="#d946ef" />
                             </View>
                             <Text style={styles.title}>Recharge Mobile</Text>
-                            <Text style={styles.subtitle}>Solde disponible: <Text style={{ fontWeight: '700' }}>{(user?.wallet?.balance || 0).toLocaleString('fr-FR')} FCFA</Text></Text>
+                            <Text style={styles.subtitle}>Solde disponible: <Text style={{ fontWeight: '700' }}>{balance.toLocaleString('fr-FR')} FCFA</Text></Text>
                         </View>
 
                         <Text style={styles.label}>Choisir l'opérateur</Text>

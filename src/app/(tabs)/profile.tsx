@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, Platform, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
-import { apiGetDailyLimits } from '../../services/api';
+import { apiGetBalance, apiGetDailyLimits } from '../../services/api';
 
 export default function ProfileScreen() {
     const { user, logout } = useAuth();
@@ -14,8 +14,19 @@ export default function ProfileScreen() {
     const COLORS = useAppTheme();
     const styles = getStyles(COLORS);
 
-    const balance = user?.wallet?.balance ?? 0;
-    const currency = user?.wallet?.currency ?? 'FCFA';
+    const [balance, setBalance] = useState(user?.wallet?.balance ?? 0);
+    const [currency, setCurrency] = useState(user?.wallet?.currency ?? 'FCFA');
+
+    useFocusEffect(
+        useCallback(() => {
+            apiGetBalance().then(res => {
+                if (res && res.balance !== undefined) {
+                    setBalance(res.balance);
+                    setCurrency(res.currency || 'FCFA');
+                }
+            }).catch(console.error);
+        }, [])
+    );
 
     const [limits, setLimits] = useState<any>(null);
     const [appLockEnabled, setAppLockEnabled] = useState(false);
