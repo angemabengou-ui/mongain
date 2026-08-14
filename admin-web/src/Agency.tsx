@@ -4,10 +4,12 @@ import { useEffect, useState } from 'react';
 import { API_URL } from './config';
 
 export default function Agency({ token, agentPhone, agentName }: { token: string, agentPhone: string, agentName: string }) {
-    const [action, setAction] = useState<'deposit' | 'withdraw' | 'qr'>('deposit');
+    const [action, setAction] = useState<'deposit' | 'withdraw' | 'qr' | 'history'>('deposit');
     const [phone, setPhone] = useState('+241');
     const [amount, setAmount] = useState('');
     const [balance, setBalance] = useState<number | null>(null);
+
+    const [history, setHistory] = useState<any[]>([]);
 
     const [loading, setLoading] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
@@ -74,6 +76,19 @@ export default function Agency({ token, agentPhone, agentName }: { token: string
         const interval = setInterval(fetchBalance, 10000);
         return () => clearInterval(interval);
     }, [token]);
+
+    const fetchHistory = async () => {
+        try {
+            const res = await fetch(API_URL + '/api/wallet/history', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) setHistory(await res.json());
+        } catch (e) { console.error(e); }
+    };
+
+    useEffect(() => {
+        if (action === 'history') fetchHistory();
+    }, [action]);
 
     const [agentPin, setAgentPin] = useState('');
 
@@ -230,6 +245,28 @@ export default function Agency({ token, agentPhone, agentName }: { token: string
                                     <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>Vitrine Client Fixe</div>
                                 </div>
                             </button>
+
+                            <div style={{ height: 1, background: 'var(--glass-border)', margin: '10px 0' }} />
+
+                            <button
+                                style={{
+                                    display: 'flex', alignItems: 'center', padding: '16px 20px', borderRadius: 16, cursor: 'pointer',
+                                    background: action === 'history' ? 'var(--bg-primary)' : 'var(--bg-secondary)',
+                                    border: `1px solid ${action === 'history' ? 'var(--accent)' : 'var(--glass-border)'}`,
+                                    color: action === 'history' ? 'var(--accent)' : 'var(--text-primary)',
+                                    transition: 'all 0.3s ease',
+                                    textAlign: 'left'
+                                }}
+                                onClick={() => { setAction('history'); setSuccessMessage(''); setError(''); }}
+                            >
+                                <div style={{ width: 40, height: 40, borderRadius: 20, background: action === 'history' ? 'var(--accent)' : 'rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'center', alignItems: 'center', marginRight: 15 }}>
+                                    <User2 size={20} color="#fff" />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontWeight: 600, fontSize: 16 }}>Historique de Caisse</div>
+                                    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>Dépôts & Retraits du jour</div>
+                                </div>
+                            </button>
                         </div>
                     </div>
 
@@ -249,6 +286,47 @@ export default function Agency({ token, agentPhone, agentName }: { token: string
                                     <h4 style={{ color: '#10B981', margin: '0 0 5px 0', fontSize: 18 }}>Opération Réussie</h4>
                                     <p style={{ color: 'var(--text-primary)', margin: 0 }}>{successMessage}</p>
                                 </div>
+                            </div>
+                        )}
+
+                        {action === 'history' && (
+                            <div style={{ flex: 1, overflowY: 'auto' }}>
+                                <h2 style={{ marginTop: 0 }}>Historique de la Caisse Digitale</h2>
+                                <table className="data-table" style={{ width: '100%', marginTop: 20 }}>
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Type</th>
+                                            <th>Client</th>
+                                            <th>Montant</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {history.length === 0 ? (
+                                            <tr><td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>Aucune transaction récente.</td></tr>
+                                        ) : history.map((tx: any) => {
+                                            const isDeposit = tx.senderWallet?.user?.phone === agentPhone; // Agent sent money (Cash Deposit for client)
+                                            const counterpart = isDeposit ? tx.receiverWallet?.user : tx.senderWallet?.user;
+                                            return (
+                                                <tr key={tx.id}>
+                                                    <td>{new Date(tx.createdAt).toLocaleString('fr-FR')}</td>
+                                                    <td>
+                                                        <span className="status-badge" style={{ backgroundColor: isDeposit ? 'rgba(99,102,241,0.1)' : 'rgba(245,158,11,0.1)', color: isDeposit ? 'var(--accent)' : '#f59e0b' }}>
+                                                            {isDeposit ? 'DÉPÔT' : 'RETRAIT'}
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <div style={{ fontWeight: 600 }}>{counterpart?.name || 'Inconnu'}</div>
+                                                        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{counterpart?.phone}</div>
+                                                    </td>
+                                                    <td style={{ fontWeight: 800, color: isDeposit ? 'var(--danger)' : '#10b981' }}>
+                                                        {isDeposit ? '-' : '+'}{tx.amount.toLocaleString('fr-FR')} F
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
                             </div>
                         )}
 
