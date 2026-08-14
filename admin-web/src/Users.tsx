@@ -117,6 +117,27 @@ export default function UsersManagement({ token }: { token: string }) {
         }
     };
 
+    const certifyUser = async (userId: string) => {
+        if (!window.confirm('Voulez-vous certifier manuellement l\'identité physique de ce client et débloquer ses limites de transfert (Tier 1) ?')) return;
+        try {
+            const resp = await fetch(`${API_URL}/api/admin/users/${userId}/kyc`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ status: 'APPROVED' })
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (resp.ok) {
+                alert('Identité certifiée avec succès ! Les plafonds Tier 1 sont maintenant actifs pour ce compte.');
+                fetchUsers();
+                setSelectedUser({ ...selectedUser, kycStatus: 'APPROVED', kycLevel: 1 });
+            } else {
+                alert(`Erreur API (${resp.status}): ${data.error || 'Erreur Serveur'}`);
+            }
+        } catch (e: any) {
+            alert(`Erreur réseau: ${e.message}`);
+        }
+    };
+
     const handleUpdateUser = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
@@ -422,6 +443,12 @@ export default function UsersManagement({ token }: { token: string }) {
                                     Actions Administratives
                                 </h4>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    {selectedUser.kycLevel === 0 && (
+                                        <button onClick={() => certifyUser(selectedUser.id)}
+                                            style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'var(--bg-secondary)', color: '#10b981', border: '1px solid #10b981', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', transition: 'all 0.2s', boxShadow: '0 4px 6px rgba(16, 185, 129, 0.1)' }}>
+                                            🛂 Certifier manuellement l'Identité (Passer Tier 1)
+                                        </button>
+                                    )}
                                     <button onClick={() => { toggleStatus(selectedUser.id); setSelectedUser({ ...selectedUser, isActive: !selectedUser.isActive }); }}
                                         style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: selectedUser.isActive === false ? 'var(--success-bg)' : 'var(--danger-bg)', color: selectedUser.isActive === false ? 'var(--success)' : 'var(--danger)', border: '1px solid transparent', borderRadius: '12px', cursor: 'pointer', fontWeight: '600' }}>
                                         {selectedUser.isActive === false ? <ShieldCheck size={20} /> : <ShieldAlert size={20} />}

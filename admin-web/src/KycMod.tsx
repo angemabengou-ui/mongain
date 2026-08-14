@@ -44,12 +44,14 @@ export default function KycMod({ token }: { token: string }) {
             });
 
             if (res.ok) {
+                alert(`Dossier KYC ${status === 'APPROVED' ? 'approuvé' : 'rejeté'} avec succès !`);
                 fetchPending(); // Refresh
             } else {
-                alert('Erreur lors du traitement.');
+                const data = await res.json().catch(() => ({}));
+                alert(`Erreur API (${res.status}): ${data.error || 'Inconnue'}`);
             }
-        } catch (e) {
-            alert('Erreur réseau.');
+        } catch (e: any) {
+            alert(`Erreur réseau: ${e.message}`);
         }
     };
 
