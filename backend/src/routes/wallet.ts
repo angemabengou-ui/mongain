@@ -127,19 +127,27 @@ async function verifyAndIncrementDailyLimit(
     const wallet = await prisma.wallet.findUnique({ where: { id: walletId } });
     if (!wallet) throw new Error('Portefeuille introuvable');
 
-    // Remettre à zéro si le dernier reset date d'un jour précédent
+    // VIP Custom Limits: If kycLevel is >= 100, we treat it as a custom FCFA Limit overarching everything else.
+    let limit = settings.dailyLimitTier0;
+    if ((user as any).kycLevel >= 100) {
+        limit = (user as any).kycLevel;
+    } else if ((user as any).kycLevel === 1) {
+        limit = settings.dailyLimitTier1;
+    }
+
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
+
+    // Remettre à zéro si le dernier reset date d'un jour précédent
     if (wallet.dailySpentResetAt < todayStart) {
         await prisma.wallet.update({ where: { id: walletId }, data: { dailySpent: 0, dailySpentResetAt: new Date() } });
         wallet.dailySpent = 0;
     }
 
-    const limit = (user as any).kycLevel >= 1 ? settings.dailyLimitTier1 : settings.dailyLimitTier0;
     const newSpent = wallet.dailySpent + requestedAmount;
 
     if (newSpent > limit) {
-        throw new Error(`Plafond journalier dépassé (Limite: ${limit} FCFA). Déjà utilisé : ${wallet.dailySpent} FCFA. Vérifiez votre compte KYC.`);
+        throw new Error(`Plafond journalier dépassé (Limite: ${limit} FCFA). Déjà utilisé: ${wallet.dailySpent} FCFA.`);
     }
 
     // Incrémenter atomiquement avant la transaction financière
@@ -151,24 +159,21 @@ async function verifyAndIncrementDailyLimit(
 router.get('/limits', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const user = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
-        if (!user || user.role !== 'USER') return res.json({ skip: true }); // Les Agents/Marchands n'ont pas de limite journalière stricte dans cette V4.
+        if (!user || user.role !== 'USER') return res.json({ skip: true });
 
         const settings = await getSystemSettings();
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // VIP Custom Limits
+        let dailyLimit = (settings as any).dailyLimitTier0;
+        if ((user as any).kycLevel >= 100) {
+            dailyLimit = (user as any).kycLevel;
+        } else if ((user as any).kycLevel === 1) {
+            dailyLimit = (settings as any).dailyLimitTier1;
+        }
 
-        const txs = await prisma.transaction.aggregate({
-            where: { senderWalletId: user.wallet!.id, createdAt: { gte: today } },
-            _sum: { amount: true }
-        });
-
-        const dailySpend = txs._sum.amount || 0;
-        const dailyLimit = (user as any).kycLevel >= 1 ? (settings as any).dailyLimitTier1 : (settings as any).dailyLimitTier0;
-
-        res.json({ dailySpend, dailyLimit, kycStatus: (user as any).kycStatus, kycLevel: (user as any).kycLevel });
+        res.json({ dailySpend: user.wallet?.dailySpent || 0, dailyLimit, kycStatus: (user as any).kycStatus, kycLevel: (user as any).kycLevel });
     } catch (e: any) {
-        res.status(500).json({ error: 'Erreur lors du calcul des limites.' });
+        res.status(500).json({ error: 'Erreur limits.' });
     }
 });
 

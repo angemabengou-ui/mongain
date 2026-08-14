@@ -551,14 +551,43 @@ router.get('/users/kyc', authMiddleware, async (req: AuthRequest, res) => {
         const admin = await prisma.user.findUnique({ where: { id: req.userId } });
         if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
+        const filter = req.query.status as string || 'PENDING';
         const pendingList = await (prisma.user as any).findMany({
-            where: { kycStatus: 'PENDING' },
+            where: { kycStatus: filter },
             select: { id: true, name: true, phone: true, kycStatus: true, idCardFront: true, idCardBack: true, selfie: true, createdAt: true }
         });
 
         res.json(pendingList);
     } catch (e: any) {
         res.status(500).json({ error: 'Erreur réseau (KYC List)' });
+    }
+});
+
+const vipLimitSchema = z.object({ limit: z.number().int().min(100) });
+
+router.put('/users/:id/vip-limit', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
+        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+
+        const parsed = vipLimitSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: 'Limite invalide.' });
+
+        const targetUser = await prisma.user.findUnique({ where: { id: req.params.id as string } });
+        if (!targetUser) return res.status(404).json({ error: 'Introuvable' });
+
+        await (prisma.user as any).update({
+            where: { id: targetUser.id },
+            data: { kycLevel: parsed.data.limit, kycStatus: 'APPROVED' }
+        });
+
+        await prisma.auditLog.create({
+            data: { adminId: admin.id, action: 'VIP_LIMIT_SET', details: `Limit of ${parsed.data.limit} FCFA set for ${targetUser.phone}` }
+        });
+
+        res.json({ message: 'Plafond VIP appliqué avec succès.' });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
     }
 });
 
