@@ -81,8 +81,8 @@ export default function Dashboard({ token }: { token: string }) {
                     <div className="stat-value">{(stats.revenue || 0).toLocaleString('fr-FR')} FCFA</div>
                     <div className="stat-label">Chiffre d'Affaires Brut (Taxes 1%)</div>
                 </div>
-                <div className="stat-card" style={{ borderColor: 'rgba(59, 130, 246, 0.4)' }}>
-                    <div className="stat-icon volume" style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6' }}>
+                <div className="stat-card">
+                    <div className="stat-icon volume">
                         <Activity size={24} />
                     </div>
                     <div className="stat-value">{(stats.totalVolume || 0).toLocaleString('fr-FR')} FCFA</div>
@@ -109,18 +109,18 @@ export default function Dashboard({ token }: { token: string }) {
                         <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                             <defs>
                                 <linearGradient id="colorRevenus" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                    <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.4} />
+                                    <stop offset="95%" stopColor="var(--accent)" stopOpacity={0} />
                                 </linearGradient>
                             </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                             <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} />
                             <YAxis stroke="var(--text-secondary)" tick={{ fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v} />
                             <Tooltip
-                                contentStyle={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', borderRadius: '12px' }}
-                                itemStyle={{ color: '#fff', fontWeight: 'bold' }}
+                                contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', boxShadow: 'var(--shadow-md)' }}
+                                itemStyle={{ color: 'var(--text-primary)', fontWeight: 'bold' }}
                             />
-                            <Area type="monotone" dataKey="revenus" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenus)" />
+                            <Area type="monotone" dataKey="revenus" stroke="var(--accent)" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenus)" />
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>

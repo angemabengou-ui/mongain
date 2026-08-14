@@ -63,13 +63,13 @@ export default function KycMod({ token }: { token: string }) {
             {loading ? (
                 <div style={{ color: '#aaa' }}>Chargement...</div>
             ) : pending.length === 0 ? (
-                <div style={{ padding: '20px', backgroundColor: '#1e293b', borderRadius: '8px', textAlign: 'center', color: '#94a3b8' }}>
+                <div style={{ padding: '20px', backgroundColor: 'var(--bg-card)', borderRadius: '8px', textAlign: 'center', color: '#94a3b8' }}>
                     Aucun dossier KYC en attente ! 🎉
                 </div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                     {pending.map((p) => (
-                        <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#1e293b', padding: '15px', borderRadius: '12px' }}>
+                        <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: 'var(--bg-card)', padding: '15px', borderRadius: '12px' }}>
                             <div>
                                 <h3 style={{ margin: 0, color: '#f8fafc' }}>{p.name}</h3>
                                 <p style={{ margin: '5px 0', color: '#94a3b8' }}>{p.phone} - Soumis le {new Date(p.createdAt).toLocaleDateString()}</p>
@@ -80,7 +80,7 @@ export default function KycMod({ token }: { token: string }) {
                                         {p.idCardFront ? (
                                             <img src={p.idCardFront} alt="CNI Recto" style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #334155' }} />
                                         ) : (
-                                            <div style={{ width: '120px', height: '80px', backgroundColor: '#334155', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>Manquant</div>
+                                            <div style={{ width: '120px', height: '80px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>Manquant</div>
                                         )}
                                     </div>
                                     <div style={{ position: 'relative' }}>
@@ -88,7 +88,7 @@ export default function KycMod({ token }: { token: string }) {
                                         {p.idCardBack ? (
                                             <img src={p.idCardBack} alt="CNI Verso" style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #334155' }} />
                                         ) : (
-                                            <div style={{ width: '120px', height: '80px', backgroundColor: '#334155', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>Manquant</div>
+                                            <div style={{ width: '120px', height: '80px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>Manquant</div>
                                         )}
                                     </div>
                                     <div style={{ position: 'relative' }}>
@@ -96,7 +96,7 @@ export default function KycMod({ token }: { token: string }) {
                                         {p.selfie ? (
                                             <img src={p.selfie} alt="Selfie" style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #334155' }} />
                                         ) : (
-                                            <div style={{ width: '120px', height: '80px', backgroundColor: '#334155', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>Manquant</div>
+                                            <div style={{ width: '120px', height: '80px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>Manquant</div>
                                         )}
                                     </div>
                                 </div>
@@ -104,12 +104,12 @@ export default function KycMod({ token }: { token: string }) {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', justifyContent: 'center' }}>
                                 <button
                                     onClick={() => processKyc(p.id, 'APPROVED')}
-                                    style={{ backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    style={{ backgroundColor: '#10b981', color: 'var(--text-primary)', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
                                     <Check size={16} /> Approuver (Tier 1)
                                 </button>
                                 <button
                                     onClick={() => processKyc(p.id, 'REJECTED')}
-                                    style={{ backgroundColor: '#ef4444', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    style={{ backgroundColor: '#ef4444', color: 'var(--text-primary)', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
                                     <X size={16} /> Rejeter
                                 </button>
                             </div>

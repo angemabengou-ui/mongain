@@ -119,8 +119,8 @@ export default function Treasury({ token }: { token: string }) {
                 </div>
             )}
 
-            {error && <div style={{ padding: '16px', backgroundColor: 'var(--danger)', color: 'white', borderRadius: '8px', marginBottom: '20px' }}>{error}</div>}
-            {message && <div style={{ padding: '16px', backgroundColor: 'var(--success)', color: 'white', borderRadius: '8px', marginBottom: '20px' }}>{message}</div>}
+            {error && <div style={{ padding: '16px', backgroundColor: 'var(--danger)', color: 'var(--text-primary)', borderRadius: '8px', marginBottom: '20px' }}>{error}</div>}
+            {message && <div style={{ padding: '16px', backgroundColor: 'var(--success)', color: 'var(--text-primary)', borderRadius: '8px', marginBottom: '20px' }}>{message}</div>}
 
             <div style={{ display: 'flex', gap: '24px' }}>
                 <div className="stat-card" style={{ flex: 1, borderTop: '4px solid #3B82F6', alignSelf: 'flex-start' }}>
@@ -139,10 +139,10 @@ export default function Treasury({ token }: { token: string }) {
                             <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Montant à imprimer (FCFA)</label>
                             <input
                                 type="number" placeholder="1000000" value={amountMint} onChange={(e) => setAmountMint(e.target.value)}
-                                style={{ padding: '16px', width: '100%', borderRadius: '12px', boxSizing: 'border-box', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'white', fontSize: '16px' }}
+                                style={{ padding: '16px', width: '100%', borderRadius: '12px', boxSizing: 'border-box', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: '16px' }}
                             />
                         </div>
-                        <button type="submit" disabled={loading} style={{ padding: '16px', backgroundColor: '#3B82F6', color: '#fff', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
+                        <button type="submit" disabled={loading} style={{ padding: '16px', backgroundColor: '#3B82F6', color: 'var(--text-primary)', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
                             {loading ? 'Émission...' : 'Imprimer → Voûte'}
                         </button>
                     </form>
@@ -162,7 +162,7 @@ export default function Treasury({ token }: { token: string }) {
                     <form onSubmit={handleFund} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                         <div>
                             <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Agent / Marchand Bénéficiaire</label>
-                            <select value={phone} onChange={(e) => setPhone(e.target.value)} style={{ padding: '16px', width: '100%', borderRadius: '12px', boxSizing: 'border-box', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'white', fontSize: '16px', marginBottom: '12px' }}>
+                            <select value={phone} onChange={(e) => setPhone(e.target.value)} style={{ padding: '16px', width: '100%', borderRadius: '12px', boxSizing: 'border-box', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: '16px', marginBottom: '12px' }}>
                                 <option value="">-- Sélectionnez un professionnel --</option>
                                 {proUsers.map((u: any) => (<option key={u.phone} value={u.phone}>{u.name} ({u.role})</option>))}
                             </select>
@@ -171,10 +171,10 @@ export default function Treasury({ token }: { token: string }) {
                             <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Montant Alloué (FCFA)</label>
                             <input
                                 type="number" placeholder="50000" value={amountFund} onChange={(e) => setAmountFund(e.target.value)}
-                                style={{ padding: '16px', width: '100%', borderRadius: '12px', boxSizing: 'border-box', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'white', fontSize: '16px' }}
+                                style={{ padding: '16px', width: '100%', borderRadius: '12px', boxSizing: 'border-box', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: '16px' }}
                             />
                         </div>
-                        <button type="submit" disabled={loading} style={{ padding: '16px', backgroundColor: '#10B981', color: '#fff', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
+                        <button type="submit" disabled={loading} style={{ padding: '16px', backgroundColor: '#10B981', color: 'var(--text-primary)', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
                             {loading ? 'Transfert...' : 'Distribuer (Voûte)'}
                         </button>
                     </form>

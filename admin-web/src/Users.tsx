@@ -1,4 +1,4 @@
-import { Briefcase, Store, User, UserPlus, Users as UsersIcon } from 'lucide-react';
+import { Briefcase, Lock, ShieldAlert, BadgeCheck as ShieldCheck, Store, User, UserPlus, Users as UsersIcon, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { API_URL } from './config';
 
@@ -10,6 +10,9 @@ export default function UsersManagement({ token }: { token: string }) {
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
     const usersPerPage = 10;
+
+    // Slide-over CRM 360
+    const [selectedUser, setSelectedUser] = useState<any>(null);
 
     // Modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -138,25 +141,26 @@ export default function UsersManagement({ token }: { token: string }) {
     };
 
     return (
-        <div className="dashboard-content">
+        <div className="dashboard-content" style={{ position: 'relative' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <div>
-                    <h2>Gestion des Utilisateurs</h2>
-                    <p style={{ color: 'var(--text-secondary)' }}>Filtrez, visualisez et superviez les comptes de l'écosystème.</p>
+                    <h2>Base de Données Utilisateurs</h2>
+                    <p style={{ color: 'var(--text-secondary)' }}>Filtrez, visualisez et superviez les comptes de l'écosystème Mongain.</p>
                 </div>
                 <button
                     onClick={() => setIsModalOpen(true)}
-                    style={{ padding: '12px 20px', backgroundColor: '#4F46E5', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
-                    <UserPlus size={18} /> Ajouter Profil Pro
+                    className="btn-primary"
+                    style={{ width: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <UserPlus size={18} /> Créer un Profil Pro
                 </button>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => setFilter('')} style={{ padding: '8px 16px', borderRadius: '20px', border: filter === '' ? 'none' : '1px solid var(--border)', backgroundColor: filter === '' ? '#334155' : 'transparent', color: '#fff', cursor: 'pointer' }}>Tous</button>
-                    <button onClick={() => setFilter('USER')} style={{ padding: '8px 16px', borderRadius: '20px', border: filter === 'USER' ? 'none' : '1px solid var(--border)', backgroundColor: filter === 'USER' ? '#10B981' : 'transparent', color: '#fff', cursor: 'pointer' }}>Clients</button>
-                    <button onClick={() => setFilter('AGENT')} style={{ padding: '8px 16px', borderRadius: '20px', border: filter === 'AGENT' ? 'none' : '1px solid var(--border)', backgroundColor: filter === 'AGENT' ? '#4F46E5' : 'transparent', color: '#fff', cursor: 'pointer' }}>Agents</button>
-                    <button onClick={() => setFilter('MERCHANT')} style={{ padding: '8px 16px', borderRadius: '20px', border: filter === 'MERCHANT' ? 'none' : '1px solid var(--border)', backgroundColor: filter === 'MERCHANT' ? '#F59E0B' : 'transparent', color: '#fff', cursor: 'pointer' }}>Marchands</button>
+                    <button onClick={() => setFilter('')} style={{ padding: '8px 16px', borderRadius: '20px', border: filter === '' ? 'none' : '1px solid var(--border)', backgroundColor: filter === '' ? 'var(--text-primary)' : 'transparent', color: filter === '' ? 'var(--bg-primary)' : 'var(--text-secondary)', cursor: 'pointer', fontWeight: '500' }}>Tous</button>
+                    <button onClick={() => setFilter('USER')} style={{ padding: '8px 16px', borderRadius: '20px', border: filter === 'USER' ? 'none' : '1px solid var(--border)', backgroundColor: filter === 'USER' ? 'var(--success)' : 'transparent', color: filter === 'USER' ? 'white' : 'var(--text-secondary)', cursor: 'pointer', fontWeight: '500' }}>Clients</button>
+                    <button onClick={() => setFilter('AGENT')} style={{ padding: '8px 16px', borderRadius: '20px', border: filter === 'AGENT' ? 'none' : '1px solid var(--border)', backgroundColor: filter === 'AGENT' ? 'var(--accent)' : 'transparent', color: filter === 'AGENT' ? 'white' : 'var(--text-secondary)', cursor: 'pointer', fontWeight: '500' }}>Agents</button>
+                    <button onClick={() => setFilter('MERCHANT')} style={{ padding: '8px 16px', borderRadius: '20px', border: filter === 'MERCHANT' ? 'none' : '1px solid var(--border)', backgroundColor: filter === 'MERCHANT' ? 'var(--warning)' : 'transparent', color: filter === 'MERCHANT' ? 'white' : 'var(--text-secondary)', cursor: 'pointer', fontWeight: '500' }}>Marchands</button>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                     <input
@@ -164,7 +168,6 @@ export default function UsersManagement({ token }: { token: string }) {
                         placeholder="Rechercher par nom ou numéro..."
                         value={searchTerm}
                         onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                        style={{ padding: '10px 16px', borderRadius: '8px', border: '1px solid var(--border)', backgroundColor: 'var(--bg-secondary)', color: 'white', width: '250px' }}
                     />
                 </div>
             </div>
@@ -175,7 +178,7 @@ export default function UsersManagement({ token }: { token: string }) {
                 ) : (
                     <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                         <thead>
-                            <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                            <tr style={{ backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border)' }}>
                                 <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Utilisateur</th>
                                 <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Téléphone</th>
                                 <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Pseudo</th>
@@ -183,12 +186,17 @@ export default function UsersManagement({ token }: { token: string }) {
                                 <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Rôle</th>
                                 <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Statut</th>
                                 <th style={{ padding: '16px', color: 'var(--text-secondary)', textAlign: 'right' }}>Solde</th>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)', textAlign: 'right' }}>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredUsers.slice((currentPage - 1) * usersPerPage, currentPage * usersPerPage).map(u => (
-                                <tr key={u.id} style={{ borderBottom: '1px solid var(--border)', opacity: u.isActive === false ? 0.6 : 1 }}>
+                                <tr key={u.id}
+                                    onClick={() => setSelectedUser(u)}
+                                    style={{
+                                        cursor: 'pointer',
+                                        transition: 'background 0.2s',
+                                        opacity: u.isActive === false ? 0.6 : 1
+                                    }}>
                                     <td style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
                                         <div style={{ width: '40px', height: '40px', borderRadius: '20px', backgroundColor: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                             {getRoleIcon(u.role)}
@@ -240,21 +248,6 @@ export default function UsersManagement({ token }: { token: string }) {
                                     <td style={{ padding: '16px', textAlign: 'right', fontWeight: 'bold', color: '#10B981' }}>
                                         {u.wallet?.balance?.toLocaleString('fr-FR')} FCFA
                                     </td>
-                                    <td style={{ padding: '16px', textAlign: 'right' }}>
-                                        {u.role !== 'ADMIN' && (
-                                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                                                <button onClick={() => toggleStatus(u.id)} style={{ padding: '6px 12px', fontSize: '12px', backgroundColor: u.isActive !== false ? '#E11D4820' : '#10B98120', color: u.isActive !== false ? '#E11D48' : '#10B981', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-                                                    {u.isActive !== false ? 'BLOQUER' : 'ACTIVER'}
-                                                </button>
-                                                <button onClick={() => resetPin(u.id)} style={{ padding: '6px 12px', fontSize: '12px', backgroundColor: '#334155', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
-                                                    RESET PIN
-                                                </button>
-                                                <button onClick={() => deleteUser(u.id)} style={{ padding: '6px 12px', fontSize: '12px', backgroundColor: '#E11D48', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }} title="Supprimer définitivement">
-                                                    🗑️ SUPPRIMER
-                                                </button>
-                                            </div>
-                                        )}
-                                    </td>
                                 </tr>
                             ))}
                             {users.length === 0 && (
@@ -276,13 +269,13 @@ export default function UsersManagement({ token }: { token: string }) {
                         <button
                             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                             disabled={currentPage === 1}
-                            style={{ padding: '8px 16px', backgroundColor: 'var(--bg-secondary)', color: currentPage === 1 ? 'var(--text-secondary)' : '#fff', border: '1px solid var(--border)', borderRadius: '8px', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
+                            style={{ padding: '8px 16px', backgroundColor: 'var(--bg-card)', color: currentPage === 1 ? 'var(--text-muted)' : 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '8px', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontWeight: '600' }}>
                             Précédent
                         </button>
                         <button
                             onClick={() => setCurrentPage(p => Math.min(Math.ceil(users.length / usersPerPage), p + 1))}
                             disabled={currentPage >= Math.ceil(users.length / usersPerPage)}
-                            style={{ padding: '8px 16px', backgroundColor: 'var(--bg-secondary)', color: currentPage >= Math.ceil(users.length / usersPerPage) ? 'var(--text-secondary)' : '#fff', border: '1px solid var(--border)', borderRadius: '8px', cursor: currentPage >= Math.ceil(users.length / usersPerPage) ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
+                            style={{ padding: '8px 16px', backgroundColor: 'var(--bg-card)', color: currentPage >= Math.ceil(users.length / usersPerPage) ? 'var(--text-muted)' : 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '8px', cursor: currentPage >= Math.ceil(users.length / usersPerPage) ? 'not-allowed' : 'pointer', fontWeight: '600' }}>
                             Suivant
                         </button>
                     </div>
@@ -296,30 +289,95 @@ export default function UsersManagement({ token }: { token: string }) {
                         {error && <div style={{ marginBottom: '16px', color: 'var(--danger)', fontSize: '14px' }}>{error}</div>}
                         <form onSubmit={handleCreatePro} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                             <div>
-                                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Type de Profil</label>
-                                <select value={newRole} onChange={e => setNewRole(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'white' }}>
+                                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>Type de Profil</label>
+                                <select value={newRole} onChange={e => setNewRole(e.target.value)}>
                                     <option value="AGENT">Agent (Agence / Dépôt-Retrait)</option>
                                     <option value="MERCHANT">Marchand (Boutique / Vendeur Comptoir)</option>
                                 </select>
                             </div>
                             <div>
-                                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Nom / Enseigne</label>
-                                <input type="text" value={newName} onChange={e => setNewName(e.target.value)} required style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'white' }} placeholder="Ex: Boutique Ali" />
+                                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>Nom / Enseigne</label>
+                                <input type="text" value={newName} onChange={e => setNewName(e.target.value)} required placeholder="Ex: Boutique Ali" />
                             </div>
                             <div>
-                                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Téléphone</label>
-                                <input type="text" value={newPhone} onChange={e => setNewPhone(e.target.value)} required style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'white' }} placeholder="+24177......." />
+                                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>Téléphone</label>
+                                <input type="text" value={newPhone} onChange={e => setNewPhone(e.target.value)} required placeholder="+24177......." />
                             </div>
                             <div>
-                                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>PIN PROVISOIRE</label>
-                                <input type="text" value={newPin} onChange={e => setNewPin(e.target.value)} required style={{ width: '100%', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'white' }} />
+                                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>PIN PROVISOIRE</label>
+                                <input type="text" value={newPin} onChange={e => setNewPin(e.target.value)} required />
                             </div>
 
                             <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-                                <button type="button" onClick={() => setIsModalOpen(false)} style={{ flex: 1, padding: '12px', backgroundColor: 'transparent', border: '1px solid var(--border)', color: 'white', borderRadius: '8px', cursor: 'pointer' }}>Annuler</button>
-                                <button type="submit" disabled={creating} style={{ flex: 1, padding: '12px', backgroundColor: '#4F46E5', border: 'none', color: 'white', borderRadius: '8px', cursor: 'pointer' }}>{creating ? 'Création...' : 'Créer'}</button>
+                                <button type="button" onClick={() => setIsModalOpen(false)} style={{ flex: 1, padding: '12px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>Annuler</button>
+                                <button type="submit" disabled={creating} className="btn-primary" style={{ flex: 1 }}>{creating ? 'Création...' : 'Créer le profil'}</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* CRM 360-View Panel */}
+            {selectedUser && (
+                <div style={{
+                    position: 'fixed', top: 0, right: 0, width: '450px', height: '100vh',
+                    backgroundColor: 'var(--bg-card)', borderLeft: '1px solid var(--border)',
+                    boxShadow: 'var(--shadow-lg)', zIndex: 50, padding: '32px',
+                    overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px'
+                }}>
+                    <div className="flex-between">
+                        <h3 style={{ fontSize: '20px' }}>Profil Utilisateur</h3>
+                        <button onClick={() => setSelectedUser(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                            <X size={24} />
+                        </button>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '24px', backgroundColor: 'var(--bg-primary)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                        <div style={{ width: '64px', height: '64px', borderRadius: '32px', backgroundColor: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+                            {selectedUser.name?.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{selectedUser.name}</div>
+                            <div style={{ color: 'var(--text-secondary)' }}>{selectedUser.phone}</div>
+                            {selectedUser.username && <div style={{ color: 'var(--accent)', fontSize: '13px' }}>@{selectedUser.username}</div>}
+                        </div>
+                    </div>
+
+                    <div className="stats-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 0 }}>
+                        <div className="stat-card" style={{ padding: '20px' }}>
+                            <div className="stat-label">Solde Portefeuille</div>
+                            <div className="stat-value" style={{ fontSize: '24px', color: 'var(--success)' }}>{selectedUser.wallet?.balance?.toLocaleString('fr-FR')} F</div>
+                        </div>
+                        <div className="stat-card" style={{ padding: '20px' }}>
+                            <div className="stat-label">Statut KYC</div>
+                            <div style={{ marginTop: '8px' }}>
+                                <span className={`status-pill ${selectedUser.kycStatus === 'UNVERIFIED' ? 'neutral' : selectedUser.kycStatus === 'APPROVED' ? 'success' : 'warning'}`}>
+                                    {selectedUser.kycStatus || 'UNVERIFIED'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h4 style={{ color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '0.5px', marginBottom: '16px' }}>
+                            Actions Administratives
+                        </h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            <button onClick={() => { toggleStatus(selectedUser.id); setSelectedUser({ ...selectedUser, isActive: !selectedUser.isActive }); }}
+                                style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: selectedUser.isActive === false ? 'var(--success-bg)' : 'var(--danger-bg)', color: selectedUser.isActive === false ? 'var(--success)' : 'var(--danger)', border: '1px solid transparent', borderRadius: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                                {selectedUser.isActive === false ? <ShieldCheck size={20} /> : <ShieldAlert size={20} />}
+                                {selectedUser.isActive === false ? 'Réactiver le compte' : 'Suspendre le compte'}
+                            </button>
+                            <button onClick={() => resetPin(selectedUser.id)}
+                                style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                                <Lock size={20} />
+                                Générer un nouveau code PIN
+                            </button>
+                            <button onClick={() => { deleteUser(selectedUser.id); setSelectedUser(null); }}
+                                style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'var(--bg-primary)', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', marginTop: '16px' }}>
+                                🗑️ Clôturer définitivement le compte
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

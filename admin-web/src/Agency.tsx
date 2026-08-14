@@ -137,7 +137,7 @@ export default function Agency({ token, agentPhone, agentName }: { token: string
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40, borderBottom: '1px solid var(--glass-border)', paddingBottom: 20 }}>
                     <div>
                         <h1 style={{ fontSize: '28px', margin: 0, fontWeight: 800, color: 'var(--text-primary)' }}>Espace Guichet</h1>
-                        <p style={{ color: 'var(--text-secondary)', marginTop: 5, fontSize: 16 }}>Agent : <strong style={{ color: '#fff' }}>{agentName}</strong></p>
+                        <p style={{ color: 'var(--text-secondary)', marginTop: 5, fontSize: 16 }}>Agent : <strong style={{ color: 'var(--text-primary)' }}>{agentName}</strong></p>
                     </div>
 
                     {balance !== null && (
@@ -155,7 +155,7 @@ export default function Agency({ token, agentPhone, agentName }: { token: string
                             </div>
                             <div>
                                 <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13, textTransform: 'uppercase', fontWeight: 600, letterSpacing: 1 }}>Caisse Digitale</p>
-                                <h2 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: '#fff' }}>{balance.toLocaleString('fr-FR')} <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>FCFA</span></h2>
+                                <h2 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: 'var(--text-primary)' }}>{balance.toLocaleString('fr-FR')} <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>FCFA</span></h2>
                             </div>
                         </div>
                     )}
@@ -247,7 +247,7 @@ export default function Agency({ token, agentPhone, agentName }: { token: string
                                 <CheckCircle color="#10B981" size={28} style={{ marginRight: 15 }} />
                                 <div>
                                     <h4 style={{ color: '#10B981', margin: '0 0 5px 0', fontSize: 18 }}>Opération Réussie</h4>
-                                    <p style={{ color: '#fff', margin: 0 }}>{successMessage}</p>
+                                    <p style={{ color: 'var(--text-primary)', margin: 0 }}>{successMessage}</p>
                                 </div>
                             </div>
                         )}
@@ -365,7 +365,7 @@ export default function Agency({ token, agentPhone, agentName }: { token: string
                                             width: '100%', padding: '20px', borderRadius: 16, fontSize: 18, fontWeight: 700,
                                             border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
                                             background: action === 'withdraw' ? '#f59e0b' : 'var(--accent)',
-                                            color: '#fff',
+                                            color: 'var(--text-primary)',
                                             boxShadow: `0 10px 20px ${action === 'withdraw' ? 'rgba(245,158,11,0.3)' : 'rgba(99,102,241,0.3)'}`,
                                             opacity: loading ? 0.7 : 1,
                                             transition: 'all 0.2s',

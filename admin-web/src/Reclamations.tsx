@@ -104,7 +104,7 @@ export default function Reclamations({ token }: { token: string }) {
                                         onClick={() => closeTicket(rec.id)}
                                         style={{
                                             display: 'flex', alignItems: 'center', gap: '8px',
-                                            backgroundColor: '#10B981', color: 'white', border: 'none',
+                                            backgroundColor: '#10B981', color: 'var(--text-primary)', border: 'none',
                                             padding: '10px 16px', borderRadius: '8px', cursor: 'pointer',
                                             fontWeight: 'bold'
                                         }}

@@ -117,11 +117,11 @@ export default function Ledger({ token }: { token: string }) {
                     <p style={{ color: 'var(--text-secondary)' }}>Surveillance en temps réel de tous les flux financiers de la plateforme.</p>
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
-                    <button onClick={exportCSV} style={{ padding: '12px 20px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
+                    <button onClick={exportCSV} style={{ padding: '12px 20px', backgroundColor: '#3b82f6', color: 'var(--text-primary)', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
                         <Download size={18} />
                         CSV
                     </button>
-                    <button onClick={exportPDF} style={{ padding: '12px 20px', backgroundColor: '#e11d48', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
+                    <button onClick={exportPDF} style={{ padding: '12px 20px', backgroundColor: '#e11d48', color: 'var(--text-primary)', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
                         <FileText size={18} />
                         Télécharger PDF
                     </button>
@@ -138,7 +138,7 @@ export default function Ledger({ token }: { token: string }) {
                     style={{
                         width: '100%', padding: '16px 16px 16px 48px',
                         borderRadius: '12px', backgroundColor: 'var(--bg-secondary)',
-                        border: '1px solid var(--border)', color: 'white',
+                        border: '1px solid var(--border)', color: 'var(--text-primary)',
                         fontSize: '15px'
                     }}
                 />
