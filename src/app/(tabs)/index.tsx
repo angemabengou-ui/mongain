@@ -43,6 +43,7 @@ export default function DashboardScreen() {
   const [dailyRevenue, setDailyRevenue] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [appConfig, setAppConfig] = useState({ seegEnabled: true, tontineEnabled: true });
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -52,9 +53,10 @@ export default function DashboardScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const [walletData, txData] = await Promise.all([
+      const [walletData, txData, settingsData] = await Promise.all([
         apiGetBalance(),
         apiGetTransactions(),
+        require('../../services/api').apiGetSystemSettings()
       ]);
       setBalance(walletData.balance);
       setCurrency(walletData.currency);
@@ -62,6 +64,10 @@ export default function DashboardScreen() {
       const todayStr = new Date().toISOString().split('T')[0];
       const todayRev = txData.filter(tx => tx.type === 'incoming' && tx.createdAt.startsWith(todayStr)).reduce((s, tx) => s + tx.amount, 0);
       setDailyRevenue(todayRev);
+
+      if (settingsData) {
+        setAppConfig({ seegEnabled: settingsData.seegEnabled, tontineEnabled: settingsData.tontineEnabled });
+      }
 
       setTransactions(txData.slice(0, 3)); // 3 dernières
     } catch (e) {
@@ -181,13 +187,13 @@ export default function DashboardScreen() {
             <View style={styles.serviceSection}>
               <Text style={styles.sectionTitle}>Services & Factures</Text>
               <View style={styles.serviceGrid}>
-                <ServiceItem icon="flash" label="Électricité" color="#F59E0B" onPress={() => router.push('/services/seeg' as any)} styles={styles} />
+                <ServiceItem icon="flash" label="Électricité" color="#F59E0B" disabled={!appConfig.seegEnabled} onPress={() => router.push('/services/seeg' as any)} styles={styles} />
 
                 <ServiceItem icon="phone-portrait" label="Crédit Air" color="#D946EF" onPress={() => router.push('/services/airtime' as any)} styles={styles} />
 
                 <ServiceItem icon="tv" label="Abo TV" color="#3B82F6" onPress={() => router.push('/services/tv' as any)} styles={styles} />
 
-                <ServiceItem icon="lock-closed" label="Tontine" color="#10B981" onPress={() => router.push('/services/tontine' as any)} styles={styles} />
+                <ServiceItem icon="lock-closed" label="Tontine" color="#10B981" disabled={!appConfig.tontineEnabled} onPress={() => router.push('/services/tontine' as any)} styles={styles} />
               </View>
             </View>
 
@@ -241,14 +247,23 @@ const ActionItem = ({ icon, label, color, badge, onPress, styles }: any) => (
   </TouchableOpacity>
 );
 
-const ServiceItem = ({ icon, label, color, onPress, styles }: any) => (
-  <TouchableOpacity style={styles.serviceItemContainer} activeOpacity={0.7} onPress={onPress}>
-    <View style={[styles.serviceIconWrap, { backgroundColor: color + '15' }]}>
-      <Ionicons name={icon} size={24} color={color} />
-    </View>
-    <Text style={styles.serviceLabel}>{label}</Text>
-  </TouchableOpacity>
-);
+const ServiceItem = ({ icon, label, color, onPress, styles, disabled }: any) => {
+  const handlePress = () => {
+    if (disabled) {
+      import('react-native').then(({ Alert }) => Alert.alert('Service Indisponible', 'Ce programme est temporairement suspendu par notre administration.'));
+      return;
+    }
+    onPress();
+  };
+  return (
+    <TouchableOpacity style={[styles.serviceItemContainer, disabled && { opacity: 0.4 }]} activeOpacity={0.7} onPress={handlePress}>
+      <View style={[styles.serviceIconWrap, { backgroundColor: color + '15' }]}>
+        <Ionicons name={icon} size={24} color={color} />
+      </View>
+      <Text style={styles.serviceLabel}>{label}</Text>
+    </TouchableOpacity>
+  );
+};
 
 const TransactionItem = ({ tx, onPress, styles, colors }: any) => {
   const isIncoming = tx.type === 'incoming';

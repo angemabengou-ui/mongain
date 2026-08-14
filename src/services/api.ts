@@ -152,6 +152,11 @@ export const apiLookupUser = (phone: string) =>
 export const apiGetDailyLimits = () =>
     request('GET', '/api/wallet/limits', undefined, true) as Promise<{ skip?: boolean, dailySpend: number, dailyLimit: number, kycStatus: string, kycLevel: number }>;
 
+export const apiGetSystemSettings = () =>
+    request('GET', '/api/settings', undefined, false) as Promise<{
+        airtelEnabled: boolean, moovEnabled: boolean, seegEnabled: boolean, tontineEnabled: boolean
+    }>;
+
 export interface AppNotification {
     id: string; title: string; body: string; type: string; isRead: boolean; createdAt: string;
 }
