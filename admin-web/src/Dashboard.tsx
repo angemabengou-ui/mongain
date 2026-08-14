@@ -1,7 +1,7 @@
-import { API_URL } from './config';
 import { Activity, Users, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { API_URL } from './config';
 
 export default function Dashboard({ token }: { token: string }) {
     const [stats, setStats] = useState<any>(null);
@@ -78,22 +78,26 @@ export default function Dashboard({ token }: { token: string }) {
                     <div className="stat-icon revenue">
                         <Wallet size={24} />
                     </div>
-                    <div className="stat-value">{stats.revenue.toLocaleString()} FCFA</div>
-                    <div className="stat-label">Revenus (Frais 1%)</div>
+                    <div className="stat-value">{(stats.revenue || 0).toLocaleString('fr-FR')} FCFA</div>
+                    <div className="stat-label">Chiffre d'Affaires Brut (Taxes 1%)</div>
                 </div>
-                <div className="stat-card">
-                    <div className="stat-icon volume">
+                <div className="stat-card" style={{ borderColor: 'rgba(59, 130, 246, 0.4)' }}>
+                    <div className="stat-icon volume" style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6' }}>
                         <Activity size={24} />
                     </div>
-                    <div className="stat-value">{stats.totalCirculating.toLocaleString()} FCFA</div>
-                    <div className="stat-label">Volume total en circulation</div>
+                    <div className="stat-value">{(stats.totalVolume || 0).toLocaleString('fr-FR')} FCFA</div>
+                    <div className="stat-label">Volume de P2P Transféré (Global)</div>
                 </div>
                 <div className="stat-card">
                     <div className="stat-icon users">
                         <Users size={24} />
                     </div>
-                    <div className="stat-value">{stats.totalUsers}</div>
-                    <div className="stat-label">Utilisateurs actifs</div>
+                    <div className="stat-value" style={{ fontSize: '18px' }}>
+                        {stats.totalUsers || 0} <span style={{ fontSize: '11px', color: 'gray', marginRight: '8px' }}>Clients</span>
+                        {stats.agentsCount || 0} <span style={{ fontSize: '11px', color: 'gray', marginRight: '8px' }}>Agts</span>
+                        {stats.merchantsCount || 0} <span style={{ fontSize: '11px', color: 'gray' }}>Mchs</span>
+                    </div>
+                    <div className="stat-label">Réseau Dynamique</div>
                 </div>
             </div>
 

@@ -1,10 +1,8 @@
-// @ts-nocheck
 import { Ionicons } from '@expo/vector-icons';
-import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { useEffect, useState } from 'react';
-import { Alert, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
@@ -26,22 +24,20 @@ export default function ProfileScreen() {
         if (user && user.role === 'USER') {
             apiGetDailyLimits().then(data => setLimits(data)).catch(console.error);
         }
-        // Charger la préférence AppLock
-        SecureStore.getItemAsync('appLockEnabled').then(val => {
-            setAppLockEnabled(val === 'true');
-        });
+        // Charger la préférence AppLock (ON par défaut)
+        if (Platform.OS !== 'web') {
+            SecureStore.getItemAsync('appLockEnabled').then(val => {
+                setAppLockEnabled(val !== 'false');
+            }).catch(e => console.log("SecureStore error:", e));
+        }
     }, [user]);
 
     const toggleAppLock = async (value: boolean) => {
-        if (value) {
-            // Vérifier si la biométrie est dispo avant d'activer
-            const hasHardware = await LocalAuthentication.hasHardwareAsync();
-            const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-            if (!hasHardware || !isEnrolled) {
-                Alert.alert('Non disponible', 'Aucune biométrie (FaceID/Empreinte) configurée sur cet appareil.');
-                return;
-            }
+        if (Platform.OS === 'web') {
+            Alert.alert("Non supporté", "La sécurité renforcée n'est pas supportée sur le Web.");
+            return;
         }
+
         await SecureStore.setItemAsync('appLockEnabled', value ? 'true' : 'false');
         setAppLockEnabled(value);
     };
@@ -118,7 +114,7 @@ export default function ProfileScreen() {
                     <Text style={styles.sectionTitle}>Compte</Text>
                     <MenuItem icon="person-outline" label="Informations personnelles" onPress={() => router.push('/profile-edit')} styles={styles} colors={COLORS} />
                     <MenuItem icon="shield-checkmark-outline" label="Sécurité & PIN" onPress={() => router.push('/pin-change')} styles={styles} colors={COLORS} />
-                    <MenuItem icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications')} styles={styles} colors={COLORS} />
+                    <MenuItem icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications' as any)} styles={styles} colors={COLORS} />
                     {/* AppLock Toggle */}
                     <View style={[styles.menuItem, { justifyContent: 'space-between' }]}>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>

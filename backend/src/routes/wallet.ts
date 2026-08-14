@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { TelecomGatewayManager } from '../services/mobileMoney';
 import { getSystemSettings } from './settings';
 
 const expo = new Expo();
@@ -13,7 +14,14 @@ const CORPORATE_PHONE = process.env.CORPORATE_PHONE || '+24100000000';
 export const sendPush = async (token: string | null | undefined, title: string, body: string) => {
     if (token && Expo.isExpoPushToken(token)) {
         try {
-            await expo.sendPushNotificationsAsync([{ to: token, sound: 'default', title, body }]);
+            await expo.sendPushNotificationsAsync([{
+                to: token,
+                sound: 'default',
+                title,
+                body,
+                priority: 'high',
+                channelId: 'default'
+            }]);
         } catch (e) {
             console.error('Erreur Push Notification:', e);
         }
@@ -76,6 +84,8 @@ router.post('/generate-withdraw-code', authMiddleware, async (req: AuthRequest, 
         return res.status(500).json({ error: 'Erreur génération code' });
     }
 });
+
+
 // ─── Vérification atomique du plafond journalier ───────────────────────────
 async function verifyAndIncrementDailyLimit(
     walletId: string,
@@ -333,220 +343,63 @@ router.get('/lookup/:phone', authMiddleware, async (req: AuthRequest, res) => {
     return res.json({ id: user.id, name: user.name, phone: user.phone, role: user.role });
 });
 
-// POST /api/wallet/deposit (Agent to User)
-router.post('/deposit', authMiddleware, async (req: AuthRequest, res) => {
-    const parsed = depositSchema.safeParse(req.body);
-    if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.issues[0].message });
-    }
 
-    const { amount, phone } = parsed.data as any; // phone string added to body if needed. Wait, depositSchema needs 'phone'. Let's relax it.
-    if (!phone) return res.status(400).json({ error: 'Numéro du client manquant.' });
 
-    try {
-        const result = await prisma.$transaction(async (tx) => {
-            const agent = await tx.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
-            if (!agent || agent.role !== 'AGENT') throw new Error('Action non autorisée. Réservé aux Agents.');
-            if (!agent.wallet || agent.wallet.balance < amount) throw new Error('Solde Agent insuffisant.');
-
-            const client = await tx.user.findUnique({ where: { phone }, include: { wallet: true } });
-            if (!client || !client.wallet) throw new Error('Client introuvable.');
-
-            const updatedAgentWallet = await tx.wallet.update({
-                where: { id: agent.wallet.id, balance: { gte: amount } },
-                data: { balance: { decrement: amount } }
-            });
-
-            await tx.wallet.update({
-                where: { id: client.wallet.id },
-                data: { balance: { increment: amount } }
-            });
-
-            await tx.transaction.create({
-                data: {
-                    amount,
-                    senderWalletId: agent.wallet.id,
-                    receiverWalletId: client.wallet.id,
-                    status: 'COMPLETED',
-                    reference: 'DEPOSIT-' + Math.random().toString(36).substring(7).toUpperCase(),
-                }
-            });
-            return { balance: updatedAgentWallet.balance, clientName: client.name, pushToken: (client as any).pushToken };
-        });
-
-        // Notify Client via Socket.IO
-        const io = req.app.get('io');
-        if (io) {
-            io.to(`user_${phone}`).emit('payment_received', {
-                amount,
-                from: 'Agent Mongain'
-            });
-        }
-
-        // Trigger Push
-        sendPush(result.pushToken, 'Dépôt Réussi 🏦', `L'agent vous a déposé ${amount.toLocaleString('fr-FR')} FCFA. Ton solde est mis à jour.`);
-
-        return res.json({ message: `Dépôt de ${amount} FCFA effectué vers ${result.clientName}.`, balance: result.balance });
-    } catch (error: any) {
-        return res.status(400).json({ error: error.message });
-    }
-});
-
-// POST /api/wallet/agent-withdraw (Agent Pulls from Client)
-router.post('/agent-withdraw', authMiddleware, async (req: AuthRequest, res) => {
+// POST /api/wallet/request-withdraw (Agent Pushes Request to Client)
+router.post('/request-withdraw', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const agentId = req.userId;
+        const { targetPhone, amount } = req.body;
+
+        if (!targetPhone || !amount || amount <= 0) {
+            return res.status(400).json({ error: 'Numéro du client et montant valides obligatoires.' });
+        }
+
+        let cleanedPhone = targetPhone.replace(/\s/g, '');
+        if (!cleanedPhone.startsWith('+')) cleanedPhone = '+241' + (cleanedPhone.startsWith('0') ? cleanedPhone.substring(1) : cleanedPhone);
+
         const agent = await prisma.user.findUnique({
-            where: { id: agentId },
-            include: { wallet: true }
+            where: { id: agentId }
         });
 
-        if (!agent) return res.status(404).json({ error: 'Agent introuvable' });
-        if (agent.role !== 'AGENT' && agent.role !== 'MERCHANT') return res.status(403).json({ error: 'Autorisation refusée. Seul un AGENT ou COMMEÇANT peut encaisser un retrait physique.' });
-
-        const { payerPhone, withdrawCode } = req.body;
-        if (!payerPhone || !withdrawCode) {
-            return res.status(400).json({ error: 'Téléphone et Jeton requis.' });
-        }
+        if (!agent || agent.role !== 'AGENT') return res.status(403).json({ error: 'Autorisation refusée. Réservé aux Agents Mongain.' });
 
         const client = await prisma.user.findUnique({
-            where: { phone: payerPhone },
-            include: { wallet: true }
+            where: { phone: cleanedPhone }
         });
 
-        if (!client || !client.wallet) return res.status(404).json({ error: 'Client introuvable' });
+        if (!client) return res.status(404).json({ error: 'Ce client est introuvable sur le réseau Mongain.' });
 
-        const otpRecord = await prisma.verificationCode.findUnique({ where: { phone: payerPhone } });
-        if (!otpRecord || otpRecord.expiresAt < new Date()) {
-            return res.status(403).json({ error: 'Jeton de retrait invalide ou expiré.' });
-        }
-
-        const [savedCode, savedAmountStr] = otpRecord.code.split(':');
-        if (savedCode !== withdrawCode || !savedAmountStr) {
-            return res.status(403).json({ error: 'Jeton de retrait incorrect.' });
-        }
-
-        const amount = parseFloat(savedAmountStr);
-        if (isNaN(amount) || amount <= 0) {
-            return res.status(400).json({ error: 'Erreur intégrité. Montant corrompu.' });
-        }
-
-        const settings = await getSystemSettings();
-
-        // --- Commission Partagée Dynamique selon le rôle ---
-        let totalTax = 0;
-        let agentReward = 0;
-
-        // Si c'est un Commerçant, le retrait est payant (ex: 1.3%)
-        if (agent.role === 'MERCHANT') {
-            totalTax = Math.ceil(amount * settings.taxWithdraw);
-            agentReward = Math.ceil(amount * settings.rewardMerchant);
-        }
-        // Si c'est un Agent Mongain, le retrait est gratuit (0%)
-        else if (agent.role === 'AGENT') {
-            totalTax = 0;
-            agentReward = 0;
-            // Note: Si une prime spécifique agent existe (payée par Mongain), on l'ajoute ici. On reste gratuit pour le client.
-        }
-
-        const totalDebit = amount + totalTax;
-
-        // Mongain encaisse le reste (ex: 1.0%)
-        const netMongain = totalTax - agentReward;
-
-        if (client.wallet.balance < totalDebit) return res.status(400).json({ error: `Solde insuffisant pour le retrait (Frais: ${totalTax} FCFA).` });
-        if (client.id === agent.id) return res.status(400).json({ error: 'Opération circulaire interdite.' });
-
-        // Vérification du plafond pour le retrait client (atomique)
-        await verifyAndIncrementDailyLimit(client.wallet!.id, client.id, totalDebit, settings);
-
-        const corporate = await prisma.user.findUnique({
-            where: { phone: CORPORATE_PHONE },
-            include: { wallet: true }
-        });
-
-        // Transaction atomique
-        const transactionResult = await prisma.$transaction(async (tx) => {
-            // 1. Débit client total
-            const clientNav = await tx.wallet.update({
-                where: { id: client.wallet!.id, balance: { gte: totalDebit } },
-                data: { balance: { decrement: totalDebit } }
-            });
-
-            // 2. Crédit Agent (Montant du retrait + Prime Commerçant)
-            await tx.wallet.update({
-                where: { id: agent.wallet!.id },
-                data: { balance: { increment: amount + agentReward } }
-            });
-
-            // 3. Bénéfice Corporate
-            if (corporate && corporate.wallet && netMongain > 0) {
-                await tx.wallet.update({
-                    where: { id: corporate.wallet.id },
-                    data: { balance: { increment: netMongain } }
-                });
-
-                await tx.transaction.create({
-                    data: {
-                        amount: netMongain,
-                        senderWalletId: client.wallet!.id,
-                        receiverWalletId: corporate.wallet.id,
-                        status: 'COMPLETED',
-                        reference: 'FEE-REVENUE-' + Math.random().toString(36).substring(7).toUpperCase(),
-                    }
-                });
-            }
-
-            // Historique Global
-            const transactionRecord = await tx.transaction.create({
-                data: {
-                    amount,
-                    senderWalletId: client.wallet!.id,
-                    receiverWalletId: agent.wallet!.id,
-                    status: 'COMPLETED',
-                    reference: 'WITHDRAW-' + Math.random().toString(36).substring(7).toUpperCase(),
-                }
-            });
-
-            // Destruction du Jeton OTP pour empêcher le Replay Attack
-            await prisma.verificationCode.delete({ where: { phone: client.phone } });
-
-            return transactionRecord;
-        });
-
-        // Notifications
-        if ((client as any).pushToken) {
-            fetch('https://exp.host/--/api/v2/push/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    to: (client as any).pushToken,
-                    title: '💵 Retrait effectué',
-                    body: `Vous avez retiré ${amount.toLocaleString('fr-FR')} FCFA chez l'Agent ${agent.name}. Frais: 0 FCFA.`,
-                    data: { amount },
-                    sound: 'default'
-                })
-            }).catch(e => console.error('Push Error:', e));
-        }
-
+        // Emit Socket.IO Event directly to the user's room
         const io = req.app.get('io');
         if (io) {
-            io.to(`user_${agent.phone}`).emit('payment_received', {
-                amount: amount,
-                from: payerPhone
-            });
-            io.to(`user_${payerPhone}`).emit('payment_received', {
-                amount: -totalDebit,
-                from: 'Agent ' + agent.name
+            io.to(`user_${client.phone}`).emit('withdraw_request', {
+                agentPhone: agent.phone,
+                agentName: agent.name,
+                amount: amount
             });
         }
 
-        res.json({ message: 'Retrait autorisé avec succès. Remettez les espèces au client.', transaction: transactionResult, agentCommission: agentReward });
-    } catch (e: any) {
-        console.error('Agent Withdraw Error:', e);
-        res.status(400).json({ error: e.message || 'Erreur lors du retrait' });
+        // Send Push Notification
+        if ((client as any).pushToken) {
+            try {
+                sendPush(
+                    (client as any).pushToken,
+                    "Demande de Retrait ⚠️",
+                    `L'Agence ${agent.name} demande un retrait de ${amount.toLocaleString('fr-FR')} FCFA. Ouvrez Mongain pour valider avec votre empreinte.`
+                );
+            } catch (err) {
+                console.error("Push Error", err);
+            }
+        }
+
+        return res.json({ success: true, message: 'Demande envoyée au client pour validation biométrique.' });
+    } catch (error: any) {
+        console.error('Request Withdraw Error:', error);
+        return res.status(500).json({ error: 'Erreur lors de la demande de retrait.' });
     }
 });
+
 
 // POST /api/wallet/transfer
 router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
@@ -599,11 +452,12 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
                 }
             }
 
-            const fee = amount * 0.01; // 1% fee
+            const settings = await tx.systemSettings.findFirst() || { taxP2P: 0.01, taxWithdraw: 0.013, rewardMerchant: 0.003, agencyWithdrawThreshold: 500000, agencyTaxWithdraw: 0.01 };
+            const fee = amount * settings.taxP2P;
             const totalRequired = amount + fee;
 
             if (sender.wallet.balance < totalRequired) {
-                throw new Error(`Solde insuffisant. Vous devez avoir au moins ${totalRequired} FCFA (Incluant 1% de frais).`);
+                throw new Error(`Solde insuffisant. Vous devez avoir au moins ${totalRequired} FCFA (Incluant ${settings.taxP2P * 100}% de frais).`);
             }
 
             const receiver = await tx.user.findUnique({
@@ -712,7 +566,7 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
                 include: { wallet: true },
             });
             if (!agent || !agent.wallet) throw new Error("Agent introuvable.");
-            if (agent.role !== 'AGENT') throw new Error("Le QR scanné n'est pas celui d'un Agent.");
+            if (agent.role !== 'AGENT' && agent.role !== 'MERCHANT') throw new Error("Opération impossible. Ce QR n'appartient ni à un Agent ni à un Commerçant.");
 
             if (parsed.data.useBiometrics) {
                 // Biometrics bypassed PIN
@@ -722,12 +576,28 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
                 if (!pinMatch) throw new Error(`Code PIN incorrect.`);
             }
 
-            // Withdrawals are free!
-            const totalRequired = amount;
+            const settings = await tx.systemSettings.findFirst() || { taxP2P: 0.01, taxWithdraw: 0.013, rewardMerchant: 0.003, agencyWithdrawThreshold: 500000, agencyTaxWithdraw: 0.01 };
+
+            let fee = 0;
+            let merchantReward = 0;
+
+            if (agent.role === 'MERCHANT') {
+                fee = amount * settings.taxWithdraw;
+                merchantReward = amount * settings.rewardMerchant;
+            } else if (agent.role === 'AGENT') {
+                if (amount > settings.agencyWithdrawThreshold) {
+                    fee = (amount - settings.agencyWithdrawThreshold) * settings.agencyTaxWithdraw;
+                }
+            }
+
+            const totalRequired = amount + fee;
 
             if (sender.wallet.balance < totalRequired) {
-                throw new Error(`Solde insuffisant pour retirer ${amount} FCFA.`);
+                throw new Error(`Solde insuffisant pour couvrir le retrait et les frais de ${fee} FCFA.`);
             }
+
+            const corporate = await tx.user.findUnique({ where: { phone: '+24100000000' }, include: { wallet: true } }); // Assuming CORPORATE_PHONE is +24100000000
+            if (!corporate || !corporate.wallet) throw new Error("Erreur critique: Compte central introuvable.");
 
             const updatedSenderWallet = await tx.wallet.update({
                 where: { id: sender.wallet.id, balance: { gte: totalRequired } },
@@ -736,8 +606,16 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
 
             await tx.wallet.update({
                 where: { id: agent.wallet.id },
-                data: { balance: { increment: amount } },
+                data: { balance: { increment: amount + merchantReward } },
             });
+
+            const corporateCut = fee - merchantReward;
+            if (corporateCut > 0) {
+                await tx.wallet.update({
+                    where: { id: corporate.wallet.id },
+                    data: { balance: { increment: corporateCut } },
+                });
+            }
 
             const transaction = await tx.transaction.create({
                 data: {
@@ -747,6 +625,18 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
                     status: 'COMPLETED',
                 },
             });
+
+            if (fee > 0) {
+                await tx.transaction.create({
+                    data: {
+                        amount: fee,
+                        senderWalletId: sender.wallet.id,
+                        receiverWalletId: corporate.wallet.id,
+                        status: 'COMPLETED',
+                        reference: 'FEE-W-' + transaction.id.substring(0, 8),
+                    }
+                });
+            }
 
             return {
                 transaction,
@@ -771,120 +661,74 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
     }
 });
 
-// ─── Paiement Marchand (Show-To-Pay) ──────────────────────────────────
+// -- RECHARGE DEPUIS EXTERNE (AIRTEL / MOOV / BANQUE) --
+const rechargeSchema = z.object({
+    method: z.enum(['AIRTEL', 'MOOV', 'BANK']),
+    identifier: z.string().min(5),
+    amount: z.number().int('Pas de centimes.').positive('Montant invalide.')
+});
 
-router.post('/charge', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/recharge', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const merchantId = req.userId;
-        const merchant = await prisma.user.findUnique({
-            where: { id: merchantId },
-            include: { wallet: true }
-        });
+        const parsed = rechargeSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: 'Données invalides.' });
 
-        if (!merchant) return res.status(404).json({ error: 'Compte encaisseur introuvable.' });
+        const { method, identifier, amount } = parsed.data;
 
-        const { payerPhone, amount, withdrawCode } = chargeSchema.parse(req.body);
+        const user = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
+        if (!user || !user.wallet) return res.status(404).json({ error: 'Compte introuvable.' });
 
-        const payer = await prisma.user.findUnique({
-            where: { phone: payerPhone },
-            include: { wallet: true }
-        });
-
-        if (!payer || !payer.wallet) return res.status(404).json({ error: 'Client introuvable' });
-
-        // Valider le profil cryptographique (Evite le Zero Auth)
-        const otpRecord = await prisma.verificationCode.findUnique({ where: { phone: payerPhone } });
-        if (!otpRecord || otpRecord.expiresAt < new Date()) {
-            return res.status(403).json({ error: 'Jeton de transfert invalide ou expiré.' });
+        // Compte système "Passerelle de Paiement" (Aggregator) pour simuler l'entrée d'argent externe
+        const gatewayPhone = '+24133333333';
+        let gateway = await prisma.user.findUnique({ where: { phone: gatewayPhone }, include: { wallet: true } });
+        if (!gateway) {
+            gateway = await prisma.user.create({
+                data: {
+                    phone: gatewayPhone,
+                    name: 'PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)',
+                    role: 'ADMIN',
+                    pin: await bcrypt.hash('0000', 10),
+                    wallet: { create: { balance: 999999999, currency: 'FCFA' } }
+                },
+                include: { wallet: true }
+            });
         }
 
-        const [savedCode, savedAmountStr] = otpRecord.code.split(':');
-        if (savedCode !== withdrawCode || !savedAmountStr) {
-            return res.status(403).json({ error: 'Jeton de sécurité incorrect.' });
-        }
+        // Simuler le délai d'une API Bancaire/Mobile Money réelle (ex: chargement OTP, 3D Secure)
+        await new Promise(r => setTimeout(r, 1500));
 
-        const boundAmount = parseFloat(savedAmountStr);
-        if (isNaN(boundAmount) || boundAmount <= 0) {
-            return res.status(400).json({ error: 'Erreur intégrité jeton. Montant corrompu.' });
-        }
+        const ref = `RECHARGE-${method}-${Math.random().toString(36).substring(7).toUpperCase()}`;
 
-        // Fix de sécurité : Le commerçant DOIT facturer exactement ce que le client a signé dans son jeton.
-        if (boundAmount !== amount) {
-            return res.status(400).json({ error: `La requête indique ${amount} CFA mais le client n'a généré un jeton que pour ${boundAmount} CFA.` });
-        }
-
-        // Limite Anti-Blanchiment (KYC Niveau 1)
-        if (amount > 500000) {
-            return res.status(400).json({ error: 'Limite quotidienne KYC dépassée. Le client ne peut pas payer plus de 500 000 FCFA.' });
-        }
-        if (payer.wallet.balance < amount) return res.status(400).json({ error: 'Solde insuffisant chez le client' });
-
-        if (payer.id === merchant.id) return res.status(400).json({ error: 'Vous ne pouvez pas vous prélever vous-même' });
-
-        // Transaction atomique
-        const transactionResult = await prisma.$transaction(async (tx) => {
-            // Débit client avec Contrainte Atomique SQL
+        await prisma.$transaction(async (tx) => {
+            // "Prendre" l'argent du monde virtuel externe
             await tx.wallet.update({
-                where: { id: payer.wallet!.id, balance: { gte: amount } },
+                where: { id: gateway!.wallet!.id },
                 data: { balance: { decrement: amount } }
             });
 
-            // Crédit marchand
+            // Créditer le client Mongain
             await tx.wallet.update({
-                where: { id: merchant.wallet!.id },
+                where: { id: user.wallet!.id },
                 data: { balance: { increment: amount } }
             });
 
-            // Log de la transaction (uniquement une entrée liant les deux portefeuilles)
-            const transactionRecord = await tx.transaction.create({
+            await tx.transaction.create({
                 data: {
                     amount,
-                    senderWalletId: payer.wallet!.id,
-                    receiverWalletId: merchant.wallet!.id,
+                    senderWalletId: gateway!.wallet!.id,
+                    receiverWalletId: user.wallet!.id,
                     status: 'COMPLETED',
-                    reference: 'PAYCODE-' + Math.random().toString(36).substring(7).toUpperCase()
+                    reference: ref
                 }
             });
-
-            // Détruire le JWT OTP Token pour empêcher un Replay
-            await tx.verificationCode.delete({ where: { phone: payer.phone } });
-
-            return transactionRecord;
         });
 
-        // Notify Merchant via Socket.IO
-        // Notify Payer via Push
-        if ((payer as any).pushToken) {
-            fetch('https://exp.host/--/api/v2/push/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    to: (payer as any).pushToken,
-                    title: '🛍️ Paiement Marchand effectué',
-                    body: `Vous avez payé ${amount.toLocaleString('fr-FR')} FCFA chez ${merchant.name}.`,
-                    data: { amount },
-                    sound: 'default'
-                })
-            }).catch(e => console.error('Push Error:', e));
-        }
+        // Alerte push
+        sendPush(user.pushToken, 'Rechargement Réussi 💰', `Votre compte a été crédité de ${amount.toLocaleString()} FCFA via ${method}.`);
 
-        // Notify both via Socket.IO
-        const io = req.app.get('io');
-        if (io) {
-            io.to(`user_${merchant.phone}`).emit('payment_received', {
-                amount,
-                from: payerPhone
-            });
-            io.to(`user_${payerPhone}`).emit('payment_received', {
-                amount: -amount,
-                from: merchant.name
-            });
-        }
-
-        res.json({ message: 'Paiement encaissé avec succès', transaction: transactionResult });
+        res.json({ message: 'Rechargement réussi.', balance: user.wallet.balance + amount });
     } catch (e: any) {
-        console.error('Merchant Charge Error:', e);
-        res.status(400).json({ error: e.message || 'Erreur lors de l\'encaissement' });
+        res.status(500).json({ error: e.message });
     }
 });
 
@@ -991,6 +835,41 @@ router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
         });
     } catch (e: any) {
         return res.status(400).json({ error: e.message || 'Erreur lors de l\'achat du service.' });
+    }
+});
+
+// POST /api/wallet/pull (Dépot Mobile Money)
+router.post('/pull', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const { phone, amount, network } = req.body;
+        if (!amount || amount < 500) throw new Error('Montant minimum : 500 FCFA');
+
+        const user = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
+        if (!user || !user.wallet) throw new Error('Compte expéditeur introuvable');
+
+        // Initialisation universelle de la Telecom Gateway
+        const gateway = TelecomGatewayManager.getProvider(phone, network);
+
+        // Déclenche l'appel USSD PULL
+        const response = await gateway.initiateDeposit(phone, amount);
+
+        // Historiser de la transaction (Statut: PENDING en attente de Callback Telco)
+        await prisma.transaction.create({
+            data: {
+                amount,
+                receiverWalletId: user.wallet.id,
+                status: response.status as any,
+                reference: response.reference,
+            }
+        });
+
+        return res.json({
+            message: response.message,
+            reference: response.reference,
+            network: gateway.name
+        });
+    } catch (e: any) {
+        return res.status(400).json({ error: e.message || 'Erreur lors de la requête de dépôt réseau.' });
     }
 });
 

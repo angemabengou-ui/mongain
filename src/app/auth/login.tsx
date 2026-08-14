@@ -44,10 +44,21 @@ export default function LoginScreen() {
         }
         setLoading(true);
         try {
-            // Force construction with country code
-            const formattedPhone = phone.startsWith('+') ? phone : `+241${phone.replace(/\s+/g, '')}`;
-            await login(formattedPhone, pin);
-            router.replace('/');
+            // Determine if the input is a pseudo or a phone
+            const isPhone = /^[0-9\s+]+$/.test(phone);
+            const formattedPhone = isPhone
+                ? (phone.startsWith('+') ? phone : `+241${phone.replace(/\s+/g, '')}`)
+                : phone.trim().toLowerCase(); // username (pseudo)
+
+            const res = await login(formattedPhone, pin);
+
+            if (res?.requireOtp) {
+                router.push({ pathname: '/auth/verify-login-otp', params: { phone: formattedPhone } });
+            } else if (res?.success) {
+                router.replace('/');
+            } else {
+                setError('Erreur inattendue de connexion.');
+            }
         } catch (e: any) {
             setError(e.message);
         } finally {
@@ -79,13 +90,14 @@ export default function LoginScreen() {
                             </View>
                         ) : null}
 
-                        <Text style={styles.label}>Numéro de téléphone</Text>
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.prefix}>+241</Text>
+                        <Text style={styles.label}>Numéro, E-mail ou Pseudo</Text>
+                        <View style={[styles.inputContainer, { paddingLeft: 16 }]}>
+                            <Ionicons name="person-circle-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 8 }} />
                             <TextInput
-                                style={styles.input}
-                                placeholder="00 00 00 00"
-                                keyboardType="phone-pad"
+                                style={[styles.input, { flex: 1 }]}
+                                placeholder="Numéro Mobile, @pseudo ou E-mail"
+                                keyboardType="default"
+                                autoCapitalize="none"
                                 value={phone}
                                 onChangeText={setPhone}
                                 placeholderTextColor={COLORS.textSecondary}

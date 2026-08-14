@@ -17,6 +17,7 @@ router.post('/create', authMiddleware, async (req: Request, res: Response) => {
 
         const group = await prisma.tontineGroup.create({
             data: {
+                creatorId: userId,
                 name,
                 contribution: parseFloat(contribution),
                 frequency: frequency || 'MONTHLY',
@@ -40,31 +41,28 @@ router.post('/create', authMiddleware, async (req: Request, res: Response) => {
     }
 });
 
-// Récupérer toutes les tontines disponibles et celles rejointes par l'utilisateur
+// Récupérer uniquement les tontines de l'utilisateur (Publique -> Privée)
 router.get('/groups', authMiddleware, async (req: Request, res: Response) => {
     try {
         const userId = (req as AuthRequest).userId!;
 
-        // Groupes existants
-        const groups = await prisma.tontineGroup.findMany({
-            where: { status: 'ACTIVE' },
-            include: {
-                _count: {
-                    select: { participants: true }
-                }
-            }
-        });
-
         // Participations de l'utilisateur
         const myParticipations = await prisma.tontineParticipant.findMany({
             where: { userId },
-            include: { group: true }
+            include: {
+                group: {
+                    include: {
+                        _count: { select: { participants: true } }
+                    }
+                }
+            },
+            orderBy: { joinedAt: 'desc' }
         });
 
         res.json({
             success: true,
             data: {
-                groups,
+                groups: [], // Vide pour compatibilité ou supprimer du front plus tard
                 myParticipations
             }
         });
@@ -74,7 +72,105 @@ router.get('/groups', authMiddleware, async (req: Request, res: Response) => {
     }
 });
 
-// Rejoindre un club de Tontine
+// Détails complets d'un groupe (pour le créateur/participants)
+router.get('/details/:groupId', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as AuthRequest).userId!;
+        const { groupId } = req.params;
+
+        const group = await prisma.tontineGroup.findUnique({
+            where: { id: String(groupId) },
+            include: {
+                creator: { select: { name: true, phone: true } },
+                participants: {
+                    include: { user: { select: { name: true, phone: true } } },
+                    orderBy: { payoutOrder: 'asc' }
+                }
+            }
+        });
+
+        if (!group) return res.status(404).json({ success: false, message: "Club introuvable" });
+
+        // Seuls les membres peuvent voir
+        const isMember = group.participants.some(p => p.userId === userId);
+        if (!isMember) return res.status(403).json({ success: false, message: "Accès refusé" });
+
+        res.json({ success: true, data: group });
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: e.message || "Erreur serveur" });
+    }
+});
+
+// Inviter un membre par téléphone
+router.post('/invite', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as AuthRequest).userId!;
+        const { groupId, phone } = req.body;
+
+        const group = await prisma.tontineGroup.findUnique({ where: { id: String(groupId) } });
+        if (!group || group.creatorId !== userId) {
+            return res.status(403).json({ success: false, message: "Seul le créateur peut inviter." });
+        }
+
+        const invitee = await prisma.user.findUnique({ where: { phone } });
+        if (!invitee) {
+            return res.status(404).json({ success: false, message: "Numéro non trouvé sur Mongain." });
+        }
+
+        const existing = await prisma.tontineParticipant.findFirst({
+            where: { userId: invitee.id, tontineGroupId: groupId }
+        });
+        if (existing) {
+            return res.status(400).json({ success: false, message: "Ce membre y est déjà." });
+        }
+
+        const count = await prisma.tontineParticipant.count({ where: { tontineGroupId: groupId } });
+        const participant = await prisma.tontineParticipant.create({
+            data: { userId: invitee.id, tontineGroupId: groupId, payoutOrder: count + 1 }
+        });
+
+        await prisma.notification.create({
+            data: {
+                userId: invitee.id,
+                title: "Invitation Tontine 🤝",
+                body: `Vous avez été ajouté au club ${group.name}.`,
+                type: "INFO"
+            }
+        });
+
+        res.json({ success: true, message: "Membre ajouté avec succès.", data: participant });
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: e.message || "Erreur serveur" });
+    }
+});
+
+// Modifier l'ordre de passage d'un membre manuellement
+router.post('/reorder', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as AuthRequest).userId!;
+        // orderMap: [ { participantId: "...1", newOrder: 1 }, { participantId: "...2", newOrder: 2 } ]
+        const { groupId, orderMap } = req.body;
+
+        const group = await prisma.tontineGroup.findUnique({ where: { id: String(groupId) } });
+        if (!group || group.creatorId !== userId) {
+            return res.status(403).json({ success: false, message: "Seul le créateur peut modifier l'ordre." });
+        }
+
+        // Transactions pour mettre à jour tout d'un coup
+        for (const item of orderMap) {
+            await prisma.tontineParticipant.update({
+                where: { id: item.participantId },
+                data: { payoutOrder: item.newOrder }
+            });
+        }
+
+        res.json({ success: true, message: "L'ordre a été mis à jour." });
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: e.message || "Erreur serveur" });
+    }
+});
+
+// Rejoindre un club n'est théoriquement plus utilisé publiquement, mais on garde pour compatibilité ou avec un code d'invit
 router.post('/join', authMiddleware, async (req: Request, res: Response) => {
     try {
         const userId = (req as AuthRequest).userId!;
@@ -85,7 +181,7 @@ router.post('/join', authMiddleware, async (req: Request, res: Response) => {
         }
 
         // Vérifier si le groupe existe
-        const group = await prisma.tontineGroup.findUnique({ where: { id: groupId } });
+        const group = await prisma.tontineGroup.findUnique({ where: { id: String(groupId) } });
         if (!group || group.status !== 'ACTIVE') {
             return res.status(404).json({ success: false, message: "Groupe introuvable ou inactif." });
         }

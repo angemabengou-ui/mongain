@@ -15,7 +15,9 @@ export const getSystemSettings = async () => {
                 taxWithdraw: 0.013,
                 rewardMerchant: 0.003,
                 dailyLimitTier0: 50000,
-                dailyLimitTier1: 2000000
+                dailyLimitTier1: 2000000,
+                agencyWithdrawThreshold: 500000,
+                agencyTaxWithdraw: 0.01
             } as any
         });
     }
@@ -38,6 +40,8 @@ const settingsSchema = z.object({
     rewardMerchant: z.number().min(0).max(1),
     dailyLimitTier0: z.number().min(100),
     dailyLimitTier1: z.number().min(100),
+    agencyWithdrawThreshold: z.number().min(0),
+    agencyTaxWithdraw: z.number().min(0).max(1),
 });
 
 // PUT /api/admin/settings (SuperAdmin only)

@@ -12,6 +12,8 @@ datasource db {
 
 model User {
   id                String        @id @default(uuid())
+  username          String?       @unique // Secondary auth identifier (Anti-SIM recycle)
+  email             String?       @unique // Optional tertiary auth and recovery
   name              String
   phone             String        @unique
   pin               String // hashed pin code
@@ -36,6 +38,7 @@ model User {
   auditLogs         AuditLog[]
   notifications     Notification[]
   tontineParticipations TontineParticipant[]
+  createdTontines       TontineGroup[] @relation("GroupCreator")
 }
 
 model Reclamation {
@@ -107,6 +110,10 @@ model SystemSettings {
   dailyLimitTier0  Float    @default(50000.0) // Plafond en FCFA par jour pour non-vérifiés
   dailyLimitTier1  Float    @default(2000000.0) // Plafond en FCFA par jour pour vérifiés
   
+  // Règles spécifiques Agences (V6)
+  agencyWithdrawThreshold Float @default(500000.0) // Montant au-delà duquel le retrait agence est taxé
+  agencyTaxWithdraw       Float @default(0.01) // Taxe de 1% sur la part excédentaire ou globale
+  
   updatedAt        DateTime @updatedAt
 }
 
@@ -123,6 +130,8 @@ model Notification {
 
 model TontineGroup {
   id           String   @id @default(uuid())
+  creatorId    String
+  creator      User     @relation("GroupCreator", fields: [creatorId], references: [id])
   name         String
   contribution Float
   frequency    String   @default("MONTHLY") // WEEKLY, MONTHLY

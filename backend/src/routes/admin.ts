@@ -12,7 +12,10 @@ router.get('/stats', authMiddleware, async (req: AuthRequest, res) => {
         const user = await prisma.user.findUnique({ where: { id: req.userId } });
         if (!user || user.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
-        const totalUsers = await prisma.user.count();
+        const totalUsers = await prisma.user.count({ where: { role: 'USER', isActive: true } });
+        const agentsCount = await prisma.user.count({ where: { role: 'AGENT', isActive: true } });
+        const merchantsCount = await prisma.user.count({ where: { role: 'MERCHANT', isActive: true } });
+
         const company = await prisma.user.findUnique({ where: { phone: '+24100000000' }, include: { wallet: true } });
 
         const circulatingWallets = await prisma.wallet.aggregate({
@@ -44,8 +47,26 @@ router.get('/stats', authMiddleware, async (req: AuthRequest, res) => {
             else if (tx.receiverWallet?.user?.role === 'USER') mintedToClients += tx.amount;
         });
 
+        const pureVolume = await prisma.transaction.aggregate({
+            where: {
+                status: 'COMPLETED',
+                NOT: {
+                    OR: [
+                        { reference: { startsWith: 'MINT-' } },
+                        { reference: { startsWith: 'FUND_AGENT-' } },
+                        { reference: { startsWith: 'FEE-' } }
+                    ]
+                }
+            },
+            _sum: { amount: true }
+        });
+        const totalVolume = pureVolume._sum.amount || 0;
+
         res.json({
             totalUsers,
+            agentsCount,
+            merchantsCount,
+            totalVolume,
             revenue: company?.wallet?.balance || 0,
             reserve: reserveBalance,
             totalCirculating: circulatingWallets._sum.balance || 0,

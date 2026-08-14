@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -24,21 +24,24 @@ const COLORS = {
     textSecondary: '#a0aec0',
 };
 
-// Data encoded in the QR Code
-// Format: mongain://transfer?phone=%2B24177777777&name=User%20Name
+// Data encoded in the Universal QR Code
+// Format: mongain://user?phone=...&name=...&role=...
 function generateQrData(phone: string, name: string, role: string) {
     const encodedPhone = encodeURIComponent(phone);
     const encodedName = encodeURIComponent(name);
-    if (role === 'MERCHANT') {
-        return `mongain://payment?merchantPhone=${encodedPhone}&name=${encodedName}`;
-    }
-    return `mongain://transfer?phone=${encodedPhone}&name=${encodedName}`;
+    const encodedRole = encodeURIComponent(role || 'USER');
+    return `mongain://user?phone=${encodedPhone}&name=${encodedName}&role=${encodedRole}`;
 }
 
 export default function QrScreen() {
     const router = useRouter();
     const { user } = useAuth();
-    const [mode, setMode] = useState<'scan' | 'receive'>('scan');
+    const params = useLocalSearchParams();
+
+    // mode can be enforced via URL parameter (e.g. ?mode=scanOnly)
+    const scanOnly = params.mode === 'scanOnly';
+    const intent = params.intent as string;
+    const [mode, setMode] = useState<'scan' | 'receive'>(scanOnly ? 'scan' : 'scan');
 
     // Camera permissions
     const [permission, requestPermission] = useCameraPermissions();
@@ -62,98 +65,55 @@ export default function QrScreen() {
             setTimeout(() => { setScanError(null); setScanned(false); }, 3000);
         };
 
-        if (data.startsWith('mongain://transfer')) {
+        if (data.startsWith('mongain://user')) {
             try {
                 const qs = data.split('?')[1];
-                const params = new URLSearchParams(qs);
-                const phone = params.get('phone');
-                const name = params.get('name');
-                if (phone) {
-                    router.push({ pathname: '/transfer-confirm', params: { receiverPhone: phone, receiverName: name || phone, isMerchant: 'false' } });
+                const urlParams = new URLSearchParams(qs);
+                const targetPhone = urlParams.get('phone');
+                const targetName = urlParams.get('name') || targetPhone;
+                const targetRole = urlParams.get('role');
+
+                if (!targetPhone) {
+                    showError('QR Code invalide : Numéro manquant.');
                     return;
                 }
-                showError('QR de transfert invalide : numéro manquant.');
-            } catch {
-                showError('QR de transfert illisible.');
-            }
-        } else if (data.startsWith('mongain://withdraw')) {
-            try {
-                const qs = data.split('?')[1];
-                const params = new URLSearchParams(qs);
-                const agentPhone = params.get('agentPhone');
-                const amount = params.get('amount');
-                if (agentPhone) {
-                    router.replace({ pathname: '/withdraw', params: { agentPhone, amount: amount || '' } });
+
+                // --- UNIVERSAL DISPATCHER LOGIC --- //
+
+                // 1. If scanned by an AGENT -> Agent wants to deposit digital money to Client!
+                if (user?.role === 'AGENT') {
+                    if (targetRole === 'AGENT') {
+                        showError("Un Agent ne peut pas scanner un autre Agent au guichet.");
+                        return;
+                    }
+                    // Goto universal agent dashboard to handle the client (Deposit)
+                    router.replace({ pathname: '/agent-action' as any, params: { clientPhone: targetPhone, clientName: targetName, action: 'DEPOSIT' } });
                     return;
                 }
-                showError('QR de retrait invalide : agent introuvable.');
-            } catch {
-                showError('QR de retrait illisible.');
-            }
-        } else if (data.startsWith('mongain://payment')) {
-            try {
-                const qs = data.split('?')[1];
-                const params = new URLSearchParams(qs);
-                const merchantPhone = params.get('merchantPhone');
-                const name = params.get('name');
-                if (merchantPhone) {
-                    router.push({ pathname: '/transfer-confirm', params: { receiverPhone: merchantPhone, receiverName: name || merchantPhone, isMerchant: 'true' } });
+
+                // 2. If User scans a MERCHANT -> Payment
+                if (targetRole === 'MERCHANT') {
+                    router.push({ pathname: '/transfer-confirm', params: { receiverPhone: targetPhone, receiverName: targetName, isMerchant: 'true' } });
                     return;
                 }
-                showError('QR marchand invalide : numéro manquant.');
-            } catch {
-                showError('QR marchand illisible.');
-            }
-        } else if (data.startsWith('mongain://paycode')) {
-            try {
-                const qs = data.split('?')[1];
-                const params = new URLSearchParams(qs);
-                const payerPhone = params.get('phone');
-                const payerName = params.get('name');
-                const amount = params.get('amount');
-                if (payerPhone && amount) {
-                    router.replace({ pathname: '/merchant-charge', params: { payerPhone, payerName: payerName || payerPhone, amount } });
+
+                // 3. If User scans an AGENT -> Withdraw at the Agent's Desk
+                if (targetRole === 'AGENT') {
+                    // Client initiates a withdrawal by sending digital cash to the Agent
+                    router.replace({ pathname: '/client-withdraw-desk', params: { agentPhone: targetPhone, agentName: targetName } });
                     return;
                 }
-                showError('QR de paiement invalide : données incomplètes.');
-            } catch {
-                showError('QR de paiement illisible.');
-            }
-        } else if (data.startsWith('mongain://withdrawcode')) {
-            try {
-                const qs = data.split('?')[1];
-                const params = new URLSearchParams(qs);
-                const clientPhone = params.get('phone');
-                const clientName = params.get('name');
-                const amount = params.get('amount');
-                const code = params.get('code');
-                if (clientPhone && amount) {
-                    router.replace({ pathname: '/agent-withdraw', params: { payerPhone: clientPhone, payerName: clientName || clientPhone, amount, withdrawCode: code || '' } });
-                    return;
-                }
-                showError('QR de code retrait invalide.');
-            } catch {
-                showError('QR de code retrait illisible.');
-            }
-        } else if (data.startsWith('mongain://agent-withdraw-desk')) {
-            try {
-                const qs = data.split('?')[1];
-                const params = new URLSearchParams(qs);
-                const agentPhone = params.get('phone');
-                const agentName = params.get('name');
-                if (agentPhone) {
-                    router.replace({ pathname: '/client-withdraw-desk', params: { agentPhone, agentName: agentName || agentPhone } });
-                    return;
-                }
-                showError('QR agent bureau invalide.');
-            } catch {
-                showError('QR agent bureau illisible.');
+
+                // 4. Default: User scans a User -> P2P Transfer
+                router.push({ pathname: '/transfer-confirm', params: { receiverPhone: targetPhone, receiverName: targetName, isMerchant: 'false' } });
+
+            } catch (e) {
+                showError('Le QR Code est corrompu ou illisible.');
             }
         } else {
-            showError('Ce QR Code n\'est pas un code Mongain valide.');
+            showError("Ce QR Code n'est pas reconnu par le réseau Mongain.");
         }
     };
-
 
     if (!user) {
         return (
@@ -172,20 +132,22 @@ export default function QrScreen() {
                 <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
                     <Ionicons name="close" size={28} color="#fff" />
                 </TouchableOpacity>
-                <View style={styles.toggleContainer}>
-                    <TouchableOpacity
-                        style={[styles.toggleBtn, mode === 'scan' && styles.toggleBtnActive]}
-                        onPress={() => setMode('scan')}
-                    >
-                        <Text style={[styles.toggleText, mode === 'scan' && styles.toggleTextActive]}>Scanner</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.toggleBtn, mode === 'receive' && styles.toggleBtnActive]}
-                        onPress={() => setMode('receive')}
-                    >
-                        <Text style={[styles.toggleText, mode === 'receive' && styles.toggleTextActive]}>Recevoir</Text>
-                    </TouchableOpacity>
-                </View>
+                {scanOnly ? null : (
+                    <View style={styles.toggleContainer}>
+                        <TouchableOpacity
+                            style={[styles.toggleBtn, mode === 'scan' && styles.toggleBtnActive]}
+                            onPress={() => setMode('scan')}
+                        >
+                            <Text style={[styles.toggleText, mode === 'scan' && styles.toggleTextActive]}>Scanner</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.toggleBtn, mode === 'receive' && styles.toggleBtnActive]}
+                            onPress={() => setMode('receive')}
+                        >
+                            <Text style={[styles.toggleText, mode === 'receive' && styles.toggleTextActive]}>Recevoir</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
                 <View style={{ width: 28 }} />
             </View>
 
@@ -228,7 +190,11 @@ export default function QrScreen() {
                                         <View style={[styles.corner, styles.bottomRight]} />
                                     </View>
                                     <Text style={styles.scanInstruction}>
-                                        {scanned ? 'Traitement en cours...' : 'Placez le code QR dans le cadre pour payer'}
+                                        {scanned ? 'Traitement en cours...' :
+                                            intent === 'withdraw' ? 'Scanner pour retirer' :
+                                                intent === 'deposit' ? 'Scannez le Code du Client pour Déposer' :
+                                                    'Placez le code QR dans le cadre pour transférer'
+                                        }
                                     </Text>
                                 </View>
                             </View>

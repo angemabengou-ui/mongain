@@ -1,7 +1,7 @@
-import { API_URL } from './config';
 import { ArrowDownCircle, ArrowUpCircle, CheckCircle, Printer, QrCode, ShieldCheck, User2, Wallet } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEffect, useState } from 'react';
+import { API_URL } from './config';
 
 export default function Agency({ token, agentPhone, agentName }: { token: string, agentPhone: string, agentName: string }) {
     const [action, setAction] = useState<'deposit' | 'withdraw' | 'qr'>('deposit');
@@ -75,6 +75,8 @@ export default function Agency({ token, agentPhone, agentName }: { token: string
         return () => clearInterval(interval);
     }, [token]);
 
+    const [agentPin, setAgentPin] = useState('');
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
@@ -82,7 +84,7 @@ export default function Agency({ token, agentPhone, agentName }: { token: string
         setLoading(true);
 
         const numAmount = parseFloat(amount);
-        if (isNaN(numAmount) || numAmount <= 0) {
+        if (action === 'deposit' && (isNaN(numAmount) || numAmount <= 0)) {
             setError('Veuillez entrer un montant valide.');
             setLoading(false);
             return;
@@ -90,33 +92,34 @@ export default function Agency({ token, agentPhone, agentName }: { token: string
 
         try {
             if (action === 'deposit') {
+                if (!agentPin || agentPin.length !== 4) throw new Error('Veuillez entrer votre code PIN PIN Agent (4 chiffres).');
+
+                // Le Dépôt = L'Agent transfère son argent numérique au Client
                 const res = await fetch(API_URL + '/api/wallet/transfer', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                    body: JSON.stringify({ receiverPhone: phone, amount: numAmount, useBiometrics: true })
+                    body: JSON.stringify({ receiverPhone: phone, amount: numAmount, pin: agentPin })
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error);
-                setSuccessMessage(`Dépôt de ${numAmount.toLocaleString('fr-FR')} FCFA transféré avec succès au client.`);
+                if (!res.ok) throw new Error(data.error || data.message || 'Erreur transfert');
+
+                setSuccessMessage(`Dépôt effectué avec succès vers le client ${phone}.`);
             } else if (action === 'withdraw') {
-                if (withdrawCode.length !== 6) throw new Error('Le code de retrait doit contenir 6 chiffres.');
-                const res = await fetch(API_URL + '/api/wallet/agent-withdraw', {
+                // Le Retrait distant nécessite que l'Agent envoie une notification PUSH au client
+                const res = await fetch(API_URL + '/api/wallet/request-withdraw', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                    body: JSON.stringify({ payerPhone: phone, withdrawCode })
+                    body: JSON.stringify({ targetPhone: phone, amount: numAmount })
                 });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error);
 
-                // data.balance contains the transactionRecord returned by Prisma
-                const resolvedAmount = data.balance?.amount || 0;
-                setSuccessMessage(`Retrait validé ! Remettez immédiatement ${resolvedAmount.toLocaleString('fr-FR')} FCFA en espèces au client.`);
+                setSuccessMessage(`Demande de validation envoyée au client ! Préparez ${numAmount.toLocaleString('fr-FR')} FCFA en espèces.`);
             }
             fetchBalance(); // Refresh balance immediately after success
-            // Reset fields
-            setPhone('+241');
+            // Reset fields (except phone to ease next operation)
             setAmount('');
-            setWithdrawCode('');
+            setAgentPin('');
         } catch (err: any) {
             setError(err.message || 'Une erreur est survenue.');
         } finally {
@@ -306,8 +309,41 @@ export default function Agency({ token, agentPhone, agentName }: { token: string
                                     </div>
 
                                     {action === 'deposit' && (
+                                        <>
+                                            <div className="input-group" style={{ marginBottom: 20 }}>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>Montant cash reçu (FCFA)</label>
+                                                <input
+                                                    type="number"
+                                                    value={amount}
+                                                    onChange={e => setAmount(e.target.value)}
+                                                    placeholder="Ex: 5000"
+                                                    required
+                                                    style={{ fontSize: 24, fontWeight: 'bold', padding: '16px 20px', background: 'var(--bg-primary)', letterSpacing: 1 }}
+                                                />
+                                            </div>
+                                            <div className="input-group" style={{ marginBottom: 40 }}>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)' }}>
+                                                    <ShieldCheck size={16} /> Votre Code PIN Agent
+                                                </label>
+                                                <input
+                                                    type="password"
+                                                    value={agentPin}
+                                                    onChange={e => setAgentPin(e.target.value)}
+                                                    placeholder="••••"
+                                                    maxLength={4}
+                                                    required
+                                                    style={{ fontSize: 30, padding: '16px 20px', textAlign: 'center', letterSpacing: 10, background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', color: 'var(--accent)' }}
+                                                />
+                                                <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: 10, textAlign: 'center' }}>
+                                                    Saisissez votre PIN de sécurité. L'argent partira directement de votre compte vers le client.
+                                                </small>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {action === 'withdraw' && (
                                         <div className="input-group" style={{ marginBottom: 40 }}>
-                                            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>Montant (FCFA)</label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>Montant demandé (FCFA)</label>
                                             <input
                                                 type="number"
                                                 value={amount}
@@ -316,24 +352,8 @@ export default function Agency({ token, agentPhone, agentName }: { token: string
                                                 required
                                                 style={{ fontSize: 24, fontWeight: 'bold', padding: '16px 20px', background: 'var(--bg-primary)', letterSpacing: 1 }}
                                             />
-                                        </div>
-                                    )}
-
-                                    {action === 'withdraw' && (
-                                        <div className="input-group" style={{ marginBottom: 40 }}>
-                                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#f59e0b' }}>
-                                                <ShieldCheck size={16} /> Jeton de Sécurité Client (TOTP)
-                                            </label>
-                                            <input
-                                                value={withdrawCode}
-                                                onChange={e => setWithdrawCode(e.target.value)}
-                                                placeholder="XXXXXX"
-                                                maxLength={6}
-                                                required
-                                                style={{ fontSize: 24, padding: '16px 20px', textAlign: 'center', letterSpacing: 10, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', color: '#fcd34d' }}
-                                            />
-                                            <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: 10, textAlign: 'center' }}>
-                                                Demandez au client de générer le jeton de sécurité de 6 chiffres depuis l'application Mongain, dans la rubrique Retrait/TOTP.
+                                            <small style={{ color: 'var(--text-secondary)', display: 'block', marginTop: 15, textAlign: 'center' }}>
+                                                Le client recevra une requête directe sur son application Mongain pour valider le transfert vers votre compte.
                                             </small>
                                         </div>
                                     )}

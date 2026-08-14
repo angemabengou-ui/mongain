@@ -1,6 +1,6 @@
-import { API_URL } from './config';
 import { Briefcase, Store, User, UserPlus, Users as UsersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { API_URL } from './config';
 
 export default function UsersManagement({ token }: { token: string }) {
     const [users, setUsers] = useState<any[]>([]);
@@ -153,6 +153,8 @@ export default function UsersManagement({ token }: { token: string }) {
                             <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
                                 <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Utilisateur</th>
                                 <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Téléphone</th>
+                                <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Pseudo</th>
+                                <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>KYC Status</th>
                                 <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Rôle</th>
                                 <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Statut</th>
                                 <th style={{ padding: '16px', color: 'var(--text-secondary)', textAlign: 'right' }}>Solde</th>
@@ -172,6 +174,19 @@ export default function UsersManagement({ token }: { token: string }) {
                                         </div>
                                     </td>
                                     <td style={{ padding: '16px', fontFamily: 'monospace' }}>{u.phone}</td>
+                                    <td style={{ padding: '16px', color: '#1DC5E9', fontWeight: '600' }}>
+                                        {u.username ? `@${u.username}` : '---'}
+                                    </td>
+                                    <td style={{ padding: '16px' }}>
+                                        <span style={{
+                                            padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold',
+                                            backgroundColor: u.kycStatus === 'UNVERIFIED' ? '#334155' : u.kycStatus === 'APPROVED' ? '#10B98120' : '#F59E0B20',
+                                            color: u.kycStatus === 'UNVERIFIED' ? '#94a3b8' : u.kycStatus === 'APPROVED' ? '#10B981' : '#F59E0B',
+                                            border: '1px solid var(--border)'
+                                        }}>
+                                            {u.kycStatus || 'UNVERIFIED'}
+                                        </span>
+                                    </td>
                                     <td style={{ padding: '16px' }}>
                                         <span style={{
                                             padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold',

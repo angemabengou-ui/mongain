@@ -24,8 +24,9 @@ export default function ClientWithdrawDeskScreen() {
     const { user, token } = useAuth();
     const COLORS = useAppTheme();
 
-    const { agentPhone, agentName } = useLocalSearchParams();
-    const [amount, setAmount] = useState('');
+    const { agentPhone, agentName, lockedAmount } = useLocalSearchParams();
+    const [amount, setAmount] = useState<string>((lockedAmount as string) || '');
+    const isAmountLocked = !!lockedAmount;
     const [loading, setLoading] = useState(false);
 
     const handleWithdraw = async () => {
@@ -108,7 +109,7 @@ export default function ClientWithdrawDeskScreen() {
 
                         <Text style={styles.title}>Demande de retrait</Text>
                         <Text style={styles.subtitle}>
-                            Saisissez le montant exact à retirer auprès de l'agent :
+                            {isAmountLocked ? "Veuillez valider le montant demandé par l'agent :" : "Saisissez le montant exact à retirer auprès de l'agent :"}
                         </Text>
 
                         <View style={styles.userBox}>
@@ -123,16 +124,17 @@ export default function ClientWithdrawDeskScreen() {
                             </View>
                         </View>
 
-                        <View style={[styles.inputBox, { borderColor: COLORS.border, backgroundColor: COLORS.surface }]}>
+                        <View style={[styles.inputBox, { borderColor: COLORS.border, backgroundColor: isAmountLocked ? '#e9ecef' : COLORS.surface }]}>
                             <Text style={[styles.currencyLabel, { color: COLORS.text }]}>FCFA</Text>
                             <TextInput
-                                style={[styles.input, { color: COLORS.text }]}
+                                style={[styles.input, { color: isAmountLocked ? COLORS.textSecondary : COLORS.text }]}
                                 placeholder="0"
                                 placeholderTextColor={COLORS.textSecondary}
                                 keyboardType="numeric"
                                 value={amount}
                                 onChangeText={setAmount}
-                                autoFocus
+                                editable={!isAmountLocked}
+                                autoFocus={!isAmountLocked}
                             />
                         </View>
 
@@ -291,6 +293,7 @@ const styles = StyleSheet.create({
         fontSize: 32,
         fontWeight: 'bold',
         textAlign: 'right',
+        color: '#111827',
     },
     feeText: {
         fontSize: 14,

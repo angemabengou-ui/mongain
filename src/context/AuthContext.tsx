@@ -1,7 +1,8 @@
+import { router } from 'expo-router';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { io, Socket } from 'socket.io-client';
-import { apiGetMe, apiLogin, apiRegister, apiUpdatePushToken, BASE_URL, deleteToken, getToken, saveToken, setUnauthorizedHandler, User } from '../services/api';
+import { apiGetMe, apiLogin, apiRegister, apiUpdatePushToken, apiVerifyLoginOtp, BASE_URL, deleteToken, getToken, saveToken, setUnauthorizedHandler, User } from '../services/api';
 
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
@@ -59,8 +60,9 @@ interface AuthContextType {
     user: User | null;
     token: string | null;
     isLoading: boolean;
-    login: (phone: string, pin: string) => Promise<void>;
-    register: (name: string, phone: string, pin: string, otpCode: string) => Promise<void>;
+    login: (phone: string, pin: string) => Promise<{ requireOtp?: boolean; success?: boolean }>;
+    verifyLoginOtp: (phone: string, otpCode: string) => Promise<void>;
+    register: (name: string, username: string, phone: string, pin: string, otpCode: string) => Promise<void>;
     logout: () => Promise<void>;
     setUser: (user: User | null) => void;
     settings: any;
@@ -97,6 +99,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 '💰 Paiement Reçu !',
                 `Vous venez de recevoir ${data.amount.toLocaleString('fr-FR')} FCFA depuis ${data.from}.`,
                 [{ text: 'Super !' }]
+            );
+        });
+
+        newSocket.on('withdraw_request', (data: { agentPhone: string, agentName: string, amount: number }) => {
+            Alert.alert(
+                '⚠️ Demande de Retrait Agence',
+                `L'Agence ${data.agentName} vous demande de valider un retrait de ${data.amount.toLocaleString('fr-FR')} FCFA.`,
+                [
+                    { text: 'Refuser', style: 'cancel' },
+                    {
+                        text: 'Valider',
+                        onPress: () => {
+                            router.push({
+                                pathname: '/client-withdraw-desk',
+                                params: {
+                                    agentPhone: data.agentPhone,
+                                    agentName: data.agentName,
+                                    lockedAmount: data.amount.toString()
+                                }
+                            });
+                        }
+                    }
+                ]
             );
         });
 
@@ -159,21 +184,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const login = async (phone: string, pin: string) => {
-        const { token: newToken, user: newUser } = await apiLogin(phone, pin);
+        const res = await apiLogin(phone, pin);
+        if (res.requireOtp) {
+            return { requireOtp: true };
+        }
+        if (res.token && res.user) {
+            await saveToken(res.token);
+            setToken(res.token);
+            setUser(res.user);
+            return { success: true };
+        }
+        return { success: false };
+    };
+
+    const verifyLoginOtp = async (phone: string, otpCode: string) => {
+        const { token: newToken, user: newUser } = await apiVerifyLoginOtp(phone, otpCode);
         await saveToken(newToken);
         setToken(newToken);
         setUser(newUser);
     };
 
-    const register = async (name: string, phone: string, pin: string, otpCode: string) => {
-        const { token: newToken, user: newUser } = await apiRegister(name, phone, pin, otpCode);
+    const register = async (name: string, username: string, phone: string, pin: string, otpCode: string) => {
+        const { token: newToken, user: newUser } = await apiRegister(name, username, phone, pin, otpCode);
         await saveToken(newToken);
         setToken(newToken);
         setUser(newUser);
     };
 
     return (
-        <AuthContext.Provider value={{ user, token, isLoading, login, register, logout, setUser, settings }}>
+        <AuthContext.Provider value={{ user, token, isLoading, login, verifyLoginOtp, register, logout, setUser, settings }}>
             {children}
         </AuthContext.Provider>
     );

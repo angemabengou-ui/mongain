@@ -86,54 +86,59 @@ export default function TransferScreen() {
     };
 
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: '#f8fafc' }]}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background }]}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
 
-                {/* Header */}
+                {/* Header Clean, sans bouton caché */}
                 <View style={styles.header}>
                     <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
                         <Ionicons name="arrow-back" size={28} color={COLORS.textPrimary} />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Envoyer de l'argent</Text>
-                    <TouchableOpacity style={styles.qrButton} onPress={() => router.push('/qr')}>
-                        <Ionicons name="qr-code-outline" size={24} color={COLORS.primary} />
-                    </TouchableOpacity>
+                    <Text style={[styles.headerTitle, { color: COLORS.textPrimary }]}>Envoyer de l'argent</Text>
+                    <View style={{ width: 44 }} />
                 </View>
 
-                <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 150 }]} keyboardShouldPersistTaps="handled">
+                <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
-                    <View style={styles.heroSection}>
-                        <View style={styles.iconCircle}>
-                            <Ionicons name="send" size={32} color={COLORS.primary} />
-                        </View>
-                        <Text style={styles.heroTitle}>À qui souhaitez-vous envoyer ?</Text>
-                        <Text style={styles.heroSub}>Saisissez un numéro ou choisissez un contact depuis votre répertoire.</Text>
+                    {/* Grille d'Actions Massives */}
+                    <View style={styles.actionGrid}>
+                        <TouchableOpacity style={[styles.actionCard, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]} onPress={() => router.push('/qr')}>
+                            <View style={[styles.actionIconWrap, { backgroundColor: '#3B82F615' }]}>
+                                <Ionicons name="qr-code" size={28} color="#3B82F6" />
+                            </View>
+                            <Text style={[styles.actionCardTitle, { color: COLORS.textPrimary }]}>Scanner QR</Text>
+                            <Text style={styles.actionCardSub}>Instantané</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={[styles.actionCard, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]} onPress={handleContactSelect}>
+                            <View style={[styles.actionIconWrap, { backgroundColor: '#8B5CF615' }]}>
+                                <Ionicons name="people" size={28} color="#8B5CF6" />
+                            </View>
+                            <Text style={[styles.actionCardTitle, { color: COLORS.textPrimary }]}>Mes Contacts</Text>
+                            <Text style={styles.actionCardSub}>Répertoire</Text>
+                        </TouchableOpacity>
                     </View>
 
-                    {/* Saisie manuelle */}
-                    <Text style={styles.inputLabel}>Numéro de téléphone</Text>
-                    <View style={[styles.inputContainer, (isLooking || recipient) ? styles.inputActive : null]}>
-                        <Text style={styles.prefix}>+241</Text>
+                    <Text style={styles.sectionTitle}>Saisie Manuelle</Text>
+
+                    {/* Saisie manuelle Modernisée */}
+                    <View style={[styles.inputContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }, (isLooking || recipient) ? { borderColor: COLORS.primary } : null]}>
+                        <Text style={[styles.prefix, { color: COLORS.textPrimary }]}>+241</Text>
                         <TextInput
-                            style={styles.input}
-                            placeholder="Ex: 077... ou 066..."
+                            style={[styles.input, { color: COLORS.textPrimary }]}
+                            placeholder="Ex: 077..."
                             keyboardType="phone-pad"
-                            placeholderTextColor="#94a3b8"
+                            placeholderTextColor={COLORS.textSecondary}
                             value={phone}
                             onChangeText={setPhone}
-                            autoFocus
                         />
                         {isLooking ? (
                             <ActivityIndicator size="small" color={COLORS.primary} style={{ padding: 8 }} />
                         ) : phone.length > 0 ? (
                             <TouchableOpacity onPress={() => { setPhone(''); setRecipient(null); setLookupError(''); }} style={{ padding: 8 }}>
-                                <Ionicons name="close-circle" size={22} color="#94a3b8" />
+                                <Ionicons name="close-circle" size={22} color={COLORS.textSecondary} />
                             </TouchableOpacity>
-                        ) : (
-                            <TouchableOpacity onPress={handleContactSelect} style={{ padding: 8 }}>
-                                <Ionicons name="call" size={22} color={COLORS.primary} />
-                            </TouchableOpacity>
-                        )}
+                        ) : null}
                     </View>
 
                     {/* Ligne d'erreur */}
@@ -147,21 +152,23 @@ export default function TransferScreen() {
                     {/* Carte Destinataire Validé */}
                     {recipient && (
                         <Animated.View style={[styles.recipientCard, {
+                            borderColor: COLORS.primary + '40',
+                            backgroundColor: COLORS.primary + '05',
                             opacity: cardAnim,
                             transform: [{ translateY: cardAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }]
                         }]}>
                             <View style={styles.recipientHeader}>
-                                <View style={styles.recipientAvatar}>
-                                    <Text style={styles.recipientInitial}>
+                                <View style={[styles.recipientAvatar, { backgroundColor: COLORS.primary + '20' }]}>
+                                    <Text style={[styles.recipientInitial, { color: COLORS.primary }]}>
                                         {recipient.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                                     </Text>
                                 </View>
                                 <View style={styles.recipientInfo}>
-                                    <Text style={styles.recipientName}>{recipient.name}</Text>
+                                    <Text style={[styles.recipientName, { color: COLORS.textPrimary }]}>{recipient.name}</Text>
                                     <Text style={styles.recipientPhone}>{recipient.phone}</Text>
                                 </View>
-                                <View style={styles.checkBadge}>
-                                    <Ionicons name="checkmark" size={16} color="#059669" />
+                                <View style={[styles.checkBadge, { backgroundColor: COLORS.primary }]}>
+                                    <Ionicons name="checkmark" size={16} color="#fff" />
                                 </View>
                             </View>
                             {recipient.role === 'MERCHANT' && (
@@ -177,35 +184,36 @@ export default function TransferScreen() {
 
                     {/* Bouton Continuer */}
                     <TouchableOpacity
-                        style={[styles.sendButton, !recipient && { backgroundColor: '#cbd5e1', shadowOpacity: 0 }]}
+                        style={[styles.sendButton, !recipient && { backgroundColor: COLORS.surface, borderColor: COLORS.border, borderWidth: 1, shadowOpacity: 0 }, recipient && { backgroundColor: COLORS.primary }]}
                         onPress={handleContinue}
                         disabled={!recipient}
                     >
-                        <Text style={[styles.sendButtonText, !recipient && { color: '#ffffff' }]}>Continuer vers le montant</Text>
+                        <Text style={[styles.sendButtonText, !recipient ? { color: COLORS.textSecondary } : { color: '#ffffff' }]}>Continuer vers le montant</Text>
                         {recipient && <Ionicons name="arrow-forward" size={20} color="#fff" style={{ marginLeft: 8 }} />}
                     </TouchableOpacity>
 
                 </ScrollView>
 
+                {/* MODAL CONTACTS (Même logique, styles propres) */}
                 <Modal
                     visible={contactsModalVisible}
                     animationType="slide"
                     presentationStyle="formSheet"
                     onRequestClose={() => setContactsModalVisible(false)}
                 >
-                    <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
+                    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
                         <View style={styles.header}>
                             <TouchableOpacity onPress={() => setContactsModalVisible(false)} style={styles.backButton}>
                                 <Ionicons name="close" size={28} color={COLORS.textPrimary} />
                             </TouchableOpacity>
-                            <Text style={styles.headerTitle}>Mes Contacts</Text>
+                            <Text style={[styles.headerTitle, { color: COLORS.textPrimary }]}>Mes Contacts</Text>
                             <View style={{ width: 44 }} />
                         </View>
                         <View style={{ padding: 16 }}>
                             <TextInput
-                                style={{ backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 16, height: 48, borderColor: '#e2e8f0', borderWidth: 1, fontSize: 16, color: '#0f172a' }}
-                                placeholder="Rechercher par nom..."
-                                placeholderTextColor="#94a3b8"
+                                style={[styles.searchInput, { backgroundColor: COLORS.surface, borderColor: COLORS.border, color: COLORS.textPrimary }]}
+                                placeholder="Rechercher un nom..."
+                                placeholderTextColor={COLORS.textSecondary}
                                 value={searchContact}
                                 onChangeText={setSearchContact}
                             />
@@ -215,17 +223,17 @@ export default function TransferScreen() {
                             keyExtractor={(item, index) => (item as any).id || index.toString()}
                             renderItem={({ item }) => (
                                 <TouchableOpacity
-                                    style={{ flexDirection: 'row', padding: 16, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', backgroundColor: '#fff' }}
+                                    style={[styles.contactRow, { backgroundColor: COLORS.surface, borderBottomColor: COLORS.border }]}
                                     onPress={() => item.phoneNumbers && pickContact(item.phoneNumbers[0].number || '')}
                                 >
-                                    <View style={[styles.recipientAvatar, { width: 40, height: 40, borderRadius: 20 }]}>
-                                        <Text style={{ fontSize: 16, fontWeight: '700', color: COLORS.primary }}>
+                                    <View style={[styles.contactAvatar, { backgroundColor: COLORS.primary + '15' }]}>
+                                        <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.primary }}>
                                             {(item.name || '?').charAt(0).toUpperCase()}
                                         </Text>
                                     </View>
                                     <View style={{ marginLeft: 12, justifyContent: 'center' }}>
-                                        <Text style={{ fontSize: 16, fontWeight: '600', color: '#1e293b' }}>{item.name}</Text>
-                                        <Text style={{ fontSize: 14, color: '#64748b' }}>{item.phoneNumbers?.[0]?.number}</Text>
+                                        <Text style={[styles.contactName, { color: COLORS.textPrimary }]}>{item.name}</Text>
+                                        <Text style={styles.contactPhone}>{item.phoneNumbers?.[0]?.number}</Text>
                                     </View>
                                 </TouchableOpacity>
                             )}
@@ -245,24 +253,24 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20, paddingVertical: 16,
     },
     backButton: { padding: 8, marginLeft: -12 },
-    qrButton: { padding: 8, marginRight: -12, backgroundColor: '#e0f2fe', borderRadius: 40 },
-    headerTitle: { color: '#1a1d2e', fontSize: 18, fontWeight: '700' },
-    content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 12, paddingBottom: 154 },
-    heroSection: { alignItems: 'center', marginBottom: 32 },
-    iconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#e0f2fe', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-    heroTitle: { fontSize: 22, fontWeight: '800', color: '#1a1d2e', marginBottom: 8, textAlign: 'center' },
-    heroSub: { fontSize: 15, color: '#64748b', textAlign: 'center', lineHeight: 22, paddingHorizontal: 10 },
+    headerTitle: { fontSize: 20, fontWeight: '800' },
+    content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 12, paddingBottom: 60 },
 
-    inputLabel: { fontSize: 14, fontWeight: '700', color: '#334155', marginBottom: 8, marginLeft: 4 },
+    actionGrid: { flexDirection: 'row', gap: 16, marginBottom: 32 },
+    actionCard: { flex: 1, borderRadius: 20, padding: 20, alignItems: 'center', borderWidth: 1 },
+    actionIconWrap: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+    actionCardTitle: { fontSize: 16, fontWeight: '800', marginBottom: 4 },
+    actionCardSub: { fontSize: 13, color: '#94a3b8', fontWeight: '500' },
+
+    sectionTitle: { fontSize: 14, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: 12, marginLeft: 4, letterSpacing: 1 },
+
     inputContainer: {
-        flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff',
+        flexDirection: 'row', alignItems: 'center',
         borderRadius: 16, paddingHorizontal: 16, height: 60, marginBottom: 16,
-        borderWidth: 1.5, borderColor: '#e2e8f0',
-        shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, shadowRadius: 4, elevation: 2
+        borderWidth: 1.5,
     },
-    inputActive: { borderColor: '#1DC5E9', backgroundColor: '#f0f9ff' },
-    prefix: { fontSize: 17, fontWeight: '700', color: '#1e293b', marginRight: 12, paddingRight: 12, borderRightWidth: 1, borderRightColor: '#cbd5e1' },
-    input: { flex: 1, fontSize: 18, color: '#0f172a', fontWeight: '600', height: '100%', letterSpacing: 1 },
+    prefix: { fontSize: 17, fontWeight: '800', marginRight: 12, paddingRight: 12, borderRightWidth: 1, borderRightColor: '#e2e8f0' },
+    input: { flex: 1, fontSize: 18, fontWeight: '700', height: '100%', letterSpacing: 1 },
 
     errorBox: {
         flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEE2E2',
@@ -271,27 +279,32 @@ const styles = StyleSheet.create({
     errorText: { color: '#E11D48', fontSize: 14, flex: 1, fontWeight: '500', lineHeight: 20 },
 
     recipientCard: {
-        backgroundColor: '#ffffff', borderRadius: 20, padding: 20, marginTop: 12,
-        borderWidth: 1, borderColor: '#D1FAE5',
-        shadowColor: '#10B981', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.1, shadowRadius: 15, elevation: 8
+        borderRadius: 20, padding: 20, marginTop: 12,
+        borderWidth: 1,
     },
     recipientHeader: { flexDirection: 'row', alignItems: 'center', gap: 16 },
     recipientAvatar: {
         width: 52, height: 52, borderRadius: 26,
-        backgroundColor: '#D1FAE5', justifyContent: 'center', alignItems: 'center',
+        justifyContent: 'center', alignItems: 'center',
     },
-    recipientInitial: { fontSize: 20, fontWeight: '800', color: '#059669' },
+    recipientInitial: { fontSize: 20, fontWeight: '800' },
     recipientInfo: { flex: 1 },
-    recipientName: { fontSize: 18, fontWeight: '800', color: '#1a1d2e', marginBottom: 4 },
-    recipientPhone: { fontSize: 14, color: '#64748b', fontWeight: '500' },
-    checkBadge: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#A7F3D0', justifyContent: 'center', alignItems: 'center' },
+    recipientName: { fontSize: 18, fontWeight: '800', marginBottom: 4 },
+    recipientPhone: { fontSize: 14, color: '#94a3b8', fontWeight: '500' },
+    checkBadge: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
     merchantBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, alignSelf: 'flex-start', marginTop: 16, gap: 6 },
     merchantText: { color: '#D97706', fontSize: 12, fontWeight: '700' },
 
     sendButton: {
-        backgroundColor: '#1DC5E9', flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-        height: 60, borderRadius: 16,
-        shadowColor: '#1DC5E9', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 15, elevation: 8,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+        height: 60, borderRadius: 16, marginTop: 32,
     },
-    sendButtonText: { color: '#ffffff', fontSize: 17, fontWeight: '700' },
+    sendButtonText: { fontSize: 17, fontWeight: '800' },
+
+    // Modal
+    searchInput: { borderRadius: 12, paddingHorizontal: 16, height: 50, borderWidth: 1, fontSize: 16, fontWeight: '600' },
+    contactRow: { flexDirection: 'row', padding: 16, borderBottomWidth: 1 },
+    contactAvatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+    contactName: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
+    contactPhone: { fontSize: 14, color: '#94a3b8', fontWeight: '500' }
 });

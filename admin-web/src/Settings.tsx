@@ -12,6 +12,14 @@ export default function Settings({ token }: { token: string }) {
     const [rewardMerchant, setRewardMerchant] = useState('');
     const [dailyLimitTier0, setDailyLimitTier0] = useState('');
     const [dailyLimitTier1, setDailyLimitTier1] = useState('');
+    const [agencyWithdrawThreshold, setAgencyWithdrawThreshold] = useState('');
+    const [agencyTaxWithdraw, setAgencyTaxWithdraw] = useState('');
+
+    // Telecom UI Mock States
+    const [airtelEnabled, setAirtelEnabled] = useState(true);
+    const [moovEnabled, setMoovEnabled] = useState(true);
+    const [airtelFee, setAirtelFee] = useState('1.5');
+    const [moovFee, setMoovFee] = useState('1.0');
 
     useEffect(() => {
         const fetchSettings = async () => {
@@ -25,6 +33,8 @@ export default function Settings({ token }: { token: string }) {
                     setRewardMerchant((data.rewardMerchant * 100).toString());
                     setDailyLimitTier0(data.dailyLimitTier0?.toString() || '50000');
                     setDailyLimitTier1(data.dailyLimitTier1?.toString() || '2000000');
+                    setAgencyWithdrawThreshold(data.agencyWithdrawThreshold?.toString() || '100000');
+                    setAgencyTaxWithdraw((data.agencyTaxWithdraw * 100).toString() || '1');
                 }
             } catch (e) {
                 console.error(e);
@@ -42,8 +52,10 @@ export default function Settings({ token }: { token: string }) {
         const floatReward = parseFloat(rewardMerchant) / 100;
         const numLimit0 = parseInt(dailyLimitTier0, 10);
         const numLimit1 = parseInt(dailyLimitTier1, 10);
+        const floatAgencyTax = parseFloat(agencyTaxWithdraw) / 100;
+        const numAgencyThreshold = parseInt(agencyWithdrawThreshold, 10);
 
-        if (isNaN(floatP2P) || isNaN(floatWithdraw) || isNaN(floatReward) || isNaN(numLimit0) || isNaN(numLimit1)) {
+        if (isNaN(floatP2P) || isNaN(floatWithdraw) || isNaN(floatReward) || isNaN(numLimit0) || isNaN(numLimit1) || isNaN(floatAgencyTax) || isNaN(numAgencyThreshold)) {
             setError('Valeurs incorrectes fournies.');
             return;
         }
@@ -66,7 +78,9 @@ export default function Settings({ token }: { token: string }) {
                     taxWithdraw: floatWithdraw,
                     rewardMerchant: floatReward,
                     dailyLimitTier0: numLimit0,
-                    dailyLimitTier1: numLimit1
+                    dailyLimitTier1: numLimit1,
+                    agencyWithdrawThreshold: numAgencyThreshold,
+                    agencyTaxWithdraw: floatAgencyTax
                 })
             });
 
@@ -148,6 +162,61 @@ export default function Settings({ token }: { token: string }) {
                     />
                 </div>
 
+                <div style={{ backgroundColor: '#0f172a', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #f43f5e' }}>
+                    <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>Seuil Gratuité Agence (FCFA)</label>
+                    <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '10px' }}>Si un retrait physique en Agence Mongain dépasse ce plafond, il sera soumis à la Taxe Agence. En dessous, il est totalement gratuit !</p>
+                    <input
+                        type="number" step="1000" min="0" required
+                        value={agencyWithdrawThreshold} onChange={e => setAgencyWithdrawThreshold(e.target.value)}
+                        style={{ width: '100%', padding: '12px', borderRadius: '6px', backgroundColor: '#334155', border: 'none', color: '#fff' }}
+                    />
+                </div>
+
+                <div style={{ backgroundColor: '#0f172a', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #f43f5e' }}>
+                    <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>Taxe Agence Excédentaire (%)</label>
+                    <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '10px' }}>Pourcentage appliqué sur la totalité du montant excédant le seuil de gratuité ci-dessus.</p>
+                    <input
+                        type="number" step="0.01" min="0" required
+                        value={agencyTaxWithdraw} onChange={e => setAgencyTaxWithdraw(e.target.value)}
+                        style={{ width: '100%', padding: '12px', borderRadius: '6px', backgroundColor: '#334155', border: 'none', color: '#fff' }}
+                    />
+                </div>
+
+
+                <h3 style={{ marginTop: '20px', marginBottom: '10px', color: '#60a5fa', borderBottom: '1px solid #334155', paddingBottom: '10px' }}>Maisons de Téléphonie (API)</h3>
+
+                <div style={{ backgroundColor: '#0f172a', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #ef4444' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                        <label style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 10 }}>🔴 Airtel Money API</label>
+                        <button type="button" onClick={() => setAirtelEnabled(!airtelEnabled)} style={{ padding: '5px 12px', borderRadius: 20, backgroundColor: airtelEnabled ? '#10b981' : '#334155', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}>
+                            {airtelEnabled ? 'ACTIF' : 'INACTIF'}
+                        </button>
+                    </div>
+                    <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '10px' }}>Frais d'intégration (prélevés par l'opérateur en %). (Note: En cours d'intégration technique globale).</p>
+                    <input
+                        type="number" step="0.1" min="0" required
+                        value={airtelFee} onChange={e => setAirtelFee(e.target.value)}
+                        style={{ width: '100%', padding: '12px', borderRadius: '6px', backgroundColor: '#334155', border: 'none', color: '#fff', opacity: airtelEnabled ? 1 : 0.5 }}
+                        disabled={!airtelEnabled}
+                    />
+                </div>
+
+                <div style={{ backgroundColor: '#0f172a', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #3b82f6' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                        <label style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 10 }}>🔵 Moov Africa API</label>
+                        <button type="button" onClick={() => setMoovEnabled(!moovEnabled)} style={{ padding: '5px 12px', borderRadius: 20, backgroundColor: moovEnabled ? '#10b981' : '#334155', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}>
+                            {moovEnabled ? 'ACTIF' : 'INACTIF'}
+                        </button>
+                    </div>
+                    <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '10px' }}>Frais d'intégration (prélevés par l'opérateur en %). (Note: En cours d'intégration technique globale).</p>
+                    <input
+                        type="number" step="0.1" min="0" required
+                        value={moovFee} onChange={e => setMoovFee(e.target.value)}
+                        style={{ width: '100%', padding: '12px', borderRadius: '6px', backgroundColor: '#334155', border: 'none', color: '#fff', opacity: moovEnabled ? 1 : 0.5 }}
+                        disabled={!moovEnabled}
+                    />
+                </div>
+
                 <button
                     type="submit"
                     disabled={loading}
@@ -161,7 +230,7 @@ export default function Settings({ token }: { token: string }) {
                     <Save size={20} />
                     {loading ? 'Sauvegarde...' : 'Appliquer au Système National'}
                 </button>
-            </form>
-        </div>
+            </form >
+        </div >
     );
 }

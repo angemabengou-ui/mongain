@@ -11,6 +11,7 @@ const router = Router();
 
 const registerSchema = z.object({
     name: z.string().min(2, 'Le nom doit comporter au moins 2 caractères.'),
+    username: z.string().min(3, 'Le pseudo doit comporter au moins 3 caractères.').transform(v => v.toLowerCase().replace(/\s/g, '')),
     phone: z.string().regex(/^\+?[0-9\s]{8,15}$/, 'Numéro de téléphone invalide.').transform(val => val.replace(/\s+/g, '').replace(/^\+2410/, '+241')),
     pin: z.string().length(4, 'Le code PIN doit comporter 4 chiffres.').regex(/^\d+$/, 'Le PIN doit être numérique.'),
     otpCode: z.string().length(4, 'Le code de vérification doit comporter 4 chiffres.'),
@@ -145,7 +146,7 @@ router.post('/register', async (req, res) => {
         return res.status(400).json({ error: parsed.error.issues[0].message });
     }
 
-    const { name, phone, pin, otpCode } = parsed.data;
+    const { name, username, phone, pin, otpCode } = parsed.data;
 
     try {
         const otpRecord = await prisma.verificationCode.findUnique({ where: { phone } });
@@ -158,9 +159,15 @@ router.post('/register', async (req, res) => {
         // Delete successful OTP record
         await prisma.verificationCode.delete({ where: { phone } });
 
+        const existingUsername = await prisma.user.findFirst({ where: { username } });
+        if (existingUsername) {
+            return res.status(400).json({ error: 'Ce pseudo est déjà utilisé par un autre compte.' });
+        }
+
         const user = await prisma.user.create({
             data: {
                 name,
+                username,
                 phone,
                 pin: hashedPin,
                 wallet: {
@@ -198,8 +205,15 @@ router.post('/login', async (req, res) => {
 
     const { phone, pin } = parsed.data;
 
-    const user = await prisma.user.findUnique({
-        where: { phone },
+    // Allow login by Phone, Username or Email
+    const user = await prisma.user.findFirst({
+        where: {
+            OR: [
+                { phone },
+                { username: phone.toLowerCase() }, // user typed their username in the "phone" field
+                { email: phone.toLowerCase() }     // user typed their email in the "phone" field
+            ]
+        },
         include: { wallet: true },
     });
 
@@ -230,6 +244,56 @@ router.post('/login', async (req, res) => {
         });
     }
 
+    await prisma.user.update({
+        where: { id: user.id },
+        data: { failedPinAttempts: 0, lockedUntil: null },
+    });
+
+    const useDemoMode = !process.env.TWILIO_ACCOUNT_SID;
+    const code = useDemoMode ? '1234' : Math.floor(1000 + Math.random() * 9000).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
+
+    // Use the actual user's phone for SMS routing, in case they logged in with their username!
+    const targetPhone = user.phone;
+
+    await prisma.verificationCode.upsert({
+        where: { phone: targetPhone },
+        update: { code, expiresAt },
+        create: { phone: targetPhone, code, expiresAt }
+    });
+
+    if (useDemoMode) {
+        console.log(`[DEMO MODE] Code d'accès 1234 généré pour le login de ${targetPhone} (Pseudo: ${user.username})`);
+    } else {
+        await sendSms(targetPhone, `[Mongain] Votre code de connexion est : ${code}.`);
+    }
+
+    return res.json({ requireOtp: true, message: 'Un code de sécurité a été envoyé par SMS.' });
+});
+
+const verifyLoginOtpSchema = z.object({
+    phone: z.string().transform(val => val.replace(/\s+/g, '').replace(/^\+2410/, '+241')),
+    otpCode: z.string().length(4),
+});
+
+// POST /api/auth/verify-login-otp
+router.post('/verify-login-otp', async (req, res) => {
+    const parsed = verifyLoginOtpSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+    const { phone, otpCode } = parsed.data;
+
+    const otpRecord = await prisma.verificationCode.findUnique({ where: { phone } });
+    if (!otpRecord || otpRecord.code !== otpCode || otpRecord.expiresAt < new Date()) {
+        return res.status(400).json({ error: 'Code OTP expiré ou invalide.' });
+    }
+
+    await prisma.verificationCode.delete({ where: { phone } });
+
+    const user = await prisma.user.findUnique({ where: { phone }, include: { wallet: true } });
+    if (!user) return res.status(404).json({ error: 'Compte introuvable.' });
+
+    // Single Device Enforcement: Increment the jwtVersion
     const updatedUser = await prisma.user.update({
         where: { id: user.id },
         data: { failedPinAttempts: 0, lockedUntil: null, jwtVersion: { increment: 1 } },
@@ -261,6 +325,8 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
     return res.json({
         id: user.id,
         name: user.name,
+        username: user.username,
+        email: user.email,
         phone: user.phone,
         role: user.role,
         kycStatus: (user as any).kycStatus,
@@ -270,6 +336,8 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
 });
 const updateProfileSchema = z.object({
     name: z.string().min(2, 'Le nom doit comporter au moins 2 caractères.'),
+    username: z.string().optional(),
+    email: z.string().email('Format email invalide.').optional().or(z.literal('')),
     idCardFront: z.string().optional(),
     idCardBack: z.string().optional(),
     selfie: z.string().optional(),
@@ -283,9 +351,23 @@ router.put('/profile', authMiddleware, async (req: AuthRequest, res) => {
     }
 
     try {
-        const { name, idCardFront, idCardBack, selfie } = parsed.data;
+        const { name, username, email, idCardFront, idCardBack, selfie } = parsed.data;
 
         let updates: any = { name };
+
+        if (username) {
+            const cleanUsername = username.toLowerCase().replace(/\s/g, '');
+            const existingUsername = await prisma.user.findFirst({ where: { username: cleanUsername, NOT: { id: req.userId } } });
+            if (existingUsername) return res.status(400).json({ error: 'Ce pseudo est déjà utilisé.' });
+            updates.username = cleanUsername;
+        }
+
+        if (email) {
+            const cleanEmail = email.toLowerCase().replace(/\s/g, '');
+            const existingEmail = await prisma.user.findFirst({ where: { email: cleanEmail, NOT: { id: req.userId } } });
+            if (existingEmail) return res.status(400).json({ error: 'Cet E-mail est déjà utilisé.' });
+            updates.email = cleanEmail;
+        }
 
         if (idCardFront && idCardBack && selfie) {
             updates.idCardFront = idCardFront;
@@ -307,6 +389,8 @@ router.put('/profile', authMiddleware, async (req: AuthRequest, res) => {
         return res.json({
             id: user.id,
             name: user.name,
+            username: user.username,
+            email: user.email,
             phone: user.phone,
             role: user.role,
             kycStatus: user.kycStatus,
@@ -381,3 +465,46 @@ router.put('/push-token', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 export default router;
+
+// POST /api/auth/verify-pin
+router.post('/verify-pin', authMiddleware, async (req: AuthRequest, res) => {
+    const { pin } = req.body;
+
+    if (!pin || typeof pin !== 'string') {
+        return res.status(400).json({ error: 'Code PIN requis.' });
+    }
+
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: req.userId }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'Utilisateur non trouvé.' });
+        }
+
+        if (user.lockedUntil && user.lockedUntil > new Date()) {
+            return res.status(403).json({ error: 'Compte temporairement verrouillé.' });
+        }
+
+        const pinMatch = await bcrypt.compare(pin, user.pin);
+
+        if (!pinMatch) {
+            const newAttempts = user.failedPinAttempts + 1;
+            const updateProps: any = { failedPinAttempts: newAttempts };
+            if (newAttempts >= 3) {
+                updateProps.lockedUntil = new Date(Date.now() + 15 * 60000); // Lock 15 mins
+            }
+            await prisma.user.update({ where: { id: user.id }, data: updateProps });
+
+            return res.status(401).json({ error: newAttempts >= 3 ? 'Compte bloqué.' : 'Code PIN incorrect.' });
+        }
+
+        // Reset attempts on success
+        await prisma.user.update({ where: { id: user.id }, data: { failedPinAttempts: 0, lockedUntil: null } });
+
+        return res.json({ success: true });
+    } catch (error) {
+        return res.status(500).json({ error: 'Erreur interne.' });
+    }
+});

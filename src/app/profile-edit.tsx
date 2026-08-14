@@ -27,6 +27,8 @@ export default function ProfileEditScreen() {
     const styles = getStyles(COLORS);
 
     const [name, setName] = useState(user?.name ?? '');
+    const [username, setUsername] = useState(user?.username ?? '');
+    const [email, setEmail] = useState(user?.email ?? '');
     const [loading, setLoading] = useState(false);
     const [documents, setDocuments] = useState<any>({
         idCardFront: null,
@@ -59,7 +61,7 @@ export default function ProfileEditScreen() {
 
         setLoading(true);
         try {
-            await apiUpdateProfile(name.trim(), documents.idCardFront, documents.idCardBack, documents.selfie);
+            await apiUpdateProfile(name.trim(), username.trim(), email.trim(), documents.idCardFront, documents.idCardBack, documents.selfie);
             // Update auth context by re-fetching Me
             const me = await apiGetMe();
             setUser(me);
@@ -100,8 +102,35 @@ export default function ProfileEditScreen() {
                         />
                     </View>
 
+                    <Text style={styles.label}>Pseudo Unique</Text>
+                    <View style={styles.inputContainer}>
+                        <Ionicons name="at-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 12 }} />
+                        <TextInput
+                            style={styles.input}
+                            value={username}
+                            onChangeText={t => setUsername(t.replace(/\s/g, '').toLowerCase())}
+                            placeholder="Ex: omar01"
+                            placeholderTextColor={COLORS.textSecondary}
+                            autoCapitalize="none"
+                        />
+                    </View>
+
+                    <Text style={styles.label}>E-mail (Sécurité Facultative)</Text>
+                    <View style={styles.inputContainer}>
+                        <Ionicons name="mail-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 12 }} />
+                        <TextInput
+                            style={styles.input}
+                            value={email}
+                            onChangeText={t => setEmail(t.replace(/\s/g, '').toLowerCase())}
+                            placeholder="Ex: omar@mongain.com"
+                            placeholderTextColor={COLORS.textSecondary}
+                            autoCapitalize="none"
+                            keyboardType="email-address"
+                        />
+                    </View>
+
                     <Text style={styles.infoText}>
-                        Votre numéro de téléphone ({user?.phone}) vous sert d'identifiant et ne peut pas être modifié.
+                        Votre numéro ({user?.phone}) vous sert d'identifiant principal et ne peut pas être modifié.
                     </Text>
 
                     {/* Section KYC */}
@@ -155,9 +184,9 @@ export default function ProfileEditScreen() {
                     </View>
 
                     <TouchableOpacity
-                        style={[styles.saveButton, (name.trim() === user?.name || name.trim().length === 0) && !documents.selfie && styles.disabledButton]}
+                        style={[styles.saveButton, ((name.trim() === user?.name || name.trim().length === 0) && username.trim() === (user?.username ?? '') && email.trim() === (user?.email ?? '') && !documents.selfie) && styles.disabledButton]}
                         onPress={handleSave}
-                        disabled={loading || ((name.trim() === user?.name || name.trim().length === 0) && !documents.selfie)}
+                        disabled={loading || ((name.trim() === user?.name || name.trim().length === 0) && username.trim() === (user?.username ?? '') && email.trim() === (user?.email ?? '') && !documents.selfie)}
                     >
                         {loading ? (
                             <ActivityIndicator color={COLORS.surface} />

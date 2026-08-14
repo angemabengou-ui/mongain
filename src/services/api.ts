@@ -67,7 +67,7 @@ const request = async (method: string, path: string, body?: object, auth = false
         }
 
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Une erreur est survenue.');
+        if (!res.ok) throw new Error(data.message || data.error || 'Une erreur est survenue.');
         return data;
     } catch (e: any) {
         if (e.message.includes('Failed to fetch') || e.message.includes('Network request failed')) {
@@ -88,6 +88,8 @@ export interface Wallet {
 export interface User {
     id: string;
     name: string;
+    username?: string;
+    email?: string;
     phone: string;
     kycStatus?: string;
     kycLevel?: number;
@@ -112,17 +114,23 @@ export interface Transaction {
 export const apiRequestOtp = (phone: string) =>
     request('POST', '/api/auth/request-otp', { phone }) as Promise<{ message: string }>;
 
-export const apiRegister = (name: string, phone: string, pin: string, otpCode: string) =>
-    request('POST', '/api/auth/register', { name, phone, pin, otpCode }) as Promise<{ token: string; user: User }>;
+export const apiRegister = (name: string, username: string, phone: string, pin: string, otpCode: string) =>
+    request('POST', '/api/auth/register', { name, username, phone, pin, otpCode }) as Promise<{ token: string; user: User }>;
 
 export const apiLogin = (phone: string, pin: string) =>
-    request('POST', '/api/auth/login', { phone, pin }) as Promise<{ token: string; user: User }>;
+    request('POST', '/api/auth/login', { phone, pin }) as Promise<{ token?: string; user?: User; requireOtp?: boolean; message?: string }>;
+
+export const apiVerifyLoginOtp = (phone: string, otpCode: string) =>
+    request('POST', '/api/auth/verify-login-otp', { phone, otpCode }) as Promise<{ token: string; user: User }>;
+
+export const apiVerifyAppLockPin = (pin: string) =>
+    request('POST', '/api/auth/verify-pin', { pin }) as Promise<{ success: boolean; error?: string }>;
 
 export const apiGetMe = () =>
     request('GET', '/api/auth/me', undefined, true) as Promise<User>;
 
-export const apiUpdateProfile = (name: string, idCardFront?: string, idCardBack?: string, selfie?: string) =>
-    request('PUT', '/api/auth/profile', { name, idCardFront, idCardBack, selfie }, true) as Promise<User>;
+export const apiUpdateProfile = (name: string, username?: string, email?: string, idCardFront?: string, idCardBack?: string, selfie?: string) =>
+    request('PUT', '/api/auth/profile', { name, username, email, idCardFront, idCardBack, selfie }, true) as Promise<User>;
 
 export const apiUpdatePin = (oldPin: string, newPin: string) =>
     request('PUT', '/api/auth/pin', { oldPin, newPin }, true) as Promise<{ message: string }>;
@@ -172,17 +180,13 @@ export const apiTransfer = (receiverPhone: string, amount: number, pin?: string,
 export const apiTopUp = (amount: number, cardToken?: string) =>
     request('POST', '/api/wallet/topup', { amount, cardToken }, true) as Promise<{ message: string; balance: number }>;
 
-export const apiDeposit = (amount: number, phone?: string) =>
-    request('POST', '/api/wallet/deposit', { amount, phone }, true) as Promise<{ message: string; balance: number }>;
+export const apiPullDeposit = (phone: string, amount: number, network: string) =>
+    request('POST', '/api/wallet/pull', { phone, amount, network }, true) as Promise<{ message: string, reference: string, network: string }>;
 
-export const apiWithdraw = (amount: number, pin?: string, agentPhone?: string, useBiometrics?: boolean) =>
-    request('POST', '/api/wallet/withdraw', { amount, pin, agentPhone, useBiometrics }, true) as Promise<{ message: string; balance: number }>;
+export const apiGenerateDepositCode = (amount: number) =>
+    request('POST', '/api/wallet/generate-deposit-code', { amount }, true) as Promise<{ success: boolean, code: string, expiresAt: string }>;
 
-export const apiMerchantCharge = (payerPhone: string, amount: number, withdrawCode: string) =>
-    request('POST', '/api/wallet/charge', { payerPhone, amount, withdrawCode }, true) as Promise<any>;
 
-export const apiAgentWithdrawConfirm = (payerPhone: string, amount: number, withdrawCode: string) =>
-    request('POST', '/api/wallet/agent-withdraw', { payerPhone, amount, withdrawCode }, true) as Promise<any>;
 
 // Reclamations
 export const apiGetReclamations = () => request('GET', '/api/reclamation', undefined, true) as Promise<any[]>;
@@ -201,3 +205,13 @@ export const apiCreateTontine = (name: string, contribution: number, frequency: 
 
 export const apiJoinTontine = (groupId: string) =>
     request('POST', '/api/tontine/join', { groupId }, true) as Promise<any>;
+
+// Nouvelles Fonctions Tontine Privée
+export const apiGetTontineDetails = (groupId: string) =>
+    request('GET', `/api/tontine/details/${groupId}`, undefined, true) as Promise<any>;
+
+export const apiInviteToTontine = (groupId: string, phone: string) =>
+    request('POST', '/api/tontine/invite', { groupId, phone }, true) as Promise<any>;
+
+export const apiReorderTontine = (groupId: string, orderMap: { participantId: string, newOrder: number }[]) =>
+    request('POST', '/api/tontine/reorder', { groupId, orderMap }, true) as Promise<any>;

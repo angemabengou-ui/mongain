@@ -1,212 +1,150 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
-import {
-    ActivityIndicator,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity, View
-} from 'react-native';
+import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppTheme } from '../constants/theme';
-import { apiWithdraw } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 export default function WithdrawScreen() {
-    const router = useRouter();
-    const params = useLocalSearchParams();
     const COLORS = useAppTheme();
-    const [agentPhone, setAgentPhone] = useState(params.agentPhone as string || '');
-    const [amount, setAmount] = useState(params.amount as string || '');
-    const [pin, setPin] = useState('');
-    const [showPin, setShowPin] = useState(false);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
-    const [success, setSuccess] = useState<{ balance: number } | null>(null);
+    const styles = getStyles(COLORS);
+    const router = useRouter();
+    const { user } = useAuth();
 
-    const handleWithdraw = async () => {
-        setError('');
-        const amountNum = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
+    const [showCode, setShowCode] = useState(false);
+    const [token, setToken] = useState('000 000');
 
-        if (!agentPhone) {
-            setError('Veuillez entrer le numéro ou code de l\'Agent.');
-            return;
-        }
-        if (!amount || isNaN(amountNum) || amountNum <= 0) {
-            setError('Veuillez entrer un montant valide.');
-            return;
-        }
-        if (!pin || pin.length !== 4) {
-            setError('Veuillez entrer votre code PIN à 4 chiffres.');
-            return;
-        }
-
-        setLoading(true);
-        try {
-            const result = await apiWithdraw(amountNum, pin, agentPhone);
-            setSuccess({ balance: result.balance });
-        } catch (e: any) {
-            setError(e.message);
-        } finally {
-            setLoading(false);
-        }
+    const generateCode = () => {
+        const pass = Math.floor(100000 + Math.random() * 900000).toString();
+        setToken(pass.slice(0, 3) + ' ' + pass.slice(3, 6));
+        setShowCode(true);
     };
 
-    if (success) {
+    if (showCode) {
         return (
-            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background, justifyContent: 'center', alignItems: 'center', padding: 32 }]}>
-                <View style={[styles.successIconWrap, { backgroundColor: COLORS.success + '20' }]}>
-                    <Ionicons name="checkmark-circle" size={90} color={COLORS.success} />
+            <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+                <View style={[styles.iconWrap, { backgroundColor: '#10B98115', padding: 24, borderRadius: 50, marginBottom: 24, width: 100, height: 100 }]}>
+                    <Ionicons name="lock-closed" size={50} color="#10B981" />
                 </View>
-                <Text style={[styles.successTitle, { color: COLORS.textPrimary }]}>Retrait autorisé !</Text>
-                <Text style={[styles.successSubtitle, { color: COLORS.textSecondary }]}>
-                    Vous pouvez maintenant retirer{'\n'}
-                    <Text style={{ fontWeight: '800', color: COLORS.textPrimary }}>
-                        {parseFloat(amount).toLocaleString('fr-FR')} FCFA
-                    </Text>
-                    {'\n'}auprès de l'agent.
+                <Text style={styles.codeGenTitle}>Code Secret Généré</Text>
+                <Text style={[styles.codeGenSubtitle, { textAlign: 'center', marginTop: 12, paddingHorizontal: 20 }]}>
+                    Veuillez communiquer ce code à 6 chiffres à votre Agent Mongain pour valider le retrait.
                 </Text>
-                <View style={[styles.remainingCard, { backgroundColor: COLORS.surface }]}>
-                    <Text style={[styles.remainingLabel, { color: COLORS.textSecondary }]}>Nouveau solde</Text>
-                    <Text style={[styles.remainingAmount, { color: COLORS.textPrimary }]}>{success.balance.toLocaleString('fr-FR')} FCFA</Text>
+
+                <View style={styles.codeContainer}>
+                    <Text style={styles.codeText}>{token}</Text>
                 </View>
-                <TouchableOpacity style={[styles.doneBtn, { backgroundColor: COLORS.success }]} onPress={() => router.replace('/(tabs)' as any)}>
-                    <Text style={styles.doneBtnText}>Retour à l'accueil</Text>
+
+                <Text style={[styles.codeGenSubtitle, { color: '#EF4444', fontWeight: 'bold' }]}>EXPIRATION DANS 05:00</Text>
+
+                <TouchableOpacity style={[styles.btn, { width: '100%', marginTop: 60 }]} onPress={() => setShowCode(false)}>
+                    <Text style={styles.btnText}>Fermer</Text>
                 </TouchableOpacity>
             </SafeAreaView>
         );
     }
 
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background }]}>
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-                <View style={[styles.header, { backgroundColor: COLORS.background }]}>
-                    <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                        <Ionicons name="arrow-back" size={28} color={COLORS.textPrimary} />
-                    </TouchableOpacity>
-                    <Text style={[styles.headerTitle, { color: COLORS.textPrimary }]}>Faire un retrait</Text>
-                    <View style={{ width: 28 }} />
+        <SafeAreaView style={styles.safeArea}>
+            <View style={styles.header}>
+                <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+                    <Ionicons name="arrow-back" size={28} color={COLORS.textPrimary} />
+                </TouchableOpacity>
+                <Text style={styles.headerTitle}>Retrait</Text>
+                <View style={{ width: 44 }} />
+            </View>
+
+            <ScrollView contentContainerStyle={styles.container}>
+                <View style={styles.balanceSection}>
+                    <Text style={styles.balanceLabel}>Solde Retirable</Text>
+                    <Text style={styles.balanceAmount}>{(user?.wallet?.balance || 0).toLocaleString('fr-FR')} FCFA</Text>
                 </View>
 
-                <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+                <Text style={styles.sectionHeader}>PAR QR SCANCER</Text>
 
-                    <TouchableOpacity
-                        style={[styles.qrScanBtn, { backgroundColor: COLORS.primary }]}
-                        onPress={() => router.push('/qr')}
-                    >
-                        <Ionicons name="qr-code-outline" size={24} color="#fff" style={{ marginRight: 10 }} />
-                        <Text style={styles.actionBtnText}>Scanner le QR de l'Agent</Text>
-                    </TouchableOpacity>
-
-                    <View style={styles.divider}>
-                        <View style={[styles.dividerLine, { backgroundColor: COLORS.border }]} />
-                        <Text style={[styles.dividerText, { color: COLORS.textSecondary }]}>OU</Text>
-                        <View style={[styles.dividerLine, { backgroundColor: COLORS.border }]} />
-                    </View>
-
-                    <View style={[styles.infoCard, { backgroundColor: COLORS.primary + '15' }]}>
-                        <Ionicons name="wallet-outline" size={32} color={COLORS.primary} style={{ marginBottom: 12 }} />
-                        <Text style={[styles.infoTitle, { color: COLORS.primary }]}>Retrait par Numéro/Code Agent</Text>
-                        <Text style={[styles.infoText, { color: COLORS.textSecondary }]}>Saisissez le code de l'Agent et le montant pour générer une autorisation.</Text>
-                    </View>
-
-                    {error ? (
-                        <View style={styles.errorBox}>
-                            <Ionicons name="alert-circle-outline" size={18} color="#EF4444" />
-                            <Text style={styles.errorText}>{error}</Text>
+                <View style={styles.listContainer}>
+                    <TouchableOpacity style={styles.listItem} onPress={() => router.push('/qr?mode=scanOnly&intent=withdraw')}>
+                        <View style={[styles.listIcon, { backgroundColor: '#F59E0B15' }]}>
+                            <Ionicons name="scan" size={24} color="#F59E0B" />
                         </View>
-                    ) : null}
-
-                    <Text style={[styles.label, { color: COLORS.textSecondary }]}>Numéro / Code Agent</Text>
-                    <View style={[styles.inputContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
-                        <Ionicons name="storefront-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 8 }} />
-                        <TextInput
-                            style={[styles.input, { color: COLORS.textPrimary }]}
-                            placeholder="Ex: +241..."
-                            keyboardType="phone-pad"
-                            value={agentPhone}
-                            onChangeText={setAgentPhone}
-                            placeholderTextColor={COLORS.textSecondary}
-                        />
-                    </View>
-
-                    <Text style={[styles.label, { color: COLORS.textSecondary }]}>Montant (FCFA)</Text>
-                    <View style={[styles.inputContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
-                        <Text style={[styles.currencyPrefix, { color: COLORS.textPrimary, borderRightColor: COLORS.border }]}>FCFA</Text>
-                        <TextInput
-                            style={[styles.input, { color: COLORS.textPrimary }]}
-                            placeholder="0"
-                            keyboardType="numeric"
-                            value={amount}
-                            onChangeText={setAmount}
-                            placeholderTextColor={COLORS.textSecondary}
-                        />
-                    </View>
-
-                    <Text style={[styles.label, { color: COLORS.textSecondary }]}>Code PIN secret</Text>
-                    <View style={[styles.inputContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
-                        <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 8 }} />
-                        <TextInput
-                            style={[styles.input, { color: COLORS.textPrimary }]}
-                            placeholder="••••"
-                            keyboardType="number-pad"
-                            secureTextEntry={!showPin}
-                            maxLength={4}
-                            value={pin}
-                            onChangeText={setPin}
-                            placeholderTextColor={COLORS.textSecondary}
-                        />
-                        <TouchableOpacity onPress={() => setShowPin(!showPin)} style={{ padding: 4 }}>
-                            <Ionicons name={showPin ? 'eye-off-outline' : 'eye-outline'} size={20} color={COLORS.textSecondary} />
-                        </TouchableOpacity>
-                    </View>
-
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: COLORS.primary }]} onPress={handleWithdraw} disabled={loading}>
-                        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionBtnText}>Confirmer le retrait manuel</Text>}
+                        <View style={styles.listTextWrap}>
+                            <Text style={styles.listTitle}>Scanner pour retirer</Text>
+                            <Text style={styles.listDesc}>Saisissez vous-même le montant à retirer.</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
                     </TouchableOpacity>
-                </ScrollView>
-            </KeyboardAvoidingView>
+                </View>
+
+                <Text style={styles.sectionHeader}>PAR CODE SECRET</Text>
+
+                <View style={styles.listContainer}>
+                    <TouchableOpacity style={styles.listItem} onPress={generateCode}>
+                        <View style={[styles.listIcon, { backgroundColor: '#10B98115' }]}>
+                            <Ionicons name="lock-closed" size={24} color="#10B981" />
+                        </View>
+                        <View style={styles.listTextWrap}>
+                            <Text style={styles.listTitle}>Générer un Code (Guichet)</Text>
+                            <Text style={styles.listDesc}>Donnez votre numéro et le code généré au caissier.</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                    </TouchableOpacity>
+                </View>
+
+                <Text style={styles.sectionHeader}>PORTFEUILLES MOBILES ET BANQUES</Text>
+
+                <View style={styles.listContainer}>
+                    <TouchableOpacity onPress={() => { }} disabled={true} style={[styles.listItem, { opacity: 0.5 }]}>
+                        <View style={[styles.listIcon, { backgroundColor: '#EF444415' }]}>
+                            <Ionicons name="phone-portrait" size={24} color="#EF4444" />
+                        </View>
+                        <View style={styles.listTextWrap}>
+                            <Text style={styles.listTitle}>Vers Airtel Money</Text>
+                            <Text style={styles.listDesc}>Virement instantané (Bientôt disponible)</Text>
+                        </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={() => { }} disabled={true} style={[styles.listItem, styles.lastListItem, { opacity: 0.5 }]}>
+                        <View style={[styles.listIcon, { backgroundColor: '#3B82F615' }]}>
+                            <Ionicons name="phone-portrait-outline" size={24} color="#3B82F6" />
+                        </View>
+                        <View style={styles.listTextWrap}>
+                            <Text style={styles.listTitle}>Vers Moov Africa</Text>
+                            <Text style={styles.listDesc}>Virement instantané (Bientôt disponible)</Text>
+                        </View>
+                    </TouchableOpacity>
+                </View>
+
+            </ScrollView>
         </SafeAreaView>
     );
 }
 
-const styles = StyleSheet.create({
-    safeArea: { flex: 1 },
-    header: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingHorizontal: 20, paddingVertical: 16,
-    },
+const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: COLORS.background },
+    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16, backgroundColor: COLORS.background },
     backButton: { padding: 8, marginLeft: -8 },
-    headerTitle: { fontSize: 18, fontWeight: '700' },
-    content: { padding: 24 },
-    qrScanBtn: {
-        height: 56, borderRadius: 16, flexDirection: 'row',
-        justifyContent: 'center', alignItems: 'center',
-        shadowOpacity: 0.2, shadowRadius: 8, elevation: 4
-    },
-    divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 32 },
-    dividerLine: { flex: 1, height: 1 },
-    dividerText: { marginHorizontal: 16, fontSize: 14, fontWeight: '700' },
-    infoCard: { padding: 20, borderRadius: 16, marginBottom: 24, alignItems: 'center' },
-    infoTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
-    infoText: { fontSize: 14, textAlign: 'center', lineHeight: 22 },
-    errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEE2E2', borderRadius: 12, padding: 12, marginBottom: 16, gap: 8 },
-    errorText: { color: '#EF4444', fontSize: 14, flex: 1 },
-    label: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
-    inputContainer: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, paddingHorizontal: 16, height: 56, marginBottom: 16, borderWidth: 1 },
-    currencyPrefix: { fontSize: 15, fontWeight: '700', marginRight: 12, borderRightWidth: 1, paddingRight: 12 },
-    input: { flex: 1, fontSize: 18, fontWeight: '600', height: '100%' },
-    actionBtn: { height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', shadowOpacity: 0.3, shadowRadius: 12, elevation: 6, marginTop: 10 },
-    actionBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-    successIconWrap: { marginBottom: 24, borderRadius: 50 },
-    successTitle: { fontSize: 28, fontWeight: '800', marginBottom: 12, textAlign: 'center' },
-    successSubtitle: { fontSize: 17, textAlign: 'center', lineHeight: 26, marginBottom: 24 },
-    remainingCard: { borderRadius: 20, paddingHorizontal: 32, paddingVertical: 20, alignItems: 'center', marginBottom: 32 },
-    remainingLabel: { fontSize: 13, marginBottom: 6 },
-    remainingAmount: { fontSize: 26, fontWeight: '800' },
-    doneBtn: { paddingHorizontal: 48, paddingVertical: 16, borderRadius: 16 },
-    doneBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+    headerTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textPrimary },
+    container: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 60 },
+
+    balanceSection: { alignItems: 'center', marginVertical: 32 },
+    balanceLabel: { fontSize: 14, color: COLORS.textSecondary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
+    balanceAmount: { fontSize: 44, fontWeight: '900', color: COLORS.textPrimary, marginVertical: 8, letterSpacing: -1 },
+
+    sectionHeader: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary, marginTop: 24, marginBottom: 12, marginLeft: 16, letterSpacing: 0.5 },
+
+    listContainer: { backgroundColor: COLORS.surface, borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 8, elevation: 1 },
+    listItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+    lastListItem: { borderBottomWidth: 0 },
+    listIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+    listTextWrap: { flex: 1, marginRight: 8 },
+    listTitle: { fontSize: 16, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 4 },
+    listDesc: { fontSize: 13, color: COLORS.textSecondary, lineHeight: 18 },
+
+    iconWrap: { justifyContent: 'center', alignItems: 'center' },
+    codeGenTitle: { fontSize: 24, fontWeight: '800', color: COLORS.textPrimary, textAlign: 'center' },
+    codeGenSubtitle: { fontSize: 15, color: COLORS.textSecondary, textAlign: 'center' },
+    codeContainer: { paddingHorizontal: 40, paddingVertical: 20, borderRadius: 20, marginVertical: 32, borderWidth: 2, borderColor: '#10B981', backgroundColor: '#10B98110' },
+    codeText: { fontSize: 48, fontWeight: '900', color: COLORS.textPrimary, letterSpacing: 5 },
+    btn: { backgroundColor: '#10B981', height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', shadowColor: '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+    btnText: { color: '#fff', fontSize: 16, fontWeight: '700' }
 });

@@ -13,19 +13,13 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useAppTheme } from '../../constants/theme';
 import { apiPayService } from '../../services/api';
 
-const COLORS = {
-    primary: '#10b981',
-    surface: '#ffffff',
-    background: '#f8f9fe',
-    textPrimary: '#1a1d2e',
-    textSecondary: '#6b7280',
-    error: '#E11D48',
-};
-
 export default function ElectricityServiceScreen() {
+    const COLORS = useAppTheme();
     const router = useRouter();
+    const styles = getStyles(COLORS);
     const [amount, setAmount] = useState('');
     const [meter, setMeter] = useState('');
     const [loading, setLoading] = useState(false);
@@ -156,7 +150,7 @@ export default function ElectricityServiceScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: COLORS.background },
     header: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -176,7 +170,7 @@ const styles = StyleSheet.create({
     errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEE2E2', borderRadius: 12, padding: 12, marginBottom: 16, gap: 8 },
     errorText: { color: COLORS.error, fontSize: 14, flex: 1 },
     label: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 6, marginLeft: 4 },
-    inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: 14, paddingHorizontal: 16, height: 56, marginBottom: 16, borderWidth: 1, borderColor: '#e2e8f0' },
+    inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: 14, paddingHorizontal: 16, height: 56, marginBottom: 16, borderWidth: 1, borderColor: COLORS.border },
     currencyPrefix: { fontSize: 15, fontWeight: '700', color: COLORS.textPrimary, marginRight: 12, borderRightWidth: 1, borderRightColor: '#cbd5e1', paddingRight: 12 },
     input: { flex: 1, fontSize: 16, color: COLORS.textPrimary, fontWeight: '600', height: '100%' },
 

@@ -2,7 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { apiCreateTontine, apiGetTontineGroups, apiJoinTontine } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import { apiCreateTontine, apiGetTontineDetails, apiGetTontineGroups, apiInviteToTontine, apiJoinTontine, apiReorderTontine } from '../../services/api';
 
 interface TontineGroup {
     id: string;
@@ -23,6 +24,7 @@ interface Participant {
 }
 
 export default function TontineScreen() {
+    const { user } = useAuth();
     const router = useRouter();
     const [groups, setGroups] = useState<TontineGroup[]>([]);
     const [myParticipations, setMyParticipations] = useState<Participant[]>([]);
@@ -32,6 +34,13 @@ export default function TontineScreen() {
     const [newGroupName, setNewGroupName] = useState('');
     const [newGroupContribution, setNewGroupContribution] = useState('');
     const [newGroupFrequency, setNewGroupFrequency] = useState('MONTHLY');
+
+    // Management Modal States
+    const [detailsModalVisible, setDetailsModalVisible] = useState(false);
+    const [selectedGroupDetails, setSelectedGroupDetails] = useState<any>(null);
+    const [invitePhone, setInvitePhone] = useState('');
+    const [inviteLoading, setInviteLoading] = useState(false);
+    const [inviteMessage, setInviteMessage] = useState<{ type: 'error' | 'success', text: string } | null>(null);
 
     const loadData = async () => {
         setLoading(true);
@@ -91,6 +100,76 @@ export default function TontineScreen() {
         }
     };
 
+    const openManagementModal = async (groupId: string) => {
+        try {
+            const res = await apiGetTontineDetails(groupId);
+            if (res.success) {
+                setSelectedGroupDetails(res.data);
+                setInviteMessage(null); // Reset UI alert when opening
+                setDetailsModalVisible(true);
+            } else {
+                window.alert("Erreur: " + res.message);
+            }
+        } catch (error: any) {
+            window.alert("Impossible de charger les détails: " + error.message);
+        }
+    };
+
+    const handleInvite = async () => {
+        if (!invitePhone || !selectedGroupDetails) return;
+        setInviteLoading(true);
+        setInviteMessage(null);
+
+        let formatted = invitePhone.trim();
+        // Si le numéro ne contient pas de +, on assume le préfixe +241
+        if (!formatted.startsWith('+')) {
+            // Nettoyer si l'utilisateur a écrit 074... 
+            if (formatted.startsWith('0')) formatted = formatted.substring(1);
+            formatted = '+241' + formatted;
+        }
+
+        try {
+            const res = await apiInviteToTontine(selectedGroupDetails.id, formatted);
+            setInviteMessage({ type: 'success', text: "✓ " + res.message });
+            setInvitePhone('');
+            // Reload details
+            const updated = await apiGetTontineDetails(selectedGroupDetails.id);
+            setSelectedGroupDetails(updated.data);
+        } catch (error: any) {
+            setInviteMessage({ type: 'error', text: "❌ " + (error.message || "Erreur lors de l'invitation.") });
+        } finally {
+            setInviteLoading(false);
+        }
+    };
+
+    const handleReorder = async (participantId: string, direction: 'UP' | 'DOWN') => {
+        if (!selectedGroupDetails) return;
+        const currentList = [...selectedGroupDetails.participants];
+        const index = currentList.findIndex(p => p.id === participantId);
+        if (index < 0) return;
+
+        if (direction === 'UP' && index > 0) {
+            const temp = currentList[index - 1].payoutOrder;
+            currentList[index - 1].payoutOrder = currentList[index].payoutOrder;
+            currentList[index].payoutOrder = temp;
+        } else if (direction === 'DOWN' && index < currentList.length - 1) {
+            const temp = currentList[index + 1].payoutOrder;
+            currentList[index + 1].payoutOrder = currentList[index].payoutOrder;
+            currentList[index].payoutOrder = temp;
+        } else {
+            return; // invalid move
+        }
+
+        const map = currentList.map(p => ({ participantId: p.id, newOrder: p.payoutOrder }));
+        try {
+            await apiReorderTontine(selectedGroupDetails.id, map);
+            const updated = await apiGetTontineDetails(selectedGroupDetails.id);
+            setSelectedGroupDetails(updated.data);
+        } catch (e: any) {
+            Alert.alert("Erreur", e.message || "Erreur lors de la réorganisation");
+        }
+    };
+
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
@@ -112,7 +191,7 @@ export default function TontineScreen() {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Mes Cotisations en cours</Text>
                     {myParticipations.map(p => (
-                        <View key={p.id} style={styles.cardActive}>
+                        <TouchableOpacity key={p.id} style={styles.cardActive} onPress={() => openManagementModal(p.group.id)}>
                             <View style={styles.cardHeader}>
                                 <Text style={styles.cardTitle}>{p.group.name}</Text>
                                 <View style={styles.badge}>
@@ -128,9 +207,8 @@ export default function TontineScreen() {
                             ) : (
                                 <Text style={[styles.statusText, { color: '#A19BB0' }]}>Cycle actuel : #{p.group.currentCycle} (En attente de votre tour)</Text>
                             )}
-
-                            <Text style={styles.statusText}>Statut Participation: {p.status}</Text>
-                        </View>
+                            <Text style={[styles.statusText, { color: '#888', marginTop: 10 }]}>Tapotez pour voir les détails 👀</Text>
+                        </TouchableOpacity>
                     ))}
                 </View>
             )}
@@ -197,6 +275,66 @@ export default function TontineScreen() {
                                 <Text style={styles.confirmCreateText}>Créer le club</Text>
                             </TouchableOpacity>
                         </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Modal de Détails (Gestion) */}
+            <Modal visible={detailsModalVisible} transparent animationType="slide" onRequestClose={() => setDetailsModalVisible(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        {selectedGroupDetails && (
+                            <>
+                                <View style={styles.cardHeader}>
+                                    <Text style={styles.modalTitle}>{selectedGroupDetails.name}</Text>
+                                    <TouchableOpacity onPress={() => { setDetailsModalVisible(false); loadData(); }}>
+                                        <Ionicons name="close" size={24} color="#FFF" />
+                                    </TouchableOpacity>
+                                </View>
+                                <Text style={styles.cardDesc}>
+                                    Cagnotte totale attendue : <Text style={{ color: '#4ADE80', fontWeight: 'bold' }}>{selectedGroupDetails.contribution * selectedGroupDetails.participants.length} FCFA</Text>
+                                </Text>
+
+                                {selectedGroupDetails.creatorId === user?.id && (
+                                    <View style={{ marginTop: 15, marginBottom: 15 }}>
+                                        <Text style={styles.label}>Inviter un membre (N° Téléphone)</Text>
+                                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                                            <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholderTextColor="#A19BB0" placeholder="Ex: 07455..." keyboardType="phone-pad" value={invitePhone} onChangeText={setInvitePhone} />
+                                            <TouchableOpacity style={{ backgroundColor: '#208AEF', paddingHorizontal: 15, borderRadius: 12, justifyContent: 'center' }} onPress={handleInvite} disabled={inviteLoading}>
+                                                {inviteLoading ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Inviter</Text>}
+                                            </TouchableOpacity>
+                                        </View>
+                                        {inviteMessage && (
+                                            <Text style={{ color: inviteMessage.type === 'error' ? '#EF4444' : '#4ADE80', marginTop: 10, fontWeight: 'bold', fontSize: 13 }}>
+                                                {inviteMessage.text}
+                                            </Text>
+                                        )}
+                                    </View>
+                                )}
+
+                                <Text style={styles.sectionTitle}>Membres du Club</Text>
+                                <ScrollView style={{ maxHeight: 250 }}>
+                                    {selectedGroupDetails.participants.map((p: any) => (
+                                        <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#2D1F4D', padding: 12, borderRadius: 8, marginBottom: 8 }}>
+                                            <Text style={{ color: p.user.id === user?.id ? '#208AEF' : '#FFF', flex: 1, fontWeight: 'bold' }}>
+                                                #{p.payoutOrder} - {p.user.name} {p.user.id === user?.id ? '(Moi)' : ''}
+                                            </Text>
+
+                                            {selectedGroupDetails.creatorId === user?.id && p.user.id !== user?.id && (
+                                                <View style={{ flexDirection: 'row', gap: 8 }}>
+                                                    <TouchableOpacity onPress={() => handleReorder(p.id, 'UP')}>
+                                                        <Ionicons name="caret-up-circle" size={24} color="#4ADE80" />
+                                                    </TouchableOpacity>
+                                                    <TouchableOpacity onPress={() => handleReorder(p.id, 'DOWN')}>
+                                                        <Ionicons name="caret-down-circle" size={24} color="#FBBF24" />
+                                                    </TouchableOpacity>
+                                                </View>
+                                            )}
+                                        </View>
+                                    ))}
+                                </ScrollView>
+                            </>
+                        )}
                     </View>
                 </View>
             </Modal>

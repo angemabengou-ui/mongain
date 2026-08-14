@@ -1,5 +1,3 @@
-import fetch from 'node-fetch'; // Native in node 18+
-
 const BASE_URL = 'http://localhost:3000';
 
 async function req(method: string, path: string, body?: any, token?: string) {

@@ -1,11 +1,9 @@
-// @ts-nocheck
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Dimensions,
   Platform,
@@ -15,7 +13,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
@@ -112,9 +110,6 @@ export default function DashboardScreen() {
                 <Text style={styles.welcomeText}>Bonjour 👋</Text>
                 <Text style={styles.userName}>{user?.name ?? '...'}</Text>
               </View>
-              <TouchableOpacity style={styles.headerIcon} onPress={logout}>
-                <Ionicons name="log-out-outline" size={24} color={COLORS.textHeader} />
-              </TouchableOpacity>
             </View>
 
             <View style={styles.balanceContainer}>
@@ -139,32 +134,32 @@ export default function DashboardScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* Quick Access QR Button */}
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff25', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 30, alignSelf: 'center', marginTop: 16 }}
+              onPress={() => router.push('/receive-qr' as any)}
+            >
+              <Ionicons name="qr-code" size={20} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Mon QR Code (Recevoir)</Text>
+            </TouchableOpacity>
+
           </View>
 
           {/* Contenu */}
           <View style={styles.contentContainer}>
             {/* Actions */}
             <View style={styles.actionsCard}>
+              <ActionItem icon="send" label="Envoyer" color="#4F46E5" onPress={() => router.push('/transfer')} styles={styles} />
+              <ActionItem icon="scan" label="Scan & Payer" color="#F59E0B" onPress={() => router.push('/qr?mode=scanOnly&intent=pay')} styles={styles} />
+              <ActionItem icon="card" label="Recharger" color="#10B981" onPress={() => router.push('/recharge' as any)} styles={styles} />
+              <ActionItem icon="wallet" label="Retrait" color="#E11D48" onPress={() => router.push('/withdraw' as any)} styles={styles} />
+
+              {user?.role === 'AGENT' && (
+                <ActionItem icon="business" label="Guichet" color="#059669" onPress={() => router.push('/qr?mode=scanOnly')} styles={styles} />
+              )}
               {user?.role === 'MERCHANT' && (
-                <ActionItem icon="qr-code" label="Mon QR Code" color="#F59E0B" onPress={() => router.push('/qr')} styles={styles} />
-              )}
-
-
-              <ActionItem icon="send" label="Transfert" color="#4F46E5" badge="Nouveau" onPress={() => router.push('/transfer')} styles={styles} />
-              <ActionItem icon="card" label="Recharger" color="#10B981" onPress={() => router.push('/deposit')} styles={styles} />
-
-              {user?.role === 'AGENT' ? (
-                <ActionItem icon="scan" label="Retrait Client" color="#E11D48" onPress={() => router.push('/qr')} styles={styles} />
-              ) : user?.role === 'MERCHANT' ? (
-                <ActionItem icon="list" label="Transactions" color="#4F46E5" onPress={() => router.push('/history')} styles={styles} />
-              ) : (
-                <ActionItem icon="wallet" label="Retrait" color="#E11D48" onPress={() => router.push('/withdraw-type')} styles={styles} />
-              )}
-
-              {user?.role !== 'AGENT' && user?.role !== 'MERCHANT' && (
-                <ActionItem icon="cart" label="Paiement" color="#F59E0B" onPress={() => {
-                  Alert.alert("⏳ Bientôt disponible", "Le paiement e-commerce par code est en cours de structuration avec nos marchands partenaires.");
-                }} styles={styles} />
+                <ActionItem icon="qr-code" label="Mon QR Code" color="#8B5CF6" onPress={() => router.push('/qr')} styles={styles} />
               )}
             </View>
 
@@ -182,29 +177,17 @@ export default function DashboardScreen() {
               </View>
             )}
 
-            {/* Scanner */}
-            <TouchableOpacity style={styles.scanButton} onPress={() => router.push('/qr')}>
-              <Ionicons name="qr-code-outline" size={32} color={COLORS.surface} />
-              <Text style={styles.scanButtonText}>Scanner / QR Code</Text>
-            </TouchableOpacity>
-
             {/* Services & Factures (Mini-Programmes) */}
             <View style={styles.serviceSection}>
               <Text style={styles.sectionTitle}>Services & Factures</Text>
               <View style={styles.serviceGrid}>
-                <ServiceItem icon="flash" label="Électricité" color="#f59e0b" onPress={() => {
-                  Alert.alert("⏳ Bientôt disponible", "Le paiement des factures SEEG/Edan est en cours d'intégration.");
-                }} styles={styles} />
+                <ServiceItem icon="flash" label="Électricité" color="#F59E0B" onPress={() => router.push('/services/seeg' as any)} styles={styles} />
 
-                <ServiceItem icon="phone-portrait" label="Crédit Air" color="#d946ef" onPress={() => {
-                  Alert.alert("⏳ Bientôt disponible", "La recharge de crédit et data (Airtel/Moov) arrive très bientôt !");
-                }} styles={styles} />
+                <ServiceItem icon="phone-portrait" label="Crédit Air" color="#D946EF" onPress={() => router.push('/services/airtime' as any)} styles={styles} />
 
-                <ServiceItem icon="tv" label="Abo TV" color="#3b82f6" onPress={() => {
-                  Alert.alert("⏳ Bientôt disponible", "Le renouvellement des abonnements TV (Canal+) sera bientôt actif !");
-                }} styles={styles} />
+                <ServiceItem icon="tv" label="Abo TV" color="#3B82F6" onPress={() => router.push('/services/tv' as any)} styles={styles} />
 
-                <ServiceItem icon="lock-closed" label="Tontine" color="#10b981" onPress={() => router.push('/services/tontine')} styles={styles} />
+                <ServiceItem icon="lock-closed" label="Tontine" color="#10B981" onPress={() => router.push('/services/tontine' as any)} styles={styles} />
               </View>
             </View>
 
@@ -232,7 +215,7 @@ export default function DashboardScreen() {
                     tx={tx}
                     styles={styles}
                     colors={COLORS}
-                    onPress={() => router.push({ pathname: '/receipt', params: { ...tx } })}
+                    onPress={() => router.push({ pathname: '/receipt' as any, params: { ...tx } })}
                   />
                 ))
               )}
@@ -299,9 +282,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     backgroundColor: COLORS.primary,
     paddingHorizontal: 20,
     paddingTop: Platform.OS === 'android' ? 40 : 20,
-    paddingBottom: 70,
-    borderBottomLeftRadius: 40,
-    borderBottomRightRadius: 40,
+    paddingBottom: 64,
   },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
   welcomeText: { color: 'rgba(255,255,255,0.8)', fontSize: 14 },
@@ -319,11 +300,12 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
   eyeIcon: { marginLeft: 16, padding: 4 },
   contentContainer: { paddingHorizontal: 20, marginTop: -40 },
   actionsCard: {
-    backgroundColor: COLORS.surface, borderRadius: 24, padding: 24,
-    flexDirection: 'row', justifyContent: 'space-between',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 5,
+    backgroundColor: COLORS.surface, borderRadius: 20, padding: 24, paddingVertical: 32,
+    flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', rowGap: 24,
+    borderWidth: 1, borderColor: COLORS.border,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 8, elevation: 1,
   },
-  actionItemContainer: { alignItems: 'center', flex: 1 },
+  actionItemContainer: { alignItems: 'center', width: '22%' },
   actionIconContainer: { width: 64, height: 64, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   badgeContainer: { position: 'absolute', top: -6, right: -10, backgroundColor: '#FF3B30', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
   badgeText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
@@ -338,8 +320,9 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
   serviceSection: { marginTop: 28 },
   serviceGrid: {
     flexDirection: 'row', justifyContent: 'space-between',
-    backgroundColor: COLORS.surface, borderRadius: 24, padding: 18,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3,
+    backgroundColor: COLORS.surface, borderRadius: 20, padding: 18,
+    borderWidth: 1, borderColor: COLORS.border,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 8, elevation: 1,
     marginTop: 16,
   },
   serviceItemContainer: { alignItems: 'center', width: '22%' },
@@ -349,7 +332,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
   transactionsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 32, marginBottom: 16 },
   sectionTitle: { fontSize: 20, fontWeight: '700', color: COLORS.textPrimary },
   seeAllText: { fontSize: 15, fontWeight: '600', color: COLORS.primary },
-  transactionList: { backgroundColor: COLORS.surface, borderRadius: 24, padding: 8, paddingBottom: 24, marginBottom: 32 },
+  transactionList: { backgroundColor: COLORS.surface, borderRadius: 20, padding: 8, paddingBottom: 24, marginBottom: 32, borderWidth: 1, borderColor: COLORS.border },
   txContainer: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: COLORS.remaining },
   txIconContainer: { marginRight: 16 },
   txIconWrapper: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },

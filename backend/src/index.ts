@@ -10,6 +10,7 @@ import adminRoutes from './routes/admin';
 import authRoutes from './routes/auth';
 import merchantRoutes from './routes/merchant';
 import notificationRoutes from './routes/notifications';
+import servicesRoutes from './routes/services';
 import settingsRoutes from './routes/settings';
 import tontineRoutes from './routes/tontine';
 import walletRoutes from './routes/wallet';
@@ -48,6 +49,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/merchant', merchantRoutes);
 app.use('/api/tontine', tontineRoutes);
+app.use('/api/services', servicesRoutes);
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', app: 'Mongain Backend', socket: true }));

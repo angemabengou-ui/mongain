@@ -33,6 +33,7 @@ export default function RegisterScreen() {
     const [step, setStep] = useState<1 | 2>(1);
 
     const [name, setName] = useState('');
+    const [username, setUsername] = useState('');
     const [phone, setPhone] = useState('');
     const [otpCode, setOtpCode] = useState('');
     const [pin, setPin] = useState('');
@@ -67,8 +68,8 @@ export default function RegisterScreen() {
 
     const handleRegister = async () => {
         setError('');
-        if (!otpCode || !name || !pin || !confirmPin) {
-            setError('Veuillez remplir tous les champs.');
+        if (!otpCode || !name || !username || !pin || !confirmPin) {
+            setError('Veuillez remplir tous les champs obligatoires.');
             return;
         }
         if (otpCode.length !== 4) {
@@ -87,7 +88,7 @@ export default function RegisterScreen() {
         setLoading(true);
         try {
             const formattedPhone = phone.startsWith('+') ? phone : `+241${phone.replace(/\s+/g, '')}`;
-            await register(name, formattedPhone, pin, otpCode);
+            await register(name, username, formattedPhone, pin, otpCode);
             router.replace('/');
         } catch (e: any) {
             setError(e.message || "Erreur lors de la création.");
@@ -179,6 +180,21 @@ export default function RegisterScreen() {
                                             placeholderTextColor="#94a3b8"
                                             value={name}
                                             onChangeText={setName}
+                                        />
+                                    </View>
+                                </View>
+
+                                <View style={styles.inputGroup}>
+                                    <Text style={styles.label}>Créer un Pseudo Unique (@alias)</Text>
+                                    <View style={styles.inputContainer}>
+                                        <Ionicons name="at-circle-outline" size={20} color={COLORS.textSecondary} style={styles.inputIcon} />
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="Ex: jean01 (sans espaces)"
+                                            placeholderTextColor="#94a3b8"
+                                            autoCapitalize="none"
+                                            value={username}
+                                            onChangeText={(t) => setUsername(t.replace(/\s/g, '').toLowerCase())}
                                         />
                                     </View>
                                 </View>
