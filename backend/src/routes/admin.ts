@@ -401,6 +401,65 @@ router.get('/ledger', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
+// POST /api/admin/transactions/:id/refund
+router.post('/transactions/:id/refund', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
+        // Assume ADMIN is required
+        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+
+        const txId = req.params.id as string;
+        const reason = req.body.reason || 'Annulé par l\'administrateur';
+
+        const originalTx = await prisma.transaction.findUnique({
+            where: { id: txId },
+            include: { senderWallet: { include: { user: true } }, receiverWallet: { include: { user: true } } }
+        });
+
+        if (!originalTx) return res.status(404).json({ error: 'Transaction introuvable.' });
+        if (originalTx.status === 'REFUNDED') return res.status(400).json({ error: 'Cette transaction a déjà été remboursée.' });
+        if (originalTx.status !== 'COMPLETED') return res.status(400).json({ error: 'Seules les transactions validées peuvent être remboursées.' });
+
+        if (!originalTx.senderWalletId || !originalTx.receiverWalletId) {
+            return res.status(400).json({ error: 'Remboursement impossible sur les dépôts cash ou retraits purs s\'il manque un portefeuille.' });
+        }
+
+        // Ensure receiver has enough balance to refund
+        if (originalTx.receiverWallet!.balance < originalTx.amount) {
+            return res.status(400).json({ error: 'Le destinataire n\'a plus assez de fonds pour couvrir le remboursement.' });
+        }
+
+        await prisma.$transaction(async (tx) => {
+            // Take from receiver
+            await tx.wallet.update({ where: { id: originalTx.receiverWalletId! }, data: { balance: { decrement: originalTx.amount } } });
+            // Give to sender
+            await tx.wallet.update({ where: { id: originalTx.senderWalletId! }, data: { balance: { increment: originalTx.amount } } });
+
+            // Mark original as refunded
+            await tx.transaction.update({ where: { id: txId }, data: { status: 'REFUNDED' } });
+
+            // Create Reversal transaction
+            await tx.transaction.create({
+                data: {
+                    amount: originalTx.amount,
+                    senderWalletId: originalTx.receiverWalletId,
+                    receiverWalletId: originalTx.senderWalletId,
+                    status: 'COMPLETED',
+                    reference: 'REFUND-' + originalTx.reference,
+                }
+            });
+
+            await tx.auditLog.create({
+                data: { adminId: admin.id, action: 'REFUND_TRANSACTION', details: `Remboursement de la TX ${originalTx.reference}. Raison: ${reason}` }
+            });
+        });
+
+        res.json({ message: 'Transaction remboursée avec succès.' });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // --- V4: Modération KYC ---
 router.get('/users/kyc', authMiddleware, async (req: AuthRequest, res) => {
     try {

@@ -1,9 +1,8 @@
-import { API_URL } from './config';
-import { ArrowDownLeft, ArrowUpRight, Search } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { FileText, Download } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, Download, FileText, RotateCcw, Search } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { API_URL } from './config';
 
 export default function Ledger({ token }: { token: string }) {
     const [transactions, setTransactions] = useState<any[]>([]);
@@ -27,6 +26,29 @@ export default function Ledger({ token }: { token: string }) {
             console.error(e);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleRefund = async (txId: string) => {
+        const reason = window.prompt("Motif de l'annulation (obligatoire) :");
+        if (!reason) return;
+        if (!window.confirm("Êtes-vous sûr de vouloir rembourser cette transaction ?")) return;
+
+        try {
+            const res = await fetch(API_URL + '/api/admin/transactions/' + txId + '/refund', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                alert("Transaction remboursée.");
+                fetchLedger();
+            } else {
+                alert("Erreur : " + data.error);
+            }
+        } catch (e: any) {
+            alert("Erreur de connexion.");
         }
     };
 
@@ -134,6 +156,7 @@ export default function Ledger({ token }: { token: string }) {
                                 <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Montant</th>
                                 <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Référence</th>
                                 <th style={{ padding: '16px', color: 'var(--text-secondary)', textAlign: 'right' }}>Statut</th>
+                                <th style={{ padding: '16px', color: 'var(--text-secondary)', textAlign: 'right' }}>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -178,11 +201,25 @@ export default function Ledger({ token }: { token: string }) {
                                         <td style={{ padding: '16px', textAlign: 'right' }}>
                                             <span style={{
                                                 padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold',
-                                                backgroundColor: tx.status === 'COMPLETED' ? '#10B98120' : '#F59E0B20',
-                                                color: tx.status === 'COMPLETED' ? '#10B981' : '#F59E0B'
+                                                backgroundColor: tx.status === 'COMPLETED' ? '#10B98120' : tx.status === 'REFUNDED' ? '#E11D4820' : '#F59E0B20',
+                                                color: tx.status === 'COMPLETED' ? '#10B981' : tx.status === 'REFUNDED' ? '#E11D48' : '#F59E0B'
                                             }}>
                                                 {tx.status}
                                             </span>
+                                        </td>
+                                        <td style={{ padding: '16px', textAlign: 'right' }}>
+                                            {tx.status === 'COMPLETED' && !isMint && !isFee && !isDeposit && (
+                                                <button
+                                                    onClick={() => handleRefund(tx.id)}
+                                                    style={{
+                                                        padding: '4px 8px', backgroundColor: 'transparent',
+                                                        color: '#E11D48', border: '1px solid #E11D4860',
+                                                        borderRadius: '6px', cursor: 'pointer',
+                                                        display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'bold'
+                                                    }}>
+                                                    <RotateCcw size={14} /> Refund
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 )
