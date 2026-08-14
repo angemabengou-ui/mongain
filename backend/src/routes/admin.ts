@@ -200,17 +200,54 @@ router.get('/users', authMiddleware, async (req: AuthRequest, res) => {
                 id: true,
                 name: true,
                 phone: true,
+                username: true,
+                email: true,
                 role: true,
                 isActive: true,
+                kycStatus: true,
                 failedPinAttempts: true,
                 createdAt: true,
                 wallet: { select: { balance: true, currency: true } }
             },
+
             orderBy: { createdAt: 'desc' }
         });
 
         res.json(users);
     } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// DELETE /api/admin/users/:id
+router.delete('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
+        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+
+        const targetId = req.params.id as string;
+        const targetUser: any = await prisma.user.findUnique({ where: { id: targetId }, include: { wallet: true } });
+        if (!targetUser) return res.status(404).json({ error: 'Utilisateur introuvable.' });
+
+        if (targetUser.phone === '+2410000000') {
+            return res.status(403).json({ error: 'Le compte corporate racine ne peut pas être supprimé.' });
+        }
+
+        if (targetUser.wallet && targetUser.wallet.balance > 0) {
+            return res.status(400).json({ error: 'Impossible de supprimer un compte avec un solde positif. Veuillez vider le compte d\'abord.' });
+        }
+
+        await prisma.user.delete({ where: { id: targetId } });
+
+        await prisma.auditLog.create({
+            data: { adminId: admin.id, action: 'DELETE_USER', details: `Suppression du compte de ${targetUser.name} (${targetUser.phone})` }
+        });
+
+        res.json({ success: true, message: 'Utilisateur supprimé définitivement.' });
+    } catch (e: any) {
+        if (e.code === 'P2003') {
+            return res.status(400).json({ error: 'Impossible de supprimer ce compte car il a un historique de transactions complexe. Désactivez-le plutôt.' });
+        }
         res.status(500).json({ error: e.message });
     }
 });

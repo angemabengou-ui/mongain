@@ -110,6 +110,26 @@ export default function UsersManagement({ token }: { token: string }) {
         }
     };
 
+    const deleteUser = async (userId: string) => {
+        if (!window.confirm('🚨 ATTENTION : Voulez-vous vraiment supprimer définitivement cet utilisateur ? Cette action est irréversible.')) return;
+        try {
+            const resp = await fetch(`${API_URL}/api/admin/users/${userId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                alert('Utilisateur supprimé avec succès.');
+                fetchUsers();
+            } else {
+                alert(`Erreur : ${data.error}`);
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Erreur réseau.');
+        }
+    };
+
     const getRoleIcon = (role: string) => {
         if (role === 'AGENT') return <Briefcase size={16} color="#4F46E5" />;
         if (role === 'MERCHANT') return <Store size={16} color="#F59E0B" />;
@@ -228,6 +248,9 @@ export default function UsersManagement({ token }: { token: string }) {
                                                 </button>
                                                 <button onClick={() => resetPin(u.id)} style={{ padding: '6px 12px', fontSize: '12px', backgroundColor: '#334155', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
                                                     RESET PIN
+                                                </button>
+                                                <button onClick={() => deleteUser(u.id)} style={{ padding: '6px 12px', fontSize: '12px', backgroundColor: '#E11D48', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }} title="Supprimer définitivement">
+                                                    🗑️ SUPPRIMER
                                                 </button>
                                             </div>
                                         )}
