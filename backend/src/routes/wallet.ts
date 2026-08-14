@@ -86,6 +86,32 @@ router.post('/generate-withdraw-code', authMiddleware, async (req: AuthRequest, 
     }
 });
 
+// GET /history (Pour l'historique des agents et clients)
+router.get('/history', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const user = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
+        if (!user || !user.wallet) return res.status(404).json({ error: 'Wallet missing' });
+
+        const txs = await prisma.transaction.findMany({
+            where: {
+                OR: [
+                    { senderWalletId: user.wallet.id },
+                    { receiverWalletId: user.wallet.id }
+                ]
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 100,
+            include: {
+                senderWallet: { include: { user: { select: { phone: true, name: true } } } },
+                receiverWallet: { include: { user: { select: { phone: true, name: true } } } },
+            }
+        });
+
+        res.json(txs);
+    } catch (e: any) {
+        res.status(500).json({ error: 'Erreur History' });
+    }
+});
 
 // ─── Vérification atomique du plafond journalier ───────────────────────────
 async function verifyAndIncrementDailyLimit(
