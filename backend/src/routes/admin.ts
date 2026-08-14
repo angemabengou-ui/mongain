@@ -259,7 +259,7 @@ router.post('/users/create-pro', authMiddleware, async (req: AuthRequest, res) =
         if (!user || user.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const schema = z.object({
-            phone: z.string(),
+            phone: z.string().transform(val => val.replace(/\s+/g, '').replace(/^\+2410/, '+241')),
             name: z.string().min(2),
             role: z.enum(['AGENT', 'MERCHANT', 'ADMIN']),
             pin: z.string().min(4),
