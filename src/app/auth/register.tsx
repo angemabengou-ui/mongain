@@ -6,7 +6,6 @@ import {
     ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
-    SafeAreaView,
     ScrollView,
     StyleSheet,
     Text,
@@ -14,6 +13,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
 import { apiRequestOtp } from '../../services/api';
@@ -276,7 +276,7 @@ const getStyles = (COLORS: any) => StyleSheet.create({
     errorText: { color: COLORS.error, fontSize: 13, marginLeft: 8, flex: 1, fontWeight: '500' },
     inputGroup: { marginBottom: 20 },
     label: { fontSize: 14, fontWeight: '600', color: COLORS.textSecondary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
-    inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, minHeight: 56, paddingHorizontal: 16 },
+    inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'transparent', borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, minHeight: 56, paddingHorizontal: 16 },
     inputIcon: { marginRight: 12 },
     input: { flex: 1, height: 56, fontSize: 16, color: COLORS.textPrimary, fontWeight: '500' },
     eyeBtn: { padding: 8, marginRight: -8 },
