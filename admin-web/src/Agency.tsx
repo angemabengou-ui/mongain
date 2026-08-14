@@ -8,7 +8,7 @@ export default function Agency({ token, agentPhone, agentName }: { token: string
     const [phone, setPhone] = useState('+241');
     const [amount, setAmount] = useState('');
     const [balance, setBalance] = useState<number | null>(null);
-    const [withdrawCode, setWithdrawCode] = useState('');
+
     const [loading, setLoading] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
     const [error, setError] = useState('');
