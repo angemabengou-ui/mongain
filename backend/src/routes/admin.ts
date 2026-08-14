@@ -400,8 +400,8 @@ router.post('/users/:id/reset-pin', authMiddleware, async (req: AuthRequest, res
         // Envoi du SMS (Simulé ou Réel Twilio)
         await sendSms(targetUser.phone, `Mongain : Votre code PIN a été réinitialisé par un Administrateur. Votre nouveau PIN de sécurité est : ${newPin}. Ne le partagez avec personne.`);
 
-        // SECURITE : on ne renvoie pas le PIN en clair au front-end
-        res.json({ message: `Code PIN réinitialisé avec succès. Un SMS contenant le nouveau code a été envoyé au client.` });
+        // SECURITE (Temporaire) : On renvoie le PIN à l'Admin Web car l'envoi de SMS réel n'est pas encore actif
+        res.json({ message: `Code PIN réinitialisé avec succès ! \n\nNouveau code provisoire : ${newPin}\n\nVeuillez le communiquer à l'utilisateur de manière sécurisée.` });
     } catch (e: any) {
         res.status(500).json({ error: e.message });
     }
