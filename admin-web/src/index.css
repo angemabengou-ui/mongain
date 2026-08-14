@@ -336,11 +336,17 @@ button {
   box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
 }
 
-.btn-primary:active {
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.btn-primary:active:not(:disabled) {
   transform: scale(0.98);
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   opacity: 0.9;
   box-shadow: 0 4px 8px rgba(79, 70, 229, 0.3);
 }
@@ -463,261 +469,54 @@ tr:last-child td {
   background: var(--text-muted);
 }
 
-.profile-avatar {
-  background: var(--accent);
-  color: white;
-  width: 36px;
-  height: 36px;
-  border-radius: 18px;
+/* Authentication (Login) */
+.auth-container {
   display: flex;
+  min-height: 100vh;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 14px;
+  background-color: var(--bg-primary);
+  padding: 24px;
 }
 
-/* Standard Dashboard Elements */
-.dashboard-content h2 {
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: -0.5px;
+.auth-card {
+  background: var(--bg-card);
+  width: 100%;
+  max-width: 440px;
+  padding: 48px 40px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.auth-title h2 {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  color: var(--text-primary);
   margin-bottom: 8px;
+  text-align: center;
 }
 
-.dashboard-content p {
+.auth-title p {
   color: var(--text-secondary);
   font-size: 15px;
-  margin-bottom: 32px;
-  line-height: 1.6;
+  text-align: center;
+  line-height: 1.5;
 }
 
-/* CRM Info Cards / Stats */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 24px;
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 24px;
 }
 
-.stat-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 32px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--border-light);
-}
-
-.stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 8px;
-}
-
-.stat-icon.revenue {
-  background: var(--success-bg);
-  color: var(--success);
-}
-
-.stat-icon.users {
-  background: var(--accent-bg);
-  color: var(--accent);
-}
-
-.stat-icon.volume {
-  background: var(--warning-bg);
-  color: var(--warning);
-}
-
-.stat-icon.danger {
-  background: var(--danger-bg);
-  color: var(--danger);
-}
-
-.stat-value {
-  font-size: 36px;
-  font-weight: 700;
-  letter-spacing: -1.5px;
-  color: var(--text-primary);
-  line-height: 1;
-}
-
-.stat-label {
-  color: var(--text-muted);
-  font-size: 14px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-/* Forms & Inputs */
-input,
-select,
-textarea {
-  width: 100%;
-  padding: 16px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: 15px;
-  font-family: 'Inter', sans-serif;
-  outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-input:focus,
-select:focus,
-textarea:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-bg);
-}
-
-/* Buttons */
-button {
-  font-family: 'Inter', sans-serif;
-}
-
-.btn-primary {
-  width: 100%;
-  padding: 16px;
-  background: var(--text-primary);
-  color: var(--bg-primary);
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: 15px;
+.input-group label {
+  font-size: 13px;
   font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.2s, transform 0.1s;
-}
-
-.btn-primary:active {
-  transform: scale(0.98);
-}
-
-.btn-primary:hover {
-  opacity: 0.9;
-}
-
-/* Tables (CRM Data) */
-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  text-align: left;
-}
-
-th {
-  padding: 16px 24px;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-primary);
-}
-
-td {
-  padding: 20px 24px;
-  color: var(--text-primary);
-  font-size: 14px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-card);
-  transition: background 0.2s;
-}
-
-tr:hover td {
-  background: var(--bg-card-hover);
-}
-
-/* Tags / Badges / Pills */
-.status-pill {
-  padding: 6px 12px;
-  border-radius: 100px;
-  font-size: 12px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  letter-spacing: 0.5px;
-}
-
-.status-pill.success {
-  background: var(--success-bg);
-  color: var(--success);
-  border: 1px solid var(--success);
-}
-
-.status-pill.warning {
-  background: var(--warning-bg);
-  color: var(--warning);
-  border: 1px solid var(--warning);
-}
-
-.status-pill.danger {
-  background: var(--danger-bg);
-  color: var(--danger);
-  border: 1px solid var(--danger);
-}
-
-.status-pill.neutral {
-  background: var(--border);
   color: var(--text-secondary);
-  border: 1px solid var(--border-light);
-}
-
-/* Utility Classes */
-.flex-between {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.gap-2 {
-  gap: 8px;
-}
-
-.gap-4 {
-  gap: 16px;
-}
-
-.mt-4 {
-  margin-top: 16px;
-}
-
-.mb-8 {
-  margin-bottom: 32px;
-}
-
-/* Scrollbars */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--bg-primary);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border-light);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
 }
