@@ -1,4 +1,4 @@
-import { Briefcase, Lock, ShieldAlert, BadgeCheck as ShieldCheck, Store, User, UserPlus, Users as UsersIcon, X, Edit2 } from 'lucide-react';
+import { Briefcase, Edit2, Lock, ShieldAlert, BadgeCheck as ShieldCheck, Store, User, UserPlus, Users as UsersIcon, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { API_URL } from './config';
 
@@ -437,10 +437,11 @@ export default function UsersManagement({ token }: { token: string }) {
                                         🗑️ Clôturer définitivement le compte
                                     </button>
                                 </div>
-                            </>
+                            </div>
+                        </>
                     )}
-                        </div>
-            )}
                 </div>
-            );
+            )}
+        </div>
+    );
 }
