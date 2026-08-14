@@ -69,6 +69,30 @@ app.use('/api/merchant', merchantRoutes);
 app.use('/api/tontine', tontineRoutes);
 app.use('/api/services', servicesRoutes);
 
+// ▶️ Route d'initialisation Super Admin (à appeler UNE SEULE FOIS)
+app.get('/api/init-admin', async (_req, res) => {
+    try {
+        const bcrypt = await import('bcryptjs');
+        const hashedPin = await bcrypt.hash('0000', 10);
+        const admin = await prisma.user.upsert({
+            where: { phone: '+24100000000' },
+            update: { role: 'ADMIN', isActive: true },
+            create: {
+                phone: '+24100000000',
+                name: 'Super Admin Mongain',
+                username: 'superadmin',
+                pin: hashedPin,
+                role: 'ADMIN',
+                isActive: true,
+                wallet: { create: { balance: 0 } }
+            }
+        });
+        return res.json({ success: true, message: '✅ Super Admin créé/mis à jour.', phone: admin.phone, role: admin.role });
+    } catch (e: any) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', app: 'Mongain Backend', socket: true }));
 
