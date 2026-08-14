@@ -93,6 +93,41 @@ app.get('/api/init-admin', async (_req, res) => {
     }
 });
 
+// ▶️ Route de Nettoyage Doublons
+app.get('/api/merge-admins', async (_req, res) => {
+    try {
+        const oldCorp = await prisma.user.findUnique({ where: { phone: '+24100000000' }, include: { wallet: true } });
+        const newCorp = await prisma.user.findUnique({ where: { phone: '+2410000000' }, include: { wallet: true } });
+
+        let actions = [];
+
+        if (oldCorp && newCorp) {
+            const oldBalance = oldCorp.wallet?.balance || 0;
+            if (oldBalance > 0 && newCorp.wallet) {
+                await prisma.wallet.update({
+                    where: { id: newCorp.wallet.id },
+                    data: { balance: { increment: oldBalance } }
+                });
+                actions.push(`Transféré ${oldBalance} FCFA vers le nouveau compte.`);
+            }
+
+            await prisma.user.update({
+                where: { id: oldCorp.id },
+                data: { phone: '+24100000000_ARCHIVED_' + Date.now(), role: 'USER', isActive: false }
+            });
+            actions.push('Ancien compte archivé et déchu.');
+
+            if (oldCorp.wallet) {
+                await prisma.wallet.update({ where: { id: oldCorp.wallet.id }, data: { balance: 0 } });
+            }
+        }
+
+        return res.json({ success: true, oldCorpExists: !!oldCorp, newCorpExists: !!newCorp, actions });
+    } catch (e: any) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', app: 'Mongain Backend', socket: true }));
 
