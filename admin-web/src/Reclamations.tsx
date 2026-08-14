@@ -5,6 +5,7 @@ import {
     User
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { API_URL } from './config';
 
 export default function Reclamations({ token }: { token: string }) {
     const [reclamations, setReclamations] = useState<any[]>([]);
@@ -16,7 +17,8 @@ export default function Reclamations({ token }: { token: string }) {
 
     const fetchReclamations = async () => {
         try {
-            const res = await fetch('http://localhost:3000/api/reclamation', {
+            const res = await fetch(API_URL + '/api/reclamation', {
+
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -35,7 +37,8 @@ export default function Reclamations({ token }: { token: string }) {
     const closeTicket = async (id: string) => {
         if (!window.confirm("Voulez-vous vraiment clôturer ce ticket ?")) return;
         try {
-            const res = await fetch(`http://localhost:3000/api/reclamation/${id}/close`, {
+            const res = await fetch(`${API_URL}/api/reclamation/${id}/close`, {
+
                 method: 'PATCH',
                 headers: {
                     'Authorization': `Bearer ${token}`

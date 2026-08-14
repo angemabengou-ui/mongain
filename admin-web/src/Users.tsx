@@ -43,7 +43,12 @@ export default function UsersManagement({ token }: { token: string }) {
     const filteredUsers = users.filter((u: any) => {
         if (!searchTerm) return true;
         const lowSearch = searchTerm.toLowerCase();
-        return u.name?.toLowerCase().includes(lowSearch) || u.phone?.toLowerCase().includes(lowSearch);
+        return (
+            u.name?.toLowerCase().includes(lowSearch) ||
+            u.phone?.toLowerCase().includes(lowSearch) ||
+            u.username?.toLowerCase().includes(lowSearch) ||
+            u.email?.toLowerCase().includes(lowSearch)
+        );
     });
 
     const handleCreatePro = async (e: React.FormEvent) => {
