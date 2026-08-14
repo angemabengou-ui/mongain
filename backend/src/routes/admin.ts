@@ -446,6 +446,46 @@ router.get('/ledger', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
+// DELETE /api/admin/users/:id
+router.delete('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
+        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+
+        const targetId = req.params.id as string;
+        const targetUser = await prisma.user.findUnique({ where: { id: targetId }, include: { wallet: true } });
+        if (!targetUser) return res.status(404).json({ error: 'Utilisateur introuvable.' });
+
+        if (targetUser.role === 'ADMIN' && admin.id !== targetUser.id) {
+            return res.status(403).json({ error: 'Impossible de supprimer un autre Administrateur.' });
+        }
+
+        // Soft delete logic to preserve financial logs
+        const scrambledPhone = `DEL_${targetId.substring(0, 8)}_${targetUser.phone}`;
+        const scrambledUsername = targetUser.username ? `DEL_${targetId.substring(0, 8)}_${targetUser.username}` : null;
+        const scrambledEmail = targetUser.email ? `DEL_${targetId.substring(0, 8)}_${targetUser.email}` : null;
+
+        await prisma.user.update({
+            where: { id: targetId },
+            data: {
+                phone: scrambledPhone,
+                username: scrambledUsername,
+                email: scrambledEmail,
+                isActive: false,
+                name: `[SUPPRIMÉ] ${targetUser.name}`
+            }
+        });
+
+        await prisma.auditLog.create({
+            data: { adminId: admin.id, action: 'DELETE_USER', details: `Clôture définitive du compte ${targetUser.phone}` }
+        });
+
+        res.json({ success: true, message: 'Utilisateur supprimé avec succès.' });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // POST /api/admin/transactions/:id/refund
 router.post('/transactions/:id/refund', authMiddleware, async (req: AuthRequest, res) => {
     try {
