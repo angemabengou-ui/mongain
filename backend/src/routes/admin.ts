@@ -597,7 +597,7 @@ router.put('/users/:id/kyc', authMiddleware, async (req: AuthRequest, res) => {
 
         res.json({ message: 'Dossier KYC traité avec succès.' });
     } catch (e: any) {
-        res.status(500).json({ error: 'Erreur serveur.' });
+        res.status(500).json({ error: `Crash Serveur KYC: ${e.message}` });
     }
 });
 
