@@ -16,7 +16,7 @@ router.get('/stats', authMiddleware, async (req: AuthRequest, res) => {
         const agentsCount = await prisma.user.count({ where: { role: 'AGENT', isActive: true } });
         const merchantsCount = await prisma.user.count({ where: { role: 'MERCHANT', isActive: true } });
 
-        const company = await prisma.user.findUnique({ where: { phone: '+24100000000' }, include: { wallet: true } });
+        const company = await prisma.user.findUnique({ where: { phone: '+2410000000' }, include: { wallet: true } });
 
         const circulatingWallets = await prisma.wallet.aggregate({
             where: { user: { role: { notIn: ['ADMIN'] } } },

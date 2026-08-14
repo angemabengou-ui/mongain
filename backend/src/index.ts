@@ -75,10 +75,10 @@ app.get('/api/init-admin', async (_req, res) => {
         const bcrypt = await import('bcryptjs');
         const hashedPin = await bcrypt.hash('0000', 10);
         const admin = await prisma.user.upsert({
-            where: { phone: '+24100000000' },
+            where: { phone: '+2410000000' },
             update: { role: 'ADMIN', isActive: true },
             create: {
-                phone: '+24100000000',
+                phone: '+2410000000',
                 name: 'Super Admin Mongain',
                 username: 'superadmin',
                 pin: hashedPin,
@@ -113,7 +113,8 @@ io.on('connection', (socket) => {
 
 async function initializeApp() {
     // Seed Corporate Account
-    const corpPhone = '+24100000000';
+    const corpPhone = '+2410000000';
+
     const existing = await prisma.user.findUnique({ where: { phone: corpPhone } });
     if (!existing) {
         const hashedPin = await bcrypt.hash('0000', 10);

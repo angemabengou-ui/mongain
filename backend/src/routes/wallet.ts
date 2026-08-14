@@ -9,7 +9,8 @@ import { getSystemSettings } from './settings';
 
 const expo = new Expo();
 
-const CORPORATE_PHONE = process.env.CORPORATE_PHONE || '+24100000000';
+const CORPORATE_PHONE = process.env.CORPORATE_PHONE || '+2410000000';
+
 
 export const sendPush = async (token: string | null | undefined, title: string, body: string) => {
     if (token && Expo.isExpoPushToken(token)) {
@@ -596,7 +597,8 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
                 throw new Error(`Solde insuffisant pour couvrir le retrait et les frais de ${fee} FCFA.`);
             }
 
-            const corporate = await tx.user.findUnique({ where: { phone: '+24100000000' }, include: { wallet: true } }); // Assuming CORPORATE_PHONE is +24100000000
+            const corporate = await tx.user.findUnique({ where: { phone: '+2410000000' }, include: { wallet: true } }); // CORPORATE_PHONE normalized
+
             if (!corporate || !corporate.wallet) throw new Error("Erreur critique: Compte central introuvable.");
 
             const updatedSenderWallet = await tx.wallet.update({
