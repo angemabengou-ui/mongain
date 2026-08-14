@@ -12,6 +12,7 @@
       "bundleIdentifier": "com.mongain.superapp"
     },
     "android": {
+      "usesCleartextTraffic": true,
       "googleServicesFile": "./google-services.json",
       "package": "com.mongain.superapp",
       "permissions": [

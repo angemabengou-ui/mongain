@@ -16,7 +16,7 @@ export default function ReceiveQRScreen() {
     const viewRef = useRef(null);
 
     // This is the permanent string string we use to route peer-to-peer or merchant reads
-    const qrValue = user ? `app://transfer?phone=${user.phone}&name=${encodeURIComponent(user.name)}` : 'UNKNOWN';
+    const qrValue = user ? `mongain://user?phone=${encodeURIComponent(user.phone)}&name=${encodeURIComponent(user.name)}&role=${encodeURIComponent(user.role || 'USER')}` : 'UNKNOWN';
 
     const handleShare = async () => {
         try {
