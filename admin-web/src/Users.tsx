@@ -17,6 +17,7 @@ export default function UsersManagement({ token }: { token: string }) {
     const [editName, setEditName] = useState('');
     const [editPhone, setEditPhone] = useState('');
     const [editUsername, setEditUsername] = useState('');
+    const [vipLimitInput, setVipLimitInput] = useState('');
 
     // Modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -34,7 +35,21 @@ export default function UsersManagement({ token }: { token: string }) {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const data = await resp.json();
-            if (resp.ok) setUsers(data);
+            if (resp.ok) {
+                setUsers(data);
+                const queryPhone = new URLSearchParams(window.location.search).get('phone');
+                if (queryPhone && data) {
+                    const found = data.find((u: any) => u.phone === queryPhone || u.phone === '+' + queryPhone.replace(' ', ''));
+                    if (found) {
+                        setSelectedUser(found);
+                        setIsEditingUser(false);
+                        setEditName(found.name);
+                        setEditPhone(found.phone);
+                        setEditUsername(found.username || '');
+                        setVipLimitInput(found.kycLevel >= 100 ? found.kycLevel.toString() : '');
+                    }
+                }
+            }
         } catch (e) {
             console.error(e);
         } finally {
@@ -138,6 +153,30 @@ export default function UsersManagement({ token }: { token: string }) {
         }
     };
 
+    const handleSetVipLimit = async () => {
+        const lim = parseInt(vipLimitInput, 10);
+        if (isNaN(lim) || lim < 100) return alert('Plafond invalide. Minimum 100 FCFA.');
+        if (!window.confirm(`Confirmez-vous le plafond exceptionnel de ${lim.toLocaleString('fr-FR')} FCFA pour ce client ?`)) return;
+
+        try {
+            const resp = await fetch(`${API_URL}/api/admin/users/${selectedUser.id}/vip-limit`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ limit: lim })
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (resp.ok) {
+                alert('Plafond VIP appliqué !');
+                fetchUsers();
+                setSelectedUser({ ...selectedUser, kycStatus: 'APPROVED', kycLevel: lim });
+            } else {
+                alert(`Erreur API (${resp.status}): ${data.error || 'Erreur Serveur'}`);
+            }
+        } catch (e: any) {
+            alert(`Erreur réseau: ${e.message}`);
+        }
+    };
+
     const handleUpdateUser = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
@@ -177,7 +216,7 @@ export default function UsersManagement({ token }: { token: string }) {
             } else {
                 alert(`Erreur : ${data.error}`);
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
             alert('Erreur réseau.');
         }
@@ -241,7 +280,10 @@ export default function UsersManagement({ token }: { token: string }) {
                         <tbody>
                             {filteredUsers.slice((currentPage - 1) * usersPerPage, currentPage * usersPerPage).map(u => (
                                 <tr key={u.id}
-                                    onClick={() => setSelectedUser(u)}
+                                    onClick={() => {
+                                        setSelectedUser(u);
+                                        setVipLimitInput(u.kycLevel >= 100 ? u.kycLevel.toString() : '');
+                                    }}
                                     style={{
                                         cursor: 'pointer',
                                         transition: 'background 0.2s',
@@ -341,7 +383,7 @@ export default function UsersManagement({ token }: { token: string }) {
                             <div>
                                 <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>Type de Profil</label>
                                 <select value={newRole} onChange={e => setNewRole(e.target.value)}>
-                                    <option value="AGENT">Agent (Agence / Dépôt-Retrait)</option>
+                                    <option value="AGENT">Agent (Point Mobile / Kiosque Route)</option>
                                     <option value="MERCHANT">Marchand (Boutique / Vendeur Comptoir)</option>
                                 </select>
                             </div>
@@ -449,6 +491,24 @@ export default function UsersManagement({ token }: { token: string }) {
                                             🛂 Certifier manuellement l'Identité (Passer Tier 1)
                                         </button>
                                     )}
+
+                                    {/* Override VIP Limit Input */}
+                                    <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '15px', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                                        <label style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: 8 }}>Plafond Transactionnel Vip (FCFA/Jour)</label>
+                                        <div style={{ display: 'flex', gap: 10 }}>
+                                            <input
+                                                type="number"
+                                                placeholder={selectedUser.kycLevel >= 100 ? selectedUser.kycLevel.toString() : "Ex: 10000000"}
+                                                value={vipLimitInput}
+                                                onChange={(e) => setVipLimitInput(e.target.value)}
+                                                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                                            />
+                                            <button onClick={handleSetVipLimit} style={{ padding: '10px 15px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>
+                                                Appliquer
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     <button onClick={() => { toggleStatus(selectedUser.id); setSelectedUser({ ...selectedUser, isActive: !selectedUser.isActive }); }}
                                         style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: selectedUser.isActive === false ? 'var(--success-bg)' : 'var(--danger-bg)', color: selectedUser.isActive === false ? 'var(--success)' : 'var(--danger)', border: '1px solid transparent', borderRadius: '12px', cursor: 'pointer', fontWeight: '600' }}>
                                         {selectedUser.isActive === false ? <ShieldCheck size={20} /> : <ShieldAlert size={20} />}

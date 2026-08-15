@@ -9,8 +9,8 @@ const router = express.Router();
 
 router.get('/stats', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const user = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!user || user.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        const user = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!user || user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const totalUsers = await prisma.user.count({ where: { role: 'USER', isActive: true } });
         const agentsCount = await prisma.user.count({ where: { role: 'AGENT', isActive: true } });
@@ -82,8 +82,8 @@ router.get('/stats', authMiddleware, async (req: AuthRequest, res) => {
 
 router.get('/reclamations', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const user = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!user || user.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        const user = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!user || user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const reclamations = await prisma.reclamation.findMany({
             orderBy: { createdAt: 'desc' },
@@ -98,8 +98,8 @@ router.get('/reclamations', authMiddleware, async (req: AuthRequest, res) => {
 
 router.post('/mint', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const user = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!user || user.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        const user = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!user || user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const schema = z.object({ amount: z.number().int('Pas de centimes (FCFA).').positive() });
         const parsed = schema.safeParse(req.body);
@@ -147,8 +147,8 @@ router.post('/mint', authMiddleware, async (req: AuthRequest, res) => {
 
 router.post('/fund-agent', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const user = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!user || user.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        const user = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!user || user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const schema = z.object({ phone: z.string(), amount: z.number().int('Pas de centimes.').positive() });
         const parsed = schema.safeParse(req.body);
@@ -190,8 +190,8 @@ router.post('/fund-agent', authMiddleware, async (req: AuthRequest, res) => {
 // GET /api/admin/users
 router.get('/users', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const user = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!user || user.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        const user = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!user || user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const role = req.query.role as string;
         const users = await prisma.user.findMany({
@@ -219,11 +219,38 @@ router.get('/users', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
+// PUT /api/admin/users/:id (Update Profile)
+router.put('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || !['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(admin.role)) {
+            return res.status(403).json({ error: 'Autorisation insuffisante.' });
+        }
+
+        const { name, phone, username, role } = req.body;
+        const targetId = req.params.id as string;
+
+        const updated = await prisma.user.update({
+            where: { id: targetId },
+            data: { name, phone, username: username || null, role }
+        });
+
+        await prisma.auditLog.create({
+            data: { adminId: admin.id, action: 'UPDATE_USER', details: `Mise à jour CRM du profil: ${updated.phone}` }
+        });
+
+        res.json({ success: true, message: 'Profil utilisateur mis à jour avec succès.', user: updated });
+    } catch (e: any) {
+        if (e.code === 'P2002') return res.status(400).json({ error: 'Le numéro de téléphone ou pseudo est déjà pris.' });
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // DELETE /api/admin/users/:id
 router.delete('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const targetId = req.params.id as string;
         const targetUser: any = await prisma.user.findUnique({ where: { id: targetId }, include: { wallet: true } });
@@ -255,8 +282,8 @@ router.delete('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
 // POST /api/admin/users/create-pro
 router.post('/users/create-pro', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const user = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!user || user.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        const user = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!user || user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const schema = z.object({
             phone: z.string().transform(val => val.replace(/\s+/g, '').replace(/^\+2410/, '+241')),
@@ -301,8 +328,8 @@ router.post('/users/create-pro', authMiddleware, async (req: AuthRequest, res) =
 // POST /api/admin/users/:id/toggle-status
 router.post('/users/:id/toggle-status', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const targetUser = await prisma.user.findUnique({ where: { id: req.params.id as string } });
         if (!targetUser) return res.status(404).json({ error: 'Utilisateur non trouvé' });
@@ -330,8 +357,8 @@ router.post('/users/:id/toggle-status', authMiddleware, async (req: AuthRequest,
 // PUT /api/admin/users/:id
 router.put('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const schema = z.object({
             name: z.string().min(2),
@@ -375,8 +402,8 @@ router.put('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
 // POST /api/admin/users/:id/reset-pin
 router.post('/users/:id/reset-pin', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const targetUser = await prisma.user.findUnique({ where: { id: req.params.id as string } });
         if (!targetUser) return res.status(404).json({ error: 'Utilisateur non trouvé' });
@@ -410,8 +437,8 @@ router.post('/users/:id/reset-pin', authMiddleware, async (req: AuthRequest, res
 // GET /api/admin/logs
 router.get('/logs', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const logs = await prisma.auditLog.findMany({
             orderBy: { createdAt: 'desc' },
@@ -428,8 +455,8 @@ router.get('/logs', authMiddleware, async (req: AuthRequest, res) => {
 // GET /api/admin/ledger
 router.get('/ledger', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const txs = await prisma.transaction.findMany({
             orderBy: { createdAt: 'desc' },
@@ -449,8 +476,8 @@ router.get('/ledger', authMiddleware, async (req: AuthRequest, res) => {
 // DELETE /api/admin/users/:id
 router.delete('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const targetId = req.params.id as string;
         const targetUser = await prisma.user.findUnique({ where: { id: targetId }, include: { wallet: true } });
@@ -489,9 +516,9 @@ router.delete('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
 // POST /api/admin/transactions/:id/refund
 router.post('/transactions/:id/refund', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
         // Assume ADMIN is required
-        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const txId = req.params.id as string;
         const reason = req.body.reason || 'Annulé par l\'administrateur';
@@ -548,8 +575,8 @@ router.post('/transactions/:id/refund', authMiddleware, async (req: AuthRequest,
 // --- V4: Modération KYC ---
 router.get('/users/kyc', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const filter = req.query.status as string || 'PENDING';
         const pendingList = await (prisma.user as any).findMany({
@@ -567,8 +594,8 @@ const vipLimitSchema = z.object({ limit: z.number().int().min(100) });
 
 router.put('/users/:id/vip-limit', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const parsed = vipLimitSchema.safeParse(req.body);
         if (!parsed.success) return res.status(400).json({ error: 'Limite invalide.' });
@@ -597,8 +624,8 @@ const kycReviewSchema = z.object({
 
 router.put('/users/:id/kyc', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!admin || admin.role !== 'ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const parsed = kycReviewSchema.safeParse(req.body);
         if (!parsed.success) return res.status(400).json({ error: 'Statut invalide.' });
@@ -627,6 +654,350 @@ router.put('/users/:id/kyc', authMiddleware, async (req: AuthRequest, res) => {
         res.json({ message: 'Dossier KYC traité avec succès.' });
     } catch (e: any) {
         res.status(500).json({ error: `Crash Serveur KYC: ${e.message}` });
+    }
+});
+
+// ==========================================
+// V6 ERP: FLOAT MANAGEMENT (BRANCHES)
+// ==========================================
+
+router.get('/branches', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || !['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(admin.role)) {
+            return res.status(403).json({ error: 'Accès refusé.' });
+        }
+
+        const branches = await prisma.branch.findMany({
+            include: { staff: { select: { id: true, name: true, role: true, email: true } } },
+            orderBy: { isHQ: 'desc' }
+        });
+
+        return res.json(branches);
+    } catch (e: any) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/branches', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Seul le Super Admin peut créer une agence.' });
+
+        const schema = z.object({ name: z.string().min(2), city: z.string().optional() });
+        const parsed = schema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: 'Nom invalide.' });
+
+        const branch = await prisma.branch.create({
+            data: { name: parsed.data.name, city: parsed.data.city || 'Non défini' }
+        });
+
+        await prisma.auditLog.create({
+            data: { adminId: admin.id, action: 'CREATE_BRANCH', details: `Création agence: ${branch.name}` }
+        });
+
+        return res.json({ success: true, branch });
+    } catch (e: any) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/branches/:id/fund', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        // Only SuperAdmin or Risk can inject physical Liquidity
+        if (!admin || !['SUPER_ADMIN', 'RISK'].includes(admin.role)) {
+            return res.status(403).json({ error: 'Autorisation "Injection de Liquidité" requise.' });
+        }
+
+        const branchId = req.params.id as string;
+        const schema = z.object({ amount: z.number().int().positive() });
+        const parsed = schema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: 'Montant invalide.' });
+        const amount = parsed.data.amount;
+
+        const branch = await prisma.branch.findUnique({ where: { id: branchId } });
+        if (!branch) return res.status(404).json({ error: 'Succursale introuvable' });
+
+        const hq = await prisma.branch.findFirst({ where: { isHQ: true } });
+        if (!hq) return res.status(500).json({ error: 'Caisse Centrale HQ introuvable.' });
+
+        if (hq.id === branchId) {
+            return res.status(400).json({ error: 'Impossible d\'alimenter la Caisse Centrale avec elle-même.' });
+        }
+
+        if (hq.balance < amount) {
+            return res.status(400).json({ error: `Fonds insuffisants. Solde HQ : ${hq.balance.toLocaleString('fr-FR')} FCFA` });
+        }
+
+        const [updatedHQ, updatedBranch] = await prisma.$transaction([
+            prisma.branch.update({ where: { id: hq.id }, data: { balance: { decrement: amount } } }),
+            prisma.branch.update({ where: { id: branchId }, data: { balance: { increment: amount } } })
+        ]);
+
+        // Audit Trail (Float Injection - Double Entry Security)
+        await prisma.auditLog.create({
+            data: {
+                adminId: admin.id,
+                action: 'FLOAT_INJECTION',
+                details: `Transfert de ${amount} FCFA (HQ -> ${branch.name}). Solde HQ restant: ${updatedHQ.balance}`
+            }
+        });
+
+        return res.json({ success: true, message: `Liquidité de ${amount} FCFA transférée à ${branch.name}.`, branch: updatedBranch });
+    } catch (e: any) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// ==========================================
+// V6 ERP: TELLER TERMINAL (GUICHET)
+// ==========================================
+
+router.get('/teller/lookup/:phone', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!staff || !['TELLER', 'BRANCH_MANAGER', 'SUPER_ADMIN'].includes(staff.role)) {
+            return res.status(403).json({ error: 'Accès Guichet refusé.' });
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { phone: req.params.phone },
+            select: { id: true, name: true, phone: true, kycStatus: true, role: true, avatar: true }
+        });
+
+        if (!user) return res.status(404).json({ error: 'Client introuvable.' });
+        return res.json(user);
+    } catch (e: any) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/teller/deposit', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, include: { branch: true } });
+        if (!staff || !staff.isActive) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!['TELLER', 'BRANCH_MANAGER'].includes(staff.role)) return res.status(403).json({ error: 'Seul un Caissier peut effectuer un dépôt physique.' });
+        if (!staff.branch) return res.status(400).json({ error: 'Vous n\'êtes affecté à aucune Agence (Coffre manquant).' });
+
+        const schema = z.object({ phone: z.string(), amount: z.number().int().positive() });
+        const parsed = schema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: 'Données invalides.' });
+        const { phone, amount } = parsed.data;
+
+        const targetUser = await prisma.user.findUnique({ where: { phone }, include: { wallet: true } });
+        if (!targetUser || !targetUser.wallet) return res.status(404).json({ error: 'Client introuvable.' });
+
+        if (staff.branch.balance < amount) {
+            return res.status(400).json({ error: `Fonds insuffisants dans le Coffre de l'Agence (${staff.branch.balance} FCFA). Contactez le siège.` });
+        }
+
+        const [updatedBranch, updatedWallet] = await prisma.$transaction([
+            prisma.branch.update({ where: { id: staff.branch.id }, data: { balance: { decrement: amount } } }),
+            prisma.wallet.update({ where: { id: targetUser.wallet.id }, data: { balance: { increment: amount } } }),
+            prisma.transaction.create({
+                data: {
+                    reference: 'DEP' + Date.now(),
+                    type: 'DEPOSIT',
+                    amount: amount,
+                    status: 'COMPLETED',
+                    receiverId: targetUser.wallet.id, // technically it's a deposit into user's wallet
+                    fee: 0,
+                    metadata: { branch: staff.branch.name, teller: staff.name }
+                }
+            }),
+            prisma.auditLog.create({
+                data: {
+                    adminId: staff.id,
+                    action: 'CASH_DEPOSIT',
+                    details: `Dépôt Espèces: ${amount} FCFA vers ${targetUser.phone}. Nouveau solde Coffre: ${staff.branch.balance - amount}`
+                }
+            })
+        ]);
+
+        return res.json({ success: true, message: `Dépôt de ${amount} FCFA réussi pour ${targetUser.name}.` });
+    } catch (e: any) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/teller/withdraw', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, include: { branch: true } });
+        if (!staff || !staff.isActive) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!['TELLER', 'BRANCH_MANAGER'].includes(staff.role)) return res.status(403).json({ error: 'Seul un Caissier peut effectuer un retrait physique.' });
+        if (!staff.branch) return res.status(400).json({ error: 'Vous n\'êtes affecté à aucune Agence.' });
+
+        const schema = z.object({ phone: z.string(), amount: z.number().int().positive() });
+        const parsed = schema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: 'Données invalides.' });
+        const { phone, amount } = parsed.data;
+
+        const targetUser = await prisma.user.findUnique({ where: { phone }, include: { wallet: true } });
+        if (!targetUser || !targetUser.wallet) return res.status(404).json({ error: 'Client introuvable.' });
+
+        if (targetUser.wallet.balance < amount) {
+            return res.status(400).json({ error: `Solde électronique client insuffisant.` });
+        }
+
+        // Customer withdrawal means they give e-Money in exchange for physical Cash from the Branch Vault.
+        const [updatedWallet, updatedBranch] = await prisma.$transaction([
+            prisma.wallet.update({ where: { id: targetUser.wallet.id }, data: { balance: { decrement: amount } } }),
+            prisma.branch.update({ where: { id: staff.branch.id }, data: { balance: { increment: amount } } }),
+            prisma.transaction.create({
+                data: {
+                    reference: 'WIT' + Date.now(),
+                    type: 'WITHDRAWAL',
+                    amount: amount,
+                    status: 'COMPLETED',
+                    senderId: targetUser.wallet.id,
+                    fee: 0,
+                    metadata: { branch: staff.branch.name, teller: staff.name }
+                }
+            }),
+            prisma.auditLog.create({
+                data: {
+                    adminId: staff.id,
+                    action: 'CASH_WITHDRAW',
+                    details: `Retrait Espèces: ${amount} FCFA par ${targetUser.phone}. Nouveau solde Coffre: ${staff.branch.balance + amount}`
+                }
+            })
+        ]);
+
+        return res.json({ success: true, message: `Retrait de ${amount} FCFA validé. Veuillez remettre les espèces au client.` });
+    } catch (e: any) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// ==========================================
+// V6 ERP: STAFF MANAGEMENT (HABILITATIONS)
+// ==========================================
+
+router.get('/staff', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || !['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(admin.role)) {
+            return res.status(403).json({ error: 'Accès refusé.' });
+        }
+
+        const staffList = await prisma.staff.findMany({
+            select: { id: true, email: true, name: true, role: true, isActive: true, branchId: true, branch: true, createdAt: true },
+            orderBy: { createdAt: 'desc' }
+        });
+        return res.json(staffList);
+    } catch (e: any) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.post('/staff', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || !['SUPER_ADMIN', 'RISK'].includes(admin.role)) {
+            return res.status(403).json({ error: 'Seule la direction peut habiliter du personnel.' });
+        }
+
+        const schema = z.object({
+            email: z.string().email(),
+            name: z.string().min(2),
+            password: z.string().min(6),
+            role: z.enum(['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER', 'BRANCH_MANAGER', 'TELLER']),
+            matricule: z.string().min(2),
+            cni: z.string().min(2),
+            phone: z.string().min(8),
+            address: z.string().optional(),
+            dob: z.string().optional(),
+            gender: z.string().optional(),
+            emergencyPhone: z.string().optional(),
+            branchId: z.string().optional()
+        });
+        const parsed = schema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: 'Données invalides ou incomplètes (Matricule, CNI requis).' });
+
+        const existing = await prisma.staff.findUnique({ where: { email: parsed.data.email } });
+        if (existing) return res.status(400).json({ error: 'Cet email professionnel est déjà attribué.' });
+
+        const hash = await bcrypt.hash(parsed.data.password, 10);
+
+        const newStaff = await prisma.staff.create({
+            data: {
+                email: parsed.data.email,
+                name: parsed.data.name,
+                password: hash,
+                role: parsed.data.role,
+                matricule: parsed.data.matricule,
+                cni: parsed.data.cni,
+                phone: parsed.data.phone,
+                address: parsed.data.address || null,
+                dob: parsed.data.dob || null,
+                gender: parsed.data.gender || null,
+                emergencyPhone: parsed.data.emergencyPhone || null,
+                status: 'PENDING', // MAKER-CHECKER LOCK
+                branchId: parsed.data.branchId || null
+            }
+        });
+
+        await prisma.auditLog.create({
+            data: { adminId: admin.id, action: 'CREATE_STAFF_PENDING', details: `Création compte Staff en attente: ${newStaff.email} (${newStaff.role})` }
+        });
+
+        return res.json({ success: true, message: 'Employé Corporate ajouté (STATUT: EN ATTENTE DE VALIDATION).' });
+    } catch (e: any) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.put('/staff/:id/approve', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || !['SUPER_ADMIN', 'RISK'].includes(admin.role)) {
+            return res.status(403).json({ error: 'Autorisation Maker-Checker requise pour valider un recrutement.' });
+        }
+
+        const targetId = req.params.id as string;
+        const targetStaff = await prisma.staff.findUnique({ where: { id: targetId } });
+        if (!targetStaff) return res.status(404).json({ error: 'Staff introuvable.' });
+        if (targetStaff.status === 'ACTIVE') return res.status(400).json({ error: 'Ce compte est déjà actif.' });
+
+        await prisma.staff.update({
+            where: { id: targetId },
+            data: { status: 'ACTIVE', isActive: true }
+        });
+
+        await prisma.auditLog.create({
+            data: { adminId: admin.id, action: 'APPROVE_STAFF', details: `Habilitation définitive du matricule: ${targetStaff.matricule}` }
+        });
+
+        return res.json({ success: true, message: 'Habilitation bancaire approuvée avec succès !' });
+    } catch (e: any) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+router.put('/staff/:id', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || !['SUPER_ADMIN', 'RISK'].includes(admin.role)) {
+            return res.status(403).json({ error: 'Droit institutionnel requis.' });
+        }
+
+        const targetId = req.params.id as string;
+        // Allows modifying Role and BranchId
+        const { role, branchId, isActive } = req.body;
+
+        const updated = await prisma.staff.update({
+            where: { id: targetId },
+            data: { role, branchId: branchId || null, isActive }
+        });
+
+        await prisma.auditLog.create({
+            data: { adminId: admin.id, action: 'UPDATE_STAFF', details: `Mutation appliquée à ${updated.name} (${updated.matricule})` }
+        });
+
+        return res.json({ success: true, message: 'Fiche du personnel mise à jour avec succès.', staff: updated });
+    } catch (e: any) {
+        return res.status(500).json({ error: e.message });
     }
 });
 

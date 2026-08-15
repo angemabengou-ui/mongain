@@ -172,3 +172,47 @@ model TontineParticipant {
   joinedAt       DateTime @default(now())
   payoutOrder    Int      @default(0)
 }
+
+// ==========================================
+// MONGAAIN V6: CORE BANKING ERP DOMAIN
+// ==========================================
+
+model Branch {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  city        String?
+  balance     Float    @default(0.0) // The Branch physical float/vault
+  isActive    Boolean  @default(true)
+  isHQ        Boolean  @default(false) // True if this is the Master Vault
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  staff       Staff[]
+}
+
+model Staff {
+  id             String   @id @default(uuid())
+  email          String   @unique // Auth identifier for Web Portal
+  password       String   // bcrypt hash (complex enterprise pwd)
+  name           String
+  role           String   // SUPER_ADMIN, RISK, COMPLIANCE_CHECKER, SUPPORT_MAKER, BRANCH_MANAGER, TELLER
+  
+  // Bank-Grade Corporate Identity
+  matricule      String?  @unique
+  cni            String?
+  phone          String?
+  address        String?
+  dob            String?
+  gender         String?
+  emergencyPhone String?
+  
+  status         String   @default("ACTIVE") // PENDING, ACTIVE, SUSPENDED
+  
+  isActive       Boolean  @default(true) // Legacy fallback
+  
+  branchId       String?
+  branch         Branch?  @relation(fields: [branchId], references: [id])
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}

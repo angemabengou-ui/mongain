@@ -8,6 +8,7 @@ import { initCronJobs } from './cron';
 import { prisma } from './prisma';
 import adminRoutes from './routes/admin';
 import authRoutes from './routes/auth';
+import corpRoutes from './routes/corp';
 import merchantRoutes from './routes/merchant';
 import notificationRoutes from './routes/notifications';
 import servicesRoutes from './routes/services';
@@ -60,6 +61,7 @@ import reclamationRoutes from './routes/reclamation';
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/corp', corpRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/reclamation', reclamationRoutes);
