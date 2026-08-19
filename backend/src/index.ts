@@ -17,6 +17,7 @@ import settingsRoutes from './routes/settings';
 import tontineRoutes from './routes/tontine';
 import treasuryRoutes from './routes/treasury';
 import walletRoutes from './routes/wallet';
+import { withDbRetry } from './utils/errors';
 
 const app = express();
 const server = http.createServer(app);
@@ -112,40 +113,48 @@ io.on('connection', (socket) => {
     });
 });
 
-async function initializeApp() {
-    // Seed Corporate Account
-    const corpPhone = '+2410000000';
-
-    const existing = await prisma.user.findUnique({ where: { phone: corpPhone } });
-    if (!existing) {
-        const hashedPin = await bcrypt.hash('0000', 10);
-        await prisma.user.create({
-            data: {
-                name: 'Mongain Corporate',
-                phone: corpPhone,
-                pin: hashedPin,
-                role: 'ADMIN',
-                wallet: { create: { balance: 0, currency: 'FCFA' } }
-            }
-        });
-        console.log('✅ Admin Corporate Account Created.');
+// Le port doit s'ouvrir IMMÉDIATEMENT, avant toute requête base de données — Render (et tout
+// hébergeur avec un health-check de port) tue le déploiement si rien n'écoute assez vite, et
+// /health lui-même ne dépend pas de la base. Avant ce correctif, le seed du compte Corporate
+// ci-dessous bloquait server.listen() : un simple ralentissement Neon au démarrage suffisait
+// à faire échouer tout le déploiement ("Port scan timeout"), alors que rien de fonctionnel
+// n'en dépendait vraiment.
+server.listen(PORT, () => {
+    console.log(`✅ Serveur Mongain en ligne sur http://localhost:${PORT}`);
+    console.log(`🛰️  WebSockets (Socket.io) Actifs`);
+    if (isProd && !process.env.TWILIO_ACCOUNT_SID) {
+        console.warn('\n⚠️  ⚠️  ⚠️  SMS NON CONFIGURÉ EN PRODUCTION ⚠️  ⚠️  ⚠️');
+        console.warn('Tous les codes OTP (inscription, connexion, réinitialisation de PIN) sont');
+        console.warn('actuellement fixés à "1234" — quiconque connaît ce code peut réinitialiser');
+        console.warn('le PIN de N\'IMPORTE QUEL compte. Ce mode démo doit être désactivé (en');
+        console.warn('configurant TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_PHONE_NUMBER) avant');
+        console.warn('d\'accepter de vrais utilisateurs.\n');
     }
+});
 
-    // Init Tontine Cron
-    initCronJobs();
+initCronJobs();
 
-    server.listen(PORT, () => {
-        console.log(`✅ Serveur Mongain en ligne sur http://localhost:${PORT}`);
-        console.log(`🛰️  WebSockets (Socket.io) Actifs`);
-        if (isProd && !process.env.TWILIO_ACCOUNT_SID) {
-            console.warn('\n⚠️  ⚠️  ⚠️  SMS NON CONFIGURÉ EN PRODUCTION ⚠️  ⚠️  ⚠️');
-            console.warn('Tous les codes OTP (inscription, connexion, réinitialisation de PIN) sont');
-            console.warn('actuellement fixés à "1234" — quiconque connaît ce code peut réinitialiser');
-            console.warn('le PIN de N\'IMPORTE QUEL compte. Ce mode démo doit être désactivé (en');
-            console.warn('configurant TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_PHONE_NUMBER) avant');
-            console.warn('d\'accepter de vrais utilisateurs.\n');
+async function seedCorporateAccount() {
+    const corpPhone = '+2410000000';
+    try {
+        const existing = await withDbRetry(() => prisma.user.findUnique({ where: { phone: corpPhone } }));
+        if (!existing) {
+            const hashedPin = await bcrypt.hash('0000', 10);
+            await prisma.user.create({
+                data: {
+                    name: 'Mongain Corporate',
+                    phone: corpPhone,
+                    pin: hashedPin,
+                    role: 'ADMIN',
+                    wallet: { create: { balance: 0, currency: 'FCFA' } }
+                }
+            });
+            console.log('✅ Admin Corporate Account Created.');
         }
-    });
+    } catch (e) {
+        // Non bloquant : ce seed est idempotent et se retentera au prochain redémarrage.
+        console.error('⚠️  Échec de la vérification/création du compte Corporate (non bloquant) :', e);
+    }
 }
 
-initializeApp().catch(console.error);
+seedCorporateAccount();
