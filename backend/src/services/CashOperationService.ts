@@ -100,6 +100,12 @@ export class CashOperationService {
                 data: { totalCashInValue: { increment: amount } }
             });
 
+            // Comme /transfer et /refund-requests : sans ça, le client n'a aucune trace de ce
+            // dépôt physique en agence dans son historique de notifications.
+            await tx.notification.create({
+                data: { userId: client.id, title: 'Dépôt reçu', body: `Vous avez reçu un dépôt de ${amount.toLocaleString('fr-FR')} FCFA en agence.`, type: 'TRANSACTION' }
+            });
+
             return transaction;
         });
     }
@@ -244,6 +250,10 @@ export class CashOperationService {
             await tx.cashSession.update({
                 where: { id: session.id },
                 data: { totalCashOutValue: { increment: amount } }
+            });
+
+            await tx.notification.create({
+                data: { userId: client.id, title: 'Retrait effectué', body: `Vous avez retiré ${amount.toLocaleString('fr-FR')} FCFA en agence (frais : ${fee.toLocaleString('fr-FR')} FCFA).`, type: 'TRANSACTION' }
             });
 
             return transaction;

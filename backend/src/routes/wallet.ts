@@ -666,9 +666,13 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
 
             // Même correctif que /transfer : le client n'avait jusqu'ici aucune trace de ce
             // retrait dans son onglet Notifications, seulement le reçu affiché une fois à
-            // l'écran juste après l'opération.
+            // l'écran juste après l'opération. L'agent/marchand ne recevait qu'un événement
+            // Socket.IO best-effort — rien s'il n'était pas connecté à ce moment précis.
             await tx.notification.create({
                 data: { userId: sender.id, title: 'Retrait effectué', body: `Vous avez retiré ${amount.toLocaleString('fr-FR')} FCFA chez ${agent.name}.`, type: 'TRANSACTION' }
+            });
+            await tx.notification.create({
+                data: { userId: agent.id, title: 'Paiement reçu', body: `Vous avez reçu ${amount.toLocaleString('fr-FR')} FCFA de la part de ${sender.name}.`, type: 'TRANSACTION' }
             });
 
             return {

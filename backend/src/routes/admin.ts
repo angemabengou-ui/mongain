@@ -964,7 +964,11 @@ router.put('/users/:id/kyc', authMiddleware, async (req: AuthRequest, res) => {
             }
         });
 
-        // Optionnel : Notifier le client du succ?s ou de l'?chec (Firebase)
+        await prisma.notification.create({
+            data: parsed.data.status === 'APPROVED'
+                ? { userId: targetId, title: 'Vérification approuvée ✅', body: 'Votre dossier de vérification d\'identité a été approuvé. Vos limites de compte ont été mises à jour.', type: 'SYSTEM' }
+                : { userId: targetId, title: 'Vérification rejetée', body: `Votre dossier de vérification d'identité a été rejeté. Motif : ${reason}`, type: 'SYSTEM' }
+        });
 
         res.json({ message: 'Dossier KYC traité avec succès.' });
     } catch (e: any) {
