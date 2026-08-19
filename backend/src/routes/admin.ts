@@ -2735,10 +2735,15 @@ router.post('/reclamations/:id/notes', authMiddleware, async (req: AuthRequest, 
             }
         });
 
-        // Si note externe (r?ponse au client), update le statut du ticket ? WAITING_CUSTOMER
+        // Si note externe (réponse au client), update le statut du ticket vers WAITING_CUSTOMER
         let updatedRec = rec;
         if (isInternal === false && rec.status !== 'RESOLVED' && rec.status !== 'CLOSED') {
             updatedRec = await prisma.reclamation.update({ where: { id: rec.id }, data: { status: 'WAITING_CUSTOMER', assigneeId: rec.assigneeId || staff.id } });
+            // Sans ça, le client n'a aucun moyen de savoir que le support a répondu à son
+            // ticket, en dehors d'aller vérifier l'écran par hasard.
+            await prisma.notification.create({
+                data: { userId: rec.userId, title: 'Réponse du support', body: `Le support a répondu à votre ticket « ${rec.title} ».`, type: 'SYSTEM' }
+            });
         } else if (!rec.assigneeId) {
             updatedRec = await prisma.reclamation.update({ where: { id: rec.id }, data: { status: 'IN_PROGRESS', assigneeId: staff.id } });
         }
@@ -2800,6 +2805,12 @@ router.patch('/reclamations/:id', authMiddleware, async (req: AuthRequest, res) 
                     authorName: `System (${staff.name})`
                 }
             });
+
+            if (status === 'RESOLVED') {
+                await prisma.notification.create({
+                    data: { userId: rec.userId, title: 'Ticket résolu ✅', body: `Votre ticket « ${rec.title} » a été marqué comme résolu.`, type: 'SYSTEM' }
+                });
+            }
         }
 
         res.json({ success: true, ticket: updated });
@@ -2809,7 +2820,7 @@ router.patch('/reclamations/:id', authMiddleware, async (req: AuthRequest, res) 
 });
 
 // ============================================================
-// API MANAGEMENT ? Gestion des int?grations marchands tiers
+// API MANAGEMENT — Gestion des intégrations marchands tiers
 // ============================================================
 
 const API_ADMIN_ROLES = ['SUPER_ADMIN', 'COMPLIANCE_CHECKER', 'RISK'];
