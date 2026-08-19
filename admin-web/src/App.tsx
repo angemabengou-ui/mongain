@@ -6,6 +6,7 @@ import BranchDashboard from './BranchDashboard';
 import ChangePassword from './ChangePassword';
 import { API_URL } from './config';
 import Dashboard from './Dashboard';
+import ErrorLogs from './ErrorLogs';
 import KycMod from './KycMod';
 import Ledger from './Ledger';
 import Login from './Login';
@@ -157,8 +158,11 @@ export default function App() {
       items: [{ id: 'settings', label: 'Configuration & API' }]
     },
     {
-      id: 'securite', label: 'SÉCURITÉ', icon: <ShieldCheck size={18} />, roles: ['SUPER_ADMIN', 'ADMIN', 'RISK'],
-      items: [{ id: 'audit', label: 'Centre d\'Audit' }]
+      id: 'securite', label: 'SÉCURITÉ', icon: <ShieldCheck size={18} />, roles: ['SUPER_ADMIN', 'ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
+      items: [
+        { id: 'audit', label: 'Centre d\'Audit' },
+        { id: 'error-logs', label: 'Erreurs Système' }
+      ]
     }
   ];
 
@@ -360,6 +364,7 @@ export default function App() {
               {activeTab === 'ledger' && <Ledger token={token} />}
               {activeTab === 'treasury' && <Treasury token={token} />}
               {activeTab === 'audit' && <AuditLogs token={token} />}
+              {activeTab === 'error-logs' && <ErrorLogs token={token} />}
               {activeTab === 'settings' && <Settings token={token} />}
             </>
           )}

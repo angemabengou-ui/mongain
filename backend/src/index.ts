@@ -17,6 +17,7 @@ import settingsRoutes from './routes/settings';
 import tontineRoutes from './routes/tontine';
 import treasuryRoutes from './routes/treasury';
 import walletRoutes from './routes/wallet';
+import { logError } from './utils/errorLog';
 import { withDbRetry } from './utils/errors';
 
 const app = express();
@@ -102,6 +103,17 @@ app.use('/api/agency', circuitBreakerMiddleware, agencyRoutes);
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', app: 'Mongain Backend', socket: true }));
+
+// Filet de sécurité : capture toute exception qu'un handler de route n'a pas déjà attrapée
+// dans son propre try/catch (Express 5 route les rejets de promesse async ici automatiquement).
+// Journalisée dans ErrorLog (page "Erreurs Système" de l'admin-web) pour rester visible même
+// sans try/catch dédié à chaque endroit.
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error('Erreur non gérée:', err);
+    logError('UNCAUGHT', err?.message || String(err), { stack: err?.stack, method: req.method }, { path: req.path });
+    if (res.headersSent) return next(err);
+    res.status(500).json({ error: 'Une erreur inattendue est survenue.' });
+});
 
 // Socket.io Connection Helper
 io.on('connection', (socket) => {

@@ -612,3 +612,21 @@ model ApiLog {
   createdAt        DateTime       @default(now())
 }
 
+// Journal technique des erreurs backend (intégrations externes, exceptions non gérées) —
+// pour que l'équipe voie les échecs réels depuis l'admin-web au lieu de devoir fouiller les
+// logs Render à chaque fois qu'un test échoue. Distinct des Reclamation (signalements client).
+model ErrorLog {
+  id        String   @id @default(uuid())
+  source    String   // ex: PVIT_PAYMENT, PVIT_WEBHOOK, UNCAUGHT
+  message   String
+  details   String? // contexte brut (corps de réponse, stack, paramètres) — jamais de secrets
+  path      String?
+  userId    String?
+  resolved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([source])
+  @@index([resolved])
+  @@index([createdAt])
+}
+

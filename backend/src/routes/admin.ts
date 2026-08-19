@@ -3030,6 +3030,48 @@ router.post('/api-integrations/:id/rotate', authMiddleware, async (req: AuthRequ
     }
 });
 
+// ==========================================
+// JOURNAL TECHNIQUE DES ERREURS (ErrorLog)
+// ==========================================
+const ERROR_LOG_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'];
+
+router.get('/error-logs', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!staff || !ERROR_LOG_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+
+        const page = Math.max(1, parseInt(req.query.page as string) || 1);
+        const limit = Math.min(100, parseInt(req.query.limit as string) || 30);
+        const { source, resolved } = req.query;
+        const where: any = {};
+        if (source) where.source = source as string;
+        if (resolved === 'true') where.resolved = true;
+        else if (resolved === 'false') where.resolved = false;
+
+        const [logs, total, sources] = await prisma.$transaction([
+            prisma.errorLog.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit }),
+            prisma.errorLog.count({ where }),
+            prisma.errorLog.findMany({ distinct: ['source'], select: { source: true } }),
+        ]);
+
+        return res.json({ logs, total, page, pages: Math.ceil(total / limit) || 1, sources: sources.map(s => s.source) });
+    } catch (e: any) {
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+router.put('/error-logs/:id/resolve', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!staff || !ERROR_LOG_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+
+        await prisma.errorLog.update({ where: { id: req.params.id as string }, data: { resolved: true } });
+        return res.json({ success: true });
+    } catch (e: any) {
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
 export default router;
 
 

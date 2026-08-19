@@ -1,5 +1,6 @@
 import express from 'express';
 import { prisma } from '../prisma';
+import { logError } from '../utils/errorLog';
 import { getSystemSettings } from './settings';
 
 const router = express.Router();
@@ -71,8 +72,9 @@ router.post('/pvit-status', async (req, res) => {
         }
 
         return ack(code);
-    } catch (e) {
+    } catch (e: any) {
         console.error('Erreur webhook PVit:', e);
+        await logError('PVIT_WEBHOOK', e?.message || String(e), { stack: e?.stack, body: req.body }, { path: '/api/webhooks/pvit-status' });
         // Toujours accuser réception même en cas d'erreur interne : sans cet écho, PVit
         // marque l'intégration comme cassée et bloque la validation du compte sandbox.
         return ack(code);

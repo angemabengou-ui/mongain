@@ -5,6 +5,8 @@
 // Les identifiants sont gérés depuis l'admin-web (Paramètres > Passerelles de Paiement,
 // SystemSettings.pvit*) plutôt que par variable d'environnement Render, pour que l'équipe
 // puisse les reconfigurer sans accès au dashboard Render.
+import { logError } from '../utils/errorLog';
+
 const PVIT_BASE_URL = 'https://api.mypvit.pro/v2';
 
 const OPERATOR_CODES = {
@@ -86,10 +88,15 @@ export async function initiatePvitPayment(settings: PVitSettings, params: {
     try { data = rawBody ? JSON.parse(rawBody) : null; } catch { /* corps non-JSON, géré ci-dessous */ }
 
     if (!res.ok || !data) {
-        // Le corps brut est loggé côté serveur (visible dans les logs Render) pour pouvoir
-        // diagnostiquer un rejet PVit sans avoir à deviner depuis un message générique.
-        console.error(`PVit a refusé la demande (HTTP ${res.status}):`, rawBody);
         const detail = data?.message || data?.error || data?.errors || (rawBody && rawBody.length < 300 ? rawBody : null);
+        // Journalisé en base (page "Erreurs Système" de l'admin-web) plutôt que seulement en
+        // console — sinon un rejet PVit n'est visible que dans les logs Render.
+        await logError('PVIT_PAYMENT', detail ? String(detail) : `HTTP ${res.status}`, {
+            httpStatus: res.status,
+            rawBody: rawBody?.slice(0, 2000),
+            requestReference: params.reference,
+            network: params.network,
+        });
         throw new Error(detail ? `PVit : ${detail}` : `PVit a refusé la demande (HTTP ${res.status}).`);
     }
     return data;
