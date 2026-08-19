@@ -7,6 +7,7 @@ import { Server } from 'socket.io';
 import { initCronJobs } from './cron';
 import { prisma } from './prisma';
 import adminRoutes from './routes/admin';
+import agencyRoutes from './routes/agency';
 import authRoutes from './routes/auth';
 import corpRoutes from './routes/corp';
 import merchantRoutes from './routes/merchant';
@@ -14,6 +15,7 @@ import notificationRoutes from './routes/notifications';
 import servicesRoutes from './routes/services';
 import settingsRoutes from './routes/settings';
 import tontineRoutes from './routes/tontine';
+import treasuryRoutes from './routes/treasury';
 import walletRoutes from './routes/wallet';
 
 const app = express();
@@ -30,6 +32,9 @@ const PORT = process.env.PORT || 3000;
 app.use(helmet());
 
 // CORS configuration (Restrict domains)
+const isProd = process.env.NODE_ENV === 'production';
+const extraAllowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
+
 app.use(cors({
     origin: (origin, callback) => {
         // Allow requests with no origin (mobile apps, curl, Postman)
@@ -39,12 +44,16 @@ app.use(cors({
             'http://localhost:3000',
             'http://localhost:8081',
             'https://mongain-backend.onrender.com',
+            ...extraAllowedOrigins,
         ];
+        if (allowed.includes(origin)) {
+            return callback(null, true);
+        }
+        // Sous-domaines de preview (Vercel/Netlify/Render) : uniquement hors production.
+        // En production, seule la liste explicite ci-dessus (+ ALLOWED_ORIGINS) est acceptée.
         if (
-            allowed.includes(origin) ||
-            origin.endsWith('.vercel.app') ||
-            origin.endsWith('.netlify.app') ||
-            origin.endsWith('.onrender.com')
+            !isProd &&
+            (origin.endsWith('.vercel.app') || origin.endsWith('.netlify.app') || origin.endsWith('.onrender.com'))
         ) {
             return callback(null, true);
         }
@@ -57,78 +66,32 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+import { circuitBreakerMiddleware } from './middleware/circuitBreaker';
 import reclamationRoutes from './routes/reclamation';
 
-// Routes
+// ==========================================
+// ROUTES SYSTEME ET ADMINISTRATION (SAFE)
+// ==========================================
 app.use('/api/auth', authRoutes);
-app.use('/api/corp', corpRoutes);
-app.use('/api/wallet', walletRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/reclamation', reclamationRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/treasury', treasuryRoutes);
 app.use('/api/notifications', notificationRoutes);
-app.use('/api/merchant', merchantRoutes);
-app.use('/api/tontine', tontineRoutes);
-app.use('/api/services', servicesRoutes);
+app.use('/api/reclamation', reclamationRoutes);
+// /api/corp = authentification/session du personnel (login, me, changement de mot de
+// passe), pas d'opération financière : si on la protège par le Circuit Breaker, l'activer
+// verrouille aussi la connexion elle-même, empêchant quiconque n'a pas déjà une session
+// active de se reconnecter pour aller le désactiver depuis Paramètres — un auto-blocage.
+app.use('/api/corp', corpRoutes);
 
-// ▶️ Route d'initialisation Super Admin (à appeler UNE SEULE FOIS)
-app.get('/api/init-admin', async (_req, res) => {
-    try {
-        const bcrypt = await import('bcryptjs');
-        const hashedPin = await bcrypt.hash('0000', 10);
-        const admin = await prisma.user.upsert({
-            where: { phone: '+2410000000' },
-            update: { role: 'ADMIN', isActive: true },
-            create: {
-                phone: '+2410000000',
-                name: 'Super Admin Mongain',
-                username: 'superadmin',
-                pin: hashedPin,
-                role: 'ADMIN',
-                isActive: true,
-                wallet: { create: { balance: 0 } }
-            }
-        });
-        return res.json({ success: true, message: '✅ Super Admin créé/mis à jour.', phone: admin.phone, role: admin.role });
-    } catch (e: any) {
-        return res.status(500).json({ error: e.message });
-    }
-});
-
-// ▶️ Route de Nettoyage Doublons
-app.get('/api/merge-admins', async (_req, res) => {
-    try {
-        const oldCorp = await prisma.user.findUnique({ where: { phone: '+24100000000' }, include: { wallet: true } });
-        const newCorp = await prisma.user.findUnique({ where: { phone: '+2410000000' }, include: { wallet: true } });
-
-        let actions = [];
-
-        if (oldCorp && newCorp) {
-            const oldBalance = oldCorp.wallet?.balance || 0;
-            if (oldBalance > 0 && newCorp.wallet) {
-                await prisma.wallet.update({
-                    where: { id: newCorp.wallet.id },
-                    data: { balance: { increment: oldBalance } }
-                });
-                actions.push(`Transféré ${oldBalance} FCFA vers le nouveau compte.`);
-            }
-
-            await prisma.user.update({
-                where: { id: oldCorp.id },
-                data: { phone: '+24100000000_ARCHIVED_' + Date.now(), role: 'USER', isActive: false }
-            });
-            actions.push('Ancien compte archivé et déchu.');
-
-            if (oldCorp.wallet) {
-                await prisma.wallet.update({ where: { id: oldCorp.wallet.id }, data: { balance: 0 } });
-            }
-        }
-
-        return res.json({ success: true, oldCorpExists: !!oldCorp, newCorpExists: !!newCorp, actions });
-    } catch (e: any) {
-        return res.status(500).json({ error: e.message });
-    }
-});
+// ==========================================
+// ROUTES FINANCIERES (PROTECTED BY CIRCUIT BREAKER)
+// ==========================================
+app.use('/api/wallet', circuitBreakerMiddleware, walletRoutes);
+app.use('/api/merchant', circuitBreakerMiddleware, merchantRoutes);
+app.use('/api/tontine', circuitBreakerMiddleware, tontineRoutes);
+app.use('/api/services', circuitBreakerMiddleware, servicesRoutes);
+app.use('/api/agency', circuitBreakerMiddleware, agencyRoutes);
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', app: 'Mongain Backend', socket: true }));

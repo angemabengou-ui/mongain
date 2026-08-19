@@ -5,7 +5,7 @@ import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
-import { BASE_URL, getToken } from '../services/api';
+import { apiCreateReclamation } from '../services/api';
 
 export default function SupportScreen() {
     const router = useRouter();
@@ -24,20 +24,7 @@ export default function SupportScreen() {
         }
         setLoading(true);
         try {
-            const token = await getToken();
-            const res = await fetch(`${BASE_URL}/api/reclamation`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ title, description })
-            });
-
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error || 'Erreur inconnue');
-            }
+            await apiCreateReclamation(title, description);
 
             Alert.alert('Demande envoyée !', 'Notre équipe technique a reçu votre réclamation et va traiter votre dossier rapidement.', [
                 { text: 'OK', onPress: () => router.back() }

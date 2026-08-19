@@ -29,10 +29,15 @@ export default function RechargeFormScreen() {
     const providerName = isAirtel ? 'Airtel Money' : isMoov ? 'Moov Africa' : 'Compte Mobile';
     const providerColor = isAirtel ? '#EF4444' : isMoov ? '#3B82F6' : COLORS.primary;
 
-    const [phoneToDebit, setPhoneToDebit] = useState(user?.phone || '');
+    // Le champ n'affiche que la partie locale (le préfixe "+241" est déjà affiché à
+    // côté) — pré-remplir avec user.phone en entier (format +241XXXXXXXX) dupliquait
+    // visuellement le préfixe et pouvait faire envoyer un numéro incomplet si
+    // l'utilisateur "corrigeait" en effaçant ce qui ressemblait à un doublon.
+    const [phoneToDebit, setPhoneToDebit] = useState((user?.phone || '').replace(/^\+241/, ''));
     const [amount, setAmount] = useState('');
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [confirmedPhone, setConfirmedPhone] = useState('');
 
     const handleRecharge = async () => {
         if (!phoneToDebit || phoneToDebit.length < 5) {
@@ -40,7 +45,7 @@ export default function RechargeFormScreen() {
             return;
         }
 
-        const amt = parseFloat(amount.replace(/\s/g, ''));
+        const amt = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
         if (isNaN(amt) || amt < 500) {
             Alert.alert("Erreur", "Le montant minimum de dépôt est de 500 FCFA.");
             return;
@@ -48,9 +53,13 @@ export default function RechargeFormScreen() {
 
         setLoading(true);
 
+        const cleaned = phoneToDebit.trim().replace(/\s/g, '');
+        const fullPhone = cleaned.startsWith('+') ? cleaned : `+241${cleaned}`;
+
         try {
-            const res = await apiPullDeposit(phoneToDebit, amt, isAirtel ? 'AIRTEL' : 'MOOV');
+            const res = await apiPullDeposit(fullPhone, amt, isAirtel ? 'AIRTEL' : 'MOOV');
             setLoading(false);
+            setConfirmedPhone(fullPhone);
             setSuccess(true);
         } catch (e: any) {
             setLoading(false);
@@ -66,7 +75,7 @@ export default function RechargeFormScreen() {
                 </View>
                 <Text style={[styles.title, { color: COLORS.textPrimary, textAlign: 'center' }]}>Demande Envoyée !</Text>
                 <Text style={[styles.subtitle, { textAlign: 'center', marginTop: 16, fontSize: 15, lineHeight: 24, color: COLORS.textSecondary }]}>
-                    Une demande de prélèvement a été poussée vers le numéro <Text style={{ fontWeight: '800', color: COLORS.textPrimary }}>{phoneToDebit}</Text>.
+                    Une demande de prélèvement a été poussée vers le numéro <Text style={{ fontWeight: '800', color: COLORS.textPrimary }}>{confirmedPhone}</Text>.
                 </Text>
 
                 <View style={[styles.warningBox, { marginTop: 24, backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>

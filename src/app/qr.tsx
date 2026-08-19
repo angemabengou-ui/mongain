@@ -80,6 +80,16 @@ export default function QrScreen() {
 
                 // --- UNIVERSAL DISPATCHER LOGIC --- //
 
+                // Un retrait ne peut se faire qu'auprès d'un Agent : si l'utilisateur est entré
+                // dans le scanner spécifiquement pour retirer (?intent=withdraw) mais que le QR
+                // scanné n'appartient pas à un Agent, on refuse plutôt que de basculer
+                // silencieusement vers un transfert P2P classique (qui enverrait de l'argent au
+                // lieu d'en retirer — voir withdraw.tsx qui pointe ici avec intent=withdraw).
+                if (intent === 'withdraw' && targetRole !== 'AGENT') {
+                    showError("Ce QR n'appartient pas à un Agent. Impossible d'y effectuer un retrait.");
+                    return;
+                }
+
                 // 1. If scanned by an AGENT -> Agent wants to deposit digital money to Client!
                 if (user?.role === 'AGENT') {
                     if (targetRole === 'AGENT') {

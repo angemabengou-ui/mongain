@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
@@ -6,6 +7,7 @@ import { z } from 'zod';
 import { AuthRequest, JWT_SECRET, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { sendSms } from '../services/sms';
+import { friendlyErrorMessage, isDbConnectivityError, withDbRetry } from '../utils/errors';
 
 const router = Router();
 
@@ -48,13 +50,13 @@ router.post('/request-otp', smsLimiter, async (req, res) => {
 
         // Mode Démo Automatique : si Twilio n'est pas configuré, le code est toujours 1234
         const useDemoMode = !process.env.TWILIO_ACCOUNT_SID;
-        const code = useDemoMode ? '1234' : Math.floor(1000 + Math.random() * 9000).toString();
+        const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
         await prisma.verificationCode.upsert({
-            where: { phone },
+            where: { phone_purpose: { phone, purpose: 'REGISTER' } },
             update: { code, expiresAt },
-            create: { phone, code, expiresAt }
+            create: { phone, purpose: 'REGISTER', code, expiresAt }
         });
 
         if (useDemoMode) {
@@ -65,7 +67,8 @@ router.post('/request-otp', smsLimiter, async (req, res) => {
 
         return res.json({ message: 'Code envoyé avec succès.' });
     } catch (e: any) {
-        return res.status(500).json({ error: e.message });
+        console.error('Erreur envoi OTP:', e);
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });
 
@@ -80,13 +83,13 @@ router.post('/request-reset-otp', smsLimiter, async (req, res) => {
         if (!existingUser) return res.status(400).json({ error: 'Ce numéro n\'est pas reconnu.' });
 
         const useDemoMode = !process.env.TWILIO_ACCOUNT_SID;
-        const code = useDemoMode ? '1234' : Math.floor(1000 + Math.random() * 9000).toString();
+        const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
         await prisma.verificationCode.upsert({
-            where: { phone },
+            where: { phone_purpose: { phone, purpose: 'RESET_PIN' } },
             update: { code, expiresAt },
-            create: { phone, code, expiresAt }
+            create: { phone, purpose: 'RESET_PIN', code, expiresAt }
         });
 
         if (useDemoMode) {
@@ -96,7 +99,8 @@ router.post('/request-reset-otp', smsLimiter, async (req, res) => {
         }
         return res.json({ message: 'Code envoyé.' });
     } catch (e: any) {
-        return res.status(500).json({ error: e.message });
+        console.error('Erreur envoi OTP:', e);
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });
 
@@ -114,13 +118,13 @@ router.post('/reset-pin', async (req, res) => {
     const { phone, otpCode, newPin } = parsed.data;
 
     try {
-        const otpRecord = await prisma.verificationCode.findUnique({ where: { phone } });
+        const otpRecord = await prisma.verificationCode.findUnique({ where: { phone_purpose: { phone, purpose: 'RESET_PIN' } } });
         if (!otpRecord || otpRecord.code !== otpCode || otpRecord.expiresAt < new Date()) {
             return res.status(400).json({ error: 'Code expiré ou invalide.' });
         }
 
         const hashedPin = await bcrypt.hash(newPin, 10);
-        await prisma.verificationCode.delete({ where: { phone } });
+        await prisma.verificationCode.delete({ where: { phone_purpose: { phone, purpose: 'RESET_PIN' } } });
 
         const updatedUser = await prisma.user.update({
             where: { phone },
@@ -149,15 +153,16 @@ router.post('/register', async (req, res) => {
     const { name, username, phone, pin, otpCode } = parsed.data;
 
     try {
-        const otpRecord = await prisma.verificationCode.findUnique({ where: { phone } });
+        const otpRecord = await prisma.verificationCode.findUnique({ where: { phone_purpose: { phone, purpose: 'REGISTER' } } });
         if (!otpRecord || otpRecord.code !== otpCode || otpRecord.expiresAt < new Date()) {
             return res.status(400).json({ error: 'Code de vérification invalide ou expiré.' });
         }
 
         const hashedPin = await bcrypt.hash(pin, 10);
+        const accNum = '1000100001' + crypto.randomInt(10000000000, 100000000000).toString() + crypto.randomInt(10, 100).toString();
 
         // Delete successful OTP record
-        await prisma.verificationCode.delete({ where: { phone } });
+        await prisma.verificationCode.delete({ where: { phone_purpose: { phone, purpose: 'REGISTER' } } });
 
         const existingUsername = await prisma.user.findFirst({ where: { username } });
         if (existingUsername) {
@@ -166,7 +171,8 @@ router.post('/register', async (req, res) => {
 
         const user = await prisma.user.create({
             data: {
-                name,
+                  accountNumber: accNum,
+                  name,
                 username,
                 phone,
                 pin: hashedPin,
@@ -191,8 +197,15 @@ router.post('/register', async (req, res) => {
                 wallet: user.wallet,
             },
         });
-    } catch {
-        return res.status(400).json({ error: 'Ce numéro de téléphone est déjà utilisé.' });
+    } catch (e: any) {
+        // P2002 = violation de contrainte unique (téléphone déjà pris) — la seule cause
+        // réaliste ici puisque request-otp a déjà vérifié la disponibilité. Toute autre
+        // erreur (ex: base injoignable) mérite son vrai message, pas ce diagnostic erroné.
+        if (e?.code === 'P2002') {
+            return res.status(400).json({ error: 'Ce numéro de téléphone est déjà utilisé.' });
+        }
+        console.error('Erreur /auth/register:', e);
+        return res.status(isDbConnectivityError(e) ? 503 : 500).json({ error: friendlyErrorMessage(e) });
     }
 });
 
@@ -205,70 +218,75 @@ router.post('/login', async (req, res) => {
 
     const { phone, pin } = parsed.data;
 
-    // Allow login by Phone, Username or Email
-    const user = await prisma.user.findFirst({
-        where: {
-            OR: [
-                { phone },
-                { username: phone.toLowerCase() }, // user typed their username in the "phone" field
-                { email: phone.toLowerCase() }     // user typed their email in the "phone" field
-            ]
-        },
-        include: { wallet: true },
-    });
+    try {
+        // Allow login by Phone, Username or Email
+        const user = await withDbRetry(() => prisma.user.findFirst({
+            where: {
+                OR: [
+                    { phone },
+                    { username: phone.toLowerCase() }, // user typed their username in the "phone" field
+                    { email: phone.toLowerCase() }     // user typed their email in the "phone" field
+                ]
+            },
+            include: { wallet: true },
+        }));
 
-    if (!user) {
-        return res.status(401).json({ error: 'Numéro ou code PIN incorrect.' });
-    }
-
-    if (user.lockedUntil && user.lockedUntil > new Date()) {
-        const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
-        return res.status(403).json({ error: `Compte sécurisé. Veuillez réessayer dans ${minutesLeft} minute(s).` });
-    }
-
-    const pinMatch = await bcrypt.compare(pin, user.pin);
-    if (!pinMatch) {
-        const attemptsInfo = user.failedPinAttempts + 1;
-        const updates: any = { failedPinAttempts: attemptsInfo };
-
-        if (attemptsInfo >= 3) {
-            updates.lockedUntil = new Date(Date.now() + 15 * 60000); // 15 minutes
+        if (!user) {
+            return res.status(401).json({ error: 'Numéro ou code PIN incorrect.' });
         }
 
-        await prisma.user.update({ where: { id: user.id }, data: updates });
+        if (user.lockedUntil && user.lockedUntil > new Date()) {
+            const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+            return res.status(403).json({ error: `Compte sécurisé. Veuillez réessayer dans ${minutesLeft} minute(s).` });
+        }
 
-        return res.status(401).json({
-            error: attemptsInfo >= 3
-                ? 'Compte bloqué suite à trop de tentatives.'
-                : `Code PIN incorrect. Tentatives restantes : ${3 - attemptsInfo}`
+        const pinMatch = await bcrypt.compare(pin, user.pin);
+        if (!pinMatch) {
+            const attemptsInfo = user.failedPinAttempts + 1;
+            const updates: any = { failedPinAttempts: attemptsInfo };
+
+            if (attemptsInfo >= 3) {
+                updates.lockedUntil = new Date(Date.now() + 15 * 60000); // 15 minutes
+            }
+
+            await prisma.user.update({ where: { id: user.id }, data: updates });
+
+            return res.status(401).json({
+                error: attemptsInfo >= 3
+                    ? 'Compte bloqué suite à trop de tentatives.'
+                    : `Code PIN incorrect. Tentatives restantes : ${3 - attemptsInfo}`
+            });
+        }
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { failedPinAttempts: 0, lockedUntil: null },
         });
+
+        const useDemoMode = !process.env.TWILIO_ACCOUNT_SID;
+        const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
+
+        // Use the actual user's phone for SMS routing, in case they logged in with their username!
+        const targetPhone = user.phone;
+
+        await prisma.verificationCode.upsert({
+            where: { phone_purpose: { phone: targetPhone, purpose: 'LOGIN' } },
+            update: { code, expiresAt },
+            create: { phone: targetPhone, purpose: 'LOGIN', code, expiresAt }
+        });
+
+        if (useDemoMode) {
+            console.log(`[DEMO MODE] Code d'accès 1234 généré pour le login de ${targetPhone} (Pseudo: ${user.username})`);
+        } else {
+            await sendSms(targetPhone, `[Mongain] Votre code de connexion est : ${code}.`);
+        }
+
+        return res.json({ requireOtp: true, message: 'Un code de sécurité a été envoyé par SMS.' });
+    } catch (e: any) {
+        console.error('Erreur /auth/login:', e);
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
-
-    await prisma.user.update({
-        where: { id: user.id },
-        data: { failedPinAttempts: 0, lockedUntil: null },
-    });
-
-    const useDemoMode = !process.env.TWILIO_ACCOUNT_SID;
-    const code = useDemoMode ? '1234' : Math.floor(1000 + Math.random() * 9000).toString();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
-
-    // Use the actual user's phone for SMS routing, in case they logged in with their username!
-    const targetPhone = user.phone;
-
-    await prisma.verificationCode.upsert({
-        where: { phone: targetPhone },
-        update: { code, expiresAt },
-        create: { phone: targetPhone, code, expiresAt }
-    });
-
-    if (useDemoMode) {
-        console.log(`[DEMO MODE] Code d'accès 1234 généré pour le login de ${targetPhone} (Pseudo: ${user.username})`);
-    } else {
-        await sendSms(targetPhone, `[Mongain] Votre code de connexion est : ${code}.`);
-    }
-
-    return res.json({ requireOtp: true, message: 'Un code de sécurité a été envoyé par SMS.' });
 });
 
 const verifyLoginOtpSchema = z.object({
@@ -283,56 +301,67 @@ router.post('/verify-login-otp', async (req, res) => {
 
     const { phone, otpCode } = parsed.data;
 
-    const otpRecord = await prisma.verificationCode.findUnique({ where: { phone } });
-    if (!otpRecord || otpRecord.code !== otpCode || otpRecord.expiresAt < new Date()) {
-        return res.status(400).json({ error: 'Code OTP expiré ou invalide.' });
+    try {
+        const otpRecord = await withDbRetry(() => prisma.verificationCode.findUnique({ where: { phone_purpose: { phone, purpose: 'LOGIN' } } }));
+        if (!otpRecord || otpRecord.code !== otpCode || otpRecord.expiresAt < new Date()) {
+            return res.status(400).json({ error: 'Code OTP expiré ou invalide.' });
+        }
+
+        await prisma.verificationCode.delete({ where: { phone_purpose: { phone, purpose: 'LOGIN' } } });
+
+        const user = await prisma.user.findUnique({ where: { phone }, include: { wallet: true } });
+        if (!user) return res.status(404).json({ error: 'Compte introuvable.' });
+
+        // Single Device Enforcement: Increment the jwtVersion
+        const updatedUser = await prisma.user.update({
+            where: { id: user.id },
+            data: { failedPinAttempts: 0, lockedUntil: null, jwtVersion: { increment: 1 } },
+        });
+
+        const token = jwt.sign({ userId: user.id, jwtVersion: updatedUser.jwtVersion }, JWT_SECRET, { expiresIn: '30d' });
+
+        return res.json({
+            token,
+            user: {
+                id: user.id,
+                name: user.name,
+                phone: user.phone,
+                role: user.role,
+                wallet: user.wallet,
+            },
+        });
+    } catch (e: any) {
+        console.error('Erreur /auth/verify-login-otp:', e);
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
-
-    await prisma.verificationCode.delete({ where: { phone } });
-
-    const user = await prisma.user.findUnique({ where: { phone }, include: { wallet: true } });
-    if (!user) return res.status(404).json({ error: 'Compte introuvable.' });
-
-    // Single Device Enforcement: Increment the jwtVersion
-    const updatedUser = await prisma.user.update({
-        where: { id: user.id },
-        data: { failedPinAttempts: 0, lockedUntil: null, jwtVersion: { increment: 1 } },
-    });
-
-    const token = jwt.sign({ userId: user.id, jwtVersion: updatedUser.jwtVersion }, JWT_SECRET, { expiresIn: '30d' });
-
-    return res.json({
-        token,
-        user: {
-            id: user.id,
-            name: user.name,
-            phone: user.phone,
-            role: user.role,
-            wallet: user.wallet,
-        },
-    });
 });
 
 // GET /api/auth/me
 router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
-    const user = await prisma.user.findUnique({
-        where: { id: req.userId },
-        include: { wallet: true },
-    });
+    try {
+        const user = await withDbRetry(() => prisma.user.findUnique({
+            where: { id: req.userId },
+            include: { wallet: true },
+        }));
 
-    if (!user) return res.status(404).json({ error: 'Utilisateur introuvable.' });
+        if (!user) return res.status(404).json({ error: 'Utilisateur introuvable.' });
 
-    return res.json({
-        id: user.id,
-        name: user.name,
-        username: user.username,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-        kycStatus: (user as any).kycStatus,
-        kycLevel: (user as any).kycLevel,
-        wallet: user.wallet,
-    });
+        return res.json({
+            id: user.id,
+            name: user.name,
+            username: user.username,
+            email: user.email,
+            phone: user.phone,
+            role: user.role,
+            kycStatus: (user as any).kycStatus,
+            kycLevel: (user as any).kycLevel,
+            kycRejectReason: (user as any).kycRejectReason,
+            wallet: user.wallet,
+        });
+    } catch (e: any) {
+        console.error('Erreur /auth/me:', e);
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
 });
 const updateProfileSchema = z.object({
     name: z.string().min(2, 'Le nom doit comporter au moins 2 caractères.'),
@@ -460,7 +489,8 @@ router.put('/push-token', authMiddleware, async (req: AuthRequest, res) => {
 
         res.json({ message: 'Push token mis à jour avec succès.' });
     } catch (error: any) {
-        res.status(500).json({ error: error.message });
+        console.error('Erreur push-token:', error);
+        res.status(500).json({ error: friendlyErrorMessage(error) });
     }
 });
 
@@ -508,3 +538,6 @@ router.post('/verify-pin', authMiddleware, async (req: AuthRequest, res) => {
         return res.status(500).json({ error: 'Erreur interne.' });
     }
 });
+
+
+

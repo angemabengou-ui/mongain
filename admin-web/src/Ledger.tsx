@@ -8,6 +8,7 @@ export default function Ledger({ token }: { token: string }) {
     const [transactions, setTransactions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
+    const [error, setError] = useState('');
 
     useEffect(() => {
         fetchLedger();
@@ -21,28 +22,48 @@ export default function Ledger({ token }: { token: string }) {
             if (res.ok) {
                 const data = await res.json();
                 setTransactions(data);
+                setError('');
+            } else {
+                // Sans ce cas, un 403 laissait croire à un registre vide au lieu d'un
+                // accès refusé — les deux affichaient le même "Aucune transaction trouvée."
+                const data = await res.json().catch(() => ({}));
+                setError(data.error || 'Accès au grand livre refusé.');
             }
         } catch (e) {
             console.error(e);
+            setError('Impossible de contacter le serveur.');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleRefund = async (txId: string) => {
-        const reason = window.prompt("Motif de l'annulation (obligatoire) :");
+    const handleRefund = async (tx: any) => {
+        const reason = window.prompt("Motif du remboursement (obligatoire) :");
         if (!reason) return;
-        if (!window.confirm("Êtes-vous sûr de vouloir rembourser cette transaction ?")) return;
+
+        const beneficiaryId = tx.senderWallet?.user?.id;
+        if (!beneficiaryId) {
+            alert("Impossible de déterminer le bénéficiaire du remboursement pour cette transaction.");
+            return;
+        }
+
+        if (!window.confirm("Soumettre une demande de remboursement pour cette transaction ? Elle devra être validée par un second agent (règle Maker/Checker) avant exécution.")) return;
 
         try {
-            const res = await fetch(API_URL + '/api/admin/transactions/' + txId + '/refund', {
+            const res = await fetch(API_URL + '/api/admin/refund-requests', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ reason })
+                body: JSON.stringify({
+                    transactionId: tx.id,
+                    userId: beneficiaryId,
+                    amount: tx.amount,
+                    refundType: 'FULL',
+                    reason,
+                })
             });
             const data = await res.json();
             if (res.ok) {
-                alert("Transaction remboursée.");
+                alert("Demande de remboursement soumise. Elle apparaît maintenant dans Support > Remboursements, en attente de validation par un second agent.");
                 fetchLedger();
             } else {
                 alert("Erreur : " + data.error);
@@ -117,11 +138,11 @@ export default function Ledger({ token }: { token: string }) {
                     <p style={{ color: 'var(--text-secondary)' }}>Surveillance en temps réel de tous les flux financiers de la plateforme.</p>
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
-                    <button onClick={exportCSV} style={{ padding: '12px 20px', backgroundColor: '#3b82f6', color: 'var(--text-primary)', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
+                    <button onClick={exportCSV} style={{ padding: '12px 20px', backgroundColor: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
                         <Download size={18} />
                         CSV
                     </button>
-                    <button onClick={exportPDF} style={{ padding: '12px 20px', backgroundColor: '#e11d48', color: 'var(--text-primary)', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
+                    <button onClick={exportPDF} style={{ padding: '12px 20px', backgroundColor: 'var(--danger)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
                         <FileText size={18} />
                         Télécharger PDF
                     </button>
@@ -177,12 +198,12 @@ export default function Ledger({ token }: { token: string }) {
                                         </td>
                                         <td style={{ padding: '16px' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#E11D48' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)' }}>
                                                     <ArrowUpRight size={16} />
                                                     <span style={{ fontWeight: 'bold' }}>{senderName}</span>
                                                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>({senderPhone})</span>
                                                 </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#10B981' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)' }}>
                                                     <ArrowDownLeft size={16} />
                                                     <span style={{ fontWeight: 'bold' }}>{receiverName}</span>
                                                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>({receiverPhone})</span>
@@ -193,16 +214,16 @@ export default function Ledger({ token }: { token: string }) {
                                             {tx.amount.toLocaleString('fr-FR')} FCFA
                                         </td>
                                         <td style={{ padding: '16px', fontFamily: 'monospace', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                                            {isFee && <span style={{ color: '#F59E0B', fontWeight: 'bold', marginRight: '4px' }}>[FEE]</span>}
-                                            {isMint && <span style={{ color: '#4F46E5', fontWeight: 'bold', marginRight: '4px' }}>[MINT]</span>}
+                                            {isFee && <span style={{ color: 'var(--warning)', fontWeight: 'bold', marginRight: '4px' }}>[FEE]</span>}
+                                            {isMint && <span style={{ color: 'var(--accent)', fontWeight: 'bold', marginRight: '4px' }}>[MINT]</span>}
                                             {isDeposit && <span style={{ color: '#1DC5E9', fontWeight: 'bold', marginRight: '4px' }}>[CASH-IN]</span>}
                                             {tx.reference || tx.id.substring(0, 8)}
                                         </td>
                                         <td style={{ padding: '16px', textAlign: 'right' }}>
                                             <span style={{
                                                 padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold',
-                                                backgroundColor: tx.status === 'COMPLETED' ? '#10B98120' : tx.status === 'REFUNDED' ? '#E11D4820' : '#F59E0B20',
-                                                color: tx.status === 'COMPLETED' ? '#10B981' : tx.status === 'REFUNDED' ? '#E11D48' : '#F59E0B'
+                                                backgroundColor: tx.status === 'COMPLETED' ? 'var(--success-bg)' : tx.status === 'REFUNDED' ? 'var(--danger-bg)' : 'var(--warning-bg)',
+                                                color: tx.status === 'COMPLETED' ? 'var(--success)' : tx.status === 'REFUNDED' ? 'var(--danger)' : 'var(--warning)'
                                             }}>
                                                 {tx.status}
                                             </span>
@@ -210,14 +231,14 @@ export default function Ledger({ token }: { token: string }) {
                                         <td style={{ padding: '16px', textAlign: 'right' }}>
                                             {tx.status === 'COMPLETED' && !isMint && !isFee && !isDeposit && (
                                                 <button
-                                                    onClick={() => handleRefund(tx.id)}
+                                                    onClick={() => handleRefund(tx)}
                                                     style={{
                                                         padding: '4px 8px', backgroundColor: 'transparent',
-                                                        color: '#E11D48', border: '1px solid #E11D4860',
+                                                        color: 'var(--danger)', border: '1px solid var(--danger-bg)',
                                                         borderRadius: '6px', cursor: 'pointer',
                                                         display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'bold'
                                                     }}>
-                                                    <RotateCcw size={14} /> Refund
+                                                    <RotateCcw size={14} /> Rembourser
                                                 </button>
                                             )}
                                         </td>
@@ -227,8 +248,8 @@ export default function Ledger({ token }: { token: string }) {
 
                             {filteredTransactions.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                                        Aucune transaction trouvée.
+                                    <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: error ? 'var(--danger)' : 'var(--text-secondary)' }}>
+                                        {error ? `⚠️ ${error}` : 'Aucune transaction trouvée.'}
                                     </td>
                                 </tr>
                             )}

@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "SystemSettings" ADD COLUMN     "taxCashIn" DOUBLE PRECISION NOT NULL DEFAULT 0.015;

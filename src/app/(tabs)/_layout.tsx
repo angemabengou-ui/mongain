@@ -2,16 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-const COLORS = {
-    primary: '#1DC5E9',
-    textSecondary: '#6b7280',
-    surface: '#ffffff',
-    background: '#130925',
-};
+import { useAppTheme } from '../../constants/theme';
 
 export default function TabLayout() {
     const insets = useSafeAreaInsets();
+    // Couleurs codées en dur précédemment : la tab bar restait blanche même en thème
+    // sombre, alors que tout le reste de l'app suit useAppTheme().
+    const COLORS = useAppTheme();
 
     return (
         <Tabs
@@ -22,7 +19,7 @@ export default function TabLayout() {
                 tabBarStyle: {
                     backgroundColor: COLORS.surface,
                     borderTopWidth: 1,
-                    borderTopColor: '#f1f5f9',
+                    borderTopColor: COLORS.border,
                     paddingBottom: 8 + insets.bottom,
                     paddingTop: 8,
                     height: 65 + insets.bottom,

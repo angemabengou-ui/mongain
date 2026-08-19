@@ -1,54 +1,80 @@
-import { Briefcase, Edit2, Lock, ShieldAlert, BadgeCheck as ShieldCheck, Store, User, UserPlus, Users as UsersIcon, X } from 'lucide-react';
+import { AlertTriangle, Briefcase, Search, Store, User, Users as UsersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { API_URL } from './config';
+import Customer360 from './Customer360';
 
-export default function UsersManagement({ token }: { token: string }) {
+export default function UsersManagement({ token, staffRole, lockedRole }: { token: string; staffRole?: string; lockedRole?: 'AGENT' }) {
     const [users, setUsers] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [filter, setFilter] = useState('');
+    const [total, setTotal] = useState(0);
+    const [loading, setLoading] = useState(false);
+
+    // Pagination & Filters
     const [searchTerm, setSearchTerm] = useState('');
-    // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
-    const usersPerPage = 10;
+    const [statusFilter, setStatusFilter] = useState('');
+    const [kycFilter, setKycFilter] = useState('');
+    // Segment de compte. Clients et Marchands sont des tiers externes autonomes (le
+    // client s'inscrit lui-même depuis son téléphone) : ils partagent cet écran via un
+    // sélecteur. Les Agents, eux, NE sont PAS un segment client — ce sont des comptes
+    // qui opèrent pour Mongain au sein d'une agence, donc rattachés à l'Organisation
+    // (voir prop `lockedRole`, utilisée par l'entrée "Agents Mongain" du menu
+    // Organisation Interne) plutôt que sélectionnables ici au même titre qu'un client.
+    const [roleFilter, setRoleFilter] = useState<'USER' | 'AGENT' | 'MERCHANT' | 'ALL'>(lockedRole || 'USER');
+    const limit = 20;
+    const isAgentView = lockedRole === 'AGENT';
 
     // Slide-over CRM 360
-    const [selectedUser, setSelectedUser] = useState<any>(null);
-    const [isEditingUser, setIsEditingUser] = useState(false);
-    const [editName, setEditName] = useState('');
-    const [editPhone, setEditPhone] = useState('');
-    const [editUsername, setEditUsername] = useState('');
-    const [vipLimitInput, setVipLimitInput] = useState('');
+    const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
-    // Modal state
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [newPhone, setNewPhone] = useState('');
-    const [newName, setNewName] = useState('');
-    const [newRole, setNewRole] = useState('AGENT');
-    const [newPin, setNewPin] = useState('1234');
-    const [creating, setCreating] = useState(false);
-    const [error, setError] = useState('');
+    // Create Pro (Merchant) state — les Agents ne se créent plus ici : un vrai agent
+    // doit être rattaché à une agence via Organisation Interne > Gestion du Personnel
+    // (rôle TELLER), qui donne les droits opérationnels réels (session de caisse, coffre
+    // physique). Ce formulaire ne crée donc plus que des comptes Marchand.
+    const [showCreatePro, setShowCreatePro] = useState(false);
+    const [proPhone, setProPhone] = useState('');
+    const [proName, setProName] = useState('');
+    const [proPin, setProPin] = useState('');
+    const [createLoading, setCreateLoading] = useState(false);
 
-    const fetchUsers = async () => {
+    // Rattachement agence (vue Agents uniquement)
+    const [branches, setBranches] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (!isAgentView) return;
+        fetch(`${API_URL}/api/admin/branches?limit=200`, { headers: { 'Authorization': `Bearer ${token}` } })
+            .then(r => r.json())
+            .then(d => setBranches(Array.isArray(d) ? d : (d.branches || [])))
+            .catch(console.error);
+    }, [isAgentView, token]);
+
+    const assignBranch = async (userId: string, branchId: string) => {
+        try {
+            const r = await fetch(`${API_URL}/api/admin/users/${userId}/branch`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ branchId: branchId || null })
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.error);
+            fetchCustomers(searchTerm, currentPage, statusFilter, kycFilter, roleFilter);
+        } catch (e: any) {
+            alert(e.message);
+        }
+    };
+
+    const fetchCustomers = async (query: string = '', page: number = 1, stat: string = '', kyc: string = '', segment: string = roleFilter) => {
         setLoading(true);
         try {
-            const resp = await fetch(API_URL + '/api/admin/users' + (filter ? `?role=${filter}` : ''), {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const data = await resp.json();
+            let url = `${API_URL}/api/admin/customers?page=${page}&limit=${limit}&role=${segment}`;
+            if (query) url += `&q=${encodeURIComponent(query)}`;
+            if (stat) url += `&status=${stat}`;
+            if (kyc) url += `&kycStatus=${kyc}`;
+
+            const resp = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
             if (resp.ok) {
-                setUsers(data);
-                const queryPhone = new URLSearchParams(window.location.search).get('phone');
-                if (queryPhone && data) {
-                    const found = data.find((u: any) => u.phone === queryPhone || u.phone === '+' + queryPhone.replace(' ', ''));
-                    if (found) {
-                        setSelectedUser(found);
-                        setIsEditingUser(false);
-                        setEditName(found.name);
-                        setEditPhone(found.phone);
-                        setEditUsername(found.username || '');
-                        setVipLimitInput(found.kycLevel >= 100 ? found.kycLevel.toString() : '');
-                    }
-                }
+                const data = await resp.json();
+                setUsers(data.customers || []);
+                setTotal(data.total || 0);
             }
         } catch (e) {
             console.error(e);
@@ -58,293 +84,223 @@ export default function UsersManagement({ token }: { token: string }) {
     };
 
     useEffect(() => {
-        fetchUsers();
-        setCurrentPage(1); // Reset page on filter change
-    }, [filter]);
+        fetchCustomers(searchTerm, currentPage, statusFilter, kycFilter, roleFilter);
+    }, [currentPage, statusFilter, kycFilter, roleFilter, token]);
 
-    const filteredUsers = users.filter((u: any) => {
-        if (!searchTerm) return true;
-        const lowSearch = searchTerm.toLowerCase();
-        return (
-            u.name?.toLowerCase().includes(lowSearch) ||
-            u.phone?.toLowerCase().includes(lowSearch) ||
-            u.username?.toLowerCase().includes(lowSearch) ||
-            u.email?.toLowerCase().includes(lowSearch)
-        );
-    });
+    const handleSearch = () => {
+        setCurrentPage(1);
+        fetchCustomers(searchTerm, 1, statusFilter, kycFilter, roleFilter);
+    };
+
+    const getRoleIcon = (role?: string) => {
+        if (role === 'AGENT') return <Briefcase size={16} color="var(--accent)" />;
+        if (role === 'MERCHANT') return <Store size={16} color="var(--warning)" />;
+        if (role === 'ADMIN') return <UsersIcon size={16} color="var(--danger)" />;
+        return <User size={16} color="var(--success)" />;
+    };
+
+    if (selectedUserId) {
+        return <Customer360 token={token} userId={selectedUserId} onBack={() => setSelectedUserId(null)} staffRole={staffRole} />;
+    }
 
     const handleCreatePro = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError('');
-        setCreating(true);
+        setCreateLoading(true);
         try {
-            const resp = await fetch(API_URL + '/api/admin/users/create-pro', {
+            const res = await fetch(`${API_URL}/api/admin/users/create-pro`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ phone: newPhone, name: newName, role: newRole, pin: newPin })
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ phone: proPhone, name: proName, role: 'MERCHANT', pin: proPin })
             });
-            const data = await resp.json();
-            if (!resp.ok) throw new Error(data.error);
-
-            setIsModalOpen(false);
-            fetchUsers(); // Refresh
-            alert(`Compte Pro (${newRole}) créé avec succès !`);
-        } catch (e: any) {
-            setError(e.message);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            alert('Compte marchand créé avec succès.');
+            setShowCreatePro(false);
+            setProPhone(''); setProName(''); setProPin('');
+            // Bascule sur le segment Marchands — sinon le compte reste invisible tant que
+            // le segment précédent reste sélectionné, ce qui donnait l'impression que la
+            // création avait échoué silencieusement.
+            setRoleFilter('MERCHANT');
+            setCurrentPage(1);
+            fetchCustomers(searchTerm, 1, statusFilter, kycFilter, 'MERCHANT');
+        } catch (err: any) {
+            alert(err.message);
         } finally {
-            setCreating(false);
+            setCreateLoading(false);
         }
-    };
-
-    const toggleStatus = async (userId: string) => {
-        if (!window.confirm('Voulez-vous vraiment changer le statut de cet utilisateur ?')) return;
-        try {
-            const resp = await fetch(`${API_URL}/api/admin/users/${userId}/toggle-status`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const data = await resp.json();
-            if (resp.ok) {
-                alert(data.message);
-                fetchUsers();
-            } else alert(data.error);
-        } catch (e) {
-            console.error(e);
-        }
-    };
-
-    const resetPin = async (userId: string) => {
-        if (!window.confirm('Voulez-vous générer un nouveau PIN secret pour cet utilisateur ?')) return;
-        try {
-            const resp = await fetch(`${API_URL}/api/admin/users/${userId}/reset-pin`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const data = await resp.json();
-            if (resp.ok) {
-                alert(`${data.message}`);
-            } else alert(data.error);
-        } catch (e) {
-            console.error(e);
-        }
-    };
-
-    const certifyUser = async (userId: string) => {
-        if (!window.confirm('Voulez-vous certifier manuellement l\'identité physique de ce client et débloquer ses limites de transfert (Tier 1) ?')) return;
-        try {
-            const resp = await fetch(`${API_URL}/api/admin/users/${userId}/kyc`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ status: 'APPROVED' })
-            });
-            const data = await resp.json().catch(() => ({}));
-            if (resp.ok) {
-                alert('Identité certifiée avec succès ! Les plafonds Tier 1 sont maintenant actifs pour ce compte.');
-                fetchUsers();
-                setSelectedUser({ ...selectedUser, kycStatus: 'APPROVED', kycLevel: 1 });
-            } else {
-                alert(`Erreur API (${resp.status}): ${data.error || 'Erreur Serveur'}`);
-            }
-        } catch (e: any) {
-            alert(`Erreur réseau: ${e.message}`);
-        }
-    };
-
-    const handleSetVipLimit = async () => {
-        const lim = parseInt(vipLimitInput, 10);
-        if (isNaN(lim) || lim < 100) return alert('Plafond invalide. Minimum 100 FCFA.');
-        if (!window.confirm(`Confirmez-vous le plafond exceptionnel de ${lim.toLocaleString('fr-FR')} FCFA pour ce client ?`)) return;
-
-        try {
-            const resp = await fetch(`${API_URL}/api/admin/users/${selectedUser.id}/vip-limit`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ limit: lim })
-            });
-            const data = await resp.json().catch(() => ({}));
-            if (resp.ok) {
-                alert('Plafond VIP appliqué !');
-                fetchUsers();
-                setSelectedUser({ ...selectedUser, kycStatus: 'APPROVED', kycLevel: lim });
-            } else {
-                alert(`Erreur API (${resp.status}): ${data.error || 'Erreur Serveur'}`);
-            }
-        } catch (e: any) {
-            alert(`Erreur réseau: ${e.message}`);
-        }
-    };
-
-    const handleUpdateUser = async (e: React.FormEvent) => {
-        e.preventDefault();
-        try {
-            const resp = await fetch(`${API_URL}/api/admin/users/${selectedUser.id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ name: editName, phone: editPhone, username: editUsername || undefined })
-            });
-            const data = await resp.json();
-            if (resp.ok) {
-                alert(data.message);
-                setSelectedUser({ ...selectedUser, name: data.user.name, phone: data.user.phone });
-                setIsEditingUser(false);
-                fetchUsers();
-            } else {
-                alert(data.error);
-            }
-        } catch (e: any) {
-            alert('Erreur: ' + e.message);
-        }
-    };
-
-    const deleteUser = async (userId: string) => {
-        if (!window.confirm('🚨 ATTENTION : Voulez-vous vraiment supprimer définitivement cet utilisateur ? Cette action est irréversible.')) return;
-        try {
-            const resp = await fetch(`${API_URL}/api/admin/users/${userId}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const data = await resp.json();
-            if (resp.ok) {
-                alert('Utilisateur supprimé avec succès.');
-                fetchUsers();
-            } else {
-                alert(`Erreur : ${data.error}`);
-            }
-        } catch (e: any) {
-            console.error(e);
-            alert('Erreur réseau.');
-        }
-    };
-
-    const getRoleIcon = (role: string) => {
-        if (role === 'AGENT') return <Briefcase size={16} color="#4F46E5" />;
-        if (role === 'MERCHANT') return <Store size={16} color="#F59E0B" />;
-        if (role === 'ADMIN') return <UsersIcon size={16} color="#E11D48" />;
-        return <User size={16} color="#10B981" />;
     };
 
     return (
         <div className="dashboard-content" style={{ position: 'relative' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <div>
-                    <h2>Base de Données Utilisateurs</h2>
-                    <p style={{ color: 'var(--text-secondary)' }}>Filtrez, visualisez et superviez les comptes de l'écosystème Mongain.</p>
+                    <h2>{isAgentView ? 'Agents Mongain (réseau historique)' : 'Comptes Clients & Marchands (C-360)'}</h2>
+                    <p style={{ color: 'var(--text-secondary)' }}>
+                        {isAgentView
+                            ? "Comptes Agent créés avant le système d'agences. Pour un nouvel agent rattaché à une agence avec les droits opérationnels complets (session de caisse, coffre), utilisez Organisation Interne > Gestion du Personnel."
+                            : "Comptes auto-inscrits depuis l'app mobile (clients) ou créés ici (marchands) — retrouvez, identifiez et analysez-les grâce à la vue 360."}
+                    </p>
                 </div>
-                <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="btn-primary"
-                    style={{ width: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <UserPlus size={18} /> Créer un Profil Pro
-                </button>
+                {staffRole === 'SUPER_ADMIN' && !isAgentView && (
+                    <button onClick={() => setShowCreatePro(true)} className="btn-primary" style={{ width: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <Briefcase size={18} /> Créer Compte Marchand
+                    </button>
+                )}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => setFilter('')} style={{ padding: '8px 16px', borderRadius: '20px', border: filter === '' ? 'none' : '1px solid var(--border)', backgroundColor: filter === '' ? 'var(--text-primary)' : 'transparent', color: filter === '' ? 'var(--bg-primary)' : 'var(--text-secondary)', cursor: 'pointer', fontWeight: '500' }}>Tous</button>
-                    <button onClick={() => setFilter('USER')} style={{ padding: '8px 16px', borderRadius: '20px', border: filter === 'USER' ? 'none' : '1px solid var(--border)', backgroundColor: filter === 'USER' ? 'var(--success)' : 'transparent', color: filter === 'USER' ? 'white' : 'var(--text-secondary)', cursor: 'pointer', fontWeight: '500' }}>Clients</button>
-                    <button onClick={() => setFilter('AGENT')} style={{ padding: '8px 16px', borderRadius: '20px', border: filter === 'AGENT' ? 'none' : '1px solid var(--border)', backgroundColor: filter === 'AGENT' ? 'var(--accent)' : 'transparent', color: filter === 'AGENT' ? 'white' : 'var(--text-secondary)', cursor: 'pointer', fontWeight: '500' }}>Agents</button>
-                    <button onClick={() => setFilter('MERCHANT')} style={{ padding: '8px 16px', borderRadius: '20px', border: filter === 'MERCHANT' ? 'none' : '1px solid var(--border)', backgroundColor: filter === 'MERCHANT' ? 'var(--warning)' : 'transparent', color: filter === 'MERCHANT' ? 'white' : 'var(--text-secondary)', cursor: 'pointer', fontWeight: '500' }}>Marchands</button>
+            {!isAgentView && (
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                    {[
+                        { val: 'USER', label: 'Clients' },
+                        { val: 'MERCHANT', label: 'Marchands' },
+                        { val: 'ALL', label: 'Tous' },
+                    ].map(seg => (
+                        <button
+                            key={seg.val}
+                            onClick={() => { setRoleFilter(seg.val as any); setCurrentPage(1); }}
+                            style={{
+                                padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                                border: `1px solid ${roleFilter === seg.val ? 'var(--accent)' : 'var(--border)'}`,
+                                background: roleFilter === seg.val ? 'var(--accent)' : 'var(--bg-card)',
+                                color: roleFilter === seg.val ? '#fff' : 'var(--text-primary)',
+                            }}
+                        >
+                            {seg.label}
+                        </button>
+                    ))}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center' }}>
+            )}
+
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 300px', display: 'flex', gap: '8px' }}>
                     <input
                         type="text"
-                        placeholder="Rechercher par nom ou numéro..."
+                        placeholder="Recherche : Nom, Tel, ID Client, Réf TX..."
                         value={searchTerm}
-                        onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                        style={{ flex: 1, padding: '10px 16px', borderRadius: '8px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
                     />
+                    <button onClick={handleSearch} className="btn-primary" style={{ width: 'auto', padding: '0 16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <Search size={18} /> <span className="hide-mobile">Recherche globale</span>
+                    </button>
                 </div>
+
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ padding: '10px 16px', borderRadius: '8px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
+                    <option value="">Tous les Statuts</option>
+                    <option value="ACTIVE">Actif</option>
+                    <option value="SUSPENDED">Suspendu</option>
+                    <option value="FROZEN">Gelé (Freeze)</option>
+                    <option value="CLOSED">Clôturé</option>
+                </select>
+
+                <select value={kycFilter} onChange={(e) => setKycFilter(e.target.value)} style={{ padding: '10px 16px', borderRadius: '8px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
+                    <option value="">Tous les Niveaux KYC</option>
+                    <option value="UNVERIFIED">Non Vérifié (Tier 0)</option>
+                    <option value="PENDING">En Revue KYC</option>
+                    <option value="APPROVED">Vérifié (Tier 1/2)</option>
+                    <option value="REJECTED">Rejeté</option>
+                </select>
             </div>
 
-            <div className="stat-card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div className="stat-card" style={{ padding: 0, overflow: 'hidden', overflowX: 'auto' }}>
                 {loading ? (
-                    <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Chargement...</div>
+                    <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>Recherche dans la base de données...</div>
                 ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <table style={{ width: '100%', minWidth: '900px', borderCollapse: 'collapse', textAlign: 'left' }}>
                         <thead>
                             <tr style={{ backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border)' }}>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Utilisateur</th>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Téléphone</th>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Pseudo</th>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>KYC Status</th>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Rôle</th>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Statut</th>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)', textAlign: 'right' }}>Solde</th>
+                                <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: 600 }}>{isAgentView ? 'Identité Agent' : 'Identité Client'}</th>
+                                <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: 600 }}>Téléphone</th>
+                                {isAgentView && <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: 600 }}>Agence</th>}
+                                <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: 600 }}>Statut KYC</th>
+                                <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: 600 }}>Activité Réc.</th>
+                                <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: 600 }}>Risque</th>
+                                <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: 600 }}>Statut Compte</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredUsers.slice((currentPage - 1) * usersPerPage, currentPage * usersPerPage).map(u => (
+                            {users.map(u => (
                                 <tr key={u.id}
-                                    onClick={() => {
-                                        setSelectedUser(u);
-                                        setVipLimitInput(u.kycLevel >= 100 ? u.kycLevel.toString() : '');
-                                    }}
+                                    onClick={() => setSelectedUserId(u.id)}
                                     style={{
                                         cursor: 'pointer',
                                         transition: 'background 0.2s',
-                                        opacity: u.isActive === false ? 0.6 : 1
-                                    }}>
+                                        opacity: u.accountStatus !== 'ACTIVE' ? 0.6 : 1,
+                                        borderBottom: '1px solid var(--border)'
+                                    }}
+                                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-primary)'}
+                                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                >
                                     <td style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
                                         <div style={{ width: '40px', height: '40px', borderRadius: '20px', backgroundColor: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                             {getRoleIcon(u.role)}
                                         </div>
                                         <div>
                                             <div style={{ fontWeight: 'bold' }}>{u.name}</div>
-                                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>ID: {u.id.substring(0, 8)}...</div>
+                                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>ID: {u.id.substring(0, 8)}</div>
                                         </div>
                                     </td>
-                                    <td style={{ padding: '16px', fontFamily: 'monospace' }}>{u.phone}</td>
-                                    <td style={{ padding: '16px', color: '#1DC5E9', fontWeight: '600' }}>
-                                        {u.username ? `@${u.username}` : '---'}
-                                    </td>
+                                    <td style={{ padding: '16px' }}><div style={{ color: 'var(--accent)', fontWeight: 'bold', fontFamily: 'monospace' }}>{u.accountNumber || 'Non assigné'}</div><div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{u.phone}</div></td>
+
+                                    {isAgentView && (
+                                        <td style={{ padding: '16px' }} onClick={e => e.stopPropagation()}>
+                                            <select
+                                                value={u.branchId || ''}
+                                                onChange={e => assignBranch(u.id, e.target.value)}
+                                                style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: u.branchId ? 'var(--text-primary)' : 'var(--warning)', fontSize: '13px' }}
+                                            >
+                                                <option value="">— Non rattaché —</option>
+                                                {branches.map(b => (
+                                                    <option key={b.id} value={b.id}>{b.name}</option>
+                                                ))}
+                                            </select>
+                                        </td>
+                                    )}
+
                                     <td style={{ padding: '16px' }}>
                                         <span style={{
                                             padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold',
-                                            backgroundColor: u.kycStatus === 'UNVERIFIED' ? '#334155' : u.kycStatus === 'APPROVED' ? '#10B98120' : '#F59E0B20',
-                                            color: u.kycStatus === 'UNVERIFIED' ? '#94a3b8' : u.kycStatus === 'APPROVED' ? '#10B981' : '#F59E0B',
+                                            backgroundColor: u.kycStatus === 'UNVERIFIED' ? '#334155' : u.kycStatus === 'APPROVED' ? 'var(--success-bg)' : 'var(--warning-bg)',
+                                            color: u.kycStatus === 'UNVERIFIED' ? '#94a3b8' : u.kycStatus === 'APPROVED' ? 'var(--success)' : 'var(--warning)',
                                             border: '1px solid var(--border)'
                                         }}>
-                                            {u.kycStatus || 'UNVERIFIED'}
+                                            {u.kycStatus}
                                         </span>
                                     </td>
-                                    <td style={{ padding: '16px' }}>
-                                        <span style={{
-                                            padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold',
-                                            backgroundColor: u.role === 'ADMIN' ? '#E11D4820' : u.role === 'AGENT' ? '#4F46E520' : u.role === 'MERCHANT' ? '#F59E0B20' : '#10B98120',
-                                            color: u.role === 'ADMIN' ? '#E11D48' : u.role === 'AGENT' ? '#4F46E5' : u.role === 'MERCHANT' ? '#F59E0B' : '#10B981'
-                                        }}>
-                                            {u.role}
-                                        </span>
+
+                                    <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                                        {u.wallet?.updatedAt ? new Date(u.wallet.updatedAt).toLocaleDateString() : 'N/A'}
                                     </td>
+
                                     <td style={{ padding: '16px' }}>
-                                        <span style={{
-                                            padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold',
-                                            backgroundColor: u.isActive !== false ? '#10B98120' : '#E11D4820',
-                                            color: u.isActive !== false ? '#10B981' : '#E11D48'
-                                        }}>
-                                            {u.isActive !== false ? 'ACTIF' : 'SUSPENDU'}
-                                        </span>
-                                        {u.failedPinAttempts >= 3 && (
-                                            <div style={{ marginTop: '8px' }}>
-                                                <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', backgroundColor: '#E11D4820', color: '#E11D48', border: '1px solid #E11D4840' }}>
-                                                    ⚠️ LOCKOUT SÉCURITÉ
-                                                </span>
-                                            </div>
+                                        {u._count?.riskFlags > 0 ? (
+                                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--danger)', fontWeight: 600, fontSize: '13px' }}>
+                                                <AlertTriangle size={14} /> {u._count.riskFlags} Flag(s)
+                                            </span>
+                                        ) : (
+                                            <span style={{ color: 'var(--success)', fontSize: '13px', fontWeight: 600 }}>Propre</span>
                                         )}
                                     </td>
-                                    <td style={{ padding: '16px', textAlign: 'right', fontWeight: 'bold', color: '#10B981' }}>
-                                        {u.wallet?.balance?.toLocaleString('fr-FR')} FCFA
+
+                                    <td style={{ padding: '16px' }}>
+                                        <span style={{
+                                            padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold',
+                                            backgroundColor: u.accountStatus === 'ACTIVE' ? 'var(--success-bg)' : 'var(--danger-bg)',
+                                            color: u.accountStatus === 'ACTIVE' ? 'var(--success)' : 'var(--danger)',
+                                            border: u.accountStatus !== 'ACTIVE' ? '1px solid var(--danger-bg)' : 'none'
+                                        }}>
+                                            {u.accountStatus === 'ACTIVE' ? 'ACTIF' : u.accountStatus}
+                                        </span>
                                     </td>
                                 </tr>
                             ))}
                             {users.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Aucun utilisateur trouvé.</td>
+                                    <td colSpan={isAgentView ? 7 : 6} style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                                        <User size={48} style={{ opacity: 0.2, marginBottom: '16px' }} />
+                                        <div>{isAgentView ? 'Aucun agent correspondant.' : 'Aucun client correspondant trouvé sur la plateforme.'}</div>
+                                    </td>
                                 </tr>
                             )}
                         </tbody>
@@ -352,10 +308,10 @@ export default function UsersManagement({ token }: { token: string }) {
                 )}
             </div>
 
-            {users.length > usersPerPage && (
+            {total > limit && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', padding: '0 8px' }}>
                     <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-                        Affichage {((currentPage - 1) * usersPerPage) + 1} - {Math.min(currentPage * usersPerPage, users.length)} sur {users.length}
+                        Affichage de {((currentPage - 1) * limit) + 1} à {Math.min(currentPage * limit, total)} sur {total} clients (Page {currentPage})
                     </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
                         <button
@@ -365,170 +321,48 @@ export default function UsersManagement({ token }: { token: string }) {
                             Précédent
                         </button>
                         <button
-                            onClick={() => setCurrentPage(p => Math.min(Math.ceil(users.length / usersPerPage), p + 1))}
-                            disabled={currentPage >= Math.ceil(users.length / usersPerPage)}
-                            style={{ padding: '8px 16px', backgroundColor: 'var(--bg-card)', color: currentPage >= Math.ceil(users.length / usersPerPage) ? 'var(--text-muted)' : 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '8px', cursor: currentPage >= Math.ceil(users.length / usersPerPage) ? 'not-allowed' : 'pointer', fontWeight: '600' }}>
+                            onClick={() => setCurrentPage(p => Math.min(Math.ceil(total / limit), p + 1))}
+                            disabled={currentPage >= Math.ceil(total / limit)}
+                            style={{ padding: '8px 16px', backgroundColor: 'var(--bg-card)', color: currentPage >= Math.ceil(total / limit) ? 'var(--text-muted)' : 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '8px', cursor: currentPage >= Math.ceil(total / limit) ? 'not-allowed' : 'pointer', fontWeight: '600' }}>
                             Suivant
                         </button>
                     </div>
                 </div>
             )}
-
-            {isModalOpen && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-                    <div style={{ backgroundColor: 'var(--bg-primary)', padding: '32px', borderRadius: '16px', width: '100%', maxWidth: '400px' }}>
-                        <h3 style={{ marginTop: 0, marginBottom: '20px' }}>Créer un Profil Professionnel</h3>
-                        {error && <div style={{ marginBottom: '16px', color: 'var(--danger)', fontSize: '14px' }}>{error}</div>}
+            {showCreatePro && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+                }}>
+                    <div className="card" style={{ width: '400px', backgroundColor: 'var(--bg-card)' }}>
+                        <h3 style={{ marginBottom: '20px', color: 'var(--text-primary)' }}>Nouveau Compte Marchand</h3>
                         <form onSubmit={handleCreatePro} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                             <div>
-                                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>Type de Profil</label>
-                                <select value={newRole} onChange={e => setNewRole(e.target.value)}>
-                                    <option value="AGENT">Agent (Point Mobile / Kiosque Route)</option>
-                                    <option value="MERCHANT">Marchand (Boutique / Vendeur Comptoir)</option>
-                                </select>
+                                <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px', fontWeight: 600 }}>Téléphone (+241...)</label>
+                                <input type="text" value={proPhone} onChange={e => setProPhone(e.target.value)} placeholder="+241xxxxxxx" required />
                             </div>
                             <div>
-                                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>Nom / Enseigne</label>
-                                <input type="text" value={newName} onChange={e => setNewName(e.target.value)} required placeholder="Ex: Boutique Ali" />
+                                <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px', fontWeight: 600 }}>Nom de l'Entité</label>
+                                <input type="text" value={proName} onChange={e => setProName(e.target.value)} required />
                             </div>
                             <div>
-                                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>Téléphone</label>
-                                <input type="text" value={newPhone} onChange={e => setNewPhone(e.target.value)} required placeholder="+24177......." />
+                                <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px', fontWeight: 600 }}>Code PIN Initial (4 chiffres)</label>
+                                <input type="password" value={proPin} onChange={e => setProPin(e.target.value)} minLength={4} maxLength={4} required />
                             </div>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>PIN PROVISOIRE</label>
-                                <input type="text" value={newPin} onChange={e => setNewPin(e.target.value)} required />
-                            </div>
-
-                            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-                                <button type="button" onClick={() => setIsModalOpen(false)} style={{ flex: 1, padding: '12px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>Annuler</button>
-                                <button type="submit" disabled={creating} className="btn-primary" style={{ flex: 1 }}>{creating ? 'Création...' : 'Créer le profil'}</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* CRM 360-View Panel */}
-            {selectedUser && (
-                <div style={{
-                    position: 'fixed', top: 0, right: 0, width: '450px', height: '100vh',
-                    backgroundColor: 'var(--bg-card)', borderLeft: '1px solid var(--border)',
-                    boxShadow: 'var(--shadow-lg)', zIndex: 50, padding: '32px',
-                    overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px'
-                }}>
-                    <div className="flex-between">
-                        <h3 style={{ fontSize: '20px' }}>Profil Utilisateur</h3>
-                        <button onClick={() => setSelectedUser(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                            <X size={24} />
-                        </button>
-                    </div>
-
-                    {isEditingUser ? (
-                        <form onSubmit={handleUpdateUser} style={{ display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'var(--bg-primary)', padding: '24px', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                            <h4 style={{ margin: 0, color: 'var(--text-primary)' }}>Modifier le profil</h4>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>Nom complet</label>
-                                <input type="text" value={editName} onChange={e => setEditName(e.target.value)} required />
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>Téléphone</label>
-                                <input type="text" value={editPhone} onChange={e => setEditPhone(e.target.value)} required />
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: '600' }}>Pseudo (Optionnel)</label>
-                                <input type="text" value={editUsername} onChange={e => setEditUsername(e.target.value)} placeholder="@pseudo" />
-                            </div>
+                            
                             <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                                <button type="button" onClick={() => setIsEditingUser(false)} style={{ flex: 1, padding: '12px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}>Annuler</button>
-                                <button type="submit" className="btn-primary" style={{ flex: 1, padding: '12px' }}>Enregistrer</button>
-                            </div>
-                        </form>
-                    ) : (
-                        <>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '24px', backgroundColor: 'var(--bg-primary)', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                                <div style={{ width: '64px', height: '64px', borderRadius: '32px', backgroundColor: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 'bold', color: 'var(--text-primary)' }}>
-                                    {selectedUser.name?.charAt(0).toUpperCase()}
-                                </div>
-                                <div>
-                                    <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{selectedUser.name}</div>
-                                    <div style={{ color: 'var(--text-secondary)' }}>{selectedUser.phone}</div>
-                                    {selectedUser.username && <div style={{ color: 'var(--accent)', fontSize: '13px' }}>@{selectedUser.username}</div>}
-                                </div>
-                                <button onClick={() => {
-                                    setEditName(selectedUser.name);
-                                    setEditPhone(selectedUser.phone);
-                                    setEditUsername(selectedUser.username || '');
-                                    setIsEditingUser(true);
-                                }} style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer' }} title="Éditer le profil">
-                                    <Edit2 size={20} />
+                                <button type="button" onClick={() => setShowCreatePro(false)} style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text-primary)' }}>Annuler</button>
+                                <button type="submit" disabled={createLoading} className="btn-primary" style={{ flex: 1, padding: '12px' }}>
+                                    {createLoading ? 'Création...' : 'Créer Compte'}
                                 </button>
                             </div>
-
-                            <div className="stats-grid" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 0 }}>
-                                <div className="stat-card" style={{ padding: '20px' }}>
-                                    <div className="stat-label">Solde Portefeuille</div>
-                                    <div className="stat-value" style={{ fontSize: '24px', color: 'var(--success)' }}>{selectedUser.wallet?.balance?.toLocaleString('fr-FR')} F</div>
-                                </div>
-                                <div className="stat-card" style={{ padding: '20px' }}>
-                                    <div className="stat-label">Statut KYC</div>
-                                    <div style={{ marginTop: '8px' }}>
-                                        <span className={`status-pill ${selectedUser.kycStatus === 'UNVERIFIED' ? 'neutral' : selectedUser.kycStatus === 'APPROVED' ? 'success' : 'warning'}`}>
-                                            {selectedUser.kycStatus || 'UNVERIFIED'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div>
-                                <h4 style={{ color: 'var(--text-muted)', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '0.5px', marginBottom: '16px' }}>
-                                    Actions Administratives
-                                </h4>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                    {selectedUser.kycLevel === 0 && (
-                                        <button onClick={() => certifyUser(selectedUser.id)}
-                                            style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'var(--bg-secondary)', color: '#10b981', border: '1px solid #10b981', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', transition: 'all 0.2s', boxShadow: '0 4px 6px rgba(16, 185, 129, 0.1)' }}>
-                                            🛂 Certifier manuellement l'Identité (Passer Tier 1)
-                                        </button>
-                                    )}
-
-                                    {/* Override VIP Limit Input */}
-                                    <div style={{ backgroundColor: 'var(--bg-secondary)', padding: '15px', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-                                        <label style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600, display: 'block', marginBottom: 8 }}>Plafond Transactionnel Vip (FCFA/Jour)</label>
-                                        <div style={{ display: 'flex', gap: 10 }}>
-                                            <input
-                                                type="number"
-                                                placeholder={selectedUser.kycLevel >= 100 ? selectedUser.kycLevel.toString() : "Ex: 10000000"}
-                                                value={vipLimitInput}
-                                                onChange={(e) => setVipLimitInput(e.target.value)}
-                                                style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
-                                            />
-                                            <button onClick={handleSetVipLimit} style={{ padding: '10px 15px', borderRadius: '8px', border: 'none', background: '#3b82f6', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>
-                                                Appliquer
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <button onClick={() => { toggleStatus(selectedUser.id); setSelectedUser({ ...selectedUser, isActive: !selectedUser.isActive }); }}
-                                        style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: selectedUser.isActive === false ? 'var(--success-bg)' : 'var(--danger-bg)', color: selectedUser.isActive === false ? 'var(--success)' : 'var(--danger)', border: '1px solid transparent', borderRadius: '12px', cursor: 'pointer', fontWeight: '600' }}>
-                                        {selectedUser.isActive === false ? <ShieldCheck size={20} /> : <ShieldAlert size={20} />}
-                                        {selectedUser.isActive === false ? 'Réactiver le compte' : 'Suspendre le compte'}
-                                    </button>
-                                    <button onClick={() => resetPin(selectedUser.id)}
-                                        style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '12px', cursor: 'pointer', fontWeight: '600' }}>
-                                        <Lock size={20} />
-                                        Générer un nouveau code PIN
-                                    </button>
-                                    <button onClick={() => { deleteUser(selectedUser.id); setSelectedUser(null); }}
-                                        style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'var(--bg-primary)', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', marginTop: '16px' }}>
-                                        🗑️ Clôturer définitivement le compte
-                                    </button>
-                                </div>
-                            </div>
-                        </>
-                    )}
+                        </form>
+                    </div>
                 </div>
             )}
         </div>
     );
 }
+
+
+

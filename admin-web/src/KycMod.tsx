@@ -58,25 +58,25 @@ export default function KycMod({ token }: { token: string }) {
 
     return (
         <div className="card" style={{ maxWidth: '900px', margin: '0 auto' }}>
-            <h2 style={{ fontSize: '24px', marginBottom: '20px', color: '#6366f1' }}>Base KYC & Identité</h2>
+            <h2 style={{ fontSize: '24px', marginBottom: '20px', color: 'var(--accent)' }}>Base KYC & Identité</h2>
 
             <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-                <button onClick={() => setTab('PENDING')} style={{ padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', border: 'none', background: tab === 'PENDING' ? '#6366f1' : 'var(--bg-card)', color: tab === 'PENDING' ? '#fff' : 'var(--text-primary)', fontWeight: 'bold' }}>
+                <button onClick={() => setTab('PENDING')} style={{ padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', border: 'none', background: tab === 'PENDING' ? 'var(--accent)' : 'var(--bg-card)', color: tab === 'PENDING' ? '#fff' : 'var(--text-primary)', fontWeight: 'bold' }}>
                     Dossiers en attente
                 </button>
-                <button onClick={() => setTab('APPROVED')} style={{ padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', border: 'none', background: tab === 'APPROVED' ? '#10b981' : 'var(--bg-card)', color: tab === 'APPROVED' ? '#fff' : 'var(--text-primary)', fontWeight: 'bold' }}>
+                <button onClick={() => setTab('APPROVED')} style={{ padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', border: 'none', background: tab === 'APPROVED' ? 'var(--success)' : 'var(--bg-card)', color: tab === 'APPROVED' ? '#fff' : 'var(--text-primary)', fontWeight: 'bold' }}>
                     Identités Certifiées
                 </button>
             </div>
 
-            <p style={{ color: '#aaa', marginBottom: '20px' }}>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '20px' }}>
                 {tab === 'PENDING' ? 'Les dossiers ci-dessous requièrent une validation manuelle.' : 'Liste des clients dont l\'identité a été formellement validée par le siège.'}
             </p>
 
-            {error && <div style={{ color: 'red', marginBottom: '10px' }}>{error}</div>}
+            {error && <div style={{ color: 'var(--danger)', marginBottom: '10px' }}>{error}</div>}
 
             {loading ? (
-                <div style={{ color: '#aaa' }}>Chargement...</div>
+                <div style={{ color: 'var(--text-muted)' }}>Chargement...</div>
             ) : pending.length === 0 ? (
                 <div className="card" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
                     Aucun dossier KYC en attente ! 🎉
@@ -93,7 +93,7 @@ export default function KycMod({ token }: { token: string }) {
                                     <div style={{ position: 'relative' }}>
                                         <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '5px' }}>CNI Recto</p>
                                         {p.idCardFront ? (
-                                            <img src={p.idCardFront} alt="CNI Recto" style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #334155' }} />
+                                            <img src={p.idCardFront} alt="CNI Recto" style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }} />
                                         ) : (
                                             <div style={{ width: '120px', height: '80px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Manquant</div>
                                         )}
@@ -101,7 +101,7 @@ export default function KycMod({ token }: { token: string }) {
                                     <div style={{ position: 'relative' }}>
                                         <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '5px' }}>CNI Verso</p>
                                         {p.idCardBack ? (
-                                            <img src={p.idCardBack} alt="CNI Verso" style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #334155' }} />
+                                            <img src={p.idCardBack} alt="CNI Verso" style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }} />
                                         ) : (
                                             <div style={{ width: '120px', height: '80px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Manquant</div>
                                         )}
@@ -109,7 +109,7 @@ export default function KycMod({ token }: { token: string }) {
                                     <div style={{ position: 'relative' }}>
                                         <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '5px' }}>Selfie</p>
                                         {p.selfie ? (
-                                            <img src={p.selfie} alt="Selfie" style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #334155' }} />
+                                            <img src={p.selfie} alt="Selfie" style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }} />
                                         ) : (
                                             <div style={{ width: '120px', height: '80px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Manquant</div>
                                         )}
@@ -119,10 +119,10 @@ export default function KycMod({ token }: { token: string }) {
 
                             {tab === 'PENDING' && (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', minWidth: '150px' }}>
-                                    <button onClick={() => processKyc(p.id, 'APPROVED')} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    <button onClick={() => processKyc(p.id, 'APPROVED')} style={{ backgroundColor: 'var(--success)', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
                                         <Check size={16} /> Approuver (Tier 1)
                                     </button>
-                                    <button onClick={() => processKyc(p.id, 'REJECTED')} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                    <button onClick={() => processKyc(p.id, 'REJECTED')} style={{ backgroundColor: 'var(--danger)', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
                                         <X size={16} /> Rejeter
                                     </button>
                                 </div>
@@ -130,7 +130,7 @@ export default function KycMod({ token }: { token: string }) {
 
                             {tab === 'APPROVED' && (
                                 <div style={{ minWidth: '150px', textAlign: 'right' }}>
-                                    <span style={{ backgroundColor: 'rgba(16,185,129,0.1)', color: '#10b981', padding: '6px 12px', borderRadius: '12px', fontSize: 13, fontWeight: 'bold' }}>CERTIFIÉ ✅</span>
+                                    <span style={{ backgroundColor: 'var(--success-bg)', color: 'var(--success)', padding: '6px 12px', borderRadius: '12px', fontSize: 13, fontWeight: 'bold' }}>CERTIFIÉ ✅</span>
                                 </div>
                             )}
                         </div>

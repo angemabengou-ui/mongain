@@ -1,11 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
-import { apiGetBalance } from '../services/api';
+import { apiGenerateWithdrawCode, apiGetBalance } from '../services/api';
+
+function formatCountdown(seconds: number) {
+    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+    const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+}
 
 export default function WithdrawScreen() {
     const COLORS = useAppTheme();
@@ -13,25 +19,91 @@ export default function WithdrawScreen() {
     const router = useRouter();
     const { user } = useAuth();
 
+    const [showAmountModal, setShowAmountModal] = useState(false);
+    const [codeAmount, setCodeAmount] = useState('');
+    const [generating, setGenerating] = useState(false);
+
     const [showCode, setShowCode] = useState(false);
     const [token, setToken] = useState('000 000');
+    const [expiresAt, setExpiresAt] = useState<number | null>(null);
+    const [remainingSeconds, setRemainingSeconds] = useState(0);
+
     const [balance, setBalance] = useState(user?.wallet?.balance || 0);
+    const [balanceStale, setBalanceStale] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
             apiGetBalance().then(res => {
-                if (res && res.balance !== undefined) setBalance(res.balance);
-            }).catch(console.error);
+                if (res && res.balance !== undefined) {
+                    setBalance(res.balance);
+                    setBalanceStale(false);
+                }
+            }).catch(() => setBalanceStale(true));
         }, [])
     );
 
-    const generateCode = () => {
-        const pass = Math.floor(100000 + Math.random() * 900000).toString();
-        setToken(pass.slice(0, 3) + ' ' + pass.slice(3, 6));
-        setShowCode(true);
+    useEffect(() => {
+        if (!showCode || !expiresAt) return;
+        const tick = () => setRemainingSeconds(Math.max(0, Math.round((expiresAt - Date.now()) / 1000)));
+        tick();
+        const interval = setInterval(tick, 1000);
+        return () => clearInterval(interval);
+    }, [showCode, expiresAt]);
+
+    const confirmGenerateCode = async () => {
+        const amount = parseFloat(codeAmount.replace(/\s/g, '').replace(',', '.'));
+        if (isNaN(amount) || amount <= 0) {
+            Alert.alert('Montant invalide', 'Veuillez entrer un montant valide supérieur à 0.');
+            return;
+        }
+        setGenerating(true);
+        try {
+            const res = await apiGenerateWithdrawCode(amount);
+            setToken(res.code.slice(0, 3) + ' ' + res.code.slice(3, 6));
+            setExpiresAt(new Date(res.expiresAt).getTime());
+            setShowAmountModal(false);
+            setCodeAmount('');
+            setShowCode(true);
+        } catch (e: any) {
+            Alert.alert('Échec', e.message || 'Impossible de générer le code.');
+        } finally {
+            setGenerating(false);
+        }
     };
 
+    if (showAmountModal) {
+        return (
+            <SafeAreaView style={styles.safeArea}>
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, justifyContent: 'center', padding: 24 }}>
+                    <Text style={styles.codeGenTitle}>Montant à retirer</Text>
+                    <Text style={[styles.codeGenSubtitle, { textAlign: 'center', marginTop: 12, marginBottom: 24 }]}>
+                        Ce montant sera débité de votre solde une fois le retrait validé par l'agent.
+                    </Text>
+                    <View style={[styles.inputBox, { borderColor: '#10B981' }]}>
+                        <Text style={styles.currencyLabel}>FCFA</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="0"
+                            placeholderTextColor={COLORS.textSecondary}
+                            keyboardType="numeric"
+                            value={codeAmount}
+                            onChangeText={setCodeAmount}
+                            autoFocus
+                        />
+                    </View>
+                    <TouchableOpacity style={[styles.btn, { marginTop: 32 }]} onPress={confirmGenerateCode} disabled={generating}>
+                        {generating ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Générer le code</Text>}
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ marginTop: 16, alignItems: 'center' }} onPress={() => { setShowAmountModal(false); setCodeAmount(''); }} disabled={generating}>
+                        <Text style={{ color: COLORS.textSecondary, fontWeight: '600' }}>Annuler</Text>
+                    </TouchableOpacity>
+                </KeyboardAvoidingView>
+            </SafeAreaView>
+        );
+    }
+
     if (showCode) {
+        const expired = remainingSeconds <= 0;
         return (
             <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
                 <View style={[styles.iconWrap, { backgroundColor: '#10B98115', padding: 24, borderRadius: 50, marginBottom: 24, width: 100, height: 100 }]}>
@@ -43,10 +115,12 @@ export default function WithdrawScreen() {
                 </Text>
 
                 <View style={styles.codeContainer}>
-                    <Text style={styles.codeText}>{token}</Text>
+                    <Text style={styles.codeText}>{expired ? '— — —' : token}</Text>
                 </View>
 
-                <Text style={[styles.codeGenSubtitle, { color: '#EF4444', fontWeight: 'bold' }]}>EXPIRATION DANS 05:00</Text>
+                <Text style={[styles.codeGenSubtitle, { color: '#EF4444', fontWeight: 'bold' }]}>
+                    {expired ? 'CODE EXPIRÉ' : `EXPIRATION DANS ${formatCountdown(remainingSeconds)}`}
+                </Text>
 
                 <TouchableOpacity style={[styles.btn, { width: '100%', marginTop: 60 }]} onPress={() => setShowCode(false)}>
                     <Text style={styles.btnText}>Fermer</Text>
@@ -69,9 +143,14 @@ export default function WithdrawScreen() {
                 <View style={styles.balanceSection}>
                     <Text style={styles.balanceLabel}>Solde Retirable</Text>
                     <Text style={styles.balanceAmount}>{balance.toLocaleString('fr-FR')} FCFA</Text>
+                    {balanceStale && (
+                        <Text style={{ fontSize: 12, color: '#F59E0B', marginTop: 4 }}>
+                            Solde peut-être obsolète — vérifiez votre connexion.
+                        </Text>
+                    )}
                 </View>
 
-                <Text style={styles.sectionHeader}>PAR QR SCANCER</Text>
+                <Text style={styles.sectionHeader}>PAR CODE QR</Text>
 
                 <View style={styles.listContainer}>
                     <TouchableOpacity style={styles.listItem} onPress={() => router.push('/qr?mode=scanOnly&intent=withdraw')}>
@@ -89,7 +168,7 @@ export default function WithdrawScreen() {
                 <Text style={styles.sectionHeader}>PAR CODE SECRET</Text>
 
                 <View style={styles.listContainer}>
-                    <TouchableOpacity style={styles.listItem} onPress={generateCode}>
+                    <TouchableOpacity style={styles.listItem} onPress={() => setShowAmountModal(true)}>
                         <View style={[styles.listIcon, { backgroundColor: '#10B98115' }]}>
                             <Ionicons name="lock-closed" size={24} color="#10B981" />
                         </View>
@@ -101,7 +180,7 @@ export default function WithdrawScreen() {
                     </TouchableOpacity>
                 </View>
 
-                <Text style={styles.sectionHeader}>PORTFEUILLES MOBILES ET BANQUES</Text>
+                <Text style={styles.sectionHeader}>PORTEFEUILLES MOBILES ET BANQUES</Text>
 
                 <View style={styles.listContainer}>
                     <TouchableOpacity onPress={() => { }} disabled={true} style={[styles.listItem, { opacity: 0.5 }]}>
@@ -150,6 +229,10 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     listTextWrap: { flex: 1, marginRight: 8 },
     listTitle: { fontSize: 16, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 4 },
     listDesc: { fontSize: 13, color: COLORS.textSecondary, lineHeight: 18 },
+
+    inputBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderRadius: 15, paddingHorizontal: 20, height: 70, width: '100%', backgroundColor: COLORS.surface },
+    currencyLabel: { fontSize: 20, fontWeight: 'bold', marginRight: 15, color: COLORS.textPrimary },
+    input: { flex: 1, fontSize: 32, fontWeight: 'bold', textAlign: 'right', color: COLORS.textPrimary },
 
     iconWrap: { justifyContent: 'center', alignItems: 'center' },
     codeGenTitle: { fontSize: 24, fontWeight: '800', color: COLORS.textPrimary, textAlign: 'center' },

@@ -1,8 +1,7 @@
-import { router } from 'expo-router';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { io, Socket } from 'socket.io-client';
-import { apiGetMe, apiLogin, apiRegister, apiUpdatePushToken, apiVerifyLoginOtp, BASE_URL, deleteToken, getToken, saveToken, setUnauthorizedHandler, User } from '../services/api';
+import { apiGetMe, apiGetSystemSettings, apiLogin, apiRegister, apiUpdatePushToken, apiVerifyLoginOtp, BASE_URL, deleteToken, getToken, saveToken, setUnauthorizedHandler, User } from '../services/api';
 
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
@@ -102,29 +101,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             );
         });
 
-        newSocket.on('withdraw_request', (data: { agentPhone: string, agentName: string, amount: number }) => {
-            Alert.alert(
-                '⚠️ Demande de Retrait Agence',
-                `L'Agence ${data.agentName} vous demande de valider un retrait de ${data.amount.toLocaleString('fr-FR')} FCFA.`,
-                [
-                    { text: 'Refuser', style: 'cancel' },
-                    {
-                        text: 'Valider',
-                        onPress: () => {
-                            router.push({
-                                pathname: '/client-withdraw-desk',
-                                params: {
-                                    agentPhone: data.agentPhone,
-                                    agentName: data.agentName,
-                                    lockedAmount: data.amount.toString()
-                                }
-                            });
-                        }
-                    }
-                ]
-            );
-        });
-
         setSocket(newSocket);
 
         // Enregistrer le push token en arrière-plan
@@ -146,6 +122,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
     };
 
+    // Récupère les paramètres publics (taux de frais, seuils, etc.) — appelé au
+    // démarrage ET après chaque connexion, pour éviter que des écrans (transfert,
+    // retrait...) ne retombent sur des valeurs par défaut codées en dur si l'app
+    // n'a pas redémarré depuis la connexion.
+    const fetchSettings = async () => {
+        try {
+            setSettings(await apiGetSystemSettings());
+        } catch {
+            // Non bloquant : les écrans ont leurs propres valeurs de repli.
+        }
+    };
+
     // Enregistrer le handler d'auto-logout pour les 401 API
     useEffect(() => {
         setUnauthorizedHandler(logout);
@@ -161,11 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     // Récupérer le profil complet depuis le backend
                     const me = await apiGetMe();
                     setUser(me);
-
-                    const respSettings = await fetch(BASE_URL + '/api/settings');
-                    if (respSettings.ok) {
-                        setSettings(await respSettings.json());
-                    }
+                    await fetchSettings();
                 }
             } catch {
                 // Token invalide ou expiré → nettoyer
@@ -192,6 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await saveToken(res.token);
             setToken(res.token);
             setUser(res.user);
+            await fetchSettings();
             return { success: true };
         }
         return { success: false };
@@ -202,6 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await saveToken(newToken);
         setToken(newToken);
         setUser(newUser);
+        await fetchSettings();
     };
 
     const register = async (name: string, username: string, phone: string, pin: string, otpCode: string) => {
@@ -209,6 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await saveToken(newToken);
         setToken(newToken);
         setUser(newUser);
+        await fetchSettings();
     };
 
     return (

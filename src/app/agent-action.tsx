@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -16,54 +16,56 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
-import { BASE_URL } from '../services/api';
-import { verifyBiometricsOrPin } from '../services/biometrics';
+import { apiTransfer } from '../services/api';
+import { enableBiometricPin, isBiometricPinEnabled, verifyBiometricsOrPin } from '../services/biometrics';
 
 export default function AgentActionDeskScreen() {
     const router = useRouter();
-    const { user, token } = useAuth();
+    const { user } = useAuth();
     const COLORS = useAppTheme();
 
     const { clientPhone, clientName, action } = useLocalSearchParams();
     const [amount, setAmount] = useState('');
+    const [pin, setPin] = useState('');
     const [loading, setLoading] = useState(false);
+    const [bioEnabled, setBioEnabled] = useState(false);
+
+    useEffect(() => { isBiometricPinEnabled().then(setBioEnabled); }, []);
 
     // Right now, this screen is specialized for the Agent depositing digital cash into a Client's wallet after receiving physical cash.
     const isDeposit = action === 'DEPOSIT';
+    const cleanAmount = (v: string) => parseFloat(v.replace(/\s/g, '').replace(',', '.'));
+    const numAmountPreview = cleanAmount(amount) || 0;
 
-    const handleAction = async () => {
-        if (!user) return;
-        const numAmount = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
-        if (isNaN(numAmount) || numAmount <= 0) {
-            Alert.alert("Montant invalide", "Veuillez entrer un montant valide supérieur à 0.");
-            return;
-        }
-
-        // Biometric / PIN Verification for the Agent to avoid acciental deposits
-        const authResult = await verifyBiometricsOrPin();
-        if (!authResult.success) {
-            Alert.alert('Échec de l\'authentification', authResult.error || 'Impossible de vérifier votre identité.');
-            return;
-        }
-
+    const submitAction = async (usedPin: string) => {
+        const numAmount = cleanAmount(amount);
         setLoading(true);
         try {
             // Utilisation du endpoint natif de transfert (gratuit d'un Agent vers Client dans le backend)
-            const endpoint = '/api/wallet/transfer';
-            const res = await fetch(`${BASE_URL}${endpoint}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({
-                    receiverPhone: clientPhone,
-                    amount: numAmount,
-                    pin: authResult.pin,
-                    useBiometrics: authResult.useBiometrics
-                })
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.message || data.error);
+            const data = await apiTransfer(clientPhone as string, numAmount, usedPin);
+
+            // Propose l'activation du déverrouillage biométrique (même parcours de
+            // consentement que transfer-confirm.tsx — jamais activé silencieusement).
+            if (!bioEnabled) {
+                Alert.alert(
+                    'Activer Face ID / Empreinte ?',
+                    'Confirmez vos prochaines opérations de guichet sans ressaisir votre code PIN.',
+                    [
+                        { text: 'Plus tard', style: 'cancel' },
+                        {
+                            text: 'Activer', onPress: async () => {
+                                const ok = await enableBiometricPin(usedPin);
+                                if (ok) setBioEnabled(true);
+                                else Alert.alert('Échec', 'Impossible d\'activer le déverrouillage biométrique sur cet appareil.');
+                            }
+                        },
+                    ]
+                );
+            }
 
             // Redirection to receipt ticket
+            // Préfixe 'DEPOSIT' obligatoire : c'est ce que receipt.tsx utilise pour
+            // afficher "Dépôt sur compte" plutôt que "Paiement envoyé".
             router.replace({
                 pathname: '/receipt',
                 params: {
@@ -72,9 +74,10 @@ export default function AgentActionDeskScreen() {
                     amount: numAmount,
                     currency: 'FCFA',
                     status: 'COMPLETED',
-                    reference: 'AGENCY-DEP-' + Date.now().toString().substring(8),
+                    reference: 'DEPOSIT-AGENCY-' + Date.now().toString().substring(8),
                     counterpart: clientName as string,
                     counterpartPhone: clientPhone as string,
+                    createdAt: data.data?.transaction?.createdAt || new Date().toISOString(),
                 }
             });
         } catch (error: any) {
@@ -82,6 +85,33 @@ export default function AgentActionDeskScreen() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleManualAction = () => {
+        const numAmount = cleanAmount(amount);
+        if (isNaN(numAmount) || numAmount <= 0) {
+            Alert.alert("Montant invalide", "Veuillez entrer un montant valide supérieur à 0.");
+            return;
+        }
+        if (pin.length !== 4) {
+            Alert.alert('Code PIN requis', 'Veuillez entrer votre code PIN à 4 chiffres.');
+            return;
+        }
+        submitAction(pin);
+    };
+
+    const handleBiometricAction = async () => {
+        const numAmount = cleanAmount(amount);
+        if (isNaN(numAmount) || numAmount <= 0) {
+            Alert.alert("Montant invalide", "Veuillez entrer un montant valide supérieur à 0.");
+            return;
+        }
+        const authResult = await verifyBiometricsOrPin();
+        if (!authResult.success || !authResult.pin) {
+            Alert.alert('Échec de l\'authentification', authResult.error || 'Impossible de vérifier votre identité.');
+            return;
+        }
+        submitAction(authResult.pin);
     };
 
     if (!user) return null;
@@ -132,26 +162,51 @@ export default function AgentActionDeskScreen() {
                                 autoFocus
                             />
                         </View>
+
+                        <View style={[styles.inputBox, { borderColor: COLORS.border, backgroundColor: COLORS.surface, height: 56, marginBottom: 0 }]}>
+                            <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 10 }} />
+                            <TextInput
+                                style={[styles.input, { fontSize: 20, textAlign: 'left', color: COLORS.text }]}
+                                placeholder="Code PIN"
+                                placeholderTextColor={COLORS.textSecondary}
+                                keyboardType="number-pad"
+                                secureTextEntry
+                                maxLength={4}
+                                value={pin}
+                                onChangeText={setPin}
+                            />
+                        </View>
                     </View>
 
-                    <TouchableOpacity
-                        style={[
-                            styles.confirmBtn,
-                            (!amount || parseFloat(amount) <= 0 || loading) && styles.confirmBtnDisabled,
-                            { backgroundColor: COLORS.primary }
-                        ]}
-                        onPress={handleAction}
-                        disabled={!amount || parseFloat(amount) <= 0 || loading}
-                    >
-                        {loading ? (
-                            <ActivityIndicator color="#fff" />
-                        ) : (
-                            <>
-                                <Ionicons name="checkmark-circle" size={24} color="#fff" style={{ marginRight: 8 }} />
-                                <Text style={styles.confirmBtnText}>Valider et Transférer</Text>
-                            </>
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                        {bioEnabled && (
+                            <TouchableOpacity
+                                style={[styles.confirmBtn, { flex: 1, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.primary }]}
+                                onPress={handleBiometricAction}
+                                disabled={!amount || numAmountPreview <= 0 || loading}
+                            >
+                                <Ionicons name="finger-print" size={22} color={COLORS.primary} />
+                            </TouchableOpacity>
                         )}
-                    </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[
+                                styles.confirmBtn,
+                                { flex: bioEnabled ? 3 : 1, backgroundColor: COLORS.primary },
+                                (!amount || numAmountPreview <= 0 || pin.length !== 4 || loading) && styles.confirmBtnDisabled,
+                            ]}
+                            onPress={handleManualAction}
+                            disabled={!amount || numAmountPreview <= 0 || pin.length !== 4 || loading}
+                        >
+                            {loading ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <>
+                                    <Ionicons name="checkmark-circle" size={24} color="#fff" style={{ marginRight: 8 }} />
+                                    <Text style={styles.confirmBtnText}>Valider et Transférer</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </View>
 
                 </ScrollView>
             </KeyboardAvoidingView>

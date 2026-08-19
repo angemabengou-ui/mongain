@@ -33,7 +33,7 @@ export default function ForgotPinScreen() {
         }
         setLoading(true);
         try {
-            const formattedPhone = phone.startsWith('+') ? phone : `+241${phone.replace(/\\s+/g, '')}`;
+            const formattedPhone = phone.startsWith('+') ? phone : `+241${phone.replace(/\s+/g, '')}`;
             await apiRequestResetOTP(formattedPhone);
             // Redirige vers reset
             router.push({ pathname: '/auth/reset-pin' as any, params: { phone: formattedPhone } });

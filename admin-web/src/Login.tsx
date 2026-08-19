@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { API_URL } from './config';
+import { apiFetch } from './utils/apiFetch';
 
-export default function Login({ setToken }: { setToken: (token: string, role: string, name: string, identifier: string) => void }) {
+export default function Login({ setToken }: { setToken: (token: string, role: string, name: string, identifier: string, mustChangePassword: boolean) => void }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -14,16 +15,11 @@ export default function Login({ setToken }: { setToken: (token: string, role: st
         setError('');
         setLoading(true);
         try {
-            const res = await fetch(API_URL + '/api/corp/login', {
+            const data = await apiFetch(API_URL + '/api/corp/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: email.trim(), password })
             });
-            const data = await res.json();
-
-            if (!res.ok) {
-                throw new Error(data.error || 'Identifiants invalides.');
-            }
 
             if (!data.user || !data.user.role) {
                 throw new Error('Réponse serveur invalide.');
@@ -35,7 +31,7 @@ export default function Login({ setToken }: { setToken: (token: string, role: st
             }
 
             // We pass the email back as the "identifier" (formerly phone)
-            setToken(data.token, data.user.role, data.user.name, data.user.email);
+            setToken(data.token, data.user.role, data.user.name, data.user.email, !!data.user.mustChangePassword);
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -44,13 +40,20 @@ export default function Login({ setToken }: { setToken: (token: string, role: st
     };
 
     return (
-        <div className="app-container" style={{ alignItems: 'center', justifyContent: 'center' }}>
-            <div className="card" style={{ width: '400px', padding: '40px' }}>
+        <div style={{
+            minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+            background: 'linear-gradient(160deg, var(--sidebar-bg) 0%, #0A2226 55%, var(--sidebar-bg) 100%)'
+        }}>
+            <div className="card" style={{ width: '400px', padding: '40px', boxShadow: 'var(--shadow-float)' }}>
                 <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-                    <div style={{ width: 48, height: 48, background: 'var(--accent)', color: 'white', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 'bold', margin: '0 auto 15px' }}>
+                    <div style={{
+                        width: 52, height: 52, background: 'var(--accent)', color: 'white', borderRadius: 12,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 800,
+                        fontFamily: 'var(--font-heading)', margin: '0 auto 18px', boxShadow: '0 8px 20px rgba(12, 133, 153, 0.35)'
+                    }}>
                         M.
                     </div>
-                    <h2 style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>Mongain Corporate</h2>
+                    <h2 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-heading)', letterSpacing: '-0.3px' }}>Mongain Corporate</h2>
                     <p style={{ color: 'var(--text-secondary)', marginTop: '8px', fontSize: 14 }}>Portail d'Authentification Interne</p>
                 </div>
 
@@ -58,7 +61,7 @@ export default function Login({ setToken }: { setToken: (token: string, role: st
                     <div style={{
                         color: 'var(--danger)', marginBottom: 20, fontSize: 14, textAlign: 'center',
                         background: 'var(--danger-bg)', padding: '12px 16px', borderRadius: 8,
-                        border: '1px solid rgba(220, 38, 38, 0.2)'
+                        border: '1px solid var(--danger)'
                     }}>
                         ⚠️ {error}
                     </div>

@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
-import { apiPayService } from '../../services/api';
+import { apiPayBill } from '../../services/api';
 
 export default function ElectricityServiceScreen() {
     const COLORS = useAppTheme();
@@ -22,6 +22,8 @@ export default function ElectricityServiceScreen() {
     const styles = getStyles(COLORS);
     const [amount, setAmount] = useState('');
     const [meter, setMeter] = useState('');
+    const [pin, setPin] = useState('');
+    const [showPin, setShowPin] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState<{ amount: number, token: string } | null>(null);
@@ -40,11 +42,16 @@ export default function ElectricityServiceScreen() {
             return;
         }
 
+        if (pin.length !== 4) {
+            setError('Code PIN requis.');
+            return;
+        }
+
         setLoading(true);
         try {
-            const result = await apiPayService('ELECTRICITY', amountNum, meter);
-            if (result.serviceToken) {
-                setSuccess({ amount: amountNum, token: result.serviceToken });
+            const result = await apiPayBill('SEEG', meter, amountNum, pin);
+            if (result.seegCode) {
+                setSuccess({ amount: amountNum, token: result.seegCode });
             } else {
                 throw new Error("Jeton non reçu.");
             }
@@ -135,6 +142,24 @@ export default function ElectricityServiceScreen() {
                             onChangeText={setAmount}
                             placeholderTextColor={COLORS.textSecondary}
                         />
+                    </View>
+
+                    <Text style={styles.label}>Code PIN Mongain</Text>
+                    <View style={styles.inputContainer}>
+                        <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 10 }} />
+                        <TextInput
+                            style={styles.input}
+                            placeholder="••••"
+                            keyboardType="number-pad"
+                            secureTextEntry={!showPin}
+                            maxLength={4}
+                            value={pin}
+                            onChangeText={setPin}
+                            placeholderTextColor={COLORS.textSecondary}
+                        />
+                        <TouchableOpacity onPress={() => setShowPin(!showPin)}>
+                            <Ionicons name={showPin ? 'eye-off-outline' : 'eye-outline'} size={20} color={COLORS.textSecondary} />
+                        </TouchableOpacity>
                     </View>
 
                     <TouchableOpacity style={styles.actionBtn} onPress={handlePay} disabled={loading}>

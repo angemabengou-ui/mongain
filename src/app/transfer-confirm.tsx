@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as LocalAuthentication from 'expo-local-authentication';
 import * as Print from 'expo-print';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import LottieView from 'lottie-react-native';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    Alert,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -19,6 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { apiTransfer } from '../services/api';
+import { enableBiometricPin, isBiometricPinEnabled, verifyBiometricsOrPin } from '../services/biometrics';
 
 const COLORS = {
     primary: '#1DC5E9',
@@ -32,7 +33,7 @@ const COLORS = {
 };
 
 export default function TransferConfirmScreen() {
-    const { settings, user } = useAuth();
+    const { settings } = useAuth();
     const router = useRouter();
     const { receiverPhone, receiverName, isMerchant } = useLocalSearchParams<{ receiverPhone: string; receiverName: string; isMerchant: string }>();
     const isPayment = isMerchant === 'true';
@@ -42,7 +43,10 @@ export default function TransferConfirmScreen() {
     const [showPin, setShowPin] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [success, setSuccess] = useState<{ receiverName: string; remainingBalance: number } | null>(null);
+    const [success, setSuccess] = useState<{ receiverName: string; remainingBalance: number; amount: number } | null>(null);
+    const [bioEnabled, setBioEnabled] = useState(false);
+
+    useEffect(() => { isBiometricPinEnabled().then(setBioEnabled); }, []);
 
     const initials = receiverName
         ? receiverName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -56,32 +60,24 @@ export default function TransferConfirmScreen() {
             return;
         }
 
-        const hasHardware = await LocalAuthentication.hasHardwareAsync();
-        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-
-        if (!hasHardware || !isEnrolled) {
-            setError('La biométrie n\'est pas disponible ou configurée sur cet appareil.');
+        const authResult = await verifyBiometricsOrPin();
+        if (!authResult.success || !authResult.pin) {
+            setError(authResult.error || 'Authentification biométrique impossible.');
             return;
         }
 
-        const auth = await LocalAuthentication.authenticateAsync({
-            promptMessage: 'Confirmez le transfert avec Face ID / Empreinte',
-            fallbackLabel: 'Utiliser le code PIN',
-        });
-
-        if (auth.success) {
-            setLoading(true);
-            try {
-                const result = await apiTransfer(receiverPhone, amountNum, undefined, true);
-                setSuccess({
-                    receiverName: result.data.receiverName,
-                    remainingBalance: result.data.remainingBalance,
-                });
-            } catch (e: any) {
-                setError(e.message);
-            } finally {
-                setLoading(false);
-            }
+        setLoading(true);
+        try {
+            const result = await apiTransfer(receiverPhone, amountNum, authResult.pin);
+            setSuccess({
+                receiverName: result.data.receiverName,
+                remainingBalance: result.data.remainingBalance,
+                amount: amountNum,
+            });
+        } catch (e: any) {
+            setError(e.message);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -100,11 +96,32 @@ export default function TransferConfirmScreen() {
 
         setLoading(true);
         try {
-            const result = await apiTransfer(receiverPhone, amountNum, pin, false);
+            const result = await apiTransfer(receiverPhone, amountNum, pin);
             setSuccess({
                 receiverName: result.data.receiverName,
                 remainingBalance: result.data.remainingBalance,
+                amount: amountNum,
             });
+
+            // Propose d'activer le déverrouillage biométrique pour les prochains transferts,
+            // maintenant que le PIN vient d'être confirmé valide par le serveur.
+            if (!bioEnabled) {
+                const currentPin = pin;
+                Alert.alert(
+                    'Activer Face ID / Empreinte ?',
+                    'Confirmez vos prochains transferts sans ressaisir votre code PIN.',
+                    [
+                        { text: 'Plus tard', style: 'cancel' },
+                        {
+                            text: 'Activer', onPress: async () => {
+                                const ok = await enableBiometricPin(currentPin);
+                                if (ok) setBioEnabled(true);
+                                else Alert.alert('Échec', 'Impossible d\'activer le déverrouillage biométrique sur cet appareil.');
+                            }
+                        },
+                    ]
+                );
+            }
         } catch (e: any) {
             setError(e.message);
         } finally {
@@ -138,10 +155,10 @@ export default function TransferConfirmScreen() {
                         <div class="logo">Mongain.</div>
                         <div class="title">Reçu de Transaction</div>
                       </div>
-                      <div class="amount">${parseFloat(amount).toLocaleString('fr-FR')} FCFA</div>
+                      <div class="amount">${(success?.amount ?? 0).toLocaleString('fr-FR')} FCFA</div>
                       <div class="row">
                         <span class="label">Statut</span>
-                        <span class="value" style="color: #10B981;">COMPLÉTÉ</span>
+                        <span class="value" style="color: #10B981;">TERMINÉE</span>
                       </div>
                       <div class="row">
                         <span class="label">${isPayment ? 'Marchand' : 'Bénéficiaire'}</span>
@@ -187,7 +204,7 @@ export default function TransferConfirmScreen() {
                 <Text style={styles.successSubtitle}>
                     Vous avez envoyé{'\n'}
                     <Text style={{ fontWeight: '800', color: COLORS.textPrimary }}>
-                        {parseFloat(amount).toLocaleString('fr-FR')} FCFA
+                        {success.amount.toLocaleString('fr-FR')} FCFA
                     </Text>
                     {'\n'}à <Text style={{ fontWeight: '800', color: COLORS.textPrimary }}>{success.receiverName}</Text>
                 </Text>
@@ -256,20 +273,30 @@ export default function TransferConfirmScreen() {
                         />
                     </View>
 
-                    {Number(amount) > 0 && (() => {
-                        const isExempt = (user?.role === 'AGENT' && !isPayment) || user?.role === 'ADMIN';
-                        const p2pFee = isExempt ? 0 : Math.ceil(Number(amount) * (settings?.taxP2P || 0.01));
-                        const totalDebit = Number(amount) + p2pFee;
+                    {(() => {
+                        // Même nettoyage que handleTransfer/handleBiometricAuth ci-dessus : un
+                        // Number(amount) brut renvoie NaN dès qu'un espace ou une virgule traîne
+                        // dans la saisie (collage, IME), ce qui masquait silencieusement cet
+                        // encart de frais au lieu d'afficher le montant réellement débité.
+                        const cleanedAmount = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
+                        if (!(cleanedAmount > 0)) return null;
+
+                        // Le backend (backend/src/routes/wallet.ts, POST /transfer) applique
+                        // taxP2P systématiquement, quel que soit le rôle de l'expéditeur —
+                        // aucune exemption AGENT/ADMIN n'existe côté serveur. Afficher "Gratuit"
+                        // ici induisait l'utilisateur en erreur sur le montant réellement débité.
+                        const p2pFee = Math.ceil(cleanedAmount * (settings?.taxP2P || 0.01));
+                        const totalDebit = cleanedAmount + p2pFee;
 
                         return (
                             <View style={{ backgroundColor: 'rgba(29, 197, 233, 0.05)', padding: 16, borderRadius: 16, marginTop: 12, borderWidth: 1, borderColor: 'rgba(29, 197, 233, 0.2)' }}>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
                                     <Text style={{ color: COLORS.textSecondary }}>Montant envoyé</Text>
-                                    <Text style={{ color: COLORS.textPrimary, fontWeight: '600' }}>{Number(amount).toLocaleString('fr-FR')} FCFA</Text>
+                                    <Text style={{ color: COLORS.textPrimary, fontWeight: '600' }}>{cleanedAmount.toLocaleString('fr-FR')} FCFA</Text>
                                 </View>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                                    <Text style={{ color: isExempt ? '#059669' : '#F59E0B' }}>Frais {isExempt ? '(Gratuit)' : `(${settings?.taxP2P ? settings.taxP2P * 100 : 1}%)`}</Text>
-                                    <Text style={{ color: isExempt ? '#059669' : '#F59E0B', fontWeight: '600' }}>{p2pFee.toLocaleString('fr-FR')} FCFA</Text>
+                                    <Text style={{ color: '#F59E0B' }}>Frais ({settings?.taxP2P ? settings.taxP2P * 100 : 1}%)</Text>
+                                    <Text style={{ color: '#F59E0B', fontWeight: '600' }}>{p2pFee.toLocaleString('fr-FR')} FCFA</Text>
                                 </View>
                                 <View style={{ width: '100%', height: 1, backgroundColor: COLORS.border || '#e2e8f0', marginVertical: 4 }} />
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
@@ -312,12 +339,14 @@ export default function TransferConfirmScreen() {
                         </TouchableOpacity>
                     </View>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginTop: 12 }}>
-                        <TouchableOpacity style={[styles.sendBtn, { flex: 1, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.primary }]} onPress={handleBiometricAuth} disabled={loading}>
-                            <Ionicons name="finger-print" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
-                            <Text style={[styles.sendBtnText, { color: COLORS.primary }]}>Face ID</Text>
-                        </TouchableOpacity>
+                        {bioEnabled && (
+                            <TouchableOpacity style={[styles.sendBtn, { flex: 1, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.primary }]} onPress={handleBiometricAuth} disabled={loading}>
+                                <Ionicons name="finger-print" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
+                                <Text style={[styles.sendBtnText, { color: COLORS.primary }]}>Face ID</Text>
+                            </TouchableOpacity>
+                        )}
 
-                        <TouchableOpacity style={[styles.sendBtn, { flex: 2, backgroundColor: isPayment ? '#F59E0B' : COLORS.primary, borderWidth: 0 }]} onPress={handleTransfer} disabled={loading}>
+                        <TouchableOpacity style={[styles.sendBtn, { flex: bioEnabled ? 2 : 1, backgroundColor: isPayment ? '#F59E0B' : COLORS.primary, borderWidth: 0 }]} onPress={handleTransfer} disabled={loading}>
                             {loading ? <ActivityIndicator color="#fff" /> : (
                                 <>
                                     <Ionicons name={isPayment ? "cart" : "send"} size={20} color="#fff" style={{ marginRight: 8 }} />

@@ -6,6 +6,7 @@ import { API_URL } from './config';
 export default function Dashboard({ token }: { token: string }) {
     const [stats, setStats] = useState<any>(null);
     const [chartData, setChartData] = useState<any[]>([]);
+    const [error, setError] = useState('');
 
     useEffect(() => {
         const fetchDashboardData = async () => {
@@ -15,11 +16,16 @@ export default function Dashboard({ token }: { token: string }) {
                 });
                 const dataStats = await resStats.json();
 
-                if (dataStats.error) {
-                    if (dataStats.error.includes('Accès') || dataStats.error.includes('Token')) {
+                if (!resStats.ok) {
+                    // Comparer le texte du message d'erreur est fragile (et cassé ici : les
+                    // messages backend contiennent des caractères d'encodage corrompus, donc
+                    // `.includes('Accès')` ne matchait jamais) — le code HTTP est fiable.
+                    if (resStats.status === 401 || resStats.status === 403) {
                         localStorage.removeItem('admin_token');
                         window.location.reload();
+                        return;
                     }
+                    setError(dataStats.error || 'Erreur de chargement du tableau de bord.');
                     return;
                 }
                 setStats(dataStats);
@@ -58,12 +64,14 @@ export default function Dashboard({ token }: { token: string }) {
                 }
             } catch (err) {
                 console.error(err);
+                setError('Impossible de contacter le serveur.');
             }
         };
 
         fetchDashboardData();
     }, [token]);
 
+    if (error) return <div className="loading-spinner" style={{ color: 'var(--danger)' }}>⚠️ {error}</div>;
     if (!stats) return <div className="loading-spinner">Connexion au serveur...</div>;
 
     return (

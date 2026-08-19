@@ -78,12 +78,15 @@ export default function ProfileScreen() {
                     {user?.phone && (
                         <View style={{ marginTop: 20, padding: 10, backgroundColor: '#fff', borderRadius: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10 }}>
                             <QRCode
-                                value={`mongain://transfer?phone=${encodeURIComponent(user.phone)}&name=${encodeURIComponent(user.name || '')}`}
+                                // Le scanner (qr.tsx) n'accepte que le préfixe 'mongain://user' — le
+                                // préfixe 'mongain://transfer' précédent n'était reconnu par aucun
+                                // scanner de l'app, rendant ce QR totalement inutilisable.
+                                value={`mongain://user?phone=${encodeURIComponent(user.phone)}&name=${encodeURIComponent(user.name || '')}&role=${encodeURIComponent(user.role || 'USER')}`}
                                 size={120}
                                 color="#1a1d2e"
                                 backgroundColor="#ffffff"
                             />
-                            <Text style={{ textAlign: 'center', marginTop: 8, fontSize: 11, color: '#64748b', fontWeight: 'bold' }}>SCAN P2P (MONG-ID)</Text>
+                            <Text style={{ textAlign: 'center', marginTop: 8, fontSize: 11, color: '#64748b', fontWeight: 'bold' }}>MON CODE QR PERSONNEL</Text>
                         </View>
                     )}
                 </View>

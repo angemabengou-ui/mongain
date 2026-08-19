@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { apiCreateTontine, apiGetTontineDetails, apiGetTontineGroups, apiInviteToTontine, apiJoinTontine, apiReorderTontine } from '../../services/api';
+import { apiCreateTontine, apiGetTontineDetails, apiGetTontineGroups, apiInviteToTontine, apiReorderTontine } from '../../services/api';
 
 interface TontineGroup {
     id: string;
@@ -26,7 +26,6 @@ interface Participant {
 export default function TontineScreen() {
     const { user } = useAuth();
     const router = useRouter();
-    const [groups, setGroups] = useState<TontineGroup[]>([]);
     const [myParticipations, setMyParticipations] = useState<Participant[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -47,7 +46,6 @@ export default function TontineScreen() {
         try {
             const res = await apiGetTontineGroups();
             if (res.data) {
-                setGroups(res.data.groups);
                 setMyParticipations(res.data.myParticipations);
             }
         } catch (error) {
@@ -61,35 +59,13 @@ export default function TontineScreen() {
         loadData();
     }, []);
 
-    const handleJoin = async (groupId: string, groupName: string, contribution: number) => {
-        Alert.alert(
-            "Rejoindre le Club",
-            `Voulez-vous vraiment rejoindre "${groupName}" ?\nUne cotisation automatique de ${contribution} FCFA sera prélevée à chaque cycle.`,
-            [
-                { text: 'Annuler', style: 'cancel' },
-                {
-                    text: 'Confirmer',
-                    onPress: async () => {
-                        try {
-                            const res = await apiJoinTontine(groupId);
-                            Alert.alert("Félicitations", res.message || "Vous faites désormais partie de cette tontine !");
-                            loadData();
-                        } catch (e: any) {
-                            Alert.alert("Erreur", e.message || "Erreur de connexion.");
-                        }
-                    }
-                }
-            ]
-        );
-    };
-
     const handleCreate = async () => {
         if (!newGroupName || !newGroupContribution) {
             Alert.alert("Erreur", "Veuillez remplir le nom et la contribution.");
             return;
         }
         try {
-            const res = await apiCreateTontine(newGroupName, parseFloat(newGroupContribution), newGroupFrequency);
+            const res = await apiCreateTontine(newGroupName, parseFloat(newGroupContribution.replace(/\s/g, '').replace(',', '.')), newGroupFrequency);
             Alert.alert("Félicitations", res.message || "Votre club a été créé avec succès.");
             setCreateModalVisible(false);
             setNewGroupName('');
@@ -108,10 +84,10 @@ export default function TontineScreen() {
                 setInviteMessage(null); // Reset UI alert when opening
                 setDetailsModalVisible(true);
             } else {
-                window.alert("Erreur: " + res.message);
+                Alert.alert("Erreur", res.message);
             }
         } catch (error: any) {
-            window.alert("Impossible de charger les détails: " + error.message);
+            Alert.alert("Erreur", "Impossible de charger les détails : " + error.message);
         }
     };
 
@@ -144,8 +120,12 @@ export default function TontineScreen() {
 
     const handleReorder = async (participantId: string, direction: 'UP' | 'DOWN') => {
         if (!selectedGroupDetails) return;
-        const currentList = [...selectedGroupDetails.participants];
-        const index = currentList.findIndex(p => p.id === participantId);
+        // Copie profonde des participants concernés : les muter directement (même après un
+        // spread superficiel de l'array) modifiait les mêmes objets que l'état React
+        // affiché, donc un ordre jamais confirmé par le serveur restait visible à l'écran
+        // en cas d'échec de la requête ci-dessous.
+        const currentList = selectedGroupDetails.participants.map((p: any) => ({ ...p }));
+        const index = currentList.findIndex((p: any) => p.id === participantId);
         if (index < 0) return;
 
         if (direction === 'UP' && index > 0) {
@@ -160,7 +140,7 @@ export default function TontineScreen() {
             return; // invalid move
         }
 
-        const map = currentList.map(p => ({ participantId: p.id, newOrder: p.payoutOrder }));
+        const map = currentList.map((p: any) => ({ participantId: p.id, newOrder: p.payoutOrder }));
         try {
             await apiReorderTontine(selectedGroupDetails.id, map);
             const updated = await apiGetTontineDetails(selectedGroupDetails.id);
@@ -215,34 +195,13 @@ export default function TontineScreen() {
 
             <View style={styles.section}>
                 <View style={styles.sectionHeaderRow}>
-                    <Text style={styles.sectionTitle}>Clubs Disponibles</Text>
+                    <Text style={styles.sectionTitle}>Nouveau Club</Text>
                     <TouchableOpacity onPress={() => setCreateModalVisible(true)} style={styles.createBtn}>
                         <Ionicons name="add" size={20} color="#FFF" />
                         <Text style={styles.createBtnText}>Créer</Text>
                     </TouchableOpacity>
                 </View>
-
-                {groups.filter(g => !myParticipations.find(m => m.tontineGroupId === g.id)).length === 0 ? (
-                    <Text style={styles.emptyText}>Aucun nouveau club disponible pour le moment.</Text>
-                ) : (
-                    groups.filter(g => !myParticipations.find(m => m.tontineGroupId === g.id)).map(g => (
-                        <View key={g.id} style={styles.card}>
-                            <View style={styles.cardHeader}>
-                                <Text style={styles.cardTitle}>{g.name}</Text>
-                                <View style={styles.participantsBadge}>
-                                    <Ionicons name="people" size={14} color="#208AEF" style={{ marginRight: 4 }} />
-                                    <Text style={styles.participantsText}>{g._count.participants}/10</Text>
-                                </View>
-                            </View>
-                            <Text style={styles.cardDesc}>
-                                Cotisation de <Text style={styles.bold}>{g.contribution} FCFA</Text> {g.frequency === 'MONTHLY' ? 'mensuels' : 'hebdomadaires'}.
-                            </Text>
-                            <TouchableOpacity style={styles.joinBtn} onPress={() => handleJoin(g.id, g.name, g.contribution)}>
-                                <Text style={styles.joinBtnText}>Rejoindre le club</Text>
-                            </TouchableOpacity>
-                        </View>
-                    ))
-                )}
+                <Text style={styles.emptyText}>Créez votre club puis invitez des membres par numéro de téléphone depuis sa page de gestion.</Text>
             </View>
 
             {/* Modal de Création de Tontine */}

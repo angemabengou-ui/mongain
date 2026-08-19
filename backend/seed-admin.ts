@@ -24,7 +24,8 @@ async function main() {
         update: {
             role: 'ADMIN',
             isActive: true,
-            isKycVerified: true,
+            kycLevel: 2,
+            kycStatus: 'APPROVED',
         },
         create: {
             phone: ADMIN_PHONE,
@@ -33,7 +34,8 @@ async function main() {
             pin: hashedPin,
             role: 'ADMIN',
             isActive: true,
-            isKycVerified: true,
+            kycLevel: 2,
+            kycStatus: 'APPROVED',
             wallet: {
                 create: { balance: 0 }
             }

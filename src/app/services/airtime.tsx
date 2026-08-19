@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
-import { apiGetBalance } from '../../services/api';
+import { apiAirtimeTopUp, apiGetBalance } from '../../services/api';
 
 export default function AirtimeScreen() {
     const COLORS = useAppTheme();
@@ -30,7 +30,7 @@ export default function AirtimeScreen() {
     const [pin, setPin] = useState('');
     const [showPin, setShowPin] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [successData, setSuccessData] = useState<any>(null);
+    const [successData, setSuccessData] = useState<{ reference: string; amount: number } | null>(null);
 
     const [balance, setBalance] = useState(user?.wallet?.balance || 0);
     useFocusEffect(
@@ -47,7 +47,7 @@ export default function AirtimeScreen() {
             return;
         }
 
-        const amt = parseFloat(amount.replace(/\s/g, ''));
+        const amt = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
         if (isNaN(amt) || amt <= 0) {
             Alert.alert("Erreur", "Veuillez entrer un montant valide.");
             return;
@@ -58,6 +58,15 @@ export default function AirtimeScreen() {
             return;
         }
 
+        setLoading(true);
+        try {
+            const res = await apiAirtimeTopUp(network, phone, amt, pin);
+            setSuccessData({ reference: res.reference, amount: amt });
+        } catch (e: any) {
+            Alert.alert("Erreur", e.message || "Échec de la recharge.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     if (successData) {
@@ -76,7 +85,7 @@ export default function AirtimeScreen() {
                     <View style={styles.divider} />
 
                     <Text style={styles.receiptLabel}>Montant Rechargé</Text>
-                    <Text style={styles.receiptValue}>{parseFloat(amount).toLocaleString('fr-FR')} FCFA</Text>
+                    <Text style={styles.receiptValue}>{successData.amount.toLocaleString('fr-FR')} FCFA</Text>
 
                     <Text style={styles.receiptLabel}>Numéro Bénéficiaire</Text>
                     <Text style={styles.receiptValue}>{phone}</Text>

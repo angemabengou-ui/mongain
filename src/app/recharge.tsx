@@ -39,7 +39,7 @@ export default function RechargeScreen() {
             <ScrollView contentContainerStyle={styles.container}>
 
                 <View style={styles.heroSection}>
-                    <Text style={[styles.heroTitle, { color: COLORS.textPrimary }]}>Alimenter my Mongain</Text>
+                    <Text style={[styles.heroTitle, { color: COLORS.textPrimary }]}>Alimenter mon compte Mongain</Text>
                     <Text style={[styles.heroSubtitle, { color: COLORS.textSecondary }]}>Sélectionnez l'origine des fonds</Text>
                 </View>
 

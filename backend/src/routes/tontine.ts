@@ -1,3 +1,4 @@
+import { friendlyErrorMessage } from '../utils/errors';
 import express, { Request, Response } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { prisma } from '../prisma';
@@ -15,11 +16,16 @@ router.post('/create', authMiddleware, async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, message: "Nom et contribution requis." });
         }
 
+        const contributionAmount = parseFloat(contribution);
+        if (isNaN(contributionAmount) || contributionAmount <= 0) {
+            return res.status(400).json({ success: false, message: "Montant de cotisation invalide." });
+        }
+
         const group = await prisma.tontineGroup.create({
             data: {
                 creatorId: userId,
                 name,
-                contribution: parseFloat(contribution),
+                contribution: contributionAmount,
                 frequency: frequency || 'MONTHLY',
                 status: 'ACTIVE'
             }
@@ -37,7 +43,7 @@ router.post('/create', authMiddleware, async (req: Request, res: Response) => {
         res.json({ success: true, message: "Club créé avec succès.", data: group });
     } catch (error: any) {
         console.error("Erreur création Tontine:", error);
-        res.status(500).json({ success: false, message: error.message || "Erreur serveur" });
+        res.status(500).json({ success: false, message: friendlyErrorMessage(error, "Erreur serveur") });
     }
 });
 
@@ -68,7 +74,7 @@ router.get('/groups', authMiddleware, async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         console.error("Erreur récupération Tontine:", error);
-        res.status(500).json({ success: false, message: error.message || "Erreur serveur" });
+        res.status(500).json({ success: false, message: friendlyErrorMessage(error, "Erreur serveur") });
     }
 });
 
@@ -97,7 +103,7 @@ router.get('/details/:groupId', authMiddleware, async (req: Request, res: Respon
 
         res.json({ success: true, data: group });
     } catch (e: any) {
-        res.status(500).json({ success: false, message: e.message || "Erreur serveur" });
+        res.status(500).json({ success: false, message: friendlyErrorMessage(e, "Erreur serveur") });
     }
 });
 
@@ -140,7 +146,7 @@ router.post('/invite', authMiddleware, async (req: Request, res: Response) => {
 
         res.json({ success: true, message: "Membre ajouté avec succès.", data: participant });
     } catch (e: any) {
-        res.status(500).json({ success: false, message: e.message || "Erreur serveur" });
+        res.status(500).json({ success: false, message: friendlyErrorMessage(e, "Erreur serveur") });
     }
 });
 
@@ -156,17 +162,34 @@ router.post('/reorder', authMiddleware, async (req: Request, res: Response) => {
             return res.status(403).json({ success: false, message: "Seul le créateur peut modifier l'ordre." });
         }
 
-        // Transactions pour mettre à jour tout d'un coup
-        for (const item of orderMap) {
-            await prisma.tontineParticipant.update({
-                where: { id: item.participantId },
-                data: { payoutOrder: item.newOrder }
-            });
+        if (!Array.isArray(orderMap) || orderMap.length === 0) {
+            return res.status(400).json({ success: false, message: "orderMap invalide." });
         }
+
+        // IDOR guard : chaque participantId ciblé doit appartenir à CE groupe — sans ce
+        // contrôle, le créateur d'un groupe A pouvait réordonner (et donc s'attribuer)
+        // un tour de paiement dans un groupe B dont il n'est que simple membre.
+        const participantIds = orderMap.map((item: any) => String(item.participantId));
+        const validParticipants = await prisma.tontineParticipant.findMany({
+            where: { id: { in: participantIds }, tontineGroupId: group.id },
+            select: { id: true }
+        });
+        if (validParticipants.length !== participantIds.length) {
+            return res.status(403).json({ success: false, message: "Un ou plusieurs participants n'appartiennent pas à ce groupe." });
+        }
+
+        await prisma.$transaction(
+            orderMap.map((item: any) =>
+                prisma.tontineParticipant.update({
+                    where: { id: String(item.participantId) },
+                    data: { payoutOrder: item.newOrder }
+                })
+            )
+        );
 
         res.json({ success: true, message: "L'ordre a été mis à jour." });
     } catch (e: any) {
-        res.status(500).json({ success: false, message: e.message || "Erreur serveur" });
+        res.status(500).json({ success: false, message: friendlyErrorMessage(e, "Erreur serveur") });
     }
 });
 
@@ -217,17 +240,19 @@ router.post('/join', authMiddleware, async (req: Request, res: Response) => {
         res.json({ success: true, message: "Vous avez rejoint la tontine avec succès.", data: participant });
     } catch (error: any) {
         console.error("Erreur Tontine join:", error);
-        res.status(500).json({ success: false, message: error.message || "Erreur serveur" });
+        res.status(500).json({ success: false, message: friendlyErrorMessage(error, "Erreur serveur") });
     }
 });
 
-// Simuler le prélèvement d'un cycle (Appelé par une Tâche CRON ou un Admin)
+// Déclenchement manuel d'un cycle (le CRON automatique appelle executeTontineCycle
+// directement en interne — voir backend/src/cron.ts — sans jamais passer par cette route
+// HTTP). Réservé au personnel habilité (compte Staff, pas le rôle legacy User.ADMIN).
 router.post('/debit/:groupId', authMiddleware, async (req: Request, res: Response) => {
     try {
-        const adminId = (req as AuthRequest).userId!;
-        const adminUser = await prisma.user.findUnique({ where: { id: adminId } });
+        const staffId = (req as AuthRequest).userId!;
+        const staff = await prisma.staff.findUnique({ where: { id: staffId } });
 
-        if (!adminUser || adminUser.role !== 'ADMIN') {
+        if (!staff || !staff.isActive || !['SUPER_ADMIN', 'RISK'].includes(staff.role)) {
             return res.status(403).json({ success: false, message: "Accès refusé" });
         }
 
@@ -244,7 +269,7 @@ router.post('/debit/:groupId', authMiddleware, async (req: Request, res: Respons
         });
     } catch (error: any) {
         console.error("Erreur Tontine debit:", error);
-        res.status(500).json({ success: false, message: error.message || "Erreur serveur" });
+        res.status(500).json({ success: false, message: friendlyErrorMessage(error, "Erreur serveur") });
     }
 });
 

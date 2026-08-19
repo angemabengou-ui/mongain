@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
 import { apiResetPIN } from '../../services/api';
+import { disableBiometricPin } from '../../services/biometrics';
 
 export default function ResetPinScreen() {
     const COLORS = useAppTheme();
@@ -43,6 +44,7 @@ export default function ResetPinScreen() {
         setLoading(true);
         try {
             await apiResetPIN(phone || '', otp, newPin);
+            await disableBiometricPin();
             setSuccess(true);
         } catch (e: any) {
             setError(e.message || "Code incorrect ou expiré.");

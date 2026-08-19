@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
-import { Transaction, apiGetBalance, apiGetTransactions } from '../../services/api';
+import { Transaction, apiGetBalance, apiGetMerchantStats, apiGetTransactions } from '../../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -40,7 +40,7 @@ export default function DashboardScreen() {
   const [balance, setBalance] = useState<number | null>(null);
   const [currency, setCurrency] = useState('FCFA');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [dailyRevenue, setDailyRevenue] = useState(0);
+  const [merchantStats, setMerchantStats] = useState<{ todaySalesAmount: number; todayCommission: number; allTimeCommission: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [appConfig, setAppConfig] = useState({ seegEnabled: true, tontineEnabled: true });
@@ -61,15 +61,19 @@ export default function DashboardScreen() {
       setBalance(walletData.balance);
       setCurrency(walletData.currency);
 
-      const todayStr = new Date().toISOString().split('T')[0];
-      const todayRev = txData.filter(tx => tx.type === 'incoming' && tx.createdAt.startsWith(todayStr)).reduce((s, tx) => s + tx.amount, 0);
-      setDailyRevenue(todayRev);
-
       if (settingsData) {
         setAppConfig({ seegEnabled: settingsData.seegEnabled, tontineEnabled: settingsData.tontineEnabled });
       }
 
       setTransactions(txData.slice(0, 3)); // 3 dernières
+
+      // Ventes ET commissions réelles via l'agrégat serveur dédié — l'ancien calcul
+      // recomposait juste le CA du jour côté client depuis la liste générique de
+      // transactions, sans jamais isoler ni afficher la commission du marchand.
+      if (user?.role === 'MERCHANT') {
+        const stats = await apiGetMerchantStats();
+        setMerchantStats(stats);
+      }
     } catch (e) {
       // Si le token est invalide, logout
       console.error(e);
@@ -77,10 +81,9 @@ export default function DashboardScreen() {
       setLoading(false);
       SplashScreen.hideAsync();
     }
-  }, []);
+  }, [user?.role]);
 
   useEffect(() => {
-    loadData();
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -93,7 +96,16 @@ export default function DashboardScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, [loadData, fadeAnim, slideAnim]);
+  }, [fadeAnim, slideAnim]);
+
+  // L'écran (tabs) reste monté quand on pousse un écran par-dessus (transfer-confirm,
+  // withdraw, etc.) : un simple useEffect de montage ne rejouait donc jamais au retour,
+  // laissant le solde affiché figé après une opération financière réussie.
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -170,16 +182,31 @@ export default function DashboardScreen() {
             </View>
 
             {/* Tableau de Bord Marchand */}
-            {user?.role === 'MERCHANT' && (
+            {user?.role === 'MERCHANT' && merchantStats && (
               <View style={[styles.actionsCard, { marginTop: 16, padding: 20, backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
                   <Ionicons name="stats-chart" size={24} color="#D97706" style={{ marginRight: 8 }} />
                   <Text style={{ fontSize: 18, fontWeight: '800', color: '#92400E' }}>Caisse du Jour</Text>
                 </View>
                 <Text style={{ fontSize: 14, color: '#B45309', marginBottom: 4 }}>Chiffre d'affaires encaissé aujourd'hui</Text>
-                <Text style={{ fontSize: 28, fontWeight: '900', color: '#D97706' }}>
-                  {formatAmount(dailyRevenue, currency)}
+                <Text style={{ fontSize: 28, fontWeight: '900', color: '#D97706', marginBottom: 16 }}>
+                  {formatAmount(merchantStats.todaySalesAmount, currency)}
                 </Text>
+                <View style={{ height: 1, backgroundColor: '#FDE68A', marginBottom: 16 }} />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <View>
+                    <Text style={{ fontSize: 13, color: '#B45309', marginBottom: 4 }}>Commission du jour</Text>
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: '#92400E' }}>
+                      {formatAmount(merchantStats.todayCommission, currency)}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={{ fontSize: 13, color: '#B45309', marginBottom: 4 }}>Commission totale</Text>
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: '#92400E' }}>
+                      {formatAmount(merchantStats.allTimeCommission, currency)}
+                    </Text>
+                  </View>
+                </View>
               </View>
             )}
 
@@ -187,7 +214,7 @@ export default function DashboardScreen() {
             <View style={styles.serviceSection}>
               <Text style={styles.sectionTitle}>Services & Factures</Text>
               <View style={styles.serviceGrid}>
-                <ServiceItem icon="flash" label="Électricité" color="#F59E0B" disabled={!appConfig.seegEnabled} onPress={() => router.push('/services/seeg' as any)} styles={styles} />
+                <ServiceItem icon="flash" label="Électricité" color="#F59E0B" disabled={!appConfig.seegEnabled} onPress={() => router.push('/services/electricity' as any)} styles={styles} />
 
                 <ServiceItem icon="phone-portrait" label="Crédit Air" color="#D946EF" onPress={() => router.push('/services/airtime' as any)} styles={styles} />
 

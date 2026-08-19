@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
-import { apiGetBalance } from '../../services/api';
+import { apiGetBalance, apiPayBill } from '../../services/api';
 
 export default function TvScreen() {
     const COLORS = useAppTheme();
@@ -38,6 +38,7 @@ export default function TvScreen() {
     const [pin, setPin] = useState('');
     const [showPin, setShowPin] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [successData, setSuccessData] = useState<{ reference: string; amount: number } | null>(null);
 
     const handlePayment = async () => {
         if (!account || account.length < 5) {
@@ -45,7 +46,7 @@ export default function TvScreen() {
             return;
         }
 
-        const amt = parseFloat(amount.replace(/\s/g, ''));
+        const amt = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
         if (isNaN(amt) || amt <= 0) {
             Alert.alert("Erreur", "Veuillez entrer un montant valide.");
             return;
@@ -56,14 +57,42 @@ export default function TvScreen() {
             return;
         }
 
-        // --- PRODUCTION GUARD ---
-        Alert.alert(
-            "Service Indisponible",
-            "L'intégration officielle avec Canal+ est en cours de configuration. Le service sera bientôt actif !"
-        );
-        return;
-        // ------------------------
+        setLoading(true);
+        try {
+            const res = await apiPayBill('CANAL', account, amt, pin);
+            setSuccessData({ reference: res.reference, amount: amt });
+        } catch (e: any) {
+            Alert.alert("Erreur", e.message || "Échec du paiement.");
+        } finally {
+            setLoading(false);
+        }
     };
+
+    if (successData) {
+        return (
+            <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center', padding: 32 }]}>
+                <View style={[styles.iconWrap, { backgroundColor: '#10b98115', padding: 24, borderRadius: 50 }]}>
+                    <Ionicons name="checkmark-circle" size={80} color="#10b981" />
+                </View>
+                <Text style={[styles.title, { marginBottom: 16 }]}>Abonnement Renouvelé !</Text>
+
+                <View style={styles.receiptCard}>
+                    <Text style={styles.receiptLabel}>Montant Payé</Text>
+                    <Text style={styles.receiptValue}>{successData.amount.toLocaleString('fr-FR')} FCFA</Text>
+
+                    <Text style={styles.receiptLabel}>Numéro d'Abonné</Text>
+                    <Text style={styles.receiptValue}>{account}</Text>
+
+                    <Text style={styles.receiptLabel}>Référence</Text>
+                    <Text style={[styles.receiptValue, { fontSize: 13, color: '#94a3b8' }]}>{successData.reference}</Text>
+                </View>
+
+                <TouchableOpacity style={[styles.btn, { width: '100%', marginTop: 32, backgroundColor: '#3b82f6' }]} onPress={() => router.replace('/')}>
+                    <Text style={styles.btnText}>Retour à l'accueil</Text>
+                </TouchableOpacity>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -161,5 +190,9 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     input: { flex: 1, fontSize: 16, color: COLORS.textPrimary, fontWeight: '600' },
     eyeBtn: { padding: 8 },
     btn: { height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
-    btnText: { color: '#fff', fontSize: 16, fontWeight: '700' }
+    btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+    receiptCard: { backgroundColor: '#1E293B', width: '100%', borderRadius: 20, padding: 24 },
+    receiptLabel: { fontSize: 13, color: '#94A3B8', marginBottom: 4 },
+    receiptValue: { fontSize: 16, fontWeight: '700', color: '#FFF', marginBottom: 16 }
 });

@@ -184,9 +184,9 @@ export default function ProfileEditScreen() {
                     </View>
 
                     <TouchableOpacity
-                        style={[styles.saveButton, ((name.trim() === user?.name || name.trim().length === 0) && username.trim() === (user?.username ?? '') && email.trim() === (user?.email ?? '') && !documents.selfie) && styles.disabledButton]}
+                        style={[styles.saveButton, ((name.trim() === user?.name || name.trim().length === 0) && username.trim() === (user?.username ?? '') && email.trim() === (user?.email ?? '') && !documents.selfie && !documents.idCardFront && !documents.idCardBack) && styles.disabledButton]}
                         onPress={handleSave}
-                        disabled={loading || ((name.trim() === user?.name || name.trim().length === 0) && username.trim() === (user?.username ?? '') && email.trim() === (user?.email ?? '') && !documents.selfie)}
+                        disabled={loading || ((name.trim() === user?.name || name.trim().length === 0) && username.trim() === (user?.username ?? '') && email.trim() === (user?.email ?? '') && !documents.selfie && !documents.idCardFront && !documents.idCardBack)}
                     >
                         {loading ? (
                             <ActivityIndicator color={COLORS.surface} />

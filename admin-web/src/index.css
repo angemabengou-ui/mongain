@@ -1,52 +1,130 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root {
-  /* Enterprise CRM Light Theme - Stripe/Salesforce Inspired */
-  --bg-primary: #F3F4F6;
-  /* Gray 100 - App background */
+  /* Mongain Admin — ancré sur le cyan de marque (#1DC5E9, app mobile) approfondi
+     pour un contexte professionnel, neutres à peine chauds, sémantique inspirée
+     du Gabon (vert forêt, or équatorial) plutôt que le émeraude/ambre générique. */
+  --bg-primary: #F7F7F4;
   --bg-secondary: #FFFFFF;
-  /* Sidebar / Topbar */
   --bg-card: #FFFFFF;
-  /* Cards */
-  --bg-card-hover: #F9FAFB;
-  /* Gray 50 */
+  --bg-card-hover: #FAFAF7;
 
-  --text-primary: #111827;
-  /* Gray 900 - Headings */
-  --text-secondary: #4B5563;
-  /* Gray 600 - Body */
-  --text-muted: #9CA3AF;
-  /* Gray 400 - Metadata */
+  --text-primary: #171F1C;
+  --text-secondary: #565F5B;
+  --text-muted: #9CA39D;
 
-  --accent: #4F46E5;
-  /* Indigo 600 */
-  --accent-light: #6366F1;
-  /* Indigo 500 */
-  --accent-bg: #EEF2FF;
-  /* Indigo 50 */
+  --accent: #0C8599;
+  --accent-light: #159AAF;
+  --accent-bg: #E3F3F5;
 
-  --success: #059669;
-  --success-bg: #ECFDF5;
+  --success: #1F9D55;
+  --success-bg: #EAF7EE;
 
-  --danger: #DC2626;
-  --danger-bg: #FEF2F2;
+  --danger: #C4463D;
+  --danger-bg: #FBEDEB;
 
-  --warning: #D97706;
-  --warning-bg: #FFFBEB;
+  --warning: #B8791A;
+  --warning-bg: #FAF1E1;
 
-  --border: #E5E7EB;
-  /* Gray 200 */
-  --border-light: #F3F4F6;
-  /* Gray 100 */
+  --border: #E4E4DE;
+  --border-light: #EFEFEA;
 
   --radius-lg: 16px;
   --radius-md: 12px;
   --radius-sm: 8px;
 
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
-  --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02);
+  --shadow-sm: 0 1px 2px 0 rgba(23, 31, 28, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(23, 31, 28, 0.06), 0 2px 4px -1px rgba(23, 31, 28, 0.03);
+  --shadow-lg: 0 10px 15px -3px rgba(23, 31, 28, 0.06), 0 4px 6px -2px rgba(23, 31, 28, 0.03);
+  --shadow-float: 0 20px 25px -5px rgba(23, 31, 28, 0.08), 0 10px 10px -5px rgba(23, 31, 28, 0.03);
+
+  --font-heading: 'Manrope', 'Inter', sans-serif;
+  --font-body: 'Inter', sans-serif;
+
+  /* Bouton "neutre fort" (créer, archiver, valider un formulaire...) — délibérément
+     toujours sombre/texte clair quel que soit le thème. Onze boutons utilisaient
+     `background: var(--text-primary)` en supposant que ce token est toujours sombre,
+     ce qui n'est vrai qu'en mode clair : en mode sombre il devient clair, laissant du
+     texte blanc illisible sur fond quasi blanc. */
+  --btn-dark-bg: #171F1C;
+  --btn-dark-bg-hover: #262F2B;
+  --btn-dark-text: #FFFFFF;
+
+  /* Sidebar volontairement distincte du contenu — ancre l'identité de marque
+     au lieu de se fondre avec le reste (elle était en var(--bg-secondary), la
+     même couleur que la topbar et les cards). */
+  --sidebar-bg: #0F2E33;
+  --sidebar-text: #B9D6DA;
+  --sidebar-text-active: #FFFFFF;
+  --sidebar-border: #1B4249;
+  --sidebar-hover: #164047;
+  --sidebar-active-bg: #0C8599;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-primary: #14181A;
+    --bg-secondary: #1B2023;
+    --bg-card: #1E2426;
+    --bg-card-hover: #242B2D;
+
+    --text-primary: #EDEFEC;
+    --text-secondary: #A9B0AC;
+    --text-muted: #6E756F;
+
+    --accent: #33B5C7;
+    --accent-light: #5AC5D4;
+    --accent-bg: #1C333A;
+
+    --success: #3FBE76;
+    --success-bg: #17331F;
+
+    --danger: #E17168;
+    --danger-bg: #3A2020;
+
+    --warning: #D9A64E;
+    --warning-bg: #382C14;
+
+    --border: #2C3335;
+    --border-light: #262C2E;
+
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.25), 0 2px 4px -1px rgba(0, 0, 0, 0.15);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15);
+    --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.35), 0 10px 10px -5px rgba(0, 0, 0, 0.15);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg-primary: #14181A;
+  --bg-secondary: #1B2023;
+  --bg-card: #1E2426;
+  --bg-card-hover: #242B2D;
+
+  --text-primary: #EDEFEC;
+  --text-secondary: #A9B0AC;
+  --text-muted: #6E756F;
+
+  --accent: #33B5C7;
+  --accent-light: #5AC5D4;
+  --accent-bg: #1C333A;
+
+  --success: #3FBE76;
+  --success-bg: #17331F;
+
+  --danger: #E17168;
+  --danger-bg: #3A2020;
+
+  --warning: #D9A64E;
+  --warning-bg: #382C14;
+
+  --border: #2C3335;
+  --border-light: #262C2E;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.25), 0 2px 4px -1px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15);
+  --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.35), 0 10px 10px -5px rgba(0, 0, 0, 0.15);
 }
 
 * {
@@ -56,12 +134,21 @@
 }
 
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-body);
   background-color: var(--bg-primary);
   color: var(--text-primary);
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, .sidebar-logo, .nav-item, button, .stat-value {
+  font-family: var(--font-heading);
+}
+
+/* Les montants FCFA s'alignent en colonnes plutôt que de danser au fil des chiffres. */
+.stat-value, td, .receiptValue {
+  font-variant-numeric: tabular-nums;
 }
 
 /* App Container */
@@ -145,11 +232,11 @@ body {
 }
 
 
-/* Sidebar */
+/* Sidebar — volontairement sombre dans les deux thèmes, ancre visuelle de marque. */
 .sidebar {
   width: 280px;
-  background-color: var(--bg-secondary);
-  border-right: 1px solid var(--border);
+  background-color: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
   padding: 32px 24px;
   display: flex;
   flex-direction: column;
@@ -162,7 +249,7 @@ body {
 .sidebar-logo {
   font-size: 24px;
   font-weight: 800;
-  color: var(--text-primary);
+  color: var(--sidebar-text-active);
   display: flex;
   align-items: center;
   gap: 16px;
@@ -179,7 +266,7 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 22px;
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+  box-shadow: 0 4px 12px rgba(12, 133, 153, 0.35);
 }
 
 .nav-links {
@@ -194,7 +281,7 @@ body {
   gap: 14px;
   padding: 12px 16px;
   border-radius: var(--radius-sm);
-  color: var(--text-secondary);
+  color: var(--sidebar-text);
   text-decoration: none;
   font-weight: 500;
   font-size: 14px;
@@ -204,19 +291,19 @@ body {
 }
 
 .nav-item:hover {
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
+  background-color: var(--sidebar-hover);
+  color: var(--sidebar-text-active);
 }
 
 .nav-item.active {
-  background-color: var(--accent-bg);
-  color: var(--accent);
+  background-color: var(--sidebar-active-bg);
+  color: #ffffff;
   font-weight: 600;
 }
 
 .nav-divider {
   height: 1px;
-  background-color: var(--border);
+  background-color: var(--sidebar-border);
   margin: 16px 0;
 }
 
@@ -379,7 +466,7 @@ textarea {
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: 15px;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-body);
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
@@ -393,11 +480,10 @@ textarea:focus {
 
 /* Buttons */
 button {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-heading);
 }
 
 .btn-primary {
-  width: 100%;
   padding: 14px 24px;
   background: var(--accent);
   color: white;
@@ -407,7 +493,7 @@ button {
   font-weight: 600;
   cursor: pointer;
   transition: opacity 0.2s, transform 0.1s, box-shadow 0.2s;
-  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+  box-shadow: 0 2px 4px rgba(12, 133, 153, 0.25);
 }
 
 .btn-primary:disabled {

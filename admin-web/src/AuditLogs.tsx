@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 export default function AuditLogs({ token }: { token: string }) {
     const [logs, setLogs] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
 
     const fetchLogs = async () => {
         setLoading(true);
@@ -13,9 +14,13 @@ export default function AuditLogs({ token }: { token: string }) {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const data = await resp.json();
-            if (resp.ok) setLogs(data);
+            // Sans le cas d'erreur, un 403 laissait croire à un journal vide au lieu
+            // d'un accès refusé.
+            if (resp.ok) { setLogs(data); setError(''); }
+            else setError(data.error || 'Accès au journal d\'audit refusé.');
         } catch (e) {
             console.error(e);
+            setError('Impossible de contacter le serveur.');
         } finally {
             setLoading(false);
         }
@@ -60,13 +65,13 @@ export default function AuditLogs({ token }: { token: string }) {
                                         {formatDate(log.createdAt)}
                                     </td>
                                     <td style={{ padding: '16px', fontWeight: 'bold' }}>
-                                        {log.admin.name} <br />
-                                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{log.admin.phone}</span>
+                                        {log.admin?.name || 'Compte inconnu / supprimé'} <br />
+                                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{log.admin?.phone || '—'}</span>
                                     </td>
                                     <td style={{ padding: '16px' }}>
                                         <span style={{
                                             padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold',
-                                            backgroundColor: '#4F46E520', color: '#4F46E5'
+                                            backgroundColor: 'var(--accent-bg)', color: 'var(--accent)'
                                         }}>
                                             {log.action}
                                         </span>
@@ -79,7 +84,9 @@ export default function AuditLogs({ token }: { token: string }) {
                             ))}
                             {logs.length === 0 && (
                                 <tr>
-                                    <td colSpan={4} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Aucun log d'audit disponible.</td>
+                                    <td colSpan={4} style={{ padding: '40px', textAlign: 'center', color: error ? 'var(--danger)' : 'var(--text-secondary)' }}>
+                                        {error ? `⚠️ ${error}` : "Aucun log d'audit disponible."}
+                                    </td>
                                 </tr>
                             )}
                         </tbody>

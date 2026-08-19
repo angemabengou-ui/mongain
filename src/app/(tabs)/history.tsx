@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
     ActivityIndicator,
     FlatList,
@@ -46,7 +46,14 @@ export default function HistoryScreen() {
         }
     }, []);
 
-    useEffect(() => { loadTransactions(); }, [loadTransactions]);
+    // L'écran (tabs) reste monté quand on pousse un écran par-dessus : un useEffect de
+    // montage ne rejouait jamais au retour, laissant l'historique figé après une nouvelle
+    // opération tant que l'utilisateur ne faisait pas un pull-to-refresh manuel.
+    useFocusEffect(
+        useCallback(() => {
+            loadTransactions();
+        }, [loadTransactions])
+    );
 
     const onRefresh = async () => {
         setRefreshing(true);

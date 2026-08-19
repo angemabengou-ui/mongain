@@ -15,7 +15,7 @@ const BACKGROUND_LIMIT_MS = 5 * 1000; // 5 seconds grace period when backgrounde
 const INACTIVITY_LIMIT_MS = 60 * 1000; // 1 minute of zero screen touch
 
 export function SecurityWrapper({ children }: { children: React.ReactNode }) {
-    const { token } = useAuth();
+    const { token, isLoading } = useAuth();
     const router = useRouter();
     const COLORS = useAppTheme();
 
@@ -27,7 +27,6 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
     const [pinError, setPinError] = useState('');
 
     const appState = useRef(AppState.currentState);
-    const isBooting = useRef(true);
 
     const panResponder = useRef(
         PanResponder.create({
@@ -62,13 +61,17 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
     };
 
     useEffect(() => {
-        if (token && isBooting.current) {
+        // Attendre la résolution de restoreSession() (AuthContext) avant de statuer : le
+        // premier rendu a toujours token===null pendant le chargement, ce qui déclenchait
+        // prématurément la branche "pas de session" et empêchait ensuite tout verrouillage
+        // biométrique une fois la vraie session restaurée (le check ne s'exécutait plus).
+        if (isLoading) return;
+        if (token) {
             checkLockAndPrompt();
-        } else if (!token) {
+        } else {
             setIsEvaluating(false);
         }
-        isBooting.current = false;
-    }, [token]);
+    }, [token, isLoading]);
 
     useEffect(() => {
         // AppState changes are only relevant on native

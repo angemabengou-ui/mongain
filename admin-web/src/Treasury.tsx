@@ -1,185 +1,410 @@
+import { Activity, AlertTriangle, BarChart3, Building2, RefreshCw, Shield, StopCircle, Wallet } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import KpiCard from './components/KpiCard';
+import PageHeader from './components/PageHeader';
+import TabBar from './components/TabBar';
 import { API_URL } from './config';
-import { Landmark, Store } from 'lucide-react';
-import { useEffect, useState } from 'react';
+
+const fmt = (n: number) => n?.toLocaleString('fr-GA') + ' FCFA';
+const fmtDate = (d: string) => new Date(d).toLocaleString('fr-GA', { dateStyle: 'short', timeStyle: 'short' });
+
+function StatusBadge({ status }: { status: string }) {
+    const map: Record<string, { bg: string; color: string; label: string }> = {
+        PENDING: { bg: 'var(--warning-bg)', color: 'var(--warning)', label: 'En attente' },
+        EXECUTED: { bg: 'var(--success-bg)', color: 'var(--success)', label: 'Exécuté' },
+        REJECTED: { bg: 'var(--danger-bg)', color: 'var(--danger)', label: 'Rejeté' },
+        CANCELLED: { bg: 'var(--bg-primary)', color: 'var(--text-secondary)', label: 'Annulé' },
+    };
+    const s = map[status] || { bg: 'var(--bg-primary)', color: 'var(--text-secondary)', label: status };
+    return <span style={{ padding: '4px 10px', borderRadius: 20, background: s.bg, color: s.color, fontSize: 11, fontWeight: 800 }}>{s.label}</span>;
+}
 
 export default function Treasury({ token }: { token: string }) {
-    const [phone, setPhone] = useState('');
-    const [amountMint, setAmountMint] = useState('');
-    const [amountFund, setAmountFund] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [message, setMessage] = useState('');
-    const [error, setError] = useState('');
+    type TreasuryTab = 'overview' | 'agencies' | 'reconciliation' | 'requests' | 'create';
+    const [tab, setTab] = useState<TreasuryTab>('overview');
+    const [loading, setLoading] = useState(true);
+    const [overview, setOverview] = useState<any>(null);
+    const [requests, setRequests] = useState<any[]>([]);
+    const [agenciesLiquidity, setAgenciesLiquidity] = useState<any[]>([]);
+    const [reconciliation, setReconciliation] = useState<any[]>([]);
 
-    const [stats, setStats] = useState<any>(null);
-    const [proUsers, setProUsers] = useState<any[]>([]);
+    // Create Request State
+    const [form, setForm] = useState({ type: 'ISSUANCE', amount: '', reason: '', comment: '', targetBranchId: '', targetWalletId: '' });
+    const [creating, setCreating] = useState(false);
+    const [branches, setBranches] = useState<any[]>([]);
 
-    useEffect(() => {
-        const fetchStats = async () => {
-            try {
-                const resp = await fetch(API_URL + '/api/admin/stats', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (resp.ok) {
-                    setStats(await resp.json());
-                }
-
-                const respUsers = await fetch(API_URL + '/api/admin/users', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (respUsers.ok) {
-                    const dataUsers = await respUsers.json();
-                    setProUsers(dataUsers.filter((u: any) => u.role === 'AGENT' || u.role === 'MERCHANT'));
-                }
-            } catch (e) {
-                console.error(e);
-            }
-        };
-        fetchStats();
-    }, [token, message]);
-
-    const handleMint = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError(''); setMessage('');
-        const formattedAmount = parseFloat(amountMint);
-        if (isNaN(formattedAmount) || formattedAmount <= 0) {
-            setError('Veuillez fournir un montant valide pour la voûte.');
-            return;
-        }
-
-        setLoading(true);
+    const fetchOverview = async () => {
         try {
-            const resp = await fetch(API_URL + '/api/admin/mint', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ amount: formattedAmount }),
-            });
-            const data = await resp.json();
-            if (!resp.ok) throw new Error(data.error);
-
-            setMessage(`✅ ${formattedAmount.toLocaleString('fr-FR')} FCFA ajoutés à la Voûte Centrale !`);
-            setAmountMint('');
-        } catch (e: any) { setError(e.message); }
-        finally { setLoading(false); }
+            const r = await fetch(`${API_URL}/api/treasury/overview`, { headers: { Authorization: `Bearer ${token}` } });
+            if (r.ok) setOverview(await r.json());
+        } catch (e) { console.error(e); }
     };
 
-    const handleFund = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError(''); setMessage('');
-        const formattedAmount = parseFloat(amountFund);
-        if (!phone || isNaN(formattedAmount) || formattedAmount <= 0) {
-            setError('Veuillez sélectionner un bénéficiaire et un montant.');
-            return;
-        }
-
-        setLoading(true);
+    const fetchRequests = async () => {
         try {
-            const resp = await fetch(API_URL + '/api/admin/fund-agent', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ phone, amount: formattedAmount }),
-            });
-            const data = await resp.json();
-            if (!resp.ok) throw new Error(data.error);
-
-            setMessage(`✅ Transfert de ${formattedAmount.toLocaleString('fr-FR')} FCFA effectué avec succès depuis la Voûte !`);
-            setPhone('');
-            setAmountFund('');
-        } catch (e: any) { setError(e.message); }
-        finally { setLoading(false); }
+            const r = await fetch(`${API_URL}/api/treasury/requests`, { headers: { Authorization: `Bearer ${token}` } });
+            if (r.ok) setRequests(await r.json());
+        } catch (e) { console.error(e); }
     };
+
+    const fetchBranches = async () => {
+        try {
+            const r = await fetch(`${API_URL}/api/admin/branches?limit=100`, { headers: { Authorization: `Bearer ${token}` } });
+            const d = await r.json();
+            if (r.ok) setBranches(Array.isArray(d) ? d : (d.branches || []));
+        } catch (e) { console.error(e); }
+    };
+
+    const fetchAgenciesLiquidity = async () => {
+        try {
+            const r = await fetch(`${API_URL}/api/treasury/agencies-liquidity`, { headers: { Authorization: `Bearer ${token}` } });
+            if (r.ok) setAgenciesLiquidity(await r.json());
+        } catch (e) { console.error(e); }
+    };
+
+    const fetchReconciliation = async () => {
+        try {
+            const r = await fetch(`${API_URL}/api/treasury/reconciliation`, { headers: { Authorization: `Bearer ${token}` } });
+            if (r.ok) setReconciliation(await r.json());
+        } catch (e) { console.error(e); }
+    };
+
+    const loadAll = async () => {
+        setLoading(true);
+        await Promise.all([fetchOverview(), fetchRequests(), fetchBranches(), fetchAgenciesLiquidity(), fetchReconciliation()]);
+        setLoading(false);
+    };
+
+    useEffect(() => { loadAll(); }, [tab]);
+
+    // Actions
+    const handleCreateRequest = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!window.confirm(`Confirmer la demande de ${form.type} d'un montant de ${form.amount} FCFA ?`)) return;
+        setCreating(true);
+        try {
+            const payload: any = { type: form.type, amount: parseFloat(form.amount) || 0, reason: form.reason, comment: form.comment };
+            if (form.targetBranchId) payload.targetBranchId = form.targetBranchId;
+            if (form.targetWalletId) payload.targetWalletId = form.targetWalletId;
+
+            const r = await fetch(`${API_URL}/api/treasury/requests`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify(payload)
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.error);
+            alert('Demande créée avec succès.');
+            setTab('requests');
+            setForm({ type: 'ISSUANCE', amount: '', reason: '', comment: '', targetBranchId: '', targetWalletId: '' });
+        } catch (err: any) { alert(err.message); } finally { setCreating(false); }
+    };
+
+    const handleApprove = async (id: string, ref: string) => {
+        if (!window.confirm(`Voulez-vous vraiment APPROUVER la demande ${ref} ? L'opération sera irréversible.`)) return;
+        try {
+            const r = await fetch(`${API_URL}/api/treasury/requests/${id}/approve`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.error);
+            alert(`Requête ${ref} exécutée avec succès !`);
+            loadAll();
+        } catch (err: any) { alert(err.message); }
+    };
+
+    const handleResolveReconciliation = async (id: string, reference: string) => {
+        const resolution = window.prompt(`Résolution du cas ${reference} — décrivez la cause de l'écart et l'action prise :`);
+        if (!resolution || resolution.trim() === '') return;
+        try {
+            const r = await fetch(`${API_URL}/api/treasury/reconciliation/${id}/resolve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ resolution, newStatus: 'RESOLVED' })
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.error);
+            loadAll();
+        } catch (err: any) { alert(err.message); }
+    };
+
+    const handleReject = async (id: string, ref: string) => {
+        const reason = window.prompt(`Saisissez le motif de rejet pour la demande ${ref}:`);
+        if (!reason || reason.trim() === '') return;
+        try {
+            const r = await fetch(`${API_URL}/api/treasury/requests/${id}/reject`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ rejectionReason: reason })
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.error);
+            loadAll();
+        } catch (err: any) { alert(err.message); }
+    };
+
+    const treasuryTabs = [
+        { id: 'overview' as const, icon: <BarChart3 size={18} />, label: 'Tableau de Bord & KPI' },
+        { id: 'agencies' as const, icon: <Building2 size={18} />, label: 'Liquidité Agences' },
+        { id: 'reconciliation' as const, icon: <AlertTriangle size={18} />, label: 'Rapprochements' },
+        { id: 'requests' as const, icon: <Activity size={18} />, label: 'Opérations & Approbations' },
+        { id: 'create' as const, icon: <Shield size={18} />, label: 'Lancer Opération' }
+    ];
 
     return (
-        <div className="dashboard-content">
-            {stats && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '32px' }}>
-                    <div className="stat-card" style={{ backgroundColor: '#10B98115', border: '1px solid #10B98130' }}>
-                        <div style={{ fontSize: '13px', color: '#6EE7B7', fontWeight: 'bold' }}>SOLDE RÉSERVE (VOÛTE)</div>
-                        <div style={{ fontSize: '24px', fontWeight: '900', color: '#34D399', marginTop: '8px' }}>
-                            {stats.reserve?.toLocaleString('fr-FR')} <span style={{ fontSize: '12px' }}>FCFA</span>
-                        </div>
-                    </div>
-                    <div className="stat-card" style={{ backgroundColor: '#3B82F615', border: '1px solid #3B82F630' }}>
-                        <div style={{ fontSize: '13px', color: '#93C5FD', fontWeight: 'bold' }}>MONNAIE MINT (TOTAL)</div>
-                        <div style={{ fontSize: '24px', fontWeight: '900', color: '#60A5FA', marginTop: '8px' }}>
-                            {stats.totalMinted?.toLocaleString('fr-FR')} <span style={{ fontSize: '12px' }}>FCFA</span>
-                        </div>
-                    </div>
-                    <div className="stat-card" style={{ backgroundColor: '#8B5CF615', border: '1px solid #8B5CF630' }}>
-                        <div style={{ fontSize: '13px', color: '#C4B5FD', fontWeight: 'bold' }}>DISTRIBUÉ (AGENTS)</div>
-                        <div style={{ fontSize: '24px', fontWeight: '800', color: '#A78BFA', marginTop: '8px' }}>
-                            {stats.mintedToAgents?.toLocaleString('fr-FR')} <span style={{ fontSize: '12px' }}>FCFA</span>
-                        </div>
-                    </div>
-                    <div className="stat-card" style={{ backgroundColor: '#F59E0B15', border: '1px solid #F59E0B30' }}>
-                        <div style={{ fontSize: '13px', color: '#FCD34D', fontWeight: 'bold' }}>DISTRIBUÉ (MARCHANDS)</div>
-                        <div style={{ fontSize: '24px', fontWeight: '800', color: '#FBBF24', marginTop: '8px' }}>
-                            {stats.mintedToMerchants?.toLocaleString('fr-FR')} <span style={{ fontSize: '12px' }}>FCFA</span>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {error && <div style={{ padding: '16px', backgroundColor: 'var(--danger)', color: 'var(--text-primary)', borderRadius: '8px', marginBottom: '20px' }}>{error}</div>}
-            {message && <div style={{ padding: '16px', backgroundColor: 'var(--success)', color: 'var(--text-primary)', borderRadius: '8px', marginBottom: '20px' }}>{message}</div>}
-
-            <div style={{ display: 'flex', gap: '24px' }}>
-                <div className="stat-card" style={{ flex: 1, borderTop: '4px solid #3B82F6', alignSelf: 'flex-start' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-                        <div style={{ padding: '12px', backgroundColor: '#3B82F620', borderRadius: '12px', color: '#3B82F6' }}>
-                            <Landmark size={32} />
-                        </div>
-                        <div>
-                            <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Banque Centrale (Mint)</h2>
-                            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)' }}>Créer de la monnaie (Voûte)</p>
-                        </div>
-                    </div>
-
-                    <form onSubmit={handleMint} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Montant à imprimer (FCFA)</label>
-                            <input
-                                type="number" placeholder="1000000" value={amountMint} onChange={(e) => setAmountMint(e.target.value)}
-                                style={{ padding: '16px', width: '100%', borderRadius: '12px', boxSizing: 'border-box', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: '16px' }}
-                            />
-                        </div>
-                        <button type="submit" disabled={loading} style={{ padding: '16px', backgroundColor: '#3B82F6', color: 'var(--text-primary)', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
-                            {loading ? 'Émission...' : 'Imprimer → Voûte'}
+        <div style={{ maxWidth: 1100, margin: '0 auto', paddingBottom: 60 }}>
+            <div style={{ marginBottom: 24 }}>
+                <PageHeader
+                    title="Trésorerie Centrale"
+                    subtitle="Gestion de la monnaie électronique, de la réserve et des allocations système."
+                    action={
+                        <button onClick={loadAll} style={{ padding: '10px 16px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700 }}>
+                            <RefreshCw size={16} /> Rafraîchir
                         </button>
-                    </form>
-                </div>
-
-                <div className="stat-card" style={{ flex: 1, borderTop: '4px solid #10B981', alignSelf: 'flex-start' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-                        <div style={{ padding: '12px', backgroundColor: '#10B98120', borderRadius: '12px', color: '#10B981' }}>
-                            <Store size={32} />
-                        </div>
-                        <div>
-                            <h2 style={{ margin: 0, fontSize: '1.25rem' }}>Pôle Distribution</h2>
-                            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)' }}>Envoyer depuis la Voûte (Agent)</p>
-                        </div>
-                    </div>
-
-                    <form onSubmit={handleFund} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Agent / Marchand Bénéficiaire</label>
-                            <select value={phone} onChange={(e) => setPhone(e.target.value)} style={{ padding: '16px', width: '100%', borderRadius: '12px', boxSizing: 'border-box', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: '16px', marginBottom: '12px' }}>
-                                <option value="">-- Sélectionnez un professionnel --</option>
-                                {proUsers.map((u: any) => (<option key={u.phone} value={u.phone}>{u.name} ({u.role})</option>))}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Montant Alloué (FCFA)</label>
-                            <input
-                                type="number" placeholder="50000" value={amountFund} onChange={(e) => setAmountFund(e.target.value)}
-                                style={{ padding: '16px', width: '100%', borderRadius: '12px', boxSizing: 'border-box', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-primary)', fontSize: '16px' }}
-                            />
-                        </div>
-                        <button type="submit" disabled={loading} style={{ padding: '16px', backgroundColor: '#10B981', color: 'var(--text-primary)', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
-                            {loading ? 'Transfert...' : 'Distribuer (Voûte)'}
-                        </button>
-                    </form>
-                </div>
+                    }
+                />
             </div>
+
+            <TabBar<TreasuryTab> tabs={treasuryTabs} active={tab} onChange={setTab} />
+
+            {loading && !overview ? (
+                <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)' }}><RefreshCw size={32} className="spin" /></div>
+            ) : (
+                <>
+                    {tab === 'overview' && overview && (
+                        <div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 24 }}>
+                                <KpiCard label="Masse Monétaire Totale" value={fmt(overview.moneySupply)} subtitle="Masse monétaire électronique totale en circulation (M0)" icon={<Activity size={20} />} color="var(--accent)" />
+                                <KpiCard label="Réserve Centrale" value={fmt(overview.reserveBalance)} subtitle="Comptes du siège central (Vault global)" icon={<Shield size={20} />} color="var(--success)" />
+                                <KpiCard label="Portefeuilles Clients" value={fmt(overview.clientWalletsBalance)} subtitle="Solde net détenu par les utilisateurs finaux" icon={<Wallet size={20} />} color="var(--warning)" />
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                                <KpiCard label="Liquidité Agences (E-Wallet)" value={fmt(overview.totalAgencyElectronic)} subtitle="Fonds alloués électroniquement aux agences" icon={<Building2 size={20} />} color="#3b82f6" />
+                                <KpiCard label="Liquidité Physique (Coffre)" value={fmt(overview.totalPhysicalVault)} subtitle="Total du cash remonté par les agences" icon={<StopCircle size={20} />} color="#8b5cf6" />
+                            </div>
+
+                            <div className="card" style={{ marginTop: 24, padding: 30 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+                                    <h3 style={{ margin: 0, fontWeight: 800, fontSize: 20 }}>Rapprochement Comptable</h3>
+                                    <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 12px', borderRadius: 20, fontWeight: 800, fontSize: 13 }}>✓ SYSTÈME ÉQUILIBRÉ</span>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'var(--bg-secondary)', borderRadius: 10 }}>
+                                        <span style={{ fontWeight: 600 }}>Total Masse Monétaire Calculée (Ledger)</span>
+                                        <span style={{ fontWeight: 800, fontSize: 16 }}>{fmt(overview.moneySupply)}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', border: '1px solid var(--border)', borderRadius: 10 }}>
+                                        <span style={{ color: 'var(--text-muted)' }}>- Réserve Centrale</span>
+                                        <span style={{ fontWeight: 600, color: 'var(--success)' }}>{fmt(overview.reserveBalance)}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', border: '1px solid var(--border)', borderRadius: 10 }}>
+                                        <span style={{ color: 'var(--text-muted)' }}>- E-Wallets Agences</span>
+                                        <span style={{ fontWeight: 600, color: '#3b82f6' }}>{fmt(overview.totalAgencyElectronic)}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', border: '1px solid var(--border)', borderRadius: 10 }}>
+                                        <span style={{ color: 'var(--text-muted)' }}>- Portefeuilles Clients (End Users)</span>
+                                        <span style={{ fontWeight: 600, color: 'var(--warning)' }}>{fmt(overview.clientWalletsBalance)}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', borderRadius: 10, marginTop: 12 }}>
+                                        <span style={{ fontWeight: 800 }}>ÉCART NON JUSTIFIÉ</span>
+                                        <span style={{ fontWeight: 900, color: 'var(--success)', fontSize: 18 }}>0 FCFA</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {tab === 'agencies' && (
+                        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+                                <h3 style={{ margin: 0, fontWeight: 800, fontSize: 18 }}>Liquidité des Succursales (E-Wallets)</h3>
+                            </div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                                <thead>
+                                    <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                                        {['Agence', 'E-Wallet', 'Coffre Fort (Espèces)', 'Statut E-Wallet'].map((h, i) => (
+                                            <th key={i} style={{ textAlign: 'left', padding: '14px 16px', color: 'var(--text-muted)', fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {agenciesLiquidity.map((a: any) => (
+                                        <tr key={a.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                                            <td style={{ padding: '14px 16px', fontWeight: 700 }}>{a.name} <code style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>{a.code}</code></td>
+                                            <td style={{ padding: '14px 16px', fontWeight: 900 }}>{fmt(a.electronicBalance)}</td>
+                                            <td style={{ padding: '14px 16px', fontWeight: 900, color: '#8b5cf6' }}>{fmt(a.physicalVault)}</td>
+                                            <td style={{ padding: '14px 16px' }}>
+                                                <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 800, background: a.status === 'CRITICAL' ? 'var(--danger-bg)' : a.status === 'LOW' ? 'var(--warning-bg)' : 'var(--success-bg)', color: a.status === 'CRITICAL' ? 'var(--danger)' : a.status === 'LOW' ? 'var(--warning)' : 'var(--success)' }}>
+                                                    {a.status}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {agenciesLiquidity.length === 0 && <tr><td colSpan={4} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Aucune agence trouvée.</td></tr>}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {tab === 'reconciliation' && (
+                        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+                                <h3 style={{ margin: 0, fontWeight: 800, fontSize: 18 }}>Cas de Rapprochement (Écarts Agences)</h3>
+                            </div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                                <thead>
+                                    <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                                        {['Réf.', 'Agence', 'Attendu', 'Déclaré (Coffre)', 'Différence', 'Date', 'Statut', 'Actions'].map((h, i) => (
+                                            <th key={i} style={{ textAlign: 'left', padding: '14px 16px', color: 'var(--text-muted)', fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {reconciliation.map((r: any) => (
+                                        <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                                            <td style={{ padding: '14px 16px' }}><code style={{ fontSize: 12 }}>{r.reference}</code></td>
+                                            <td style={{ padding: '14px 16px', fontWeight: 600 }}>{r.branch.name}</td>
+                                            <td style={{ padding: '14px 16px' }}>{fmt(r.expectedAmount)}</td>
+                                            <td style={{ padding: '14px 16px' }}>{fmt(r.reportedAmount)}</td>
+                                            <td style={{ padding: '14px 16px', fontWeight: 900, color: r.difference === 0 ? 'var(--success)' : 'var(--danger)' }}>{fmt(r.difference)}</td>
+                                            <td style={{ padding: '14px 16px', fontSize: 12 }}>{fmtDate(r.createdAt)}</td>
+                                            <td style={{ padding: '14px 16px' }}>
+                                                <span style={{ padding: '4px 8px', borderRadius: 8, fontSize: 11, fontWeight: 800, background: r.status === 'UNDER_REVIEW' ? 'var(--warning-bg)' : 'var(--success-bg)', color: r.status === 'UNDER_REVIEW' ? 'var(--warning)' : 'var(--success)' }}>
+                                                    {r.status}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '14px 16px' }}>
+                                                {r.status !== 'RESOLVED' ? (
+                                                    <button onClick={() => handleResolveReconciliation(r.id, r.reference)} style={{ padding: '6px 12px', background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success-bg)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Résoudre</button>
+                                                ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {reconciliation.length === 0 && <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Aucun cas de rapprochement.</td></tr>}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {tab === 'requests' && (
+                        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ margin: 0, fontWeight: 800, fontSize: 18 }}>Registre des Mouvements (Maker/Checker)</h3>
+                            </div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                                <thead>
+                                    <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                                        {['Référence', 'Opération', 'Montant', 'Destinataire', 'Généré par (Maker)', 'Audité par (Checker)', 'Statut', 'Actions (Checker)'].map((h, i) => (
+                                            <th key={i} style={{ textAlign: 'left', padding: '14px 16px', color: 'var(--text-muted)', fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {requests.map((r: any) => (
+                                        <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                                            <td style={{ padding: '14px 16px' }}><code style={{ fontSize: 12, background: 'var(--bg-secondary)', padding: '4px 8px', borderRadius: 6 }}>{r.reference}</code><div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{fmtDate(r.createdAt)}</div></td>
+                                            <td style={{ padding: '14px 16px' }}>
+                                                <span style={{ padding: '4px 8px', borderRadius: 8, fontSize: 11, fontWeight: 800, background: r.type === 'ISSUANCE' ? '#8b5cf620' : r.type === 'ALLOCATION' ? '#3b82f620' : 'var(--success-bg)', color: r.type === 'ISSUANCE' ? '#8b5cf6' : r.type === 'ALLOCATION' ? '#3b82f6' : 'var(--success)' }}>
+                                                    {r.type === 'ISSUANCE' ? 'MINT' : r.type}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '14px 16px', fontWeight: 900, color: 'var(--text-primary)' }}>{fmt(r.amount)}</td>
+                                            <td style={{ padding: '14px 16px' }}>
+                                                {r.type === 'ISSUANCE' ? <span style={{ color: 'var(--success)', fontWeight: 600 }}>Réserve Centrale</span> : (r.targetBranch ? `${r.targetBranch.name} (${r.targetBranch.code})` : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Wallet {r.targetWalletId || 'Inconnu'}</span>)}
+                                            </td>
+                                            <td style={{ padding: '14px 16px' }}>
+                                                <div style={{ fontWeight: 600 }}>{r.maker.name}</div>
+                                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.maker.role}</div>
+                                            </td>
+                                            <td style={{ padding: '14px 16px' }}>
+                                                {r.checker ? <><div style={{ fontWeight: 600 }}>{r.checker.name}</div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.checker.role}</div></> : <span style={{ color: 'var(--text-muted)' }}>En attente</span>}
+                                                {r.rejectionReason && <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4, fontStyle: 'italic' }}>Rejeté: {r.rejectionReason}</div>}
+                                            </td>
+                                            <td style={{ padding: '14px 16px' }}><StatusBadge status={r.status} /></td>
+                                            <td style={{ padding: '14px 16px' }}>
+                                                {r.status === 'PENDING' ? (
+                                                    <div style={{ display: 'flex', gap: 6 }}>
+                                                        <button onClick={() => handleApprove(r.id, r.reference)} style={{ padding: '6px 12px', background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success-bg)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Valider</button>
+                                                        <button onClick={() => handleReject(r.id, r.reference)} style={{ padding: '6px 12px', background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger-bg)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Rejeter</button>
+                                                    </div>
+                                                ) : <span style={{ color: 'var(--text-muted)' }}>Terminé</span>}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {requests.length === 0 && <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Aucune demande dans l'historique.</td></tr>}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {tab === 'create' && (
+                        <div className="card" style={{ padding: 32, maxWidth: 640, margin: '0 auto' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 30 }}>
+                                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'var(--btn-dark-bg)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Building2 size={24} /></div>
+                                <div>
+                                    <h3 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>Nouvelle Requête de Trésorerie</h3>
+                                    <p style={{ color: 'var(--text-muted)', margin: '4px 0 0', fontSize: 14 }}>Toute requête créée devra être auditée par un Checker (Super Admin).</p>
+                                </div>
+                            </div>
+                            <form onSubmit={handleCreateRequest} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                                <div style={{ padding: 20, background: 'var(--bg-secondary)', borderRadius: 12, border: '1px solid var(--border)' }}>
+                                    <label style={{ fontSize: 13, fontWeight: 700, display: 'block', marginBottom: 12, textTransform: 'uppercase' }}>Type d'Opération *</label>
+                                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                                        {[
+                                            { val: 'ISSUANCE', label: 'Mint (Création)' },
+                                            { val: 'ALLOCATION', label: 'Allocation (Vers Agence)' },
+                                            { val: 'RETURN', label: 'Retour (Depuis Agence)' },
+                                            { val: 'ADJUSTMENT', label: 'Ajustement Manuel' },
+                                            { val: 'REVERSAL', label: 'Annulation' }
+                                        ].map(t => (
+                                            <label key={t.val} style={{ flex: 1, padding: '14px', borderRadius: 10, border: `2px solid ${form.type === t.val ? 'var(--accent)' : 'var(--border)'}`, background: form.type === t.val ? 'var(--accent-bg)' : 'var(--bg-card)', cursor: 'pointer', textAlign: 'center', fontWeight: 700, fontSize: 13, color: form.type === t.val ? 'var(--accent)' : 'var(--text-primary)', transition: '0.2s' }}>
+                                                <input type="radio" name="type" value={t.val} checked={form.type === t.val} onChange={() => setForm({ ...form, type: t.val, targetBranchId: '', targetWalletId: '' })} style={{ display: 'none' }} />
+                                                {t.label}
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>Montant (FCFA) *</label>
+                                    <input required type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} placeholder="Ex: 5000000" style={{ width: '100%', padding: '16px', borderRadius: 12, border: '2px solid var(--border)', fontSize: 24, fontWeight: 900, color: 'var(--text-primary)' }} />
+                                </div>
+
+                                {(form.type === 'ALLOCATION' || form.type === 'RETURN' || form.type === 'ADJUSTMENT') && (
+                                    <div style={{ padding: 16, border: '2px dashed var(--border)', borderRadius: 12 }}>
+                                        <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>Agence Ciblée {form.type !== 'ADJUSTMENT' && '*'}</label>
+                                        <select required={form.type !== 'ADJUSTMENT'} value={form.targetBranchId} onChange={e => setForm({ ...form, targetBranchId: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14 }}>
+                                            <option value="">-- {form.type === 'ADJUSTMENT' ? 'Laisser vide pour la Réserve Centrale' : 'Sélectionner une agence'} --</option>
+                                            {/* Le Siège EST la Réserve Centrale : il ne peut pas être sa propre cible
+                                                d'Allocation/Retour (le backend rejette déjà cette combinaison). */}
+                                            {branches.filter(b => !b.isHQ).map(b => (
+                                                <option key={b.id} value={b.id}>{b.name} (Solde: {fmt(b.wallet?.balance)})</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+
+                                <div>
+                                    <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>Motif de l'opération *</label>
+                                    <input required value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} placeholder="Ex: Renflouement journalier agence LBV-01" style={{ width: '100%', padding: '14px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 15 }} />
+                                </div>
+
+                                <div>
+                                    <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>Commentaire d'audit (Optionnel)</label>
+                                    <textarea value={form.comment} onChange={e => setForm({ ...form, comment: e.target.value })} placeholder="Détails supplémentaires pour l'équipe d'audit..." rows={3} style={{ width: '100%', padding: '14px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, fontFamily: 'inherit' }} />
+                                </div>
+
+                                <div style={{ marginTop: 10, padding: 16, background: 'var(--warning-bg)', border: '1px solid var(--warning)', borderRadius: 10, fontSize: 13, color: '#c2410c', display: 'flex', gap: 10, alignItems: 'center', fontWeight: 600 }}>
+                                    <AlertTriangle size={20} />
+                                    En utilisant le bouton ci-dessous, vous agissez en tant que MAKER. Un validateur (CHECKER) devra inspecter votre requête.
+                                </div>
+
+                                <button type="submit" disabled={creating} style={{ width: '100%', padding: '18px', background: 'var(--btn-dark-bg)', color: 'white', border: 'none', borderRadius: 12, cursor: 'pointer', fontWeight: 800, fontSize: 16, marginTop: 10, transition: '0.2s' }}>
+                                    {creating ? 'Création de la requête...' : 'Soumettre au Validation Center'}
+                                </button>
+                            </form>
+                        </div>
+                    )}
+                </>
+            )}
         </div>
     );
 }

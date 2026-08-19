@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -16,48 +16,57 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
-import { BASE_URL } from '../services/api';
-import { verifyBiometricsOrPin } from '../services/biometrics';
+import { apiClientInitiatedWithdraw } from '../services/api';
+import { enableBiometricPin, isBiometricPinEnabled, verifyBiometricsOrPin } from '../services/biometrics';
 
 export default function ClientWithdrawDeskScreen() {
     const router = useRouter();
-    const { user, token } = useAuth();
+    const { user, settings } = useAuth();
     const COLORS = useAppTheme();
 
-    const { agentPhone, agentName, lockedAmount } = useLocalSearchParams();
-    const [amount, setAmount] = useState<string>((lockedAmount as string) || '');
-    const isAmountLocked = !!lockedAmount;
+    const { agentPhone, agentName } = useLocalSearchParams();
+    const [amount, setAmount] = useState('');
+    const [pin, setPin] = useState('');
     const [loading, setLoading] = useState(false);
+    const [bioEnabled, setBioEnabled] = useState(false);
 
-    const handleWithdraw = async () => {
-        if (!user) return;
-        const numAmount = parseFloat(amount);
-        if (isNaN(numAmount) || numAmount <= 0) {
-            Alert.alert("Montant invalide", "Veuillez entrer un montant valide supérieur à 0.");
-            return;
-        }
+    useEffect(() => { isBiometricPinEnabled().then(setBioEnabled); }, []);
 
-        // Biometric / PIN Verification
-        const authResult = await verifyBiometricsOrPin();
-        if (!authResult.success) {
-            Alert.alert('Échec de l\'authentification', authResult.error || 'Impossible de vérifier votre identité.');
-            return;
-        }
+    // Ce guichet ne concerne que les retraits chez un Agent (jamais un Marchand — voir
+    // qr.tsx), donc seule la taxe agence s'applique.
+    const threshold = settings?.agencyWithdrawThreshold ?? 500000;
+    const taxRate = settings?.agencyTaxWithdraw ?? 0.01;
+    // keyboardType="numeric" n'empêche pas un espace ou une virgule de finir dans la
+    // valeur (collage, certains claviers IME) — sans ce nettoyage, parseFloat("50 000")
+    // vaut 50 et le retrait envoyé au serveur pouvait être 1000x plus petit que prévu.
+    const cleanAmount = (v: string) => parseFloat(v.replace(/\s/g, '').replace(',', '.'));
+    const numAmountPreview = cleanAmount(amount) || 0;
+    const fee = numAmountPreview > threshold ? Math.ceil((numAmountPreview - threshold) * taxRate) : 0;
 
+    const submitWithdraw = async (usedPin: string) => {
+        const numAmount = cleanAmount(amount);
         setLoading(true);
         try {
-            const res = await fetch(`${BASE_URL}/api/wallet/client-initiated-withdraw`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({
-                    receiverPhone: agentPhone,
-                    amount: numAmount,
-                    pin: authResult.pin,
-                    useBiometrics: authResult.useBiometrics
-                })
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
+            const data = await apiClientInitiatedWithdraw(agentPhone as string, numAmount, usedPin);
+
+            // Propose l'activation du déverrouillage biométrique (même parcours de
+            // consentement que transfer-confirm.tsx — jamais activé silencieusement).
+            if (!bioEnabled) {
+                Alert.alert(
+                    'Activer Face ID / Empreinte ?',
+                    'Confirmez vos prochains retraits sans ressaisir votre code PIN.',
+                    [
+                        { text: 'Plus tard', style: 'cancel' },
+                        {
+                            text: 'Activer', onPress: async () => {
+                                const ok = await enableBiometricPin(usedPin);
+                                if (ok) setBioEnabled(true);
+                                else Alert.alert('Échec', 'Impossible d\'activer le déverrouillage biométrique sur cet appareil.');
+                            }
+                        },
+                    ]
+                );
+            }
 
             // Redirection to receipt ticket
             router.replace({
@@ -79,6 +88,33 @@ export default function ClientWithdrawDeskScreen() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleManualWithdraw = () => {
+        const numAmount = cleanAmount(amount);
+        if (isNaN(numAmount) || numAmount <= 0) {
+            Alert.alert("Montant invalide", "Veuillez entrer un montant valide supérieur à 0.");
+            return;
+        }
+        if (pin.length !== 4) {
+            Alert.alert('Code PIN requis', 'Veuillez entrer votre code PIN à 4 chiffres.');
+            return;
+        }
+        submitWithdraw(pin);
+    };
+
+    const handleBiometricWithdraw = async () => {
+        const numAmount = cleanAmount(amount);
+        if (isNaN(numAmount) || numAmount <= 0) {
+            Alert.alert("Montant invalide", "Veuillez entrer un montant valide supérieur à 0.");
+            return;
+        }
+        const authResult = await verifyBiometricsOrPin();
+        if (!authResult.success || !authResult.pin) {
+            Alert.alert('Échec de l\'authentification', authResult.error || 'Impossible de vérifier votre identité.');
+            return;
+        }
+        submitWithdraw(authResult.pin);
     };
 
     if (!user) {
@@ -109,7 +145,7 @@ export default function ClientWithdrawDeskScreen() {
 
                         <Text style={styles.title}>Demande de retrait</Text>
                         <Text style={styles.subtitle}>
-                            {isAmountLocked ? "Veuillez valider le montant demandé par l'agent :" : "Saisissez le montant exact à retirer auprès de l'agent :"}
+                            Saisissez le montant exact à retirer auprès de l'agent :
                         </Text>
 
                         <View style={styles.userBox}>
@@ -124,43 +160,69 @@ export default function ClientWithdrawDeskScreen() {
                             </View>
                         </View>
 
-                        <View style={[styles.inputBox, { borderColor: COLORS.border, backgroundColor: isAmountLocked ? '#e9ecef' : COLORS.surface }]}>
+                        <View style={[styles.inputBox, { borderColor: COLORS.border, backgroundColor: COLORS.surface }]}>
                             <Text style={[styles.currencyLabel, { color: COLORS.text }]}>FCFA</Text>
                             <TextInput
-                                style={[styles.input, { color: isAmountLocked ? COLORS.textSecondary : COLORS.text }]}
+                                style={[styles.input, { color: COLORS.text }]}
                                 placeholder="0"
                                 placeholderTextColor={COLORS.textSecondary}
                                 keyboardType="numeric"
                                 value={amount}
                                 onChangeText={setAmount}
-                                editable={!isAmountLocked}
-                                autoFocus={!isAmountLocked}
+                                autoFocus
                             />
                         </View>
 
-                        <Text style={[styles.feeText, { color: COLORS.textSecondary }]}>
-                            Frais de retrait : GRATUIT
+                        <Text style={[styles.feeText, { color: fee > 0 ? '#F59E0B' : COLORS.textSecondary }]}>
+                            {fee > 0
+                                ? `Frais de retrait : ${fee.toLocaleString('fr-FR')} FCFA (au-delà de ${threshold.toLocaleString('fr-FR')} FCFA)`
+                                : 'Frais de retrait : GRATUIT'}
                         </Text>
+
+                        <View style={[styles.inputBox, { borderColor: COLORS.border, backgroundColor: COLORS.surface, height: 56, marginTop: 10, marginBottom: 0 }]}>
+                            <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 10 }} />
+                            <TextInput
+                                style={[styles.input, { fontSize: 20, textAlign: 'left', color: COLORS.text }]}
+                                placeholder="Code PIN"
+                                placeholderTextColor={COLORS.textSecondary}
+                                keyboardType="number-pad"
+                                secureTextEntry
+                                maxLength={4}
+                                value={pin}
+                                onChangeText={setPin}
+                            />
+                        </View>
                     </View>
 
-                    <TouchableOpacity
-                        style={[
-                            styles.confirmBtn,
-                            (!amount || parseFloat(amount) <= 0 || loading) && styles.confirmBtnDisabled,
-                            { backgroundColor: COLORS.primary }
-                        ]}
-                        onPress={handleWithdraw}
-                        disabled={!amount || parseFloat(amount) <= 0 || loading}
-                    >
-                        {loading ? (
-                            <ActivityIndicator color="#fff" />
-                        ) : (
-                            <>
-                                <Ionicons name="checkmark-circle" size={24} color="#fff" style={{ marginRight: 8 }} />
-                                <Text style={styles.confirmBtnText}>Autoriser le retrait</Text>
-                            </>
+                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                        {bioEnabled && (
+                            <TouchableOpacity
+                                style={[styles.confirmBtn, { flex: 1, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.primary }]}
+                                onPress={handleBiometricWithdraw}
+                                disabled={!amount || numAmountPreview <= 0 || loading}
+                            >
+                                <Ionicons name="finger-print" size={22} color={COLORS.primary} />
+                            </TouchableOpacity>
                         )}
-                    </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[
+                                styles.confirmBtn,
+                                { flex: bioEnabled ? 3 : 1, backgroundColor: COLORS.primary },
+                                (!amount || numAmountPreview <= 0 || pin.length !== 4 || loading) && styles.confirmBtnDisabled,
+                            ]}
+                            onPress={handleManualWithdraw}
+                            disabled={!amount || numAmountPreview <= 0 || pin.length !== 4 || loading}
+                        >
+                            {loading ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <>
+                                    <Ionicons name="checkmark-circle" size={24} color="#fff" style={{ marginRight: 8 }} />
+                                    <Text style={styles.confirmBtnText}>Autoriser le retrait</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </View>
 
                     <Text style={{ textAlign: 'center', color: '#6B7280', opacity: 0.8, marginTop: 15, fontSize: 13 }}>
                         Montrez le reçu de succès à l'agent après validation.

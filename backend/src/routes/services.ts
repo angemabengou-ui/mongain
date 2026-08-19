@@ -1,8 +1,13 @@
+import { friendlyErrorMessage } from '../utils/errors';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import express from 'express';
 import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { LimitEngine } from '../services/LimitEngine';
+import { generateReference } from '../utils/reference';
+import { getSystemSettings } from './settings';
 
 const router = express.Router();
 
@@ -25,8 +30,6 @@ router.post('/pay-bill', authMiddleware, async (req: AuthRequest, res) => {
         const pinMatch = await bcrypt.compare(pin, user.pin);
         if (!pinMatch) return res.status(401).json({ error: 'Code PIN incorrect.' });
 
-        if (user.wallet.balance < amount) return res.status(400).json({ error: 'Solde insuffisant pour payer cette facture.' });
-
         // Trouver ou créer le portefeuille du Service (SEEG / CANAL)
         const servicePhone = service === 'SEEG' ? '+24188888888' : '+24177777777';
         let serviceUser = await prisma.user.findUnique({ where: { phone: servicePhone }, include: { wallet: true } });
@@ -37,26 +40,35 @@ router.post('/pay-bill', authMiddleware, async (req: AuthRequest, res) => {
                     phone: servicePhone,
                     name: `SERVICE PARTENAIRE - ${service}`,
                     role: 'ADMIN',
-                    pin: await bcrypt.hash('0000', 10),
+                    pin: await bcrypt.hash(crypto.randomBytes(8).toString('hex'), 10),
                     wallet: { create: { balance: 0, currency: 'FCFA' } }
                 },
                 include: { wallet: true }
             });
         }
+        if (!serviceUser.wallet) return res.status(500).json({ error: 'Portefeuille service introuvable.' });
 
         // Simuler un appel API vers SEEG/Edan ou Canal+
         await new Promise(r => setTimeout(r, 1200));
 
         // Code Jeton Edan de 20 chiffres (Simulé)
-        const seegCode = service === 'SEEG' ? Array.from({ length: 4 }, () => Math.floor(10000 + Math.random() * 90000).toString()).join('-') : undefined;
-        const ref = `${service}-${accountNumber}-${Math.random().toString(36).substring(7).toUpperCase()}`;
+        const seegCode = service === 'SEEG' ? Array.from({ length: 4 }, () => crypto.randomInt(10000, 100000).toString()).join('-') : undefined;
+        const ref = generateReference(`${service}-${accountNumber}`);
 
         await prisma.$transaction(async (tx) => {
-            // Débiter le client
-            await tx.wallet.update({
-                where: { id: user.wallet!.id },
+            // La limite Anti-Blanchiment s'applique aux paiements de factures comme au
+            // reste des mouvements sortants — un client Tier 0 ne doit pas pouvoir la
+            // contourner en passant par ce rail plutôt que par un transfert P2P.
+            const settings = await getSystemSettings();
+            await LimitEngine.verifyAndIncrementConsumption(tx, user.id, user.wallet!.id, amount, settings);
+
+            // Débiter le client — la clause `balance: gte` rend le débit atomique et
+            // empêche un double-clic/retry concurrent de passer sous zéro.
+            const updated = await tx.wallet.updateMany({
+                where: { id: user.wallet!.id, balance: { gte: amount } },
                 data: { balance: { decrement: amount } }
             });
+            if (updated.count === 0) throw new Error('Solde insuffisant pour payer cette facture.');
 
             // Créditer le service
             await tx.wallet.update({
@@ -83,7 +95,7 @@ router.post('/pay-bill', authMiddleware, async (req: AuthRequest, res) => {
         });
 
     } catch (e: any) {
-        res.status(500).json({ error: e.message });
+        res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });
 
@@ -107,8 +119,6 @@ router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
         const pinMatch = await bcrypt.compare(pin, user.pin);
         if (!pinMatch) return res.status(401).json({ error: 'Code PIN incorrect.' });
 
-        if (user.wallet.balance < amount) return res.status(400).json({ error: 'Solde insuffisant pour cette recharge de crédit.' });
-
         const telecomPhone = '+24166666666'; // MOCK AGGREGATOR WALLET
         let telecomUser = await prisma.user.findUnique({ where: { phone: telecomPhone }, include: { wallet: true } });
 
@@ -118,23 +128,28 @@ router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
                     phone: telecomPhone,
                     name: `SERVICE PARTENAIRE - TELECOM`,
                     role: 'ADMIN',
-                    pin: await bcrypt.hash('0000', 10),
+                    pin: await bcrypt.hash(crypto.randomBytes(8).toString('hex'), 10),
                     wallet: { create: { balance: 0, currency: 'FCFA' } }
                 },
                 include: { wallet: true }
             });
         }
+        if (!telecomUser.wallet) return res.status(500).json({ error: 'Portefeuille service introuvable.' });
 
         // Simulate third party Telecom API
         await new Promise(r => setTimeout(r, 1200));
 
-        const ref = `AIRTIME-${network}-${Math.random().toString(36).substring(7).toUpperCase()}`;
+        const ref = generateReference(`AIRTIME-${network}`);
 
         await prisma.$transaction(async (tx) => {
-            await tx.wallet.update({
-                where: { id: user.wallet!.id },
+            const settings = await getSystemSettings();
+            await LimitEngine.verifyAndIncrementConsumption(tx, user.id, user.wallet!.id, amount, settings);
+
+            const updated = await tx.wallet.updateMany({
+                where: { id: user.wallet!.id, balance: { gte: amount } },
                 data: { balance: { decrement: amount } }
             });
+            if (updated.count === 0) throw new Error('Solde insuffisant pour cette recharge de crédit.');
 
             await tx.wallet.update({
                 where: { id: telecomUser!.wallet!.id },
@@ -158,7 +173,7 @@ router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
         });
 
     } catch (e: any) {
-        res.status(500).json({ error: e.message });
+        res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });
 

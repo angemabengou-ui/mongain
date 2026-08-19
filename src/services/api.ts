@@ -66,7 +66,12 @@ const request = async (method: string, path: string, body?: object, auth = false
             throw new Error('Session expirée. Veuillez vous reconnecter.');
         }
 
-        const data = await res.json();
+        let data: any;
+        try {
+            data = await res.json();
+        } catch {
+            throw new Error(`Réponse inattendue du serveur (${res.status}). Veuillez réessayer.`);
+        }
         if (!res.ok) throw new Error(data.message || data.error || 'Une erreur est survenue.');
         return data;
     } catch (e: any) {
@@ -176,10 +181,16 @@ export const apiGetBalance = () =>
 export const apiGetTransactions = () =>
     request('GET', '/api/wallet/transactions', undefined, true) as Promise<Transaction[]>;
 
-export const apiTransfer = (receiverPhone: string, amount: number, pin?: string, useBiometrics?: boolean) =>
-    request('POST', '/api/wallet/transfer', { receiverPhone, amount, pin, useBiometrics }, true) as Promise<{
+export const apiTransfer = (receiverPhone: string, amount: number, pin: string) =>
+    request('POST', '/api/wallet/transfer', { receiverPhone, amount, pin }, true) as Promise<{
         message: string;
         data: { transaction: any; remainingBalance: number; receiverName: string };
+    }>;
+
+export const apiClientInitiatedWithdraw = (receiverPhone: string, amount: number, pin: string) =>
+    request('POST', '/api/wallet/client-initiated-withdraw', { receiverPhone, amount, pin }, true) as Promise<{
+        message: string;
+        data: { transaction: any; remainingBalance: number; agentName: string; agentPhone: string };
     }>;
 
 export const apiTopUp = (amount: number, cardToken?: string) =>
@@ -188,8 +199,8 @@ export const apiTopUp = (amount: number, cardToken?: string) =>
 export const apiPullDeposit = (phone: string, amount: number, network: string) =>
     request('POST', '/api/wallet/pull', { phone, amount, network }, true) as Promise<{ message: string, reference: string, network: string }>;
 
-export const apiGenerateDepositCode = (amount: number) =>
-    request('POST', '/api/wallet/generate-deposit-code', { amount }, true) as Promise<{ success: boolean, code: string, expiresAt: string }>;
+export const apiGenerateWithdrawCode = (amount: number) =>
+    request('POST', '/api/wallet/generate-withdraw-code', { amount }, true) as Promise<{ code: string; expiresAt: string }>;
 
 
 
@@ -200,6 +211,24 @@ export const apiCreateReclamation = (title: string, description: string) => requ
 // Services
 export const apiPayService = (type: string, amount: number, reference?: string) =>
     request('POST', '/api/wallet/pay-service', { type, amount, reference }, true) as Promise<{ message: string; balance: number; serviceToken?: string }>;
+
+// Factures SEEG / Canal+ (backend/src/routes/services.ts)
+export const apiPayBill = (service: 'SEEG' | 'CANAL', accountNumber: string, amount: number, pin: string) =>
+    request('POST', '/api/services/pay-bill', { service, accountNumber, amount, pin }, true) as Promise<{ message: string; seegCode?: string; reference: string }>;
+
+// Recharge crédit Airtel / Moov (backend/src/routes/services.ts)
+export const apiAirtimeTopUp = (network: 'AIRTEL' | 'MOOV', phoneNumber: string, amount: number, pin: string) =>
+    request('POST', '/api/services/topup', { network, phoneNumber, amount, pin }, true) as Promise<{ message: string; reference: string }>;
+
+// Marchand
+export const apiGetMerchantStats = () =>
+    request('GET', '/api/merchant/stats', undefined, true) as Promise<{
+        balance: number; todaySalesAmount: number; todaySalesCount: number;
+        allTimeSalesAmount: number; todayCommission: number; allTimeCommission: number;
+    }>;
+
+export const apiGetMerchantTransactions = () =>
+    request('GET', '/api/merchant/transactions', undefined, true) as Promise<any[]>;
 
 // Tontine
 export const apiGetTontineGroups = () =>

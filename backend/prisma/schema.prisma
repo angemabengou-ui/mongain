@@ -11,69 +11,143 @@ datasource db {
 }
 
 model User {
-  id                String        @id @default(uuid())
-  username          String?       @unique // Secondary auth identifier (Anti-SIM recycle)
-  email             String?       @unique // Optional tertiary auth and recovery
+  id                String    @id @default(uuid())
+  username          String?   @unique // Secondary auth identifier (Anti-SIM recycle)
+  email             String?   @unique // Optional tertiary auth and recovery
+  accountNumber     String?   @unique // MONG-ID — identifiant de compte alternatif au téléphone (voir wallet.ts lookups, auth.ts register, migrate-mong-id.ts)
   name              String
-  phone             String        @unique
+  phone             String    @unique
   pin               String // hashed pin code
-  failedPinAttempts Int           @default(0)
+  failedPinAttempts Int       @default(0)
   lockedUntil       DateTime?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-  role              String        @default("USER") // USER, AGENT, ADMIN, MERCHANT
-  isActive          Boolean       @default(true)
-  jwtVersion        Int           @default(0) // Invalidates sessions when logged in elsewhere
-  pushToken         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  role              String    @default("USER") // USER, AGENT, ADMIN, MERCHANT
+  isActive          Boolean   @default(true) // Legacy fallback
+  accountStatus     String    @default("ACTIVE") // ACTIVE, SUSPENDED, FROZEN, CLOSED
+  freezeReason      String?   
+  frozenUntil       DateTime? 
   
-  // Nouveaux Champs KYC
-  kycLevel          Int           @default(0) // 0: Standard, 1: Vérifié, 2: Premium
-  kycStatus         String        @default("UNVERIFIED") // UNVERIFIED, PENDING, APPROVED, REJECTED
-  idCardFront       String?
-  idCardBack        String?
-  selfie            String?
+  jwtVersion        Int       @default(0) // Invalidates sessions when logged in elsewhere
+  pushToken         String?
 
-  wallet            Wallet?
-  reclamations      Reclamation[]
-  auditLogs         AuditLog[]
-  notifications     Notification[]
+  // Rattachement agence (pertinent pour role=AGENT) — référence libre, cohérente avec
+  // Transaction.branchId/tellerId (bounded context Ledger volontairement découplé, voir
+  // Reclamation.branchId plus bas). Les opérations effectuées par un agent rattaché sont
+  // désormais comptabilisées dans les rapports de son agence (voir wallet.ts /transfer et
+  // /client-initiated-withdraw).
+  branchId String?
+
+  // Nouveaux Champs KYC
+  kycLevel    Int     @default(0) // 0: Standard, 1: Vérifié, 2: Premium
+  kycStatus   String  @default("UNVERIFIED") // UNVERIFIED, PENDING, APPROVED, REJECTED
+  kycRejectReason String? // Motif du dernier rejet, saisi par le compliance officer
+  idCardFront String?
+  idCardBack  String?
+  selfie      String?
+
+  // Nouveaux Champs: Limites Personnalisées (PROMPT 03)
+  customDailyLimit     Float?
+  customMonthlyLimit   Float?
+  customPerTxLimit     Float?
+  customLimitExpiresAt DateTime?
+
+  wallet                Wallet?
+  reclamations          Reclamation[]
+  notifications         Notification[]
+  riskFlags             RiskFlag[]           // ( PROMPT 08 CRM )
+  fraudCases            FraudCase[]          // ( PROMPT 09 )
+  refundRequests        RefundRequest[]      // ( PROMPT 09 )
   tontineParticipations TontineParticipant[]
-  createdTontines       TontineGroup[] @relation("GroupCreator")
+  createdTontines       TontineGroup[]       @relation("GroupCreator")
+  apiIntegrations       ApiIntegration[]     @relation("MerchantAPI")
 }
 
 model Reclamation {
-  id          String   @id @default(uuid())
+  id          String @id @default(uuid())
   title       String
   description String
-  status      String   @default("OPEN") // OPEN, CLOSED
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status      String @default("OPEN") // OPEN, ASSIGNED, IN_PROGRESS, WAITING_CUSTOMER, WAITING_INTERNAL, REOPENED, RESOLVED, CLOSED, ESCALATED
+  priority    String @default("NORMAL") // LOW, NORMAL, HIGH, CRITICAL
+  category    String @default("OTHER") // ACCOUNT, KYC, TRANSACTION, CASH_IN, CASH_OUT, MERCHANT, AGENCY, FRAUD, REFUND, TECHNICAL, LIMIT, OTHER
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  transactionId String? // Loose reference — Ledger bounded context is sacred
+  branchId      String?
+  tellerId      String?
+  staffId       String? // Caissier ou agent impliqué
+
+  assigneeId   String?
+  assignee     Staff?   @relation("ReclamationAssignee", fields: [assigneeId], references: [id])
+
+  // SLA
+  slaDeadline  DateTime?
+  slaBreached  Boolean  @default(false)
+
+  // Escalade
+  escalatedTo  String?   // COMPLIANCE, RISK, FINANCE, OPERATIONS
+  escalatedAt  DateTime?
+
+  resolvedAt DateTime?
+  closedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  notes ReclamationNote[]
+  refundRequests RefundRequest[]
+}
+
+model ReclamationNote {
+  id            String      @id @default(uuid())
+  reclamationId String
+  reclamation   Reclamation @relation(fields: [reclamationId], references: [id], onDelete: Cascade)
+
+  authorId   String // ID of Staff
+  authorName String
+
+  content    String
+  isInternal Boolean @default(true) // Si false, visible par le client
+
+  createdAt DateTime @default(now())
 }
 
 model Wallet {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id])
-  balance   Float    @default(0.0)
-  currency  String   @default("FCFA")
-  dailySpent      Float    @default(0.0)    // Dépense journalière (atomique, réinitialisé chaque jour)
-  dailySpentResetAt DateTime @default(now()) // Date dernière remise à zéro
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                  String   @id @default(uuid())
+  userId              String?  @unique
+  user                User?    @relation(fields: [userId], references: [id])
+  balance             Float    @default(0.0)
+  currency            String   @default("FCFA")
+  dailySpent          Float    @default(0.0) // Dépense journalière (atomique, réinitialisé chaque jour)
+  dailySpentResetAt   DateTime @default(now()) // Date dernière remise à zéro
+  monthlySpent        Float    @default(0.0) // Dépense mensuelle
+  monthlySpentResetAt DateTime @default(now()) // Remise à zéro mensuelle
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   // Relations inverses pour les transactions
   sentTransactions     Transaction[] @relation("SenderWallet")
   receivedTransactions Transaction[] @relation("ReceiverWallet")
+  branch               Branch?
 }
 
 model Transaction {
   id        String   @id @default(uuid())
   amount    Float
+  fee       Float    @default(0.0)
   status    String   @default("COMPLETED") // PENDING, COMPLETED, FAILED
-  reference String   @unique @default(cuid()) // Ref unique pour traÃ§age
+  type      String   @default("TRANSFER")  // TRANSFER, CASH_IN, CASH_OUT, REFUND, ALLOCATION
+  reference String   @unique @default(cuid())
   createdAt DateTime @default(now())
+
+  // Idempotency — prevents double-click / retry duplicates
+  idempotencyKey String? @unique
+
+  // Agency rapprochement
+  branchId  String?
+  tellerId  String?
 
   // Relations
   senderWalletId   String?
@@ -86,52 +160,148 @@ model Transaction {
   @@index([senderWalletId])
   @@index([receiverWalletId])
   @@index([createdAt])
+  @@index([branchId])
+  @@index([type])
 }
 
 model AuditLog {
   id        String   @id @default(uuid())
+  // Référence libre (pas de FK) : l'acteur peut être un User (rôle ADMIN historique) OU un
+  // Staff (portail corporate) — deux tables distinctes. Un FK vers une seule des deux faisait
+  // planter (violation de contrainte) chaque écriture émise par un compte Staff, c'est-à-dire
+  // la quasi-totalité des actions du portail admin-web depuis le passage au modèle Staff/Corp.
   adminId   String
-  admin     User     @relation(fields: [adminId], references: [id])
   action    String
   details   String
   createdAt DateTime @default(now())
+
+  @@index([adminId])
 }
 
 model VerificationCode {
   id        String   @id @default(uuid())
-  phone     String   @unique
+  phone     String
+  // Isole les codes par intention : un code émis pour "réinitialiser le PIN" ne doit
+  // jamais pouvoir être consommé par le flux "vérifier la connexion" (faille corrigée —
+  // auparavant un seul code partagé par téléphone permettait de contourner le PIN via
+  // /request-reset-otp + /verify-login-otp).
+  purpose   String   @default("LOGIN") // REGISTER, LOGIN, RESET_PIN
   code      String
   expiresAt DateTime
   createdAt DateTime @default(now())
+
+  @@unique([phone, purpose])
 }
 
 model SystemSettings {
-  id               Int      @id @default(autoincrement())
-  taxP2P           Float    @default(0.01) // 1.0% par défaut
-  taxWithdraw      Float    @default(0.013) // 1.3% par défaut
-  rewardMerchant   Float    @default(0.003) // 0.3% par défaut
-  
+  id             Int   @id @default(autoincrement())
+  taxP2P         Float @default(0.01) // 1.0% par défaut
+  taxCashIn      Float @default(0.015) // 1.5% - Distinct par nature du Cash-Out
+  taxWithdraw    Float @default(0.013) // 1.3% par défaut
+  rewardMerchant Float @default(0.003) // 0.3% par défaut
+
   // Limites journalières configurables (V4)
-  dailyLimitTier0  Float    @default(50000.0) // Plafond en FCFA par jour pour non-vérifiés
-  dailyLimitTier1  Float    @default(2000000.0) // Plafond en FCFA par jour pour vérifiés
-  
+  dailyLimitTier0 Float @default(50000.0) // Plafond en FCFA par jour pour non-vérifiés
+  dailyLimitTier1 Float @default(2000000.0) // Plafond en FCFA par jour pour vérifiés
+
   // Règles spécifiques Agences (V6)
   agencyWithdrawThreshold Float @default(500000.0) // Montant au-delà duquel le retrait agence est taxé
   agencyTaxWithdraw       Float @default(0.01) // Taxe de 1% sur la part excédentaire ou globale
-  
-  // Opérations & Intégrations Partenaires (V6)
-  airtelEnabled    Boolean @default(true)
-  moovEnabled      Boolean @default(true)
-  seegEnabled      Boolean @default(true)
-  tontineEnabled   Boolean @default(true)
-  
-  airtelFee        Float   @default(0.015) // Frais opérateur Airtel
-  moovFee          Float   @default(0.010) // Frais opérateur Moov
-  
-  airtelApiKey     String?
-  moovApiKey       String?
 
-  updatedAt        DateTime @updatedAt
+  // Opérations & Intégrations Partenaires (V6)
+  airtelEnabled  Boolean @default(true)
+  moovEnabled    Boolean @default(true)
+  seegEnabled    Boolean @default(true)
+  tontineEnabled Boolean @default(true)
+
+  airtelFee Float @default(0.015) // Frais opérateur Airtel
+  moovFee   Float @default(0.010) // Frais opérateur Moov
+
+  airtelApiKey String?
+  moovApiKey   String?
+
+  // Général
+  platformName String @default("Mongain")
+  currency     String @default("FCFA")
+  timezone     String @default("Africa/Libreville")
+  supportEmail String @default("support@mongain.com")
+  supportPhone String @default("+2410000000")
+
+  // Limites KYC Étendues
+  dailyLimitTier2   Float @default(5000000.0)
+  monthlyLimitTier0 Float @default(1000000.0)
+  monthlyLimitTier1 Float @default(10000000.0)
+  monthlyLimitTier2 Float @default(50000000.0)
+  perTxLimitTier0   Float @default(50000.0)
+  perTxLimitTier1   Float @default(500000.0)
+  perTxLimitTier2   Float @default(2000000.0)
+
+  // SLA (heures) — configurables depuis les Paramètres
+  slaLowHours      Int @default(72)
+  slaNormalHours   Int @default(48)
+  slaHighHours     Int @default(24)
+  slaCriticalHours Int @default(4)
+
+  // Refund Maker/Checker seuil
+  refundMakerCheckerThreshold Float @default(100000)
+
+  // Maintenance & Sécurité
+  globalMaintenance Boolean @default(false)
+  circuitBreaker    Boolean @default(false)
+
+  // Webhooks
+  webhookUrl    String?
+  webhookActive Boolean @default(false)
+  webhookRetry  Int     @default(3)
+
+  // Anti-Fraud & Cash Operations (V6)
+  antiFractioningWindowHours Int @default(24) // Fenêtre glissante en heures
+  antiFractioningMaxAmount   Float @default(100000.0) // Seuil maximum de retraits cumulés sans alerte
+  antiFractioningMaxCount    Int @default(3) // Nombre d'opérations maximum sur la fenêtre
+  antiFractioningAction      String @default("APPLY_FEE") // ALLOW, APPLY_FEE, BLOCK, ALERT
+
+  // Treasury & Liquidity Policies (V6)
+  maxMintAmount                Float @default(1000000000.0) // Max 1 Milliard par requête Mint
+  treasuryApprovalThreshold    Float @default(5000000.0) // Au-delà, requiert SUPER_ADMIN spécifiquement
+  agencyLowLiquidityThreshold  Float @default(15000000.0) // Alerte orange
+  agencyCriticalLiquidity      Float @default(5000000.0) // Alerte rouge
+
+  updatedAt DateTime @updatedAt
+}
+
+model SettingHistory {
+  id          String   @id @default(uuid())
+  category    String   // FEES, LIMITS, SECURITY, MAINTENANCE...
+  parameter   String   // La clé (ex: taxP2P)
+  oldValue    String
+  newValue    String
+  
+  authorId    String
+  author      Staff    @relation("HistoryMaker", fields: [authorId], references: [id])
+  
+  checkerId   String?
+  checker     Staff?   @relation("HistoryChecker", fields: [checkerId], references: [id])
+  
+  reason      String
+  status      String   @default("APPLIED") // APPLIED, REJECTED
+  
+  createdAt   DateTime @default(now())
+}
+
+model SettingsApproval {
+  id              String   @id @default(uuid())
+  makerId         String
+  checkerId       String?
+  action          String // Ex: UPDATE_FEES, TOGGLE_MAINTENANCE
+  payload         String
+  reason          String
+  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  maker   Staff  @relation("MakerRequests", fields: [makerId], references: [id])
+  checker Staff? @relation("CheckerRequests", fields: [checkerId], references: [id])
 }
 
 model Notification {
@@ -146,31 +316,31 @@ model Notification {
 }
 
 model TontineGroup {
-  id           String   @id @default(uuid())
-  creatorId    String
-  creator      User     @relation("GroupCreator", fields: [creatorId], references: [id])
-  name         String
-  contribution Float
-  frequency    String   @default("MONTHLY") // WEEKLY, MONTHLY
-  startDate    DateTime @default(now())
-  status       String   @default("ACTIVE") // ACTIVE, COMPLETED, CANCELLED
-  currentCycle Int      @default(1)
+  id             String    @id @default(uuid())
+  creatorId      String
+  creator        User      @relation("GroupCreator", fields: [creatorId], references: [id])
+  name           String
+  contribution   Float
+  frequency      String    @default("MONTHLY") // WEEKLY, MONTHLY
+  startDate      DateTime  @default(now())
+  status         String    @default("ACTIVE") // ACTIVE, COMPLETED, CANCELLED
+  currentCycle   Int       @default(1)
   lastPayoutDate DateTime? // Date du dernier paiement, pour rattrapage CRON si crash
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   participants TontineParticipant[]
 }
 
 model TontineParticipant {
-  id             String   @id @default(uuid())
+  id             String       @id @default(uuid())
   userId         String
-  user           User     @relation(fields: [userId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
   tontineGroupId String
   group          TontineGroup @relation(fields: [tontineGroupId], references: [id])
-  status         String   @default("ACTIVE") // ACTIVE, PAUSED
-  joinedAt       DateTime @default(now())
-  payoutOrder    Int      @default(0)
+  status         String       @default("ACTIVE") // ACTIVE, PAUSED
+  joinedAt       DateTime     @default(now())
+  payoutOrder    Int          @default(0)
 }
 
 // ==========================================
@@ -178,41 +348,258 @@ model TontineParticipant {
 // ==========================================
 
 model Branch {
-  id          String   @id @default(uuid())
-  name        String   @unique
-  city        String?
-  balance     Float    @default(0.0) // The Branch physical float/vault
-  isActive    Boolean  @default(true)
-  isHQ        Boolean  @default(false) // True if this is the Master Vault
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id      String  @id @default(uuid())
+  code    String  @unique @default(uuid()) // Ex: MNG-LBV-001
+  name    String  @unique
+  address String?
+  city    String?
+  region  String?  // Ex: Estuaire, Ogooué-Maritime
+  phone   String?  // Téléphone de l'agence
+  status  String  @default("DRAFT") // DRAFT, CONFIGURED, ACTIVE, SUSPENDED, CLOSED
 
-  staff       Staff[]
+  balance     Float     @default(0.0) // Physical Cash Float (Coffre)
+  isActive    Boolean   @default(true) // Legacy fallback
+  isHQ        Boolean   @default(false)
+  activatedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  walletId String? @unique // Electronic Wallet for Caisse Électronique
+  wallet   Wallet? @relation(fields: [walletId], references: [id])
+
+  managerId String? @unique
+  manager   Staff?  @relation("BranchManager", fields: [managerId], references: [id])
+
+  staff       Staff[]            @relation("BranchStaff")
+  sessions    CashSession[]
+  targetTreasuryRequests TreasuryRequest[]
+  reconciliationCases    ReconciliationCase[]
 }
 
-model Staff {
-  id             String   @id @default(uuid())
-  email          String   @unique // Auth identifier for Web Portal
-  password       String   // bcrypt hash (complex enterprise pwd)
-  name           String
-  role           String   // SUPER_ADMIN, RISK, COMPLIANCE_CHECKER, SUPPORT_MAKER, BRANCH_MANAGER, TELLER
+model CashSession {
+  id       String @id @default(uuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+  tellerId String
+  teller   Staff  @relation("TellerSessions", fields: [tellerId], references: [id])
+
+  status   String    @default("OPEN") // OPEN, CLOSED
+  openedAt DateTime  @default(now())
+  closedAt DateTime?
+
+  initialCash Float  @default(0.0)
+  finalCash   Float?
+
+  totalCashInValue  Float @default(0.0)
+  totalCashOutValue Float @default(0.0)
+
+  discrepancy       Float?
+  discrepancyReason String?
+}
+
+model TreasuryRequest {
+  id              String   @id @default(uuid())
+  reference       String   @unique // ex: TR-20260816-0001
+  type            String   // ISSUANCE, ALLOCATION, RETURN
+  amount          Float
+  currency        String   @default("FCFA")
+  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED, EXECUTED
+  reason          String
+  comment         String?
+  documentUrl     String?
+
+  makerId         String
+  maker           Staff    @relation("TreasuryMaker", fields: [makerId], references: [id])
   
+  checkerId       String?
+  checker         Staff?   @relation("TreasuryChecker", fields: [checkerId], references: [id])
+  rejectionReason String?
+
+  targetBranchId  String?
+  targetBranch    Branch?  @relation(fields: [targetBranchId], references: [id])
+  
+  targetWalletId  String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  executedAt      DateTime?
+}
+
+
+model ReconciliationCase {
+  id              String   @id @default(uuid())
+  reference       String   @unique // ex: REC-20260816-001
+  
+  branchId        String
+  branch          Branch   @relation(fields: [branchId], references: [id])
+  
+  expectedAmount  Float
+  reportedAmount  Float
+  difference      Float
+  
+  status          String   @default("UNDER_REVIEW") // MATCHED, MISMATCH, UNDER_REVIEW, RESOLVED
+  investigation   String?
+  resolution      String?
+  
+  managerId       String?
+  
+  createdAt       DateTime @default(now())
+  resolvedAt      DateTime?
+}
+
+
+model Staff {
+  id       String @id @default(uuid())
+  email    String @unique // Auth identifier for Web Portal
+  password String // bcrypt hash (complex enterprise pwd)
+  name     String
+  role     String // SUPER_ADMIN, RISK, COMPLIANCE_CHECKER, SUPPORT_MAKER, BRANCH_MANAGER, TELLER
+
   // Bank-Grade Corporate Identity
-  matricule      String?  @unique
+  matricule      String? @unique
   cni            String?
   phone          String?
   address        String?
   dob            String?
   gender         String?
   emergencyPhone String?
-  
-  status         String   @default("ACTIVE") // PENDING, ACTIVE, SUSPENDED
-  
-  isActive       Boolean  @default(true) // Legacy fallback
-  
-  branchId       String?
-  branch         Branch?  @relation(fields: [branchId], references: [id])
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  status String @default("ACTIVE") // PENDING, ACTIVE, SUSPENDED
+  createdById String? // Maker (recruteur) — interdit l'auto-approbation à l'onboarding
+  mustChangePassword Boolean @default(false) // Forcé à true pour tout nouveau compte créé via l'onboarding
+
+  isActive Boolean @default(true) // Legacy fallback
+
+  // Anti-brute-force sur /api/corp/login (aucune protection n'existait avant — un mot de
+  // passe staff était devinable sans limite) + révocation de session : incrémenté à chaque
+  // changement de mot de passe ou suspension pour invalider immédiatement tout token déjà émis.
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  jwtVersion          Int       @default(0)
+
+  branchId String?
+  branch   Branch? @relation("BranchStaff", fields: [branchId], references: [id])
+
+  managedBranch Branch?       @relation("BranchManager")
+  cashSessions  CashSession[] @relation("TellerSessions")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  makerRequests        SettingsApproval[] @relation("MakerRequests")
+  checkerRequests      SettingsApproval[] @relation("CheckerRequests")
+  reclamationsAssigned Reclamation[]      @relation("ReclamationAssignee")
+  treasuryMakerRequests    TreasuryRequest[] @relation("TreasuryMaker")
+  treasuryCheckerRequests  TreasuryRequest[] @relation("TreasuryChecker")
+  settingHistoryMade       SettingHistory[]   @relation("HistoryMaker")
+  settingHistoryChecked    SettingHistory[]   @relation("HistoryChecker")
+  riskFlagsReported        RiskFlag[]         @relation("RiskAuthor")
+  fraudCasesAnalyzed       FraudCase[]        @relation("FraudAnalyst")
+  refundRequestsMade       RefundRequest[]    @relation("RefundRequester")
+  refundRequestsApproved   RefundRequest[]    @relation("RefundApprover")
 }
+
+// ==========================================
+// MONGAAIN V6: RISK & FRAUD MANAGEMENT (PROMPT 08)
+// ==========================================
+
+// ==========================================
+// MONGAAIN V6: SUPPORT, LITIGES & REFUNDS (PROMPT 09)
+// ==========================================
+
+model FraudCase {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  analystId   String?
+  analyst     Staff?   @relation("FraudAnalyst", fields: [analystId], references: [id])
+
+  type        String   @default("SUSPICIOUS_ACTIVITY") // SUSPICIOUS_ACTIVITY, ACCOUNT_TAKEOVER, MONEY_LAUNDERING, IDENTITY_THEFT
+  riskLevel   String   @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  status      String   @default("OPEN") // OPEN, INVESTIGATION, CONFIRMED, FALSE_POSITIVE, CLOSED
+  description String
+  decision    String?  // VALID, INVALID, FRAUD, TECHNICAL_ERROR
+
+  linkedTransactionIds String   @default("[]")
+  reclamationId String?
+
+  closedAt    DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model RefundRequest {
+  id              String   @id @default(uuid())
+  transactionId   String   @unique  // Contrainte anti-double-refund atomique
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  requesterId     String
+  requester       Staff    @relation("RefundRequester", fields: [requesterId], references: [id])
+  approverId      String?
+  approver        Staff?   @relation("RefundApprover", fields: [approverId], references: [id])
+
+  amount          Float
+  refundType      String   @default("FULL") // FULL, PARTIAL
+  reason          String
+  description     String
+  reclamationId   String?
+  reclamation     Reclamation? @relation(fields: [reclamationId], references: [id])
+
+  status          String   @default("REQUESTED") // REQUESTED, UNDER_REVIEW, APPROVED, EXECUTED, REJECTED
+  rejectionReason String?
+  executedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RiskFlag {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  type        String   @default("SUSPICIOUS_ACTIVITY") // SUSPICIOUS_ACTIVITY, AML_ALERT, FRAUD_REPORT, IDENTITY_THEFT, ANTI_FRACTIONING
+  status      String   @default("OPEN") // OPEN, INVESTIGATING, RESOLVED, DISMISSED
+  
+  authorId    String
+  author      Staff    @relation("RiskAuthor", fields: [authorId], references: [id])
+  
+  description String
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+}
+
+// ==========================================
+// MONGAIN V6: API MANAGEMENT (FINAL AUDIT)
+// ==========================================
+
+model ApiIntegration {
+  id          String   @id @default(uuid())
+  merchantId  String
+  merchant    User     @relation("MerchantAPI", fields: [merchantId], references: [id])
+  appName     String
+  environment String   @default("TEST")        // TEST, LIVE
+  publicKey   String   @unique @default(uuid()) // Displayed freely
+  secretHash  String                            // bcrypt hash — NEVER returned in API responses
+  webhookUrl  String?
+  isActive    Boolean  @default(true)
+  permissions String   @default("PAYMENTS")    // Comma-separated: PAYMENTS, REFUNDS, REPORTS
+  description String?
+  rotatedAt   DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  logs ApiLog[]
+
+  @@index([merchantId])
+}
+
+model ApiLog {
+  id               String         @id @default(uuid())
+  integrationId    String
+  integration      ApiIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  action           String         // GENERATE, ROTATE, ACTIVATE, DEACTIVATE, ENV_CHANGE
+  actorId          String         // Staff ID who performed the action
+  ipAddress        String?
+  createdAt        DateTime       @default(now())
+}
+

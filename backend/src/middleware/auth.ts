@@ -1,8 +1,20 @@
+import crypto from 'crypto';
 import { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../prisma';
 
-export const JWT_SECRET = process.env.JWT_SECRET || 'mongain_secret_dev_key';
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET manquant : cette variable d\'environnement est obligatoire en production.');
+}
+
+// En dehors de la production, un secret aléatoire est généré à chaque démarrage
+// si aucun n'est fourni — évite un secret prévisible codé en dur, au prix d'une
+// invalidation des sessions existantes à chaque redémarrage du serveur en dev.
+if (!process.env.JWT_SECRET) {
+    console.warn('⚠️  JWT_SECRET non défini — un secret aléatoire a été généré pour cette session (développement uniquement).');
+}
+
+export const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
 
 export interface AuthRequest extends Request {
     userId?: string;
@@ -16,12 +28,18 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
 
     const token = authHeader.split(' ')[1];
     try {
-        const decoded = jwt.verify(token, JWT_SECRET) as { userId: string, jwtVersion?: number, isCorp?: boolean };
+        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as { userId: string, jwtVersion?: number, isCorp?: boolean };
 
         if (decoded.isCorp) {
             // Enterprise Account Routing (Bypass Consumer checks)
             const staffCheck = await prisma.staff.findUnique({ where: { id: decoded.userId } });
             if (!staffCheck || !staffCheck.isActive) throw new Error('Staff account invalid');
+            // Révocation de session : un changement de mot de passe ou une suspension incrémente
+            // jwtVersion, ce qui invalide immédiatement tout token déjà émis (comportement déjà
+            // en place côté User/mobile, absent côté Staff jusqu'ici).
+            if (decoded.jwtVersion !== undefined && decoded.jwtVersion !== staffCheck.jwtVersion) {
+                return res.status(401).json({ error: 'Votre session a expiré. Veuillez vous reconnecter.' });
+            }
             req.userId = decoded.userId;
             return next();
         }
@@ -46,11 +64,14 @@ export const authCorp = async (req: AuthRequest, res: Response, next: NextFuncti
     if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Token manquant.' });
     const token = authHeader.split(' ')[1];
     try {
-        const decoded = jwt.verify(token, JWT_SECRET) as { userId: string, isCorp?: boolean };
+        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as { userId: string, isCorp?: boolean, jwtVersion?: number };
         if (!decoded.isCorp) return res.status(403).json({ error: 'B2C token rejected on Corporate Gateway' });
 
         const staff = await prisma.staff.findUnique({ where: { id: decoded.userId } });
         if (!staff || !staff.isActive) return res.status(403).json({ error: 'Staff access denied' });
+        if (decoded.jwtVersion !== undefined && decoded.jwtVersion !== staff.jwtVersion) {
+            return res.status(401).json({ error: 'Votre session a expiré. Veuillez vous reconnecter.' });
+        }
 
         req.userId = decoded.userId;
         next();

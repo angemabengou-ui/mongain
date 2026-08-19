@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../constants/theme';
 import { apiUpdatePin } from '../services/api';
+import { disableBiometricPin } from '../services/biometrics';
 
 export default function PinChangeScreen() {
     const router = useRouter();
@@ -40,6 +41,8 @@ export default function PinChangeScreen() {
         setLoading(true);
         try {
             const res = await apiUpdatePin(oldPin, newPin);
+            // Le PIN mis en cache pour le déverrouillage biométrique est désormais obsolète.
+            await disableBiometricPin();
             Alert.alert('Succès', res.message, [
                 { text: 'OK', onPress: () => router.back() }
             ]);
