@@ -12,6 +12,12 @@ if (SMS_ENABLED && accountSid && authToken) {
 
 export const sendSms = async (to: string, body: string) => {
     if (!SMS_ENABLED || !client) {
+        // En production, un SMS qui "réussit" silencieusement sans jamais être livré est
+        // pire qu'une erreur visible : le code OTP correspondant reste un secret que
+        // personne n'a jamais reçu — inutilisable, mais son échec doit être su, pas caché.
+        if (process.env.NODE_ENV === 'production') {
+            throw new Error('Service SMS non configuré.');
+        }
         console.log('\n=============================================');
         console.log('📱 [SMS SIMULATOR - SMS_ENABLED=false]');
         console.log(`À: ${to}`);

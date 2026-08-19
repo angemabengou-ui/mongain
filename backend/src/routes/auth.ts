@@ -11,6 +11,12 @@ import { friendlyErrorMessage, isDbConnectivityError, withDbRetry } from '../uti
 
 const router = Router();
 
+// Ne jamais permettre un code OTP prévisible en production, même si Twilio n'est pas
+// configuré — un "1234" fixe accessible à quiconque le connaît serait une porte dérobée de
+// prise de contrôle de compte (reset de PIN sans connaître l'ancien). Même logique de
+// garde-fou que JWT_SECRET dans middleware/auth.ts.
+const isProd = process.env.NODE_ENV === 'production';
+
 const registerSchema = z.object({
     name: z.string().min(2, 'Le nom doit comporter au moins 2 caractères.'),
     username: z.string().min(3, 'Le pseudo doit comporter au moins 3 caractères.').transform(v => v.toLowerCase().replace(/\s/g, '')),
@@ -49,7 +55,7 @@ router.post('/request-otp', smsLimiter, async (req, res) => {
         if (existingUser) return res.status(400).json({ error: 'Ce numéro est déjà inscrit.' });
 
         // Mode Démo Automatique : si Twilio n'est pas configuré, le code est toujours 1234
-        const useDemoMode = !process.env.TWILIO_ACCOUNT_SID;
+        const useDemoMode = !process.env.TWILIO_ACCOUNT_SID && !isProd;
         const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
@@ -82,7 +88,7 @@ router.post('/request-reset-otp', smsLimiter, async (req, res) => {
         const existingUser = await prisma.user.findUnique({ where: { phone } });
         if (!existingUser) return res.status(400).json({ error: 'Ce numéro n\'est pas reconnu.' });
 
-        const useDemoMode = !process.env.TWILIO_ACCOUNT_SID;
+        const useDemoMode = !process.env.TWILIO_ACCOUNT_SID && !isProd;
         const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
@@ -269,7 +275,7 @@ router.post('/login', async (req, res) => {
             data: { failedPinAttempts: 0, lockedUntil: null },
         });
 
-        const useDemoMode = !process.env.TWILIO_ACCOUNT_SID;
+        const useDemoMode = !process.env.TWILIO_ACCOUNT_SID && !isProd;
         const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
 
