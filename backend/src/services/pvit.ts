@@ -81,9 +81,16 @@ export async function initiatePvitPayment(settings: PVitSettings, params: {
         throw new Error('Impossible de contacter PVit. Réessayez dans un instant.');
     }
 
-    const data: any = await res.json().catch(() => null);
+    const rawBody = await res.text();
+    let data: any = null;
+    try { data = rawBody ? JSON.parse(rawBody) : null; } catch { /* corps non-JSON, géré ci-dessous */ }
+
     if (!res.ok || !data) {
-        throw new Error(data?.message || `PVit a refusé la demande (HTTP ${res.status}).`);
+        // Le corps brut est loggé côté serveur (visible dans les logs Render) pour pouvoir
+        // diagnostiquer un rejet PVit sans avoir à deviner depuis un message générique.
+        console.error(`PVit a refusé la demande (HTTP ${res.status}):`, rawBody);
+        const detail = data?.message || data?.error || data?.errors || (rawBody && rawBody.length < 300 ? rawBody : null);
+        throw new Error(detail ? `PVit : ${detail}` : `PVit a refusé la demande (HTTP ${res.status}).`);
     }
     return data;
 }
