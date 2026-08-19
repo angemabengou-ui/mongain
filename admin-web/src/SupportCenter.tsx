@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import KpiCard from './components/KpiCard';
 import PageHeader from './components/PageHeader';
 import { API_URL } from './config';
+import { apiFetch } from './utils/apiFetch';
 
 interface SupportCenterProps { token: string; role?: string; }
 
@@ -60,8 +61,7 @@ export default function SupportCenter({ token, role }: SupportCenterProps) {
 
     const fetchStats = useCallback(async () => {
         try {
-            const res = await fetch(`${API_URL}/api/admin/reclamations/stats`, { headers });
-            if (res.ok) setStats(await res.json());
+            setStats(await apiFetch(`${API_URL}/api/admin/reclamations/stats`, { headers }));
         } catch (e) { console.error(e); }
     }, [token]);
 
@@ -75,11 +75,11 @@ export default function SupportCenter({ token, role }: SupportCenterProps) {
             if (searchQuery) params.set('query', searchQuery);
             if (slaFilter) params.set('slaBreached', 'true');
             params.set('limit', '100');
-            const res = await fetch(`${API_URL}/api/admin/reclamations?${params}`, { headers });
-            if (res.ok) { const d = await res.json(); setTickets(d.tickets || []); }
-            else setError('Impossible de charger les tickets.');
-        } catch (e) {
-            setError('Erreur réseau lors du chargement des tickets.');
+            const d = await apiFetch(`${API_URL}/api/admin/reclamations?${params}`, { headers });
+            setTickets(d.tickets || []);
+            setError('');
+        } catch (e: any) {
+            setError(e.message);
         } finally {
             setLoading(false);
         }
@@ -89,11 +89,11 @@ export default function SupportCenter({ token, role }: SupportCenterProps) {
         try {
             const params = new URLSearchParams();
             if (fraudStatusFilter) params.set('status', fraudStatusFilter);
-            const res = await fetch(`${API_URL}/api/admin/fraud-cases?${params}`, { headers });
-            if (res.ok) { const d = await res.json(); setFraudCases(d.cases || []); }
-            else setError('Impossible de charger les dossiers fraude.');
-        } catch (e) {
-            setError('Erreur réseau lors du chargement des dossiers fraude.');
+            const d = await apiFetch(`${API_URL}/api/admin/fraud-cases?${params}`, { headers });
+            setFraudCases(d.cases || []);
+            setError('');
+        } catch (e: any) {
+            setError(e.message);
         }
     }, [token, fraudStatusFilter]);
 
@@ -101,95 +101,81 @@ export default function SupportCenter({ token, role }: SupportCenterProps) {
         try {
             const params = new URLSearchParams();
             if (refundStatusFilter) params.set('status', refundStatusFilter);
-            const res = await fetch(`${API_URL}/api/admin/refund-requests?${params}`, { headers });
-            if (res.ok) { const d = await res.json(); setRefunds(d.refunds || []); }
-            else setError('Impossible de charger les remboursements.');
-        } catch (e) {
-            setError('Erreur réseau lors du chargement des remboursements.');
+            const d = await apiFetch(`${API_URL}/api/admin/refund-requests?${params}`, { headers });
+            setRefunds(d.refunds || []);
+            setError('');
+        } catch (e: any) {
+            setError(e.message);
         }
     }, [token, refundStatusFilter]);
 
     const openTicket = async (t: any) => {
         try {
-            const res = await fetch(`${API_URL}/api/admin/reclamations/${t.id}`, { headers });
-            if (res.ok) {
-                const d = await res.json();
-                setSelectedTicket(d);
-                setTicketNotes(d.notes || []);
-            } else setError('Impossible d\'ouvrir ce ticket.');
-        } catch (e) {
-            setError('Erreur réseau lors de l\'ouverture du ticket.');
+            const d = await apiFetch(`${API_URL}/api/admin/reclamations/${t.id}`, { headers });
+            setSelectedTicket(d);
+            setTicketNotes(d.notes || []);
+        } catch (e: any) {
+            setError(e.message);
         }
     };
 
     const addNote = async () => {
         if (!noteContent.trim() || !selectedTicket) return;
         try {
-            const res = await fetch(`${API_URL}/api/admin/reclamations/${selectedTicket.id}/notes`, {
+            const d = await apiFetch(`${API_URL}/api/admin/reclamations/${selectedTicket.id}/notes`, {
                 method: 'POST', headers, body: JSON.stringify({ content: noteContent, isInternal: noteIsInternal })
             });
-            const d = await res.json();
-            if (res.ok) {
-                setTicketNotes(prev => [...prev, d.note]);
-                setNoteContent('');
-                setError('');
-                // Le backend peut faire transiter le ticket vers WAITING_CUSTOMER/IN_PROGRESS
-                // automatiquement — refléter ce changement pour ne pas afficher un statut figé.
-                setSelectedTicket((t: any) => t ? { ...t, status: d.status, assigneeId: d.assigneeId } : t);
-            } else {
-                setError(d.error || 'Erreur');
-            }
-        } catch (e) {
-            setError('Erreur réseau : la note n\'a pas pu être envoyée.');
+            setTicketNotes(prev => [...prev, d.note]);
+            setNoteContent('');
+            setError('');
+            // Le backend peut faire transiter le ticket vers WAITING_CUSTOMER/IN_PROGRESS
+            // automatiquement — refléter ce changement pour ne pas afficher un statut figé.
+            setSelectedTicket((t: any) => t ? { ...t, status: d.status, assigneeId: d.assigneeId } : t);
+        } catch (e: any) {
+            setError(e.message);
         }
     };
 
     const updateTicketStatus = async (id: string, status: string) => {
         try {
-            const res = await fetch(`${API_URL}/api/admin/reclamations/${id}`, {
+            await apiFetch(`${API_URL}/api/admin/reclamations/${id}`, {
                 method: 'PATCH', headers, body: JSON.stringify({ status })
             });
-            if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error || 'Impossible de mettre à jour le statut.'); return; }
             fetchTickets();
             if (selectedTicket?.id === id) setSelectedTicket((t: any) => ({ ...t, status }));
-        } catch (e) {
-            setError('Erreur réseau lors de la mise à jour du statut.');
+        } catch (e: any) {
+            setError(e.message);
         }
     };
 
     const approveRefund = async (id: string, action: 'APPROVE' | 'REJECT') => {
         try {
-            const res = await fetch(`${API_URL}/api/admin/refund-requests/${id}/approve`, {
+            await apiFetch(`${API_URL}/api/admin/refund-requests/${id}/approve`, {
                 method: 'PATCH', headers, body: JSON.stringify({ action })
             });
-            const d = await res.json();
-            if (!res.ok) { setError(d.error); return; }
             fetchRefunds();
-        } catch (e) {
-            setError('Erreur réseau lors du traitement du remboursement.');
+        } catch (e: any) {
+            setError(e.message);
         }
     };
 
     const executeRefund = async (id: string) => {
         try {
-            const res = await fetch(`${API_URL}/api/admin/refund-requests/${id}/execute`, { method: 'POST', headers });
-            const d = await res.json();
-            if (!res.ok) { setError(d.error); return; }
+            await apiFetch(`${API_URL}/api/admin/refund-requests/${id}/execute`, { method: 'POST', headers });
             fetchRefunds();
-        } catch (e) {
-            setError('Erreur réseau lors de l\'exécution du remboursement.');
+        } catch (e: any) {
+            setError(e.message);
         }
     };
 
     const updateFraudCase = async (id: string, status: string, decision?: string) => {
         try {
-            const res = await fetch(`${API_URL}/api/admin/fraud-cases/${id}`, {
+            await apiFetch(`${API_URL}/api/admin/fraud-cases/${id}`, {
                 method: 'PATCH', headers, body: JSON.stringify({ status, decision })
             });
-            if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error || 'Impossible de mettre à jour le dossier.'); return; }
             fetchFraudCases();
-        } catch (e) {
-            setError('Erreur réseau lors de la mise à jour du dossier fraude.');
+        } catch (e: any) {
+            setError(e.message);
         }
     };
 
