@@ -1,6 +1,10 @@
 // Client de l'API PVit (agrégateur de paiement Mobile Money/carte, mypvit.pro) — remplace
 // l'ancien mobileMoney.ts qui ne faisait que simuler un succès sans jamais rien appeler en
 // vrai. Référence : https://docs.mypvit.pro (section "Initier un paiement").
+//
+// Les identifiants sont gérés depuis l'admin-web (Paramètres > Passerelles de Paiement,
+// SystemSettings.pvit*) plutôt que par variable d'environnement Render, pour que l'équipe
+// puisse les reconfigurer sans accès au dashboard Render.
 const PVIT_BASE_URL = 'https://api.mypvit.pro/v2';
 
 const OPERATOR_CODES = {
@@ -10,12 +14,19 @@ const OPERATOR_CODES = {
 
 export type PVitNetwork = keyof typeof OPERATOR_CODES;
 
-export function isPvitConfigured(): boolean {
+export interface PVitSettings {
+    pvitSecretKey?: string | null;
+    pvitCodeUrlPayment?: string | null;
+    pvitMerchantOperationAccountCode?: string | null;
+    pvitCallbackUrlCode?: string | null;
+}
+
+export function isPvitConfigured(settings: PVitSettings): boolean {
     return !!(
-        process.env.PVIT_SECRET_KEY &&
-        process.env.PVIT_CODE_URL_PAYMENT &&
-        process.env.PVIT_MERCHANT_OPERATION_ACCOUNT_CODE &&
-        process.env.PVIT_CALLBACK_URL_CODE
+        settings.pvitSecretKey &&
+        settings.pvitCodeUrlPayment &&
+        settings.pvitMerchantOperationAccountCode &&
+        settings.pvitCallbackUrlCode
     );
 }
 
@@ -36,20 +47,20 @@ interface PVitPaymentResponse {
     message: string;
 }
 
-export async function initiatePvitPayment(params: {
+export async function initiatePvitPayment(settings: PVitSettings, params: {
     amount: number;
     reference: string;
     customerAccountNumber: string;
     network: PVitNetwork;
 }): Promise<PVitPaymentResponse> {
-    if (!isPvitConfigured()) throw new Error('PVit non configuré.');
+    if (!isPvitConfigured(settings)) throw new Error('PVit non configuré.');
 
     let res: Response;
     try {
-        res = await fetch(`${PVIT_BASE_URL}/${process.env.PVIT_CODE_URL_PAYMENT}/rest`, {
+        res = await fetch(`${PVIT_BASE_URL}/${settings.pvitCodeUrlPayment}/rest`, {
             method: 'POST',
             headers: {
-                'X-Secret': process.env.PVIT_SECRET_KEY!,
+                'X-Secret': settings.pvitSecretKey!,
                 'X-Callback-MediaType': 'application/json',
                 'Content-Type': 'application/json',
             },
@@ -60,8 +71,8 @@ export async function initiatePvitPayment(params: {
                 transaction_type: 'PAYMENT',
                 operator_code: OPERATOR_CODES[params.network],
                 customer_account_number: params.customerAccountNumber,
-                merchant_operation_account_code: process.env.PVIT_MERCHANT_OPERATION_ACCOUNT_CODE,
-                callback_url_code: process.env.PVIT_CALLBACK_URL_CODE,
+                merchant_operation_account_code: settings.pvitMerchantOperationAccountCode,
+                callback_url_code: settings.pvitCallbackUrlCode,
                 owner_charge: 'CUSTOMER',
                 owner_charge_operator: 'CUSTOMER',
             }),

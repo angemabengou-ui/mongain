@@ -1,4 +1,4 @@
-import { Activity, Calculator, CheckCircle, Clock, Copy, Database, Eye, Globe, Key, Power, Shield, UserCheck, Wallet } from 'lucide-react';
+import { Activity, Calculator, CheckCircle, Clock, Copy, Database, Eye, Globe, Key, Power, RefreshCw, Shield, Smartphone, UserCheck, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Modal from './components/Modal';
 import PageHeader from './components/PageHeader';
@@ -338,6 +338,7 @@ export default function PlatformConfig({ token }: { token: string }) {
         { id: 'limits', label: 'Plafonds & KYC', icon: Shield },
         { id: 'antifraud', label: 'Anti-Fractionnement', icon: UserCheck },
         { id: 'integrations', label: 'Intégrations (API)', icon: Database },
+        { id: 'gateways', label: 'Passerelles de Paiement', icon: Smartphone },
         { id: 'breaker', label: 'Circuit Breaker', icon: Power },
         { id: 'approvals', label: 'Approbation (Checker) ' + (requests.filter(r => r.status === 'PENDING').length ? `(${requests.filter(r => r.status === 'PENDING').length})` : ''), icon: CheckCircle },
         { id: 'history', label: 'Historique', icon: Clock }
@@ -488,6 +489,69 @@ export default function PlatformConfig({ token }: { token: string }) {
 
                         {/* TAB: INTEGRATIONS — API MANAGEMENT */}
                         {activeTab === 'integrations' && <ApiManagementTab token={token} />}
+
+                        {/* TAB: PASSERELLES DE PAIEMENT — PVit (Dépôt Mobile Money) */}
+                        {activeTab === 'gateways' && (
+                            <div className="card" style={{ padding: 24 }}>
+                                <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={20} /> PVit — Dépôt Mobile Money (Airtel/Moov)</h3>
+                                <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: -8, marginBottom: 20 }}>
+                                    Identifiants de l'agrégateur de paiement PVit (mypvit.pro), utilisés par le backend pour initier un dépôt Mobile Money réel. Valeurs disponibles dans ton tableau de bord PVit : Paramétrages → APIs (clé secrète, code URL "REST"), Comptes (compte d'opération), Urls (code de callback).
+                                </p>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                                    <div>
+                                        <label>Clé secrète (X-Secret)</label>
+                                        <input className="input" type="password" placeholder={settings.pvitSecretKey || 'Non configurée'} value={drafts.pvitSecretKey === settings.pvitSecretKey ? '' : (drafts.pvitSecretKey || '')} onChange={e => handleFieldChange('pvitSecretKey', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label>Code URL de paiement (endpoint REST)</label>
+                                        <input className="input" value={drafts.pvitCodeUrlPayment || ''} onChange={e => handleFieldChange('pvitCodeUrlPayment', e.target.value)} placeholder="ex: 5OPBYBDCK1ZGH681" />
+                                    </div>
+                                    <div>
+                                        <label>Compte d'opération marchand</label>
+                                        <input className="input" value={drafts.pvitMerchantOperationAccountCode || ''} onChange={e => handleFieldChange('pvitMerchantOperationAccountCode', e.target.value)} placeholder="ex: ACC_XXXXXXXXXXXX" />
+                                    </div>
+                                    <div>
+                                        <label>Code de l'URL de callback</label>
+                                        <input className="input" value={drafts.pvitCallbackUrlCode || ''} onChange={e => handleFieldChange('pvitCallbackUrlCode', e.target.value)} placeholder="ex: GW7O6" />
+                                    </div>
+                                </div>
+
+                                <div style={{ marginTop: 20 }}>
+                                    <label>Clé de webhook (à mettre dans l'URL enregistrée sur PVit)</label>
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <input className="input" type="password" style={{ flex: 1 }} placeholder={settings.pvitWebhookSecret || 'Non configurée'} value={drafts.pvitWebhookSecret === settings.pvitWebhookSecret ? '' : (drafts.pvitWebhookSecret || '')} onChange={e => handleFieldChange('pvitWebhookSecret', e.target.value)} />
+                                        <button
+                                            type="button"
+                                            onClick={() => handleFieldChange('pvitWebhookSecret', Array.from(crypto.getRandomValues(new Uint8Array(24))).map(b => b.toString(16).padStart(2, '0')).join(''))}
+                                            style={{ padding: '0 14px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                                        >
+                                            <RefreshCw size={14} /> Générer
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {drafts.pvitWebhookSecret && drafts.pvitWebhookSecret !== settings.pvitWebhookSecret && (
+                                    <div style={{ marginTop: 16, padding: 14, background: 'var(--accent-bg)', borderRadius: 10, border: '1px solid var(--accent)' }}>
+                                        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', marginBottom: 6 }}>URL À ENREGISTRER SUR PVIT (section "Urls") UNE FOIS CE CHANGEMENT DÉPOSÉ ET APPROUVÉ</div>
+                                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                            <code style={{ flex: 1, padding: '8px 12px', background: 'var(--bg-card)', borderRadius: 8, fontSize: 12, wordBreak: 'break-all' }}>
+                                                https://mongain-backend.onrender.com/api/webhooks/pvit-status?key={drafts.pvitWebhookSecret}
+                                            </code>
+                                            <button type="button" onClick={() => navigator.clipboard.writeText(`https://mongain-backend.onrender.com/api/webhooks/pvit-status?key=${drafts.pvitWebhookSecret}`)} style={{ padding: '8px 12px', background: 'var(--btn-dark-bg)', color: 'var(--btn-dark-text)', border: 'none', borderRadius: 8, cursor: 'pointer' }}><Copy size={14} /></button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div style={{ marginTop: 20, padding: 14, background: 'var(--bg-secondary)', borderRadius: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
+                                    Statut actuel : {settings.pvitSecretKey && settings.pvitCodeUrlPayment && settings.pvitMerchantOperationAccountCode && settings.pvitCallbackUrlCode
+                                        ? <span style={{ color: 'var(--success)', fontWeight: 700 }}>✓ Configuré — le dépôt Mobile Money est actif.</span>
+                                        : <span style={{ color: 'var(--warning)', fontWeight: 700 }}>⚠ Incomplet — le dépôt Mobile Money reste désactivé tant que les 4 champs ci-dessus ne sont pas remplis.</span>}
+                                </div>
+
+                                <button className="btn" style={{ marginTop: 20, width: '100%' }} onClick={() => handleSaveGroup('CONFIGURE_PVIT', ['pvitSecretKey', 'pvitCodeUrlPayment', 'pvitMerchantOperationAccountCode', 'pvitCallbackUrlCode', 'pvitWebhookSecret'])}>Déposer Changement (Maker)</button>
+                            </div>
+                        )}
 
                         {/* TAB: CIRCUIT BREAKER */}
                         {activeTab === 'breaker' && (

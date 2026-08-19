@@ -220,6 +220,15 @@ model SystemSettings {
   airtelApiKey String?
   moovApiKey   String?
 
+  // PVit (agrégateur de paiement Mobile Money/carte, mypvit.pro) — dépôt Mobile Money réel.
+  // Gérable depuis l'admin-web (Paramètres > Passerelles de Paiement) plutôt que par variable
+  // d'environnement Render, pour que l'équipe puisse reconfigurer sans accès au dashboard Render.
+  pvitSecretKey                    String?
+  pvitCodeUrlPayment               String?
+  pvitMerchantOperationAccountCode String?
+  pvitCallbackUrlCode              String?
+  pvitWebhookSecret                String?
+
   // Général
   platformName String @default("Mongain")
   currency     String @default("FCFA")

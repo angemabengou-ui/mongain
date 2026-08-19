@@ -943,7 +943,8 @@ router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
 // POST /api/webhooks/pvit-status) une fois l'opérateur confirmé, ce qui est pourquoi la
 // transaction ci-dessous démarre PENDING et non COMPLETED.
 router.post('/pull', authMiddleware, async (req: AuthRequest, res) => {
-    if (!isPvitConfigured()) {
+    const settings = await getSystemSettings();
+    if (!isPvitConfigured(settings)) {
         return res.status(501).json({
             error: 'Le dépôt Mobile Money nécessite une intégration réelle avec Airtel/Moov. Cette fonctionnalité est désactivée tant que cette intégration n\'est pas configurée.'
         });
@@ -961,7 +962,7 @@ router.post('/pull', authMiddleware, async (req: AuthRequest, res) => {
         const reference = generateReference('PULL').substring(0, 20);
         const customerAccountNumber = toPvitCustomerAccountNumber(String(phone));
 
-        const response = await initiatePvitPayment({ amount, reference, customerAccountNumber, network });
+        const response = await initiatePvitPayment(settings, { amount, reference, customerAccountNumber, network });
 
         // Historiser la transaction — PENDING jusqu'à confirmation par webhook.
         await prisma.transaction.create({

@@ -1,5 +1,6 @@
 import express from 'express';
 import { prisma } from '../prisma';
+import { getSystemSettings } from './settings';
 
 const router = express.Router();
 
@@ -14,7 +15,8 @@ const router = express.Router();
 router.post('/pvit-status', async (req, res) => {
     const ack = (code: any) => res.status(200).json({ transactionId: req.body?.transactionId, responseCode: code });
 
-    if (!process.env.PVIT_WEBHOOK_SECRET || req.query.key !== process.env.PVIT_WEBHOOK_SECRET) {
+    const settings = await getSystemSettings();
+    if (!settings.pvitWebhookSecret || req.query.key !== settings.pvitWebhookSecret) {
         return res.status(403).json({ error: 'Clé de webhook invalide.' });
     }
 

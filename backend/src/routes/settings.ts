@@ -30,6 +30,8 @@ router.get('/', async (req, res) => {
             ...settings,
             airtelApiKey: settings.airtelApiKey ? '••••••••' + settings.airtelApiKey.slice(-4) : null,
             moovApiKey: settings.moovApiKey ? '••••••••' + settings.moovApiKey.slice(-4) : null,
+            pvitSecretKey: settings.pvitSecretKey ? '••••••••' + settings.pvitSecretKey.slice(-4) : null,
+            pvitWebhookSecret: settings.pvitWebhookSecret ? '••••••••' + settings.pvitWebhookSecret.slice(-4) : null,
         };
 
         return res.json(maskedSettings);
@@ -77,6 +79,13 @@ const settingsSchema = z.object({
     airtelApiKey: z.string().nullable().optional(),
     moovApiKey: z.string().nullable().optional(),
 
+    // PVit (dépôt Mobile Money — backend/src/services/pvit.ts)
+    pvitSecretKey: z.string().nullable().optional(),
+    pvitCodeUrlPayment: z.string().nullable().optional(),
+    pvitMerchantOperationAccountCode: z.string().nullable().optional(),
+    pvitCallbackUrlCode: z.string().nullable().optional(),
+    pvitWebhookSecret: z.string().nullable().optional(),
+
     // Webhooks
     webhookUrl: z.string().nullable().optional(),
     webhookActive: z.boolean().optional(),
@@ -114,6 +123,8 @@ router.post('/request', authMiddleware, async (req: AuthRequest, res) => {
         // Ne pas stocker un masque de clé comme nouvelle clé
         if (parsed.data.airtelApiKey?.startsWith('••••••••')) delete parsed.data.airtelApiKey;
         if (parsed.data.moovApiKey?.startsWith('••••••••')) delete parsed.data.moovApiKey;
+        if (parsed.data.pvitSecretKey?.startsWith('••••••••')) delete parsed.data.pvitSecretKey;
+        if (parsed.data.pvitWebhookSecret?.startsWith('••••••••')) delete parsed.data.pvitWebhookSecret;
 
         const approvalRequest = await prisma.settingsApproval.create({
             data: {
