@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -31,6 +31,8 @@ export default function AirtimeScreen() {
     const [showPin, setShowPin] = useState(false);
     const [loading, setLoading] = useState(false);
     const [successData, setSuccessData] = useState<{ reference: string; amount: number } | null>(null);
+    // Ref synchrone anti double-tap : voir transfer-confirm.tsx pour le détail du problème.
+    const submittingRef = useRef(false);
 
     const [balance, setBalance] = useState(user?.wallet?.balance || 0);
     useFocusEffect(
@@ -42,6 +44,7 @@ export default function AirtimeScreen() {
     );
 
     const handleTopUp = async () => {
+        if (submittingRef.current) return;
         if (!phone || phone.length < 8) {
             Alert.alert("Erreur", "Veuillez entrer un numéro de téléphone valide.");
             return;
@@ -58,6 +61,7 @@ export default function AirtimeScreen() {
             return;
         }
 
+        submittingRef.current = true;
         setLoading(true);
         try {
             const res = await apiAirtimeTopUp(network, phone, amt, pin);
@@ -65,6 +69,7 @@ export default function AirtimeScreen() {
         } catch (e: any) {
             Alert.alert("Erreur", e.message || "Échec de la recharge.");
         } finally {
+            submittingRef.current = false;
             setLoading(false);
         }
     };

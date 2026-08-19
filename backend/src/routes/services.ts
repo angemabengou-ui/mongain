@@ -28,7 +28,11 @@ router.post('/pay-bill', authMiddleware, async (req: AuthRequest, res) => {
         if (!user || !user.wallet) return res.status(404).json({ error: 'Compte introuvable.' });
 
         const pinMatch = await bcrypt.compare(pin, user.pin);
-        if (!pinMatch) return res.status(401).json({ error: 'Code PIN incorrect.' });
+        // 400, pas 401 : ce endpoint est authentifié (token valide requis) — un 401 ici
+        // serait à tort intercepté par le client mobile comme "session expirée"
+        // (src/services/api.ts, request()), qui masque "Code PIN incorrect." et force un
+        // logout complet. Même correctif que /api/wallet/transfer.
+        if (!pinMatch) return res.status(400).json({ error: 'Code PIN incorrect.' });
 
         // Trouver ou créer le portefeuille du Service (SEEG / CANAL)
         const servicePhone = service === 'SEEG' ? '+24188888888' : '+24177777777';
@@ -117,7 +121,8 @@ router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
         if (!user || !user.wallet) return res.status(404).json({ error: 'Compte introuvable.' });
 
         const pinMatch = await bcrypt.compare(pin, user.pin);
-        if (!pinMatch) return res.status(401).json({ error: 'Code PIN incorrect.' });
+        // 400, pas 401 — même correctif que /pay-bill ci-dessus.
+        if (!pinMatch) return res.status(400).json({ error: 'Code PIN incorrect.' });
 
         const telecomPhone = '+24166666666'; // MOCK AGGREGATOR WALLET
         let telecomUser = await prisma.user.findUnique({ where: { phone: telecomPhone }, include: { wallet: true } });

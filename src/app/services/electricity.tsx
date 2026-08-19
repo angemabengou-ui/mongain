@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
     ActivityIndicator,
     KeyboardAvoidingView,
@@ -27,8 +27,11 @@ export default function ElectricityServiceScreen() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState<{ amount: number, token: string } | null>(null);
+    // Ref synchrone anti double-tap : voir transfer-confirm.tsx pour le détail du problème.
+    const submittingRef = useRef(false);
 
     const handlePay = async () => {
+        if (submittingRef.current) return;
         setError('');
         const amountNum = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
 
@@ -47,6 +50,7 @@ export default function ElectricityServiceScreen() {
             return;
         }
 
+        submittingRef.current = true;
         setLoading(true);
         try {
             const result = await apiPayBill('SEEG', meter, amountNum, pin);
@@ -58,6 +62,7 @@ export default function ElectricityServiceScreen() {
         } catch (e: any) {
             setError(e.message);
         } finally {
+            submittingRef.current = false;
             setLoading(false);
         }
     };

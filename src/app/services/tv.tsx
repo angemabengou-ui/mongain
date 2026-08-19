@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -39,8 +39,11 @@ export default function TvScreen() {
     const [showPin, setShowPin] = useState(false);
     const [loading, setLoading] = useState(false);
     const [successData, setSuccessData] = useState<{ reference: string; amount: number } | null>(null);
+    // Ref synchrone anti double-tap : voir transfer-confirm.tsx pour le détail du problème.
+    const submittingRef = useRef(false);
 
     const handlePayment = async () => {
+        if (submittingRef.current) return;
         if (!account || account.length < 5) {
             Alert.alert("Erreur", "Veuillez entrer un numéro d'abonné valide.");
             return;
@@ -57,6 +60,7 @@ export default function TvScreen() {
             return;
         }
 
+        submittingRef.current = true;
         setLoading(true);
         try {
             const res = await apiPayBill('CANAL', account, amt, pin);
@@ -64,6 +68,7 @@ export default function TvScreen() {
         } catch (e: any) {
             Alert.alert("Erreur", e.message || "Échec du paiement.");
         } finally {
+            submittingRef.current = false;
             setLoading(false);
         }
     };

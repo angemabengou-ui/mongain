@@ -232,7 +232,12 @@ router.post('/login', async (req, res) => {
         }));
 
         if (!user) {
-            return res.status(401).json({ error: 'Numéro ou code PIN incorrect.' });
+            // 400, pas 401 : ce endpoint n'est pas authentifié (aucun token envoyé), donc un
+            // 401 ici serait à tort intercepté comme "session expirée" par le client mobile
+            // (src/services/api.ts, request()), qui masque le vrai message et déclenche un
+            // logout local — inoffensif ici mais trompeur, et incohérent avec /transfer et
+            // /client-initiated-withdraw qui utilisent déjà 400 pour ce même type d'échec.
+            return res.status(400).json({ error: 'Numéro ou code PIN incorrect.' });
         }
 
         if (user.lockedUntil && user.lockedUntil > new Date()) {
@@ -251,7 +256,8 @@ router.post('/login', async (req, res) => {
 
             await prisma.user.update({ where: { id: user.id }, data: updates });
 
-            return res.status(401).json({
+            // 400, pas 401 — voir commentaire ci-dessus (même correctif que /transfer).
+            return res.status(400).json({
                 error: attemptsInfo >= 3
                     ? 'Compte bloqué suite à trop de tentatives.'
                     : `Code PIN incorrect. Tentatives restantes : ${3 - attemptsInfo}`
@@ -457,7 +463,11 @@ router.put('/pin', authMiddleware, async (req: AuthRequest, res) => {
 
         const isPinValid = await bcrypt.compare(oldPin, user.pin);
         if (!isPinValid) {
-            return res.status(401).json({ error: 'Ancien code PIN incorrect' });
+            // 400, pas 401 — voir commentaire dans /login : ce endpoint est authentifié
+            // (token valide requis), donc un 401 ici serait indiscernable côté client d'un
+            // vrai token expiré et déclencherait un logout complet + message trompeur pour
+            // une simple erreur de saisie de l'ancien PIN.
+            return res.status(400).json({ error: 'Ancien code PIN incorrect' });
         }
 
         const hashedPin = await bcrypt.hash(newPin, 10);
@@ -527,7 +537,9 @@ router.post('/verify-pin', authMiddleware, async (req: AuthRequest, res) => {
             }
             await prisma.user.update({ where: { id: user.id }, data: updateProps });
 
-            return res.status(401).json({ error: newAttempts >= 3 ? 'Compte bloqué.' : 'Code PIN incorrect.' });
+            // 400, pas 401 — ce PIN protège le déverrouillage de l'app-lock (SecurityWrapper),
+            // pas le token JWT. Voir commentaire dans /login pour le détail de l'incident évité.
+            return res.status(400).json({ error: newAttempts >= 3 ? 'Compte bloqué.' : 'Code PIN incorrect.' });
         }
 
         // Reset attempts on success

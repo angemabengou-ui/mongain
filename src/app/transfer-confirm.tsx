@@ -3,7 +3,7 @@ import * as Print from 'expo-print';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import LottieView from 'lottie-react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -45,6 +45,10 @@ export default function TransferConfirmScreen() {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState<{ receiverName: string; remainingBalance: number; amount: number } | null>(null);
     const [bioEnabled, setBioEnabled] = useState(false);
+    // Ref (pas seulement le state `loading`) : deux appuis rapides peuvent tous les deux lire
+    // `loading` avant que le premier `setLoading(true)` n'ait été commité par React — la ref
+    // est mutée de façon synchrone et bloque donc réellement le second appel concurrent.
+    const submittingRef = useRef(false);
 
     useEffect(() => { isBiometricPinEnabled().then(setBioEnabled); }, []);
 
@@ -53,6 +57,7 @@ export default function TransferConfirmScreen() {
         : '?';
 
     const handleBiometricAuth = async () => {
+        if (submittingRef.current) return; // Garde anti double-tap (synchrone, voir déclaration de submittingRef).
         setError('');
         const amountNum = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
         if (!amount || isNaN(amountNum) || amountNum <= 0) {
@@ -66,6 +71,8 @@ export default function TransferConfirmScreen() {
             return;
         }
 
+        if (submittingRef.current) return;
+        submittingRef.current = true;
         setLoading(true);
         try {
             const result = await apiTransfer(receiverPhone, amountNum, authResult.pin);
@@ -77,11 +84,13 @@ export default function TransferConfirmScreen() {
         } catch (e: any) {
             setError(e.message);
         } finally {
+            submittingRef.current = false;
             setLoading(false);
         }
     };
 
     const handleTransfer = async () => {
+        if (submittingRef.current) return; // Garde anti double-tap (synchrone, voir déclaration de submittingRef).
         setError('');
         const amountNum = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
 
@@ -94,6 +103,7 @@ export default function TransferConfirmScreen() {
             return;
         }
 
+        submittingRef.current = true;
         setLoading(true);
         try {
             const result = await apiTransfer(receiverPhone, amountNum, pin);
@@ -125,6 +135,7 @@ export default function TransferConfirmScreen() {
         } catch (e: any) {
             setError(e.message);
         } finally {
+            submittingRef.current = false;
             setLoading(false);
         }
     };
