@@ -152,7 +152,11 @@ router.post('/qr-cash-out', authMiddleware, async (req: AuthRequest, res) => {
         if (!client || !client.wallet) return res.status(404).json({ error: 'Client introuvable.' });
 
         const isPinValid = await bcrypt.compare(pin, client.pin);
-        if (!isPinValid) return res.status(401).json({ error: 'Code PIN incorrect.' });
+        // 400, pas 401 : le client mobile traite tout 401 comme "session expirée" (voir
+        // src/services/api.ts, request()) et force une déconnexion complète avec suppression
+        // du token — un simple mauvais PIN ne doit jamais faire ça. Même correctif que
+        // /pay-bill, /topup et /verify-pin, manqué ici lors de ce précédent passage.
+        if (!isPinValid) return res.status(400).json({ error: 'Code PIN incorrect.' });
 
         const branch = await prisma.branch.findUnique({ where: { code: branchCode }, include: { wallet: true, sessions: { where: { status: 'OPEN' } } } });
 
