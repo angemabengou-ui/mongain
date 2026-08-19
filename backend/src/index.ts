@@ -70,6 +70,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 import { circuitBreakerMiddleware } from './middleware/circuitBreaker';
 import reclamationRoutes from './routes/reclamation';
+import webhookRoutes from './routes/webhooks';
 
 // ==========================================
 // ROUTES SYSTEME ET ADMINISTRATION (SAFE)
@@ -85,6 +86,10 @@ app.use('/api/reclamation', reclamationRoutes);
 // verrouille aussi la connexion elle-même, empêchant quiconque n'a pas déjà une session
 // active de se reconnecter pour aller le désactiver depuis Paramètres — un auto-blocage.
 app.use('/api/corp', corpRoutes);
+// Notifications entrantes de PVit — jamais derrière le Circuit Breaker : un dépôt déjà
+// débité côté opérateur doit toujours pouvoir être confirmé et crédité, même en verrouillage
+// d'urgence, sinon l'argent du client reste bloqué en PENDING indéfiniment.
+app.use('/api/webhooks', webhookRoutes);
 
 // ==========================================
 // ROUTES FINANCIERES (PROTECTED BY CIRCUIT BREAKER)

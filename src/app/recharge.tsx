@@ -1,17 +1,30 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../constants/theme';
 
-// Aucune intégration réelle avec Airtel/Moov n'existe côté backend (voir recharge-form.tsx
-// et backend/src/routes/wallet.ts /pull) — les toggles airtelEnabled/moovEnabled de
-// SystemSettings sont un réglage de maintenance INDÉPENDANT (pensé pour un fournisseur déjà
-// branché), pas un indicateur de cette intégration. Désactivé ici pour ne pas laisser croire
-// que le dépôt fonctionne alors qu'il ne peut que renvoyer une erreur après coup.
 export default function RechargeScreen() {
     const COLORS = useAppTheme();
     const router = useRouter();
+    const [appConfig, setAppConfig] = useState({ airtelEnabled: true, moovEnabled: true });
+
+    useEffect(() => {
+        require('../services/api').apiGetSystemSettings()
+            .then((data: any) => {
+                if (data) setAppConfig({ airtelEnabled: data.airtelEnabled, moovEnabled: data.moovEnabled });
+            })
+            .catch(console.error);
+    }, []);
+
+    const handlePress = (provider: string, isEnabled: boolean) => {
+        if (!isEnabled) {
+            Alert.alert('Service Indisponible', `Le réseau ${provider} est temporairement suspendu pour maintenance.`);
+            return;
+        }
+        router.push({ pathname: '/recharge-form', params: { method: provider.toUpperCase() } });
+    };
 
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background }]}>
@@ -33,24 +46,26 @@ export default function RechargeScreen() {
                 <Text style={[styles.sectionHeader, { color: COLORS.textSecondary }]}>PRÉLÈVEMENT MOBILE MONEY</Text>
 
                 <View style={[styles.listContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
-                    <TouchableOpacity onPress={() => { }} disabled={true} style={[styles.listItem, { borderBottomColor: COLORS.border, opacity: 0.5 }]}>
+                    <TouchableOpacity style={[styles.listItem, { borderBottomColor: COLORS.border }, !appConfig.airtelEnabled && { opacity: 0.4 }]} onPress={() => handlePress('Airtel', appConfig.airtelEnabled)}>
                         <View style={[styles.listIcon, { backgroundColor: '#EF444415' }]}>
                             <Ionicons name="phone-portrait" size={24} color="#EF4444" />
                         </View>
                         <View style={styles.listTextWrap}>
                             <Text style={[styles.listTitle, { color: COLORS.textPrimary }]}>Airtel Money</Text>
-                            <Text style={[styles.listDesc, { color: COLORS.textSecondary }]}>Pas encore connecté (Bientôt disponible)</Text>
+                            <Text style={[styles.listDesc, { color: COLORS.textSecondary }]}>Débité depuis votre solde Airtel.</Text>
                         </View>
+                        <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
                     </TouchableOpacity>
 
-                    <TouchableOpacity onPress={() => { }} disabled={true} style={[styles.lastListItem, { opacity: 0.5 }]}>
+                    <TouchableOpacity style={[styles.lastListItem, !appConfig.moovEnabled && { opacity: 0.4 }]} onPress={() => handlePress('Moov', appConfig.moovEnabled)}>
                         <View style={[styles.listIcon, { backgroundColor: '#3B82F615' }]}>
                             <Ionicons name="phone-portrait-outline" size={24} color="#3B82F6" />
                         </View>
                         <View style={styles.listTextWrap}>
                             <Text style={[styles.listTitle, { color: COLORS.textPrimary }]}>Moov Africa</Text>
-                            <Text style={[styles.listDesc, { color: COLORS.textSecondary }]}>Pas encore connecté (Bientôt disponible)</Text>
+                            <Text style={[styles.listDesc, { color: COLORS.textSecondary }]}>Débité depuis votre solde Moov.</Text>
                         </View>
+                        <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
                     </TouchableOpacity>
                 </View>
 

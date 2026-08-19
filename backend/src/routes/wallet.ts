@@ -5,7 +5,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
-import { TelecomGatewayManager } from '../services/mobileMoney';
+import { initiatePvitPayment, isPvitConfigured, toPvitCustomerAccountNumber } from '../services/pvit';
 import { friendlyErrorMessage } from '../utils/errors';
 import { generateReference } from '../utils/reference';
 import { getSystemSettings } from './settings';
@@ -935,50 +935,49 @@ router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
-// POST /api/wallet/pull (Dépot Mobile Money)
+// POST /api/wallet/pull (Dépôt Mobile Money via PVit)
 //
-// ⚠️ Comme /recharge et /topup : TelecomGatewayManager (mobileMoney.ts) ne fait qu'un
-// SIMULACRE d'appel Airtel/Moov — aucune vraie intégration USSD PULL n'existe, et surtout
-// aucun endpoint webhook/callback telco n'existe nulle part dans le backend pour faire
-// passer la transaction PENDING créée ci-dessous à COMPLETED et créditer le wallet. Avant
-// ce garde-fou, le client voyait "Appel USSD déclenché" puis n'était JAMAIS crédité — un
-// dépôt qui disparaît silencieusement dans une transaction PENDING permanente. Désactivé
-// par défaut (même flag que /recharge et /topup) tant qu'une vraie intégration + callback
-// telco ne sont pas branchés.
+// Intégration réelle (voir backend/src/services/pvit.ts) : cette route ne fait qu'INITIER la
+// demande — PVit répond immédiatement avec un accusé de prise en compte, jamais le résultat
+// final. Le wallet n'est crédité que par le webhook (backend/src/routes/webhooks.ts,
+// POST /api/webhooks/pvit-status) une fois l'opérateur confirmé, ce qui est pourquoi la
+// transaction ci-dessous démarre PENDING et non COMPLETED.
 router.post('/pull', authMiddleware, async (req: AuthRequest, res) => {
-    if (process.env.ENABLE_UNVERIFIED_CARD_TOPUP !== 'true') {
+    if (!isPvitConfigured()) {
         return res.status(501).json({
-            error: 'Le dépôt Mobile Money nécessite une intégration réelle avec Airtel/Moov (y compris le webhook de confirmation). Cette fonctionnalité est désactivée tant que cette intégration n\'est pas en place.'
+            error: 'Le dépôt Mobile Money nécessite une intégration réelle avec Airtel/Moov. Cette fonctionnalité est désactivée tant que cette intégration n\'est pas configurée.'
         });
     }
 
     try {
         const { phone, amount, network } = req.body;
         if (!amount || amount < 500) throw new Error('Montant minimum : 500 FCFA');
+        if (network !== 'AIRTEL' && network !== 'MOOV') throw new Error('Opérateur invalide.');
+        if (!phone) throw new Error('Numéro de téléphone requis.');
 
         const user = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
         if (!user || !user.wallet) throw new Error('Compte expéditeur introuvable');
 
-        // Initialisation universelle de la Telecom Gateway
-        const gateway = TelecomGatewayManager.getProvider(phone, network);
+        const reference = generateReference('PULL').substring(0, 20);
+        const customerAccountNumber = toPvitCustomerAccountNumber(String(phone));
 
-        // Déclenche l'appel USSD PULL
-        const response = await gateway.initiateDeposit(phone, amount);
+        const response = await initiatePvitPayment({ amount, reference, customerAccountNumber, network });
 
-        // Historiser de la transaction (Statut: PENDING en attente de Callback Telco)
+        // Historiser la transaction — PENDING jusqu'à confirmation par webhook.
         await prisma.transaction.create({
             data: {
                 amount,
                 receiverWalletId: user.wallet.id,
-                status: response.status as any,
-                reference: response.reference,
+                status: 'PENDING',
+                type: 'CASH_IN',
+                reference,
             }
         });
 
         return res.json({
-            message: response.message,
-            reference: response.reference,
-            network: gateway.name
+            message: response.message || 'Demande de dépôt initiée. Consultez votre téléphone pour valider avec votre code PIN Mobile Money.',
+            reference,
+            network,
         });
     } catch (e: any) {
         return res.status(400).json({ error: friendlyErrorMessage(e, 'Erreur lors de la requête de dépôt réseau.') });
