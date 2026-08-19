@@ -137,6 +137,14 @@ async function initializeApp() {
     server.listen(PORT, () => {
         console.log(`✅ Serveur Mongain en ligne sur http://localhost:${PORT}`);
         console.log(`🛰️  WebSockets (Socket.io) Actifs`);
+        if (isProd && !process.env.TWILIO_ACCOUNT_SID) {
+            console.warn('\n⚠️  ⚠️  ⚠️  SMS NON CONFIGURÉ EN PRODUCTION ⚠️  ⚠️  ⚠️');
+            console.warn('Tous les codes OTP (inscription, connexion, réinitialisation de PIN) sont');
+            console.warn('actuellement fixés à "1234" — quiconque connaît ce code peut réinitialiser');
+            console.warn('le PIN de N\'IMPORTE QUEL compte. Ce mode démo doit être désactivé (en');
+            console.warn('configurant TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_PHONE_NUMBER) avant');
+            console.warn('d\'accepter de vrais utilisateurs.\n');
+        }
     });
 }
 
