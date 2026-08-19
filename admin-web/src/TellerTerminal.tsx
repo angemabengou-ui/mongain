@@ -7,7 +7,6 @@ const fmt = (n: number) => n.toLocaleString('fr-GA') + ' FCFA';
 export default function TellerTerminal({ token, userName }: { token: string; userName: string }) {
     const [session, setSession] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
 
     // Forms & Modals
     const [openForm, setOpenForm] = useState({ initialCash: '' });
@@ -40,7 +39,7 @@ export default function TellerTerminal({ token, userName }: { token: string; use
             const resp = await fetch(`${API_URL}/api/agency/sessions`, { headers: { Authorization: `Bearer ${token}` } });
             const data = await resp.json();
             if (resp.ok) setSession(Array.isArray(data) ? data.find((s: any) => s.status === 'OPEN') ?? null : null);
-        } catch (e: any) { setError(e.message); } finally { setLoading(false); }
+        } catch (e: any) { alert(e.message); } finally { setLoading(false); }
     };
 
     useEffect(() => { fetchSession(); }, []);

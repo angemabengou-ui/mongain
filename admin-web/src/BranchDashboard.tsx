@@ -79,15 +79,6 @@ export default function BranchDashboard({ token }: { token: string }) {
     if (error) return <div style={{ color: 'red' }}>Erreur critique : {error}</div>;
 
     const myActiveSession = branch?.sessions?.find((s: any) => s.status === 'OPEN');
-    const chartData = [
-        { name: 'Lun', flux: 2400 },
-        { name: 'Mar', flux: 1398 },
-        { name: 'Mer', flux: 9800 },
-        { name: 'Jeu', flux: 3908 },
-        { name: 'Ven', flux: 4800 },
-        { name: 'Sam', flux: 3800 },
-        { name: 'Dim', flux: 4300 },
-    ];
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', maxWidth: 1200, margin: '0 auto', paddingBottom: 50 }}>

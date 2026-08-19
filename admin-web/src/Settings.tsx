@@ -1,8 +1,7 @@
-import { Activity, Calculator, CheckCircle, Clock, Copy, Database, Eye, Globe, Key, Power, Settings as SettingsIcon, Shield, UserCheck, Wallet } from 'lucide-react';
+import { Activity, Calculator, CheckCircle, Clock, Copy, Database, Eye, Globe, Key, Power, Shield, UserCheck, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Modal from './components/Modal';
 import PageHeader from './components/PageHeader';
-import TabBar from './components/TabBar';
 import { API_URL } from './config';
 
 // ─── API MANAGEMENT TAB ────────────────────────────────────────────────────

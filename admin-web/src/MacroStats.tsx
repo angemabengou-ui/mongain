@@ -273,7 +273,7 @@ export default function MacroStats({ token }: { token: string }) {
                     <div style={{ width: '100%', height: 300, display: 'flex', justifyContent: 'center' }}>
                         <ResponsiveContainer>
                             <PieChart>
-                                <Pie data={pieData} cx="50%" cy="50%" outerRadius={100} paddingAngle={2} dataKey="value" label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`} labelLine={false}>
+                                <Pie data={pieData} cx="50%" cy="50%" outerRadius={100} paddingAngle={2} dataKey="value" label={({ name, percent }) => `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`} labelLine={false}>
                                     {pieData.map((_, i) => (
                                         <Cell key={i} fill={COLORS[i % COLORS.length]} />
                                     ))}

@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 // Barre d'onglets unique — remplace 4 langages visuels différents (soulignement
 // accent chez Customer360, pilule accent chez SupportCenter, pilule sombre chez

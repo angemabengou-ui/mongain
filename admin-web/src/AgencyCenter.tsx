@@ -13,6 +13,8 @@ import PageHeader from './components/PageHeader';
 import TabBar from './components/TabBar';
 import { API_URL } from './config';
 
+type AgencyTab360 = 'overview' | 'staff' | 'tellers' | 'vault' | 'cashops' | 'reconciliation' | 'alerts';
+
 const fmt = (n: number) => n.toLocaleString('fr-GA') + ' FCFA';
 const fmtDate = (d: string) => new Date(d).toLocaleString('fr-GA', { dateStyle: 'short', timeStyle: 'short' });
 
@@ -49,7 +51,7 @@ export default function AgencyCenter({ token, role }: { token: string; role: str
 
     // Selected agency for 360 view
     const [selected, setSelected] = useState<any>(null);
-    const [tab360, setTab360] = useState<'overview' | 'staff' | 'tellers' | 'vault' | 'cashops' | 'reconciliation' | 'alerts'>('overview');
+    const [tab360, setTab360] = useState<AgencyTab360>('overview');
 
     // Agency 360 data
     const [overview, setOverview] = useState<any>(null);
@@ -218,11 +220,11 @@ export default function AgencyCenter({ token, role }: { token: string; role: str
         const tabs360 = [
             { id: 'overview' as const, icon: <BarChart3 size={15} />, label: 'Aperçu' },
             { id: 'staff' as const, icon: <Users size={15} />, label: 'Personnel' },
-            { id: 'tellers', icon: <User size={15} />, label: 'Caissiers' },
-            { id: 'vault', icon: <Wallet size={15} />, label: 'Coffre' },
-            { id: 'cashops', icon: <Activity size={15} />, label: 'Opérations' },
-            { id: 'reconciliation', icon: <BookOpen size={15} />, label: 'Rapprochement' },
-            { id: 'alerts', icon: <Bell size={15} />, label: 'Alertes' },
+            { id: 'tellers' as const, icon: <User size={15} />, label: 'Caissiers' },
+            { id: 'vault' as const, icon: <Wallet size={15} />, label: 'Coffre' },
+            { id: 'cashops' as const, icon: <Activity size={15} />, label: 'Opérations' },
+            { id: 'reconciliation' as const, icon: <BookOpen size={15} />, label: 'Rapprochement' },
+            { id: 'alerts' as const, icon: <Bell size={15} />, label: 'Alertes' },
         ];
 
         return (
@@ -248,7 +250,7 @@ export default function AgencyCenter({ token, role }: { token: string; role: str
                     )}
                 </div>
 
-                <TabBar tabs={tabs360} active={tab360} onChange={setTab360} />
+                <TabBar<AgencyTab360> tabs={tabs360} active={tab360} onChange={setTab360} />
 
                 {/* OVERVIEW */}
                 {tab360 === 'overview' && overview && (
@@ -490,7 +492,8 @@ export default function AgencyCenter({ token, role }: { token: string; role: str
                         </div>
                         {alerts.length === 0 && <div className="card" style={{ padding: 30, textAlign: 'center', color: 'var(--success)', fontWeight: 600 }}><CheckCircle size={24} style={{ marginBottom: 8 }} /><br />Aucune alerte active. Agence opérationnelle.</div>}
                         {alerts.map((a, i) => {
-                            const sev = { CRITICAL: 'var(--danger)', HIGH: 'var(--warning)', MEDIUM: 'var(--warning)', LOW: '#3b82f6' }[a.severity] || '#6b7280';
+                            const severityColors: Record<string, string> = { CRITICAL: 'var(--danger)', HIGH: 'var(--warning)', MEDIUM: 'var(--warning)', LOW: '#3b82f6' };
+                            const sev = severityColors[a.severity] || '#6b7280';
                             return (
                                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', borderRadius: 12, border: `1px solid ${sev}30`, background: `${sev}08` }}>
                                     <AlertTriangle size={20} style={{ color: sev, flexShrink: 0 }} />

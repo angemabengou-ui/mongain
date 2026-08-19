@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 // Carte KPI unique — remplace 4 implémentations différentes (AgencyCenter en
 // horizontal, Treasury avec icône géante en fond, SupportCenter sans classe .card,

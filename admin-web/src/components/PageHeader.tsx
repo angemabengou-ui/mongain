@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 // Un seul en-tête de page pour tout le portail — avant cette refonte, chaque écran
 // définissait sa propre taille de titre (24/28px), graisse (700/800/900) et

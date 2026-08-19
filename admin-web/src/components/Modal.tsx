@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 // Modale unique — remplace des overlays à opacité différente selon l'écran
 // (0.5 / 0.55 / 0.6 / #0008) et un fond de conteneur qui divergeait du token .card

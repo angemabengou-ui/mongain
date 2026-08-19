@@ -97,7 +97,6 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
     const [txFilter, setTxFilter] = useState({ type: '', status: '', page: 1 });
 
     // ── Freeze / Unfreeze (Prompt 17) ──────────────────────────
-    const FREEZE_REASONS = ['SUSPECTED_FRAUD', 'AML_REVIEW', 'SECURITY_ISSUE', 'LEGAL_REQUEST', 'CUSTOMER_REQUEST', 'ACCOUNT_COMPROMISE', 'OTHER'];
     const [freezeReason, setFreezeReason] = useState('SUSPECTED_FRAUD');
     const [freezeComment, setFreezeComment] = useState('');
     const [unfreezeJustification, setUnfreezeJustification] = useState('');
