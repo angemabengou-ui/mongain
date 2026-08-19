@@ -44,6 +44,7 @@ app.use(cors({
             'http://localhost:3000',
             'http://localhost:8081',
             'https://mongain-backend.onrender.com',
+            'https://mongain.vercel.app',
             ...extraAllowedOrigins,
         ];
         if (allowed.includes(origin)) {
