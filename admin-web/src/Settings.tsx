@@ -492,7 +492,43 @@ export default function PlatformConfig({ token }: { token: string }) {
 
                         {/* TAB: PASSERELLES DE PAIEMENT — PVit (Dépôt Mobile Money) */}
                         {activeTab === 'gateways' && (
-                            <div className="card" style={{ padding: 24 }}>
+                            <div>
+                                <div className="card" style={{ padding: 24, marginBottom: 24 }}>
+                                    <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Power size={20} /> Activer / Désactiver les Canaux</h3>
+                                    <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: -8, marginBottom: 20 }}>
+                                        Coupe-circuit par opérateur — désactive l'option correspondante dans l'app mobile, indépendamment des identifiants PVit configurés plus bas. Utile pour couper un canal en maintenance ou pendant les tests, sans toucher aux identifiants.
+                                    </p>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                                        {[
+                                            { key: 'airtelEnabled', label: 'Airtel Money', color: '#EF4444' },
+                                            { key: 'moovEnabled', label: 'Moov Africa', color: '#3B82F6' },
+                                        ].map(({ key, label, color }) => {
+                                            const isOn = drafts[key] !== undefined ? drafts[key] : settings[key];
+                                            return (
+                                                <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                                        <Smartphone size={18} color={color} />
+                                                        <span style={{ fontWeight: 700 }}>{label}</span>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleFieldChange(key, !isOn)}
+                                                        style={{
+                                                            padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
+                                                            background: isOn ? 'var(--success-bg)' : 'var(--danger-bg)',
+                                                            color: isOn ? 'var(--success)' : 'var(--danger)',
+                                                        }}
+                                                    >
+                                                        {isOn ? 'ACTIVÉ' : 'DÉSACTIVÉ'}
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <button className="btn" style={{ marginTop: 20, width: '100%' }} onClick={() => handleSaveGroup('TOGGLE_MOBILE_MONEY_CHANNELS', ['airtelEnabled', 'moovEnabled'])}>Déposer Changement (Maker)</button>
+                                </div>
+
+                                <div className="card" style={{ padding: 24 }}>
                                 <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={20} /> PVit — Dépôt Mobile Money (Airtel/Moov)</h3>
                                 <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: -8, marginBottom: 20 }}>
                                     Identifiants de l'agrégateur de paiement PVit (mypvit.pro), utilisés par le backend pour initier un dépôt Mobile Money réel. Valeurs disponibles dans ton tableau de bord PVit : Paramétrages → APIs (clé secrète, code URL "REST"), Comptes (compte d'opération), Urls (code de callback).
@@ -550,6 +586,7 @@ export default function PlatformConfig({ token }: { token: string }) {
                                 </div>
 
                                 <button className="btn" style={{ marginTop: 20, width: '100%' }} onClick={() => handleSaveGroup('CONFIGURE_PVIT', ['pvitSecretKey', 'pvitCodeUrlPayment', 'pvitMerchantOperationAccountCode', 'pvitCallbackUrlCode', 'pvitWebhookSecret'])}>Déposer Changement (Maker)</button>
+                                </div>
                             </div>
                         )}
 
