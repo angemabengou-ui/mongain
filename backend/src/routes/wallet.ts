@@ -469,6 +469,17 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
                 });
             }
 
+            // Persistées en base pour les deux parties — le push/socket ci-dessous est un
+            // best-effort en temps réel (échoue silencieusement sans token/connexion), mais
+            // sans cette écriture ni l'expéditeur ni le destinataire ne voyaient JAMAIS
+            // l'opération dans l'onglet Notifications de l'app.
+            await tx.notification.create({
+                data: { userId: sender.id, title: 'Transfert envoyé', body: `Vous avez envoyé ${amount.toLocaleString('fr-FR')} FCFA à ${receiver.name}.`, type: 'TRANSACTION' }
+            });
+            await tx.notification.create({
+                data: { userId: receiver.id, title: '💰 Transfert reçu', body: `Vous avez reçu ${amount.toLocaleString('fr-FR')} FCFA de la part de ${sender.name}.`, type: 'TRANSACTION' }
+            });
+
             return {
                 transaction,
                 remainingBalance: updatedSenderWallet.balance,
@@ -652,6 +663,13 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
                     }
                 });
             }
+
+            // Même correctif que /transfer : le client n'avait jusqu'ici aucune trace de ce
+            // retrait dans son onglet Notifications, seulement le reçu affiché une fois à
+            // l'écran juste après l'opération.
+            await tx.notification.create({
+                data: { userId: sender.id, title: 'Retrait effectué', body: `Vous avez retiré ${amount.toLocaleString('fr-FR')} FCFA chez ${agent.name}.`, type: 'TRANSACTION' }
+            });
 
             return {
                 transaction,

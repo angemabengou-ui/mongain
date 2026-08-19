@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../constants/theme';
@@ -25,7 +25,7 @@ export default function NotificationsScreen() {
         }
     };
 
-    useEffect(() => { loadNotifications(); }, []);
+    useFocusEffect(useCallback(() => { loadNotifications(); }, []));
 
     const handleRefresh = async () => {
         setRefreshing(true);

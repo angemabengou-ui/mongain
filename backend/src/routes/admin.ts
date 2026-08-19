@@ -1719,6 +1719,11 @@ router.post('/refund-requests/:id/execute', authMiddleware, async (req: AuthRequ
                 }
             });
             await tx.auditLog.create({ data: { adminId: staff.id, action: 'EXECUTE_REFUND', details: `Refund ${refund.id.substring(0, 8)} : ${refund.amount} FCFA crédités sur wallet ${userWallet.id}, débités du wallet ${counterpartWallet.id}. TX originale ${refund.transactionId} NON modifiée.` } });
+            // Sans ça, le client remboursé n'a aucun moyen de savoir que l'argent est arrivé
+            // en dehors d'ouvrir son historique et de le remarquer par hasard.
+            await tx.notification.create({
+                data: { userId: refund.userId, title: 'Remboursement reçu', body: `Vous avez été remboursé de ${refund.amount.toLocaleString('fr-FR')} FCFA.`, type: 'TRANSACTION' }
+            });
         });
 
         res.json({ success: true, message: `Remboursement de ${refund.amount} FCFA exécuté. TX originale préservée.` });
@@ -1856,7 +1861,7 @@ router.post('/users/:id/block', authMiddleware, async (req: AuthRequest, res) =>
                 data: {
                     userId: customerId,
                     title: 'Compte suspendu',
-                    body: 'Votre compte Mongain a ?t? temporairement suspendu. Contactez le support pour plus d\'informations.',
+                    body: 'Votre compte Mongain a été temporairement suspendu. Contactez le support pour plus d\'informations.',
                     type: 'SECURITY'
                 }
             })
@@ -2335,7 +2340,7 @@ router.post('/users/:id/freeze', authMiddleware, async (req: AuthRequest, res) =
                 data: {
                     userId: customerId,
                     title: 'Compte gelé',
-                    body: 'Votre compte Mongain a ?t? temporairement gel?. Contactez le support pour plus d\'informations.',
+                    body: 'Votre compte Mongain a été temporairement gelé. Contactez le support pour plus d\'informations.',
                     type: 'SECURITY'
                 }
             })
