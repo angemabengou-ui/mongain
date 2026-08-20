@@ -959,7 +959,13 @@ router.post('/pull', authMiddleware, async (req: AuthRequest, res) => {
         const user = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
         if (!user || !user.wallet) throw new Error('Compte expéditeur introuvable');
 
-        const reference = generateReference('PULL').substring(0, 20);
+        // PVit rejette tout caractère non-alphanumérique dans `reference` (leur propre exemple
+        // de doc, "ORDER-2026-0001", ne passe pourtant pas leur propre validation — vérifié en
+        // sandbox : "Le champ 'reference' doit être une valeur alphanumerique") — retirer le
+        // tiret de generateReference() avant envoi, cette même valeur sert aussi de clé de
+        // correspondance pour le webhook (Transaction.reference), donc les deux doivent être
+        // strictement identiques au caractère près.
+        const reference = generateReference('PULL').replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
         const customerAccountNumber = toPvitCustomerAccountNumber(String(phone));
 
         const response = await initiatePvitPayment(settings, { amount, reference, customerAccountNumber, network });
