@@ -189,7 +189,11 @@ export default function Ledger({ token }: { token: string }) {
 
                                 const isFee = tx.reference?.startsWith('FEE');
                                 const isMint = tx.reference?.startsWith('MINT');
-                                const isDeposit = tx.reference?.startsWith('DEPOSIT');
+                                // CIN = cash-in guichet (CashOperationService), PULL = dépôt Mobile Money PVit
+                                // (backend/src/routes/wallet.ts POST /pull) — aucune écriture ne génère plus
+                                // de préfixe "DEPOSIT" à ce jour, mais on le garde pour compat avec d'anciennes
+                                // transactions historiques.
+                                const isDeposit = tx.reference?.startsWith('DEPOSIT') || tx.reference?.startsWith('CIN') || tx.reference?.startsWith('PULL');
 
                                 return (
                                     <tr key={tx.id} style={{ borderBottom: '1px solid var(--border)' }}>

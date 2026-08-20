@@ -267,7 +267,11 @@ export default function Treasury({ token }: { token: string }) {
                                             <td style={{ padding: '14px 16px', fontWeight: 900, color: r.difference === 0 ? 'var(--success)' : 'var(--danger)' }}>{fmt(r.difference)}</td>
                                             <td style={{ padding: '14px 16px', fontSize: 12 }}>{fmtDate(r.createdAt)}</td>
                                             <td style={{ padding: '14px 16px' }}>
-                                                <span style={{ padding: '4px 8px', borderRadius: 8, fontSize: 11, fontWeight: 800, background: r.status === 'UNDER_REVIEW' ? 'var(--warning-bg)' : 'var(--success-bg)', color: r.status === 'UNDER_REVIEW' ? 'var(--warning)' : 'var(--success)' }}>
+                                                <span style={{
+                                                    padding: '4px 8px', borderRadius: 8, fontSize: 11, fontWeight: 800,
+                                                    background: r.status === 'UNDER_REVIEW' ? 'var(--warning-bg)' : r.status === 'MISMATCH' ? 'var(--danger-bg)' : 'var(--success-bg)',
+                                                    color: r.status === 'UNDER_REVIEW' ? 'var(--warning)' : r.status === 'MISMATCH' ? 'var(--danger)' : 'var(--success)'
+                                                }}>
                                                     {r.status}
                                                 </span>
                                             </td>

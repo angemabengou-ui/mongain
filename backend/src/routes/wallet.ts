@@ -879,7 +879,19 @@ router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // POST /api/wallet/pay-service (Achat Électricité, etc.)
+//
+// Même situation que /api/services/pay-bill (services.ts) : aucune intégration réelle avec
+// SEEG/Edan n'existe (le type ELECTRICITY refuse plus bas), et aucun autre `type` n'est
+// réellement implémenté (serviceToken reste toujours vide) — sans ce gate, un appel direct
+// avec n'importe quel `type` autre que ELECTRICITY débitait quand même le client pour un
+// service jamais livré. Désactivé par défaut, même flag que services.ts (même catégorie :
+// paiement de service externe non branché, pas un rechargement de wallet).
 router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
+    if (process.env.ENABLE_UNVERIFIED_EXTERNAL_SERVICES !== 'true') {
+        return res.status(501).json({
+            error: 'Le paiement de services nécessite une intégration réelle avec le fournisseur. Cette fonctionnalité est désactivée tant que cette intégration n\'est pas en place.'
+        });
+    }
     try {
         const { type, amount, reference } = req.body;
         if (!amount || amount <= 0) throw new Error('Montant invalide');
@@ -898,8 +910,11 @@ router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
         }
 
         const newBalance = await prisma.$transaction(async (tx) => {
+            // Garde atomique (balance: gte) : le contrôle ci-dessus lit une valeur non
+            // verrouillée, donc deux paiements concurrents pouvaient tous deux le passer et
+            // faire passer le solde en négatif (même classe de bug que /pay-bill, /topup).
             const w = await tx.wallet.update({
-                where: { id: user.wallet!.id },
+                where: { id: user.wallet!.id, balance: { gte: amount } },
                 data: { balance: { decrement: amount } }
             });
 

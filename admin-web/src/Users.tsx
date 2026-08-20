@@ -7,6 +7,7 @@ export default function UsersManagement({ token, staffRole, lockedRole }: { toke
     const [users, setUsers] = useState<any[]>([]);
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
     // Pagination & Filters
     const [searchTerm, setSearchTerm] = useState('');
@@ -71,13 +72,22 @@ export default function UsersManagement({ token, staffRole, lockedRole }: { toke
             if (kyc) url += `&kycStatus=${kyc}`;
 
             const resp = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+            // Sans ce cas, un 403 (ex: rôle non habilité pour ce segment) laissait croire
+            // à une liste vide au lieu d'un accès refusé.
             if (resp.ok) {
                 const data = await resp.json();
                 setUsers(data.customers || []);
                 setTotal(data.total || 0);
+                setError('');
+            } else {
+                const data = await resp.json().catch(() => ({}));
+                setUsers([]);
+                setError(data.error || 'Accès à la liste des comptes refusé.');
             }
         } catch (e) {
             console.error(e);
+            setUsers([]);
+            setError('Impossible de contacter le serveur.');
         } finally {
             setLoading(false);
         }
@@ -297,9 +307,9 @@ export default function UsersManagement({ token, staffRole, lockedRole }: { toke
                             ))}
                             {users.length === 0 && (
                                 <tr>
-                                    <td colSpan={isAgentView ? 7 : 6} style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                                    <td colSpan={isAgentView ? 7 : 6} style={{ padding: '60px', textAlign: 'center', color: error ? 'var(--danger)' : 'var(--text-secondary)' }}>
                                         <User size={48} style={{ opacity: 0.2, marginBottom: '16px' }} />
-                                        <div>{isAgentView ? 'Aucun agent correspondant.' : 'Aucun client correspondant trouvé sur la plateforme.'}</div>
+                                        <div>{error ? `⚠️ ${error}` : isAgentView ? 'Aucun agent correspondant.' : 'Aucun client correspondant trouvé sur la plateforme.'}</div>
                                     </td>
                                 </tr>
                             )}

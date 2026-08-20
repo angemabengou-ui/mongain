@@ -16,17 +16,17 @@ const StatusBadge = ({ status }: { status: string }) => {
         ACTIVE: ['var(--success)', 'var(--success-bg)'],
         SUSPENDED: ['var(--warning)', 'var(--warning-bg)'],
         FROZEN: ['var(--danger)', 'var(--danger-bg)'],
-        CLOSED: ['#6b7280', '#f3f4f6'],
+        CLOSED: ['var(--text-muted)', 'var(--bg-secondary)'],
         PENDING_KYC: ['var(--accent)', 'var(--accent-bg)'],
         APPROVED: ['var(--success)', 'var(--success-bg)'],
         REJECTED: ['var(--danger)', 'var(--danger-bg)'],
         PENDING: ['var(--warning)', 'var(--warning-bg)'],
-        UNVERIFIED: ['#9ca3af', '#f3f4f6'],
+        UNVERIFIED: ['var(--text-muted)', 'var(--bg-secondary)'],
         OPEN: ['var(--warning)', 'var(--warning-bg)'],
         RESOLVED: ['var(--success)', 'var(--success-bg)'],
-        CLOSED_R: ['#6b7280', '#f3f4f6'],
+        CLOSED_R: ['var(--text-muted)', 'var(--bg-secondary)'],
     };
-    const [color, bg] = map[status] || ['#6b7280', '#f3f4f6'];
+    const [color, bg] = map[status] || ['var(--text-muted)', 'var(--bg-secondary)'];
     return (
         <span style={{
             padding: '3px 10px', borderRadius: 20, fontSize: 12,

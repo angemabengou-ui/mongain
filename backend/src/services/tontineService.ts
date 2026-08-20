@@ -92,10 +92,16 @@ export async function executeTontineCycle(groupId: string) {
         const beneficiaryWallet = await prisma.wallet.findUnique({ where: { userId: beneficiary.userId } });
         if (beneficiaryWallet) {
             await prisma.$transaction(async (tx) => {
-                await tx.wallet.update({
-                    where: { id: vaultWallet.id },
+                // Garde atomique (balance: gte), même principe que le débit des cotisations
+                // ci-dessus : le Coffre Tontine est un wallet système partagé par TOUS les
+                // groupes (déclenchement CRON + manuel via POST /api/tontine/debit/:groupId
+                // peuvent se chevaucher), donc un décrément non gardé pouvait faire passer son
+                // solde sous zéro si un autre cycle le vidait entre-temps.
+                const claim = await tx.wallet.updateMany({
+                    where: { id: vaultWallet.id, balance: { gte: totalPot } },
                     data: { balance: { decrement: totalPot } }
                 });
+                if (claim.count === 0) throw new Error('Coffre Tontine insuffisant pour ce paiement.');
                 await tx.wallet.update({
                     where: { id: beneficiaryWallet.id },
                     data: { balance: { increment: totalPot } }

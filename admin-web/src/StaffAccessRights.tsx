@@ -64,10 +64,12 @@ export default function StaffAccessRights({ token }: { token: string }) {
         if (!search.trim()) { setSearchResults([]); setSearchTotal(0); return; }
         setSearchLoading(true);
         try {
-            const data = await apiFetch(`${API_URL}/api/admin/staff?q=${encodeURIComponent(search)}&unassigned=false&page=${searchPage}&limit=${PAGE_SIZE}`, { headers: { 'Authorization': `Bearer ${token}` } });
-            // La recherche cible la reconfiguration des comptes déjà actifs — les PENDING
-            // ont déjà leur propre file d'attente ci-dessus, pas besoin de les dupliquer ici.
-            setSearchResults(data.staff.filter((s: any) => s.status !== 'PENDING'));
+            // La recherche cible la reconfiguration des comptes déjà actifs/suspendus — les PENDING
+            // ont déjà leur propre file d'attente ci-dessus, pas besoin de les dupliquer ici. Filtré
+            // côté serveur (pas juste après coup côté client) pour que `total`, et donc la pagination,
+            // reflète vraiment le nombre de lignes affichées plutôt que de compter aussi les PENDING.
+            const data = await apiFetch(`${API_URL}/api/admin/staff?q=${encodeURIComponent(search)}&unassigned=false&status=ACTIVE,SUSPENDED&page=${searchPage}&limit=${PAGE_SIZE}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            setSearchResults(data.staff);
             setSearchTotal(data.total);
             setError('');
         } catch (e: any) {

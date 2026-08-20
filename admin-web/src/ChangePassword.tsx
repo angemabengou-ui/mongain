@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { API_URL } from './config';
 
-export default function ChangePassword({ token, onDone, onLogout }: { token: string, onDone: () => void, onLogout: () => void }) {
+export default function ChangePassword({ token, onLogout }: { token: string, onLogout: () => void }) {
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -30,7 +30,12 @@ export default function ChangePassword({ token, onDone, onLogout }: { token: str
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Échec du changement de mot de passe.');
-            onDone();
+            // Le backend révoque immédiatement l'ancien token (jwtVersion incrémenté) — le
+            // conserver et continuer sur la même session laisserait l'admin sur une appli
+            // cassée (401 sur le premier appel API suivant). On force une reconnexion propre
+            // avec le nouveau mot de passe, qui émettra un token valide.
+            alert('Mot de passe modifié avec succès. Merci de vous reconnecter.');
+            onLogout();
         } catch (err: any) {
             setError(err.message);
         } finally {

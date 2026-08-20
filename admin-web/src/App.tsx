@@ -95,10 +95,7 @@ export default function App() {
     setToken(t);
   }} />;
 
-  if (mustChangePassword) return <ChangePassword token={token} onLogout={logout} onDone={() => {
-    localStorage.setItem('admin_must_change_pw', '0');
-    setMustChangePassword(false);
-  }} />;
+  if (mustChangePassword) return <ChangePassword token={token} onLogout={logout} />;
 
   // Navigation Map — réorganisée pour éliminer les doublons : "Business" (Marchands &
   // Agents) et "Clients & Comptes" menaient tous deux au même écran Users.tsx (qui, côté

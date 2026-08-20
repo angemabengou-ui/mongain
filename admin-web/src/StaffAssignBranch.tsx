@@ -34,10 +34,9 @@ export default function StaffAssignBranch({ token }: { token: string }) {
     const [sort, setSort] = useState('name-asc');
 
     useEffect(() => {
-        fetch(API_URL + '/api/admin/branches?limit=200', { headers: { 'Authorization': `Bearer ${token}` } })
-            .then(r => r.json())
+        apiFetch(API_URL + '/api/admin/branches?limit=200', { headers: { 'Authorization': `Bearer ${token}` } })
             .then(d => setBranches(Array.isArray(d) ? d : (d.branches || [])))
-            .catch(console.error);
+            .catch((e: any) => setError(e.message));
     }, [token]);
 
     const fetchList = async () => {

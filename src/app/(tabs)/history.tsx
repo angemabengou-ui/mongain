@@ -181,6 +181,28 @@ const FilterPill = ({ label, active, onPress, styles }: any) => (
     </TouchableOpacity>
 );
 
+// Le dépôt Mobile Money (PVit) reste 'PENDING' tant que le webhook opérateur n'a pas
+// confirmé, et peut finir 'FAILED' (backend/src/routes/webhooks.ts) — sans cet indicateur,
+// une demande encore en attente (ou rejetée) apparaissait ici identique à une transaction
+// déjà créditée, laissant croire à tort que l'argent était disponible.
+function StatusPill({ status, styles }: { status: string; styles: any }) {
+    if (status === 'PENDING') {
+        return (
+            <View style={[styles.statusPill, { backgroundColor: '#F59E0B15' }]}>
+                <Text style={[styles.statusPillText, { color: '#F59E0B' }]}>En attente</Text>
+            </View>
+        );
+    }
+    if (status === 'FAILED') {
+        return (
+            <View style={[styles.statusPill, { backgroundColor: '#E11D4815' }]}>
+                <Text style={[styles.statusPillText, { color: '#E11D48' }]}>Échoué</Text>
+            </View>
+        );
+    }
+    return null;
+}
+
 const TransactionItem = ({ tx, styles, colors }: any) => {
     const router = useRouter();
     const title = tx.type === 'outgoing' ? 'Transfert envoyé' : 'Transfert reçu';
@@ -200,6 +222,7 @@ const TransactionItem = ({ tx, styles, colors }: any) => {
             <View style={styles.txDetails}>
                 <Text style={styles.txTitle}>{title}</Text>
                 <Text style={styles.txName}>{tx.counterpart}</Text>
+                <StatusPill status={tx.status} styles={styles} />
             </View>
             <View style={styles.txAmountContainer}>
                 <Text style={[styles.txAmount, { color: tx.type === 'incoming' ? '#059669' : colors.textPrimary }]}>{amountStr}</Text>
@@ -236,6 +259,8 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     txDetails: { flex: 1 },
     txTitle: { fontSize: 16, fontWeight: '600', color: COLORS.textPrimary, marginBottom: 4 },
     txName: { fontSize: 14, color: COLORS.textSecondary },
+    statusPill: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, marginTop: 4 },
+    statusPillText: { fontSize: 11, fontWeight: '700' },
     txAmountContainer: { alignItems: 'flex-end' },
     txAmount: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
     txDate: { fontSize: 12, color: COLORS.textSecondary },

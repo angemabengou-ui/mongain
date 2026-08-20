@@ -32,6 +32,14 @@ export default function KycMod({ token }: { token: string }) {
     }, [tab]);
 
     const processKyc = async (userId: string, status: 'APPROVED' | 'REJECTED') => {
+        // Le backend exige un motif (min 3 caractères) pour tout rejet — sans quoi la requête
+        // échoue systématiquement avec un 400.
+        let reason: string | null = null;
+        if (status === 'REJECTED') {
+            reason = window.prompt('Motif du rejet (obligatoire, minimum 3 caractères) :');
+            if (!reason || reason.trim().length < 3) { alert('Motif de rejet requis (minimum 3 caractères).'); return; }
+        }
+
         if (!confirm(`Confirmez-vous le statut ${status} pour ce dossier ?`)) return;
 
         try {
@@ -41,7 +49,7 @@ export default function KycMod({ token }: { token: string }) {
                     Authorization: `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ status })
+                body: JSON.stringify({ status, reason: reason || undefined })
             });
 
             if (res.ok) {
@@ -79,7 +87,7 @@ export default function KycMod({ token }: { token: string }) {
                 <div style={{ color: 'var(--text-muted)' }}>Chargement...</div>
             ) : pending.length === 0 ? (
                 <div className="card" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-                    Aucun dossier KYC en attente ! 🎉
+                    {tab === 'PENDING' ? 'Aucun dossier KYC en attente ! 🎉' : 'Aucune identité certifiée pour le moment.'}
                 </div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>

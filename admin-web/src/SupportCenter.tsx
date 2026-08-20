@@ -230,7 +230,7 @@ export default function SupportCenter({ token, role }: SupportCenterProps) {
                         <KpiCard label="Attente Client" value={stats?.waitingCustomer ?? '…'} color="var(--warning)" icon={<Clock size={18} />} />
                         <KpiCard label="SLA Dépassés" value={stats?.slaBreached ?? '…'} color="var(--danger)" icon={<AlertTriangle size={18} />} />
                         <KpiCard label="Critiques" value={stats?.critical ?? '…'} color="var(--danger)" icon={<ShieldAlert size={18} />} />
-                        <KpiCard label="Refunds Pending" value={stats?.refundPending ?? '…'} color="#0ea5e9" icon={<ArrowUpCircle size={18} />} />
+                        <KpiCard label="Remb. en Attente" value={stats?.refundPending ?? '…'} color="#0ea5e9" icon={<ArrowUpCircle size={18} />} />
                         <KpiCard label="Fraudes Actives" value={stats?.fraudCases ?? '…'} color="var(--danger)" icon={<Shield size={18} />} />
                     </div>
                     <button onClick={fetchStats} style={{ alignSelf: 'flex-start', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 14px', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
@@ -261,7 +261,7 @@ export default function SupportCenter({ token, role }: SupportCenterProps) {
                                 {CATEGORIES.map(c => <option key={c}>{c}</option>)}
                             </select>
                             <button onClick={() => setSlaFilter(!slaFilter)} style={{ background: slaFilter ? 'var(--danger-bg)' : 'var(--bg-card)', border: `1px solid ${slaFilter ? 'var(--danger)' : 'var(--border)'}`, borderRadius: 8, padding: '6px 10px', color: slaFilter ? 'var(--danger)' : 'var(--text-muted)', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-                                <AlertTriangle size={13} /> SLA Breached
+                                <AlertTriangle size={13} /> SLA Dépassés
                             </button>
                             <button onClick={fetchTickets} style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, padding: '6px 12px', color: '#fff', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <Filter size={13} /> Filtrer

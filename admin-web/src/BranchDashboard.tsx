@@ -294,7 +294,7 @@ function ReconciliationReport({ token }: { token: string }) {
     if (!report.length && !loading) {
         return (
             <div className="card" style={{ padding: 30, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0 }}>Opérations & Réconciliation (Expected vs Declared)</h3>
+                <h3 style={{ margin: 0 }}>Opérations & Réconciliation des Caisses</h3>
                 <button onClick={fetchReport} style={{ padding: '8px 16px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer' }}>Générer le rapport consolidé</button>
             </div>
         )
@@ -315,7 +315,7 @@ function ReconciliationReport({ token }: { token: string }) {
                             <th>Cash Initial</th>
                             <th>Cash In (Entrant)</th>
                             <th>Cash Out (Sortant)</th>
-                            <th>Cash Attendu (Expected)</th>
+                            <th>Cash Attendu</th>
                         </tr>
                     </thead>
                     <tbody>

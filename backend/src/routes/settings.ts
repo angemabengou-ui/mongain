@@ -5,6 +5,16 @@ import { prisma } from '../prisma';
 
 const router = Router();
 
+// Mêmes champs que le masquage de GET / ci-dessous — ne jamais écrire leur valeur en clair
+// ailleurs, y compris dans l'historique de configuration (SettingHistory), sous peine de
+// contourner le masquage : GET /api/settings/history est lisible par les mêmes rôles
+// (SUPER_ADMIN/RISK/COMPLIANCE_CHECKER) et affichait jusqu'ici oldValue/newValue en clair.
+const SECRET_SETTING_FIELDS = new Set(['airtelApiKey', 'moovApiKey', 'pvitSecretKey', 'pvitWebhookSecret']);
+const maskSecretForHistory = (key: string, value: any) => {
+    if (!SECRET_SETTING_FIELDS.has(key) || value == null || value === '') return String(value);
+    return '••••••••' + String(value).slice(-4);
+};
+
 export const getSystemSettings = async () => {
     let settings = await prisma.systemSettings.findFirst();
     if (!settings) {
@@ -204,8 +214,8 @@ router.post('/approve/:id', authMiddleware, async (req: AuthRequest, res) => {
                             data: {
                                 category: 'SYSTEM',
                                 parameter: key,
-                                oldValue: String(oldV),
-                                newValue: String(newV),
+                                oldValue: maskSecretForHistory(key, oldV),
+                                newValue: maskSecretForHistory(key, newV),
                                 authorId: approval.makerId,
                                 checkerId: staff.id,
                                 reason: approval.reason,

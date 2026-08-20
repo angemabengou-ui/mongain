@@ -276,10 +276,25 @@ export default function PlatformConfig({ token }: { token: string }) {
         } catch (e) { setError('Erreur Réseau'); } finally { setLoading(false); }
     };
 
-    const handleSaveGroup = (groupAction: string, keys: string[]) => {
+    // Champs secrets affichés en type="password" avec un placeholder masqué (••••XXXX) au lieu
+    // de la vraie valeur — un champ jamais touché et un champ vidé par erreur (focus + Ctrl-A +
+    // Suppr) sont donc VISUELLEMENT IDENTIQUES (input vide, même placeholder grisé). Sans cette
+    // garde, soumettre le groupe après un vidage accidentel enverrait une chaîne vide, que le
+    // backend n'a aucun moyen de distinguer d'un "nouveau secret vide" — et écraserait le secret
+    // réel en base dès l'approbation Checker. On traite donc "vide" comme "non modifié" pour ces
+    // clés : on omet la clé du payload plutôt que d'y mettre une chaîne vide.
+    const MASKED_SECRET_KEYS = ['pvitSecretKey', 'pvitWebhookSecret', 'airtelApiKey', 'moovApiKey'];
+
+    // `overrides` sert au cas où une valeur vient tout juste d'être basculée dans le même geste
+    // (ex: bouton Circuit Breaker) : `handleFieldChange` programme une mise à jour de `drafts`
+    // via setState, qui n'est pas encore appliquée au moment où ce même clic appelle
+    // `handleSaveGroup` — lire `drafts[k]` renverrait donc l'ANCIENNE valeur, pas celle qu'on
+    // vient de choisir. `overrides` permet de fournir la valeur réelle sans attendre le re-render.
+    const handleSaveGroup = (groupAction: string, keys: string[], overrides: Record<string, any> = {}) => {
         const payload: any = {};
         keys.forEach(k => {
-            let val = drafts[k];
+            let val = k in overrides ? overrides[k] : drafts[k];
+            if (MASKED_SECRET_KEYS.includes(k) && !val) return;
             if (k.toLowerCase().includes('tax') || k.toLowerCase().includes('fee') || k.toLowerCase().includes('reward')) {
                 payload[k] = parseFloat(val) / 100;
             } else if (k.toLowerCase().includes('limit') || k.toLowerCase().includes('threshold') || k.toLowerCase().includes('hours') || k.toLowerCase().includes('count')) {
@@ -289,8 +304,10 @@ export default function PlatformConfig({ token }: { token: string }) {
             }
         });
 
+        if (Object.keys(payload).length === 0) { setError('Aucune modification à soumettre.'); return; }
+
         let confirmMsg = `Vous allez soumettre les paramètres suivants à validation:\n\n`;
-        keys.forEach(k => confirmMsg += `- ${k}: ${payload[k]}\n`);
+        Object.keys(payload).forEach(k => confirmMsg += `- ${k}: ${payload[k]}\n`);
         if (!window.confirm(confirmMsg)) return;
 
         submitRequest(groupAction, payload);
@@ -604,8 +621,9 @@ export default function PlatformConfig({ token }: { token: string }) {
                                     Statut Actuel : {settings.circuitBreaker ? <span style={{ color: 'var(--danger)' }}>ACTIVÉ (BLOCKING)</span> : <span style={{ color: 'var(--success)' }}>DÉSACTIVÉ (OPERATIONAL)</span>}
                                 </div>
                                 <button onClick={() => {
-                                    handleFieldChange('circuitBreaker', !settings.circuitBreaker);
-                                    handleSaveGroup('CIRCUIT_BREAKER_TOGGLE', ['circuitBreaker']);
+                                    const next = !settings.circuitBreaker;
+                                    handleFieldChange('circuitBreaker', next);
+                                    handleSaveGroup('CIRCUIT_BREAKER_TOGGLE', ['circuitBreaker'], { circuitBreaker: next });
                                 }} style={{ width: '100%', padding: 24, background: settings.circuitBreaker ? '#f1f5f9' : 'var(--danger)', color: settings.circuitBreaker ? 'black' : 'white', borderRadius: 12, border: 'none', fontWeight: 900, fontSize: 20, cursor: 'pointer' }}>
                                     {settings.circuitBreaker ? 'DÉSACTIVER (Restore Services)' : "DÉCLENCHER LE CIRCUIT BREAKER (Maker)"}
                                 </button>

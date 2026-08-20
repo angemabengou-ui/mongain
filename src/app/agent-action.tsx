@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -29,6 +29,9 @@ export default function AgentActionDeskScreen() {
     const [pin, setPin] = useState('');
     const [loading, setLoading] = useState(false);
     const [bioEnabled, setBioEnabled] = useState(false);
+    // Ref synchrone anti double-tap : voir transfer-confirm.tsx pour le détail du problème
+    // (deux appuis rapides peuvent tous deux lire `loading` avant le premier re-render).
+    const submittingRef = useRef(false);
 
     useEffect(() => { isBiometricPinEnabled().then(setBioEnabled); }, []);
 
@@ -38,6 +41,8 @@ export default function AgentActionDeskScreen() {
     const numAmountPreview = cleanAmount(amount) || 0;
 
     const submitAction = async (usedPin: string) => {
+        if (submittingRef.current) return;
+        submittingRef.current = true;
         const numAmount = cleanAmount(amount);
         setLoading(true);
         try {
@@ -83,6 +88,7 @@ export default function AgentActionDeskScreen() {
         } catch (error: any) {
             Alert.alert('Échec', error.message || 'La transaction a échoué.');
         } finally {
+            submittingRef.current = false;
             setLoading(false);
         }
     };

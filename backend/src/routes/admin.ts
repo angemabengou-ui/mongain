@@ -1091,7 +1091,13 @@ router.get('/staff', authMiddleware, async (req: AuthRequest, res) => {
                 { matricule: { contains: q as string, mode: 'insensitive' } },
             ];
         }
-        if (status) where.status = status as string;
+        if (status) {
+            // Liste séparée par virgules (ex: "ACTIVE,SUSPENDED") pour exclure un seul statut
+            // (PENDING) sans devoir choisir une seule valeur exacte — cf. admin-web StaffAccessRights,
+            // dont la recherche doit couvrir les comptes actifs ET suspendus, mais pas la file PENDING.
+            const statuses = (status as string).split(',').map(s => s.trim()).filter(Boolean);
+            where.status = statuses.length > 1 ? { in: statuses } : statuses[0];
+        }
         if (unassigned === 'true') where.branchId = null;
         else if (unassigned === 'false') where.branchId = { not: null };
         if (branchId) where.branchId = branchId as string;

@@ -29,6 +29,11 @@ export default function ErrorLogs({ token }: { token: string }) {
             if (resolvedFilter === 'resolved') params.set('resolved', 'true');
             else if (resolvedFilter === 'unresolved') params.set('resolved', 'false');
             const data = await apiFetch(`${API_URL}/api/admin/error-logs?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } });
+            // Si on vient de résoudre la dernière erreur d'une page (ou de changer de filtre)
+            // et que `page` dépasse maintenant le nombre réel de pages, on se recale au lieu
+            // d'afficher une page vide alors que des résultats existent bien sur une page antérieure.
+            const newPages = Math.ceil(data.total / PAGE_SIZE) || 1;
+            if (page > newPages) { setPage(newPages); return; }
             setLogs(data.logs);
             setTotal(data.total);
             setSources(data.sources || []);
@@ -40,8 +45,10 @@ export default function ErrorLogs({ token }: { token: string }) {
         }
     };
 
+    // Un seul effet, déclenché par page/filtres : changer un filtre remet aussi `page` à 1 dans
+    // le même geste (voir les onChange ci-dessous) plutôt que via un effet séparé, qui aurait
+    // déclenché un premier fetch avec l'ancienne page avant qu'un second ne le corrige juste après.
     useEffect(() => { fetchLogs(); }, [page, sourceFilter, resolvedFilter]);
-    useEffect(() => { setPage(1); }, [sourceFilter, resolvedFilter]);
 
     const handleResolve = async (id: string) => {
         setSavingId(id);
@@ -73,11 +80,11 @@ export default function ErrorLogs({ token }: { token: string }) {
             )}
 
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
-                <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
                     <option value="">Toutes les sources</option>
                     {sources.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-                <select value={resolvedFilter} onChange={e => setResolvedFilter(e.target.value as any)} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <select value={resolvedFilter} onChange={e => { setResolvedFilter(e.target.value as any); setPage(1); }} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
                     <option value="unresolved">Non résolues</option>
                     <option value="resolved">Résolues</option>
                     <option value="all">Toutes</option>
@@ -100,7 +107,7 @@ export default function ErrorLogs({ token }: { token: string }) {
                             <tr><td colSpan={4} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Chargement...</td></tr>
                         ) : logs.length === 0 ? (
                             <tr><td colSpan={4} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>
-                                {resolvedFilter === 'unresolved' ? 'Aucune erreur non résolue. 🎉' : 'Aucune erreur enregistrée.'}
+                                {resolvedFilter === 'unresolved' ? 'Aucune erreur non résolue. 🎉' : resolvedFilter === 'resolved' ? 'Aucune erreur résolue pour l\'instant.' : 'Aucune erreur enregistrée.'}
                             </td></tr>
                         ) : logs.map(log => (
                             <Fragment key={log.id}>

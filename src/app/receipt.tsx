@@ -30,12 +30,25 @@ export default function ReceiptScreen() {
         hour: '2-digit', minute: '2-digit'
     });
 
-    const isDeposit = reference && (reference as string).startsWith('DEPOSIT');
+    // 'PULL' = préfixe du dépôt Mobile Money PVit (backend/src/routes/wallet.ts, POST
+    // /wallet/pull) — 'DEPOSIT' reste géré pour les dépôts en agence (agent-action.tsx).
+    const isDeposit = reference && ((reference as string).startsWith('DEPOSIT') || (reference as string).startsWith('PULL'));
     const isWithdraw = reference && (reference as string).startsWith('WITHDRAW');
 
     let title = isIncoming ? 'Paiement reçu' : 'Paiement envoyé';
     if (isDeposit) title = 'Dépôt sur compte';
     if (isWithdraw) title = 'Retrait en espèces';
+
+    // Le dépôt PVit reste PENDING tant que le webhook opérateur n'a pas confirmé (voir
+    // backend/src/routes/wallet.ts et webhooks.ts) — afficher "Effectué" sans condition
+    // laissait croire au client que l'argent était déjà crédité alors que la demande est
+    // seulement en cours de validation, voire déjà rejetée (FAILED).
+    const statusStr = (Array.isArray(status) ? status[0] : status) || 'COMPLETED';
+    const isPending = statusStr === 'PENDING';
+    const isFailed = statusStr === 'FAILED';
+    const statusLabel = isFailed ? 'Échoué' : isPending ? 'En attente' : 'Effectué';
+    const statusColor = isFailed ? '#E11D48' : isPending ? '#F59E0B' : COLORS.success;
+    const statusIconName: any = isFailed ? 'close-circle' : isPending ? 'time' : 'checkmark-circle';
 
     const [isPrinting, setIsPrinting] = useState(false);
 
@@ -67,7 +80,7 @@ export default function ReceiptScreen() {
                             <div class="logo">MONGAIN</div>
                             <div class="title">${title}</div>
                             <div class="amount">${isIncoming || isDeposit ? '+' : '-'}${formattedAmount} ${currency}</div>
-                            <div class="status">✓ Opération réussie</div>
+                            <div class="status" style="background-color:${statusColor}20;color:${statusColor};">${isFailed ? '✕' : isPending ? '⏳' : '✓'} ${isPending ? 'En attente de confirmation' : isFailed ? 'Opération échouée' : 'Opération réussie'}</div>
                         </div>
                         <div class="divider"></div>
                         
@@ -144,9 +157,9 @@ export default function ReceiptScreen() {
                         <Text style={styles.receiptAmount}>
                             {isIncoming || isDeposit ? '+' : '-'}{formattedAmount} {currency}
                         </Text>
-                        <View style={styles.statusBadge}>
-                            <Ionicons name="checkmark-circle" size={14} color={COLORS.success} />
-                            <Text style={styles.statusText}>Effectué</Text>
+                        <View style={[styles.statusBadge, { backgroundColor: statusColor + '15' }]}>
+                            <Ionicons name={statusIconName} size={14} color={statusColor} />
+                            <Text style={[styles.statusText, { color: statusColor }]}>{statusLabel}</Text>
                         </View>
                     </View>
 
