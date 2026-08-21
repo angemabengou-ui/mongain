@@ -14,6 +14,9 @@ let lastInteractionTime = Date.now();
 const BACKGROUND_LIMIT_MS = 5 * 1000; // 5 seconds grace period when backgrounded
 const INACTIVITY_LIMIT_MS = 60 * 1000; // 1 minute of zero screen touch
 
+// Global flag to temporarily suspend AppLock when triggering native OS intents (like ImagePicker)
+export const SecurityFlags = { bypassAppLock: false };
+
 export function SecurityWrapper({ children }: { children: React.ReactNode }) {
     const { token, isLoading } = useAuth();
     const router = useRouter();
@@ -50,8 +53,8 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
             return;
         }
         const lockPref = await SecureStore.getItemAsync('appLockEnabled');
-        // SECURITY UPDATE: AppLock is ON by default (Opt-out)
-        if (lockPref !== 'false') {
+        // SECURITY UPDATE: AppLock is OFF by default (Opt-in)
+        if (lockPref === 'true') {
             setIsLocked(true);
             setTimeout(() => handleUnlock(), 500);
         } else {
@@ -86,7 +89,7 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
                 if (token) {
                     const lockPref = await SecureStore.getItemAsync('appLockEnabled');
                     const timeAway = Date.now() - lastInteractionTime;
-                    if (lockPref !== 'false' && timeAway > BACKGROUND_LIMIT_MS) {
+                    if (lockPref === 'true' && timeAway > BACKGROUND_LIMIT_MS && !SecurityFlags.bypassAppLock) {
                         setIsLocked(true);
                         setRequiresPinFallback(false);
                         handleUnlock();
@@ -111,7 +114,7 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
 
             if (timeAway > INACTIVITY_LIMIT_MS) {
                 const lockPref = await SecureStore.getItemAsync('appLockEnabled');
-                if (lockPref !== 'false') {
+                if (lockPref === 'true') {
                     setIsLocked(true);
                     setRequiresPinFallback(false);
                     handleUnlock();
@@ -143,6 +146,9 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
             if (result.success) {
                 lastInteractionTime = Date.now();
                 setIsLocked(false);
+            } else {
+                // If the user presses "Utiliser le code PIN" or it fails for any reason
+                setRequiresPinFallback(true);
             }
         } else {
             // No biometric hardware -> Fallback to custom PIN form

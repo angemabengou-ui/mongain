@@ -21,7 +21,11 @@ import Treasury from './Treasury';
 import Users from './Users';
 
 export default function App() {
-  const [token, setToken] = useState(localStorage.getItem('admin_token'));
+  // VUL-05 : Le token JWT est migré vers sessionStorage au lieu de localStorage.
+  // sessionStorage : scopé par onglet/session — disparait à la fermeture du tab,
+  // et inaccessible aux scripts d'autres origines (XSS cross-origin réduit).
+  // Les données non-sensibles (rôle, préférences UI) restent en localStorage.
+  const [token, setToken] = useState(sessionStorage.getItem('admin_token'));
   const [role, setRole] = useState(localStorage.getItem('admin_role') || 'ADMIN');
   const [userName, setUserName] = useState(localStorage.getItem('admin_name') || 'Admin');
   const [phone, setPhone] = useState(localStorage.getItem('admin_phone') || '');
@@ -51,7 +55,7 @@ export default function App() {
   }, [expandedGroup]);
 
   const logout = () => {
-    localStorage.removeItem('admin_token');
+    sessionStorage.removeItem('admin_token');
     localStorage.removeItem('admin_role');
     localStorage.removeItem('admin_name');
     localStorage.removeItem('admin_phone');
@@ -82,7 +86,7 @@ export default function App() {
   }, [token]);
 
   if (!token) return <Login setToken={(t, r, n, p, mcp) => {
-    localStorage.setItem('admin_token', t);
+    sessionStorage.setItem('admin_token', t);
     localStorage.setItem('admin_role', r);
     localStorage.setItem('admin_name', n);
     localStorage.setItem('admin_phone', p);

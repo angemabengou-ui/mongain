@@ -35,10 +35,10 @@ export default function ProfileScreen() {
         if (user && user.role === 'USER') {
             apiGetDailyLimits().then(data => setLimits(data)).catch(console.error);
         }
-        // Charger la préférence AppLock (ON par défaut)
+        // Charger la préférence AppLock (OFF par défaut)
         if (Platform.OS !== 'web') {
             SecureStore.getItemAsync('appLockEnabled').then(val => {
-                setAppLockEnabled(val !== 'false');
+                setAppLockEnabled(val === 'true');
             }).catch(e => console.log("SecureStore error:", e));
         }
     }, [user]);

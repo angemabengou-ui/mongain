@@ -33,42 +33,80 @@ router.post('/pvit-status', async (req, res) => {
 
         if (status === 'SUCCESS') {
             await prisma.$transaction(async (tx) => {
-                // Réclamation atomique : si un retry concurrent a déjà traité cette même
-                // notification entre le findUnique ci-dessus et maintenant, count === 0.
                 const claim = await tx.transaction.updateMany({ where: { id: transaction.id, status: 'PENDING' }, data: { status: 'COMPLETED' } });
                 if (claim.count === 0) return;
 
-                const wallet = await tx.wallet.update({
-                    where: { id: transaction.receiverWalletId },
-                    data: { balance: { increment: amountCredited ?? transaction.amount } },
-                    include: { user: true }
-                });
-                if (wallet.user) {
-                    await tx.notification.create({
-                        data: {
-                            userId: wallet.user.id,
-                            title: 'Dépôt reçu',
-                            body: `Votre dépôt Mobile Money de ${(amountCredited ?? transaction.amount).toLocaleString('fr-FR')} FCFA a été crédité.`,
-                            type: 'TRANSACTION'
-                        }
+                if (transaction.type === 'CASH_IN') {
+                    // Dépôt : on crédite le destinataire
+                    const wallet = await tx.wallet.update({
+                        where: { id: transaction.receiverWalletId },
+                        data: { balance: { increment: amountCredited ?? transaction.amount } },
+                        include: { user: true }
                     });
+                    if (wallet.user) {
+                        await tx.notification.create({
+                            data: {
+                                userId: wallet.user.id,
+                                title: 'Dépôt reçu',
+                                body: `Votre dépôt Mobile Money de ${(amountCredited ?? transaction.amount).toLocaleString('fr-FR')} FCFA a été crédité.`,
+                                type: 'TRANSACTION'
+                            }
+                        });
+                    }
+                } else if (transaction.type === 'CASH_OUT') {
+                    // Retrait : Déjà débité en PENDING. Si succès, on notifie juste.
+                    const wallet = await tx.wallet.findUnique({ where: { id: transaction.senderWalletId! }, include: { user: true } });
+                    if (wallet?.user) {
+                        await tx.notification.create({
+                            data: {
+                                userId: wallet.user.id,
+                                title: 'Retrait réussi',
+                                body: `Votre compte Mobile Money a bien été crédité de ${transaction.amount.toLocaleString('fr-FR')} FCFA.`,
+                                type: 'TRANSACTION'
+                            }
+                        });
+                    }
                 }
             });
         } else {
-            const claim = await prisma.transaction.updateMany({ where: { id: transaction.id, status: 'PENDING' }, data: { status: 'FAILED' } });
-            if (claim.count > 0) {
-                const wallet = await prisma.wallet.findUnique({ where: { id: transaction.receiverWalletId }, include: { user: true } });
-                if (wallet?.user) {
-                    await prisma.notification.create({
-                        data: {
-                            userId: wallet.user.id,
-                            title: 'Dépôt échoué',
-                            body: `Votre dépôt Mobile Money de ${transaction.amount.toLocaleString('fr-FR')} FCFA a échoué. Réessayez ou contactez le support.`,
-                            type: 'TRANSACTION'
+            // FAILED
+            await prisma.$transaction(async (tx) => {
+                const claim = await tx.transaction.updateMany({ where: { id: transaction.id, status: 'PENDING' }, data: { status: 'FAILED' } });
+                if (claim.count > 0) {
+                    if (transaction.type === 'CASH_IN') {
+                        const wallet = await tx.wallet.findUnique({ where: { id: transaction.receiverWalletId }, include: { user: true } });
+                        if (wallet?.user) {
+                            await tx.notification.create({
+                                data: {
+                                    userId: wallet.user.id,
+                                    title: 'Dépôt échoué',
+                                    body: `Votre dépôt Mobile Money de ${transaction.amount.toLocaleString('fr-FR')} FCFA a échoué. Réessayez ou contactez le support.`,
+                                    type: 'TRANSACTION'
+                                }
+                            });
                         }
-                    });
+                    } else if (transaction.type === 'CASH_OUT') {
+                        // Remboursement de l'argent car le retrait a échoué
+                        const wallet = await tx.wallet.update({
+                            where: { id: transaction.senderWalletId! },
+                            data: { balance: { increment: transaction.amount } },
+                            include: { user: true }
+                        });
+                        // Remarques de fraude/sécurité : les frais ne sont pas remboursés 
+                        // pour l'instant (complexité).
+                        if (wallet.user) {
+                            await tx.notification.create({
+                                data: {
+                                    userId: wallet.user.id,
+                                    title: 'Retrait échoué',
+                                    body: `Le retrait vers votre Mobile Money a échoué. Le montant de ${transaction.amount.toLocaleString('fr-FR')} FCFA a été recrédité sur votre solde.`,
+                                    type: 'TRANSACTION'
+                                }
+                            });
+                        }
+                    }
                 }
-            }
+            });
         }
 
         return ack(code);

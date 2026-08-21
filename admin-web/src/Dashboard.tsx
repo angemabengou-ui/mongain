@@ -1,9 +1,9 @@
 import { Activity, Users, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { API_URL } from './config';
+import apiClient from './utils/apiClient';
 
-export default function Dashboard({ token }: { token: string }) {
+export default function Dashboard({ token }: { token?: string }) {
     const [stats, setStats] = useState<any>(null);
     const [chartData, setChartData] = useState<any[]>([]);
     const [error, setError] = useState('');
@@ -11,65 +11,43 @@ export default function Dashboard({ token }: { token: string }) {
     useEffect(() => {
         const fetchDashboardData = async () => {
             try {
-                const resStats = await fetch(API_URL + '/api/admin/stats', {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                const dataStats = await resStats.json();
+                const resStats = await apiClient.get('/api/admin/stats');
+                setStats(resStats.data);
 
-                if (!resStats.ok) {
-                    // Comparer le texte du message d'erreur est fragile (et cassé ici : les
-                    // messages backend contiennent des caractères d'encodage corrompus, donc
-                    // `.includes('Accès')` ne matchait jamais) — le code HTTP est fiable.
-                    if (resStats.status === 401 || resStats.status === 403) {
-                        localStorage.removeItem('admin_token');
-                        window.location.reload();
-                        return;
-                    }
-                    setError(dataStats.error || 'Erreur de chargement du tableau de bord.');
-                    return;
+                const resLedger = await apiClient.get('/api/admin/ledger');
+                const ledger = resLedger.data;
+
+                const daysMap = new Map();
+                for (let i = 6; i >= 0; i--) {
+                    const d = new Date();
+                    d.setDate(d.getDate() - i);
+                    daysMap.set(d.toISOString().split('T')[0], 0);
                 }
-                setStats(dataStats);
 
-                // Fetch ledger for real chart
-                const resLedger = await fetch(API_URL + '/api/admin/ledger', {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                if (resLedger.ok) {
-                    const ledger = await resLedger.json();
-
-                    // Group revenues (FEEs) by day for the last 7 days
-                    const daysMap = new Map();
-                    for (let i = 6; i >= 0; i--) {
-                        const d = new Date();
-                        d.setDate(d.getDate() - i);
-                        daysMap.set(d.toISOString().split('T')[0], 0);
-                    }
-
-                    ledger.forEach((tx: any) => {
-                        if (tx.reference?.startsWith('FEE') && tx.status === 'COMPLETED') {
-                            const dateStr = new Date(tx.createdAt).toISOString().split('T')[0];
-                            if (daysMap.has(dateStr)) {
-                                daysMap.set(dateStr, daysMap.get(dateStr) + tx.amount);
-                            }
+                ledger.forEach((tx: any) => {
+                    if (tx.reference?.startsWith('FEE') && tx.status === 'COMPLETED') {
+                        const dateStr = new Date(tx.createdAt).toISOString().split('T')[0];
+                        if (daysMap.has(dateStr)) {
+                            daysMap.set(dateStr, daysMap.get(dateStr) + tx.amount);
                         }
-                    });
+                    }
+                });
 
-                    const realChart = Array.from(daysMap.entries()).map(([date, amount]) => {
-                        const d = new Date(date);
-                        const dayName = d.toLocaleDateString('fr-FR', { weekday: 'short' });
-                        return { name: dayName.charAt(0).toUpperCase() + dayName.slice(1), revenus: amount };
-                    });
+                const realChart = Array.from(daysMap.entries()).map(([date, amount]) => {
+                    const d = new Date(date);
+                    const dayName = d.toLocaleDateString('fr-FR', { weekday: 'short' });
+                    return { name: dayName.charAt(0).toUpperCase() + dayName.slice(1), revenus: amount };
+                });
 
-                    setChartData(realChart);
-                }
-            } catch (err) {
+                setChartData(realChart);
+            } catch (err: any) {
                 console.error(err);
-                setError('Impossible de contacter le serveur.');
+                setError(err.response?.data?.error || 'Impossible de contacter le serveur.');
             }
         };
 
         fetchDashboardData();
-    }, [token]);
+    }, []);
 
     if (error) return <div className="loading-spinner" style={{ color: 'var(--danger)' }}>⚠️ {error}</div>;
     if (!stats) return <div className="loading-spinner">Connexion au serveur...</div>;
@@ -109,7 +87,6 @@ export default function Dashboard({ token }: { token: string }) {
                 </div>
             </div>
 
-            {/* Zone Graphique Analytique */}
             <div className="stat-card" style={{ padding: '32px', marginTop: '16px' }}>
                 <h3 style={{ marginBottom: '24px', fontSize: '18px', fontWeight: '600' }}>Évolution des Revenus (7 derniers jours)</h3>
                 <div style={{ width: '100%', height: 350 }}>

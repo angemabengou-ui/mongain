@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
-import { apiTransfer } from '../services/api';
+import { apiGetMyVouchers, apiSpendVoucher, apiTransfer } from '../services/api';
 import { enableBiometricPin, isBiometricPinEnabled, verifyBiometricsOrPin } from '../services/biometrics';
 
 const COLORS = {
@@ -50,7 +50,16 @@ export default function TransferConfirmScreen() {
     // est mutée de façon synchrone et bloque donc réellement le second appel concurrent.
     const submittingRef = useRef(false);
 
-    useEffect(() => { isBiometricPinEnabled().then(setBioEnabled); }, []);
+    const [vouchers, setVouchers] = useState<any[]>([]);
+
+    useEffect(() => {
+        isBiometricPinEnabled().then(setBioEnabled);
+        if (isPayment) {
+            apiGetMyVouchers().then(res => {
+                if (res.data?.success) setVouchers(res.data.data);
+            }).catch(console.error);
+        }
+    }, [isPayment]);
 
     const initials = receiverName
         ? receiverName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -132,6 +141,26 @@ export default function TransferConfirmScreen() {
                     ]
                 );
             }
+        } catch (e: any) {
+            setError(e.message);
+        } finally {
+            submittingRef.current = false;
+            setLoading(false);
+        }
+    };
+
+    const handleSpendVoucher = async (voucherId: string, amount: number) => {
+        if (submittingRef.current) return;
+        submittingRef.current = true;
+        setLoading(true);
+        setError('');
+        try {
+            const result = await apiSpendVoucher(voucherId, receiverPhone);
+            setSuccess({
+                receiverName: result.data.destination || receiverName || receiverPhone,
+                remainingBalance: 0,
+                amount: amount,
+            });
         } catch (e: any) {
             setError(e.message);
         } finally {
@@ -296,7 +325,10 @@ export default function TransferConfirmScreen() {
                         // taxP2P systématiquement, quel que soit le rôle de l'expéditeur —
                         // aucune exemption AGENT/ADMIN n'existe côté serveur. Afficher "Gratuit"
                         // ici induisait l'utilisateur en erreur sur le montant réellement débité.
-                        const p2pFee = Math.ceil(cleanedAmount * (settings?.taxP2P || 0.01));
+                        // Le backend applique taxP2P systématiquement. On vérifie via ?? au lieu de || 
+                        // pour éviter qu'un taux de 0% (falsy) ne retombe à 1%.
+                        const taxRate = settings?.taxP2P ?? 0.01;
+                        const p2pFee = Math.ceil(cleanedAmount * taxRate);
                         const totalDebit = cleanedAmount + p2pFee;
 
                         return (
@@ -306,7 +338,7 @@ export default function TransferConfirmScreen() {
                                     <Text style={{ color: COLORS.textPrimary, fontWeight: '600' }}>{cleanedAmount.toLocaleString('fr-FR')} FCFA</Text>
                                 </View>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                                    <Text style={{ color: '#F59E0B' }}>Frais ({settings?.taxP2P ? settings.taxP2P * 100 : 1}%)</Text>
+                                    <Text style={{ color: '#F59E0B' }}>Frais ({taxRate * 100}%)</Text>
                                     <Text style={{ color: '#F59E0B', fontWeight: '600' }}>{p2pFee.toLocaleString('fr-FR')} FCFA</Text>
                                 </View>
                                 <View style={{ width: '100%', height: 1, backgroundColor: COLORS.border || '#e2e8f0', marginVertical: 4 }} />
@@ -366,6 +398,31 @@ export default function TransferConfirmScreen() {
                             )}
                         </TouchableOpacity>
                     </View>
+
+                    {vouchers.length > 0 && (
+                        <View style={{ marginTop: 32 }}>
+                            <Text style={styles.label}>Payer par Caisse Commune (Bons)</Text>
+                            {vouchers.map((v) => (
+                                <TouchableOpacity
+                                    key={v.id}
+                                    style={styles.voucherCard}
+                                    onPress={() => handleSpendVoucher(v.id, v.amount)}
+                                >
+                                    <Ionicons name="lock-closed" size={24} color="#F59E0B" style={{ marginRight: 12 }} />
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ fontWeight: '700', fontSize: 16, color: COLORS.textPrimary }}>
+                                            {v.vault?.name}
+                                        </Text>
+                                        <Text style={{ color: COLORS.textSecondary }}>Bon pré-approuvé</Text>
+                                    </View>
+                                    <View style={{ alignItems: 'flex-end' }}>
+                                        <Text style={{ fontWeight: '800', color: '#10B981', fontSize: 16 }}>{v.amount.toLocaleString()} F</Text>
+                                        <Text style={{ color: '#F59E0B', fontSize: 12, fontWeight: '700', marginTop: 2 }}>UTILISER</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
                 </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>
@@ -426,6 +483,12 @@ const styles = StyleSheet.create({
         shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
     },
     sendBtnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+
+    voucherCard: {
+        flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEEFC2',
+        padding: 16, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#F59E0B',
+        shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8
+    },
 
     // Succès
     successIconWrap: { marginBottom: 24 },

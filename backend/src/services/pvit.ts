@@ -59,10 +59,13 @@ export async function initiatePvitPayment(settings: PVitSettings, params: {
 
     let res: Response;
     try {
-        res = await fetch(`${PVIT_BASE_URL}/${settings.pvitCodeUrlPayment}/rest`, {
+        const urlCode = settings.pvitCodeUrlPayment!.trim();
+        const secret = settings.pvitSecretKey!.trim();
+
+        res = await fetch(`${PVIT_BASE_URL}/${urlCode}/rest`, {
             method: 'POST',
             headers: {
-                'X-Secret': settings.pvitSecretKey!,
+                'X-Secret': secret,
                 'X-Callback-MediaType': 'application/json',
                 'Content-Type': 'application/json',
             },
@@ -98,6 +101,63 @@ export async function initiatePvitPayment(settings: PVitSettings, params: {
             network: params.network,
         });
         throw new Error(detail ? `PVit : ${detail}` : `PVit a refusé la demande (HTTP ${res.status}).`);
+    }
+    return data;
+}
+
+// Fonction pour Envoyer de l'argent depuis Mongain vers un compte Mobile Money (Retrait client)
+export async function initiatePvitTransfer(settings: PVitSettings, params: {
+    amount: number;
+    reference: string;
+    customerAccountNumber: string;
+    network: PVitNetwork;
+}): Promise<PVitPaymentResponse> {
+    if (!isPvitConfigured(settings)) throw new Error('PVit non configuré.');
+
+    let res: Response;
+    try {
+        const urlCode = settings.pvitCodeUrlPayment!.trim();
+        const secret = settings.pvitSecretKey!.trim();
+
+        res = await fetch(`${PVIT_BASE_URL}/${urlCode}/rest`, {
+            method: 'POST',
+            headers: {
+                'X-Secret': secret,
+                'X-Callback-MediaType': 'application/json',
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                amount: params.amount,
+                reference: params.reference,
+                service: 'RESTFUL',
+                // Clé importante pour les retraits : TRANSFER au lieu de PAYMENT.
+                // Cela ordonne à PVit de débiter notre compte marchand et de créditer le client.
+                transaction_type: 'TRANSFER',
+                operator_code: OPERATOR_CODES[params.network],
+                customer_account_number: params.customerAccountNumber,
+                merchant_operation_account_code: settings.pvitMerchantOperationAccountCode,
+                callback_url_code: settings.pvitCallbackUrlCode,
+                owner_charge: 'CUSTOMER',
+                owner_charge_operator: 'CUSTOMER',
+            }),
+        });
+    } catch {
+        throw new Error('Impossible de contacter PVit. Réessayez dans un instant.');
+    }
+
+    const rawBody = await res.text();
+    let data: any = null;
+    try { data = rawBody ? JSON.parse(rawBody) : null; } catch { /* corps non-JSON, géré ci-dessous */ }
+
+    if (!res.ok || !data) {
+        const detail = data?.message || data?.error || data?.errors || (rawBody && rawBody.length < 300 ? rawBody : null);
+        await logError('PVIT_TRANSFER', detail ? String(detail) : `HTTP ${res.status}`, {
+            httpStatus: res.status,
+            rawBody: rawBody?.slice(0, 2000),
+            requestReference: params.reference,
+            network: params.network,
+        });
+        throw new Error(detail ? `PVit : ${detail}` : `PVit a refusé la demande de transfert (HTTP ${res.status}).`);
     }
     return data;
 }

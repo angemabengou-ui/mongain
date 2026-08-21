@@ -32,6 +32,7 @@
     "tsx": "^4.23.5",
     "twilio": "^6.0.2",
     "typescript": "^7.0.2",
+    "winston": "^3.19.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

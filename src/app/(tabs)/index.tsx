@@ -221,6 +221,8 @@ export default function DashboardScreen() {
                 <ServiceItem icon="tv" label="Abo TV" color="#3B82F6" onPress={() => router.push('/services/tv' as any)} styles={styles} />
 
                 <ServiceItem icon="lock-closed" label="Tontine" color="#10B981" disabled={!appConfig.tontineEnabled} onPress={() => router.push('/services/tontine' as any)} styles={styles} />
+
+                <ServiceItem icon="shield-checkmark" label="Caisses" color="#F59E0B" onPress={() => router.push('/services/vaults' as any)} styles={styles} />
               </View>
             </View>
 
@@ -383,13 +385,13 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
 
   serviceSection: { marginTop: 28 },
   serviceGrid: {
-    flexDirection: 'row', justifyContent: 'space-between',
+    flexDirection: 'row', justifyContent: 'flex-start', flexWrap: 'wrap', rowGap: 16, columnGap: 16,
     backgroundColor: COLORS.surface, borderRadius: 20, padding: 18,
     borderWidth: 1, borderColor: COLORS.border,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 8, elevation: 1,
     marginTop: 16,
   },
-  serviceItemContainer: { alignItems: 'center', width: '22%' },
+  serviceItemContainer: { alignItems: 'center', width: '21%' },
   serviceIconWrap: { width: 48, height: 48, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   serviceLabel: { fontSize: 11, fontWeight: '600', color: COLORS.textSecondary, textAlign: 'center' },
 

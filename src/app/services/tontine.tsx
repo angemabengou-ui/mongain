@@ -1,9 +1,28 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
-import { apiCreateTontine, apiGetTontineDetails, apiGetTontineGroups, apiInviteToTontine, apiReorderTontine } from '../../services/api';
+import {
+    apiCreateTontine,
+    apiGetTontineDetails,
+    apiGetTontineGroups,
+    apiInviteToTontine,
+    apiReorderTontine
+} from '../../services/api';
 
 interface TontineGroup {
     id: string;
@@ -26,6 +45,7 @@ interface Participant {
 export default function TontineScreen() {
     const { user } = useAuth();
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const [myParticipations, setMyParticipations] = useState<Participant[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -66,7 +86,7 @@ export default function TontineScreen() {
         }
         try {
             const res = await apiCreateTontine(newGroupName, parseFloat(newGroupContribution.replace(/\s/g, '').replace(',', '.')), newGroupFrequency);
-            Alert.alert("Félicitations", res.message || "Votre club a été créé avec succès.");
+            Alert.alert("Succès", res.message || "Club créé avec succès.");
             setCreateModalVisible(false);
             setNewGroupName('');
             setNewGroupContribution('');
@@ -81,7 +101,7 @@ export default function TontineScreen() {
             const res = await apiGetTontineDetails(groupId);
             if (res.success) {
                 setSelectedGroupDetails(res.data);
-                setInviteMessage(null); // Reset UI alert when opening
+                setInviteMessage(null);
                 setDetailsModalVisible(true);
             } else {
                 Alert.alert("Erreur", res.message);
@@ -97,9 +117,7 @@ export default function TontineScreen() {
         setInviteMessage(null);
 
         let formatted = invitePhone.trim();
-        // Si le numéro ne contient pas de +, on assume le préfixe +241
         if (!formatted.startsWith('+')) {
-            // Nettoyer si l'utilisateur a écrit 074... 
             if (formatted.startsWith('0')) formatted = formatted.substring(1);
             formatted = '+241' + formatted;
         }
@@ -108,11 +126,10 @@ export default function TontineScreen() {
             const res = await apiInviteToTontine(selectedGroupDetails.id, formatted);
             setInviteMessage({ type: 'success', text: "✓ " + res.message });
             setInvitePhone('');
-            // Reload details
             const updated = await apiGetTontineDetails(selectedGroupDetails.id);
             setSelectedGroupDetails(updated.data);
         } catch (error: any) {
-            setInviteMessage({ type: 'error', text: "❌ " + (error.message || "Erreur lors de l'invitation.") });
+            setInviteMessage({ type: 'error', text: "❌ " + (error.message || "Erreur d'invitation.") });
         } finally {
             setInviteLoading(false);
         }
@@ -120,10 +137,6 @@ export default function TontineScreen() {
 
     const handleReorder = async (participantId: string, direction: 'UP' | 'DOWN') => {
         if (!selectedGroupDetails) return;
-        // Copie profonde des participants concernés : les muter directement (même après un
-        // spread superficiel de l'array) modifiait les mêmes objets que l'état React
-        // affiché, donc un ordre jamais confirmé par le serveur restait visible à l'écran
-        // en cas d'échec de la requête ci-dessous.
         const currentList = selectedGroupDetails.participants.map((p: any) => ({ ...p }));
         const index = currentList.findIndex((p: any) => p.id === participantId);
         if (index < 0) return;
@@ -137,7 +150,7 @@ export default function TontineScreen() {
             currentList[index + 1].payoutOrder = currentList[index].payoutOrder;
             currentList[index].payoutOrder = temp;
         } else {
-            return; // invalid move
+            return;
         }
 
         const map = currentList.map((p: any) => ({ participantId: p.id, newOrder: p.payoutOrder }));
@@ -153,388 +166,296 @@ export default function TontineScreen() {
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#208AEF" />
+                <ActivityIndicator size="large" color="#4ADE80" />
+                <Text style={{ color: '#fff', marginTop: 15, fontWeight: '600' }}>Chargement des clubs...</Text>
             </View>
         );
     }
 
     return (
-        <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 50 }}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={24} color="#FFF" />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Épargne & Tontine</Text>
-            </View>
-
-            {myParticipations.length > 0 && (
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Mes Cotisations en cours</Text>
-                    {myParticipations.map(p => (
-                        <TouchableOpacity key={p.id} style={styles.cardActive} onPress={() => openManagementModal(p.group.id)}>
-                            <View style={styles.cardHeader}>
-                                <Text style={styles.cardTitle}>{p.group.name}</Text>
-                                <View style={styles.badge}>
-                                    <Text style={styles.badgeText}>Ordre: #{p.payoutOrder}</Text>
-                                </View>
-                            </View>
-                            <Text style={styles.cardDesc}>
-                                Prélèvement : <Text style={styles.bold}>{p.group.contribution} FCFA</Text> / {p.group.frequency === 'MONTHLY' ? 'Mois' : 'Semaine'}
-                            </Text>
-
-                            {p.payoutOrder === p.group.currentCycle ? (
-                                <Text style={[styles.statusText, { color: '#FBBF24', fontSize: 14, fontWeight: '800' }]}>🎉 C'est à vous de recevoir la cagnotte (Cycle #{p.group.currentCycle}) !</Text>
-                            ) : (
-                                <Text style={[styles.statusText, { color: '#A19BB0' }]}>Cycle actuel : #{p.group.currentCycle} (En attente de votre tour)</Text>
-                            )}
-                            <Text style={[styles.statusText, { color: '#888', marginTop: 10 }]}>Tapotez pour voir les détails 👀</Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            )}
-
-            <View style={styles.section}>
-                <View style={styles.sectionHeaderRow}>
-                    <Text style={styles.sectionTitle}>Nouveau Club</Text>
-                    <TouchableOpacity onPress={() => setCreateModalVisible(true)} style={styles.createBtn}>
-                        <Ionicons name="add" size={20} color="#FFF" />
-                        <Text style={styles.createBtnText}>Créer</Text>
+        <SafeAreaView style={styles.safeArea}>
+            <View style={styles.headerHero}>
+                <View style={styles.headerRow}>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.iconBtnLayer}>
+                        <Ionicons name="arrow-back" size={24} color="#FFF" />
+                    </TouchableOpacity>
+                    <Text style={styles.heroTitle}>Tontines</Text>
+                    <TouchableOpacity onPress={() => setCreateModalVisible(true)} style={styles.iconBtnLayerSolid}>
+                        <Ionicons name="add" size={24} color="#FFF" />
                     </TouchableOpacity>
                 </View>
-                <Text style={styles.emptyText}>Créez votre club puis invitez des membres par numéro de téléphone depuis sa page de gestion.</Text>
+                <Text style={styles.heroDesc}>
+                    Épargnez ensemble, gagnez plus vite.
+                </Text>
             </View>
 
-            {/* Modal de Création de Tontine */}
+            <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: insets.bottom + 100, paddingTop: 10 }} showsVerticalScrollIndicator={false}>
+                {myParticipations.length === 0 ? (
+                    <View style={styles.emptyState}>
+                        <View style={styles.emptyIconCircle}>
+                            <Ionicons name="wallet-outline" size={48} color="#208AEF" />
+                        </View>
+                        <Text style={styles.emptyTitle}>Aucune tontine active</Text>
+                        <Text style={styles.emptySubtitle}>
+                            Créez votre premier club pour commencer à épargner avec vos amis ou votre famille.
+                        </Text>
+                        <TouchableOpacity onPress={() => setCreateModalVisible(true)} style={styles.primaryPillBtn}>
+                            <Text style={styles.primaryPillText}>Lancer un nouveau club</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionLabel}>VOS CLUBS ACTIFS</Text>
+
+                        {myParticipations.map(p => {
+                            const isMyTurn = p.payoutOrder === p.group.currentCycle;
+                            return (
+                                <TouchableOpacity key={p.id} style={[styles.glassCard, isMyTurn && styles.glassCardGolden]} onPress={() => openManagementModal(p.group.id)}>
+                                    <View style={styles.cardTop}>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={styles.cardHeaderTitle}>{p.group.name}</Text>
+                                            <Text style={styles.cardMetaInfo}>
+                                                <Ionicons name="time-outline" size={14} color="#A19BB0" /> {p.group.frequency === 'MONTHLY' ? 'Mensuel' : 'Hebdo'}  •  #{p.payoutOrder} sur {p.group._count?.participants || '?'}
+                                            </Text>
+                                        </View>
+                                        <View style={styles.circleBadge}>
+                                            <Ionicons name="chevron-forward" size={18} color="#A19BB0" />
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.divider} />
+
+                                    <View style={styles.cardBottom}>
+                                        <View>
+                                            <Text style={styles.lightLabel}>Cotisation</Text>
+                                            <Text style={styles.mainFigure}>{p.group.contribution.toLocaleString('fr-FR')} FCFA</Text>
+                                        </View>
+
+                                        <View style={{ alignItems: 'flex-end' }}>
+                                            <Text style={styles.lightLabel}>Cycle Actuel</Text>
+                                            <View style={[styles.statusBadge, isMyTurn && styles.statusBadgeGolden]}>
+                                                {isMyTurn ? (
+                                                    <Ionicons name="gift" size={12} color="#F59E0B" style={{ marginRight: 4 }} />
+                                                ) : (
+                                                    <Ionicons name="sync" size={12} color="#208AEF" style={{ marginRight: 4 }} />
+                                                )}
+                                                <Text style={[styles.statusBadgeText, isMyTurn && { color: '#F59E0B' }]}>
+                                                    {isMyTurn ? "C'est votre tour !" : `N° ${p.group.currentCycle}`}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    </View>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+                )}
+            </ScrollView>
+
+            {/* Modal: Creation */}
             <Modal visible={createModalVisible} transparent animationType="slide" onRequestClose={() => setCreateModalVisible(false)}>
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Créer un Club de Tontine</Text>
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+                    <View style={[styles.bottomSheet, { paddingBottom: Math.max(insets.bottom + 20, 30) }]}>
+                        <View style={styles.sheetHandle} />
+                        <Text style={styles.sheetTitle}>Nouveau Club de Tontine</Text>
+                        <Text style={styles.sheetSubtitle}>Configurez les règles de cotisation de votre futur groupe.</Text>
 
-                        <Text style={styles.label}>Nom du club</Text>
-                        <TextInput style={styles.input} placeholderTextColor="#A19BB0" placeholder="Ex: Tontine Famille" value={newGroupName} onChangeText={setNewGroupName} autoCapitalize="words" />
+                        <Text style={styles.inputLabel}>Nom du Club</Text>
+                        <TextInput style={styles.inputField} placeholderTextColor="#71717A" placeholder="Ex: Tontine Famille" value={newGroupName} onChangeText={setNewGroupName} autoCapitalize="words" />
 
-                        <Text style={styles.label}>Cotisation (FCFA)</Text>
-                        <TextInput style={styles.input} placeholderTextColor="#A19BB0" placeholder="Ex: 5000" keyboardType="numeric" value={newGroupContribution} onChangeText={setNewGroupContribution} />
+                        <Text style={styles.inputLabel}>Montant de la cotisation (FCFA)</Text>
+                        <TextInput style={styles.inputField} placeholderTextColor="#71717A" placeholder="Ex: 10000" keyboardType="numeric" value={newGroupContribution} onChangeText={setNewGroupContribution} />
 
-                        <Text style={styles.label}>Fréquence</Text>
-                        <View style={styles.frequencyRow}>
-                            <TouchableOpacity style={[styles.freqBtn, newGroupFrequency === 'WEEKLY' && styles.freqBtnActive]} onPress={() => setNewGroupFrequency('WEEKLY')}>
-                                <Text style={[styles.freqText, newGroupFrequency === 'WEEKLY' && styles.freqTextActive]}>Hebdomadaire</Text>
+                        <Text style={styles.inputLabel}>Fréquence des prélèvements</Text>
+                        <View style={styles.radioGroup}>
+                            <TouchableOpacity style={[styles.radioBtn, newGroupFrequency === 'WEEKLY' && styles.radioBtnActive]} onPress={() => setNewGroupFrequency('WEEKLY')}>
+                                <Text style={[styles.radioText, newGroupFrequency === 'WEEKLY' && styles.radioTextActive]}>Hebdomadaire</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={[styles.freqBtn, newGroupFrequency === 'MONTHLY' && styles.freqBtnActive]} onPress={() => setNewGroupFrequency('MONTHLY')}>
-                                <Text style={[styles.freqText, newGroupFrequency === 'MONTHLY' && styles.freqTextActive]}>Mensuelle</Text>
+                            <TouchableOpacity style={[styles.radioBtn, newGroupFrequency === 'MONTHLY' && styles.radioBtnActive]} onPress={() => setNewGroupFrequency('MONTHLY')}>
+                                <Text style={[styles.radioText, newGroupFrequency === 'MONTHLY' && styles.radioTextActive]}>Mensuelle</Text>
                             </TouchableOpacity>
                         </View>
 
-                        <View style={styles.modalActions}>
-                            <TouchableOpacity style={styles.cancelBtn} onPress={() => setCreateModalVisible(false)}>
-                                <Text style={styles.cancelBtnText}>Annuler</Text>
+                        <View style={styles.actionRow}>
+                            <TouchableOpacity style={styles.btnSecondary} onPress={() => setCreateModalVisible(false)}>
+                                <Text style={styles.btnSecondaryText}>Annuler</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={styles.confirmCreateBtn} onPress={handleCreate}>
-                                <Text style={styles.confirmCreateText}>Créer le club</Text>
+                            <TouchableOpacity style={styles.btnPrimary} onPress={handleCreate}>
+                                <Text style={styles.btnPrimaryText}>Créer le club</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
 
-            {/* Modal de Détails (Gestion) */}
+            {/* Modal: Management */}
             <Modal visible={detailsModalVisible} transparent animationType="slide" onRequestClose={() => setDetailsModalVisible(false)}>
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+                    <View style={[styles.bottomSheet, { height: '85%', paddingBottom: Math.max(insets.bottom + 20, 30) }]}>
+                        <View style={styles.sheetHandle} />
+
                         {selectedGroupDetails && (
-                            <>
-                                <View style={styles.cardHeader}>
-                                    <Text style={styles.modalTitle}>{selectedGroupDetails.name}</Text>
-                                    <TouchableOpacity onPress={() => { setDetailsModalVisible(false); loadData(); }}>
+                            <View style={{ flex: 1 }}>
+                                <View style={styles.sheetHeaderWithAction}>
+                                    <View>
+                                        <Text style={styles.sheetTitle}>{selectedGroupDetails.name}</Text>
+                                        <Text style={styles.sheetSubtitle}>Cagnotte totale : <Text style={{ color: '#4ADE80', fontWeight: 'bold' }}>{(selectedGroupDetails.contribution * selectedGroupDetails.participants.length).toLocaleString('fr-FR')} FCFA</Text></Text>
+                                    </View>
+                                    <TouchableOpacity onPress={() => { setDetailsModalVisible(false); loadData(); }} style={styles.closeBtn}>
                                         <Ionicons name="close" size={24} color="#FFF" />
                                     </TouchableOpacity>
                                 </View>
-                                <Text style={styles.cardDesc}>
-                                    Cagnotte totale attendue : <Text style={{ color: '#4ADE80', fontWeight: 'bold' }}>{selectedGroupDetails.contribution * selectedGroupDetails.participants.length} FCFA</Text>
-                                </Text>
 
-                                {selectedGroupDetails.creatorId === user?.id && (
-                                    <View style={{ marginTop: 15, marginBottom: 15 }}>
-                                        <Text style={styles.label}>Inviter un membre (N° Téléphone)</Text>
-                                        <View style={{ flexDirection: 'row', gap: 10 }}>
-                                            <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholderTextColor="#A19BB0" placeholder="Ex: 07455..." keyboardType="phone-pad" value={invitePhone} onChangeText={setInvitePhone} />
-                                            <TouchableOpacity style={{ backgroundColor: '#208AEF', paddingHorizontal: 15, borderRadius: 12, justifyContent: 'center' }} onPress={handleInvite} disabled={inviteLoading}>
-                                                {inviteLoading ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Inviter</Text>}
-                                            </TouchableOpacity>
-                                        </View>
-                                        {inviteMessage && (
-                                            <Text style={{ color: inviteMessage.type === 'error' ? '#EF4444' : '#4ADE80', marginTop: 10, fontWeight: 'bold', fontSize: 13 }}>
-                                                {inviteMessage.text}
-                                            </Text>
-                                        )}
-                                    </View>
-                                )}
+                                <ScrollView style={{ flex: 1, marginTop: 10 }} showsVerticalScrollIndicator={false}>
 
-                                <Text style={styles.sectionTitle}>Membres du Club</Text>
-                                <ScrollView style={{ maxHeight: 250 }}>
-                                    {selectedGroupDetails.participants.map((p: any) => (
-                                        <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#2D1F4D', padding: 12, borderRadius: 8, marginBottom: 8 }}>
-                                            <Text style={{ color: p.user.id === user?.id ? '#208AEF' : '#FFF', flex: 1, fontWeight: 'bold' }}>
-                                                #{p.payoutOrder} - {p.user.name} {p.user.id === user?.id ? '(Moi)' : ''}
-                                            </Text>
-
-                                            {selectedGroupDetails.creatorId === user?.id && p.user.id !== user?.id && (
-                                                <View style={{ flexDirection: 'row', gap: 8 }}>
-                                                    <TouchableOpacity onPress={() => handleReorder(p.id, 'UP')}>
-                                                        <Ionicons name="caret-up-circle" size={24} color="#4ADE80" />
-                                                    </TouchableOpacity>
-                                                    <TouchableOpacity onPress={() => handleReorder(p.id, 'DOWN')}>
-                                                        <Ionicons name="caret-down-circle" size={24} color="#FBBF24" />
-                                                    </TouchableOpacity>
-                                                </View>
+                                    {selectedGroupDetails.creatorId === user?.id && (
+                                        <View style={styles.inviteBox}>
+                                            <Text style={[styles.inputLabel, { color: '#FFF' }]}>Ajouter un membre</Text>
+                                            <View style={styles.inviteRow}>
+                                                <TextInput
+                                                    style={styles.inviteInput}
+                                                    placeholderTextColor="#A19BB0"
+                                                    placeholder="Téléphone (ex: 074...)"
+                                                    keyboardType="phone-pad"
+                                                    value={invitePhone}
+                                                    onChangeText={setInvitePhone}
+                                                />
+                                                <TouchableOpacity style={styles.inviteActionBtn} onPress={handleInvite} disabled={inviteLoading}>
+                                                    {inviteLoading ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="send" size={18} color="#FFF" />}
+                                                </TouchableOpacity>
+                                            </View>
+                                            {inviteMessage && (
+                                                <Text style={{ color: inviteMessage.type === 'error' ? '#EF4444' : '#4ADE80', marginTop: 10, fontSize: 13, fontWeight: '600' }}>
+                                                    {inviteMessage.text}
+                                                </Text>
                                             )}
                                         </View>
-                                    ))}
+                                    )}
+
+                                    <View style={styles.membersHeader}>
+                                        <Text style={styles.sectionLabel}>ORDRE DE PASSAGE ({selectedGroupDetails.participants.length})</Text>
+                                    </View>
+
+                                    <View style={styles.membersList}>
+                                        {selectedGroupDetails.participants.map((p: any, idx: number) => {
+                                            const isMe = p.user.id === user?.id;
+                                            const isCurrentTurn = p.payoutOrder === selectedGroupDetails.currentCycle;
+                                            const isPast = p.payoutOrder < selectedGroupDetails.currentCycle;
+
+                                            return (
+                                                <View key={p.id} style={[styles.memberRow, isMe && styles.memberRowMe]}>
+                                                    <View style={[styles.orderCircle, isCurrentTurn && { backgroundColor: '#F59E0B' }, isPast && { opacity: 0.5 }]}>
+                                                        {isPast ? <Ionicons name="checkmark" size={14} color="#FFF" /> : <Text style={styles.orderCircleText}>{p.payoutOrder}</Text>}
+                                                    </View>
+                                                    <View style={{ flex: 1, marginLeft: 12 }}>
+                                                        <Text style={[styles.memberName, isMe && { color: '#4ADE80' }, isPast && { color: '#71717A' }]}>
+                                                            {p.user.name} {isMe ? '(Vous)' : ''}
+                                                        </Text>
+                                                        <Text style={styles.memberPhone}>{p.user.phone}</Text>
+                                                    </View>
+
+                                                    {selectedGroupDetails.creatorId === user?.id && !isMe && (
+                                                        <View style={{ flexDirection: 'row', gap: 6 }}>
+                                                            {idx > 0 && (
+                                                                <TouchableOpacity style={styles.sortBtn} onPress={() => handleReorder(p.id, 'UP')}>
+                                                                    <Ionicons name="chevron-up" size={18} color="#A19BB0" />
+                                                                </TouchableOpacity>
+                                                            )}
+                                                            {idx < selectedGroupDetails.participants.length - 1 && (
+                                                                <TouchableOpacity style={styles.sortBtn} onPress={() => handleReorder(p.id, 'DOWN')}>
+                                                                    <Ionicons name="chevron-down" size={18} color="#A19BB0" />
+                                                                </TouchableOpacity>
+                                                            )}
+                                                        </View>
+                                                    )}
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
                                 </ScrollView>
-                            </>
+                            </View>
                         )}
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
-        </ScrollView>
+        </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#130925',
-    },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#130925',
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingTop: 50,
-        paddingBottom: 20,
-        paddingHorizontal: 20,
-        backgroundColor: '#1C1236',
-        borderBottomLeftRadius: 20,
-        borderBottomRightRadius: 20,
-        marginBottom: 20,
-    },
-    backButton: {
-        padding: 5,
-        marginRight: 15,
-    },
-    headerTitle: {
-        color: '#FFF',
-        fontSize: 22,
-        fontWeight: '700',
-    },
-    section: {
-        paddingHorizontal: 20,
-        marginBottom: 30,
-    },
-    sectionTitle: {
-        color: '#A19BB0',
-        fontSize: 16,
-        fontWeight: '600',
-        marginBottom: 15,
-        textTransform: 'uppercase',
-    },
-    card: {
-        backgroundColor: '#1C1236',
-        borderRadius: 16,
-        padding: 18,
-        marginBottom: 15,
-        borderWidth: 1,
-        borderColor: '#2D1F4D',
-    },
-    cardActive: {
-        backgroundColor: 'rgba(32, 138, 239, 0.1)',
-        borderRadius: 16,
-        padding: 18,
-        marginBottom: 15,
-        borderWidth: 1,
-        borderColor: '#208AEF',
-    },
-    cardHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 10,
-    },
-    cardTitle: {
-        color: '#FFF',
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
-    badge: {
-        backgroundColor: '#208AEF',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    badgeText: {
-        color: '#FFF',
-        fontSize: 12,
-        fontWeight: 'bold',
-    },
-    participantsBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(32, 138, 239, 0.15)',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-    },
-    participantsText: {
-        color: '#208AEF',
-        fontSize: 13,
-        fontWeight: 'bold',
-    },
-    cardDesc: {
-        color: '#A19BB0',
-        fontSize: 15,
-        lineHeight: 22,
-        marginBottom: 5,
-    },
-    bold: {
-        color: '#FFF',
-        fontWeight: 'bold',
-    },
-    statusText: {
-        color: '#4ADE80',
-        fontSize: 13,
-        fontWeight: '600',
-        marginTop: 5,
-    },
-    emptyText: {
-        color: '#666',
-        fontStyle: 'italic',
-        textAlign: 'center',
-        marginTop: 10,
-    },
-    joinBtn: {
-        backgroundColor: '#208AEF',
-        borderRadius: 12,
-        paddingVertical: 12,
-        alignItems: 'center',
-        marginTop: 15,
-    },
-    joinBtnText: {
-        color: '#FFF',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    sectionHeaderRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 15,
-    },
-    createBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#4ADE80',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
-    },
-    createBtnText: {
-        color: '#FFF',
-        fontWeight: 'bold',
-        marginLeft: 4,
-        fontSize: 14,
-    },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        justifyContent: 'flex-end',
-    },
-    modalContent: {
-        backgroundColor: '#1C1236',
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        padding: 24,
-    },
-    modalTitle: {
-        color: '#FFF',
-        fontSize: 20,
-        fontWeight: 'bold',
-        marginBottom: 20,
-        textAlign: 'center',
-    },
-    label: {
-        color: '#A19BB0',
-        marginBottom: 8,
-        fontWeight: '600',
-    },
-    input: {
-        backgroundColor: '#130925',
-        color: '#FFF',
-        borderRadius: 12,
-        padding: 14,
-        fontSize: 16,
-        marginBottom: 20,
-        borderWidth: 1,
-        borderColor: '#2D1F4D',
-    },
-    frequencyRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 30,
-    },
-    freqBtn: {
-        flex: 1,
-        backgroundColor: '#130925',
-        paddingVertical: 12,
-        borderRadius: 12,
-        marginHorizontal: 5,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#2D1F4D',
-    },
-    freqBtnActive: {
-        backgroundColor: 'rgba(32, 138, 239, 0.2)',
-        borderColor: '#208AEF',
-    },
-    freqText: {
-        color: '#A19BB0',
-        fontWeight: 'bold',
-    },
-    freqTextActive: {
-        color: '#208AEF',
-    },
-    modalActions: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-    },
-    cancelBtn: {
-        flex: 1,
-        backgroundColor: '#2D1F4D',
-        padding: 16,
-        borderRadius: 12,
-        alignItems: 'center',
-        marginRight: 10,
-    },
-    cancelBtnText: {
-        color: '#FFF',
-        fontWeight: 'bold',
-        fontSize: 16,
-    },
-    confirmCreateBtn: {
-        flex: 1,
-        backgroundColor: '#208AEF',
-        padding: 16,
-        borderRadius: 12,
-        alignItems: 'center',
-        marginLeft: 10,
-    },
-    confirmCreateText: {
-        color: '#FFF',
-        fontWeight: 'bold',
-        fontSize: 16,
-    }
+    safeArea: { flex: 1, backgroundColor: '#090514' },
+    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#090514' },
+
+    headerHero: { paddingHorizontal: 24, paddingTop: Platform.OS === 'android' ? 40 : 10, paddingBottom: 30, backgroundColor: '#110A24', borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
+    headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+    iconBtnLayer: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.05)', justifyContent: 'center', alignItems: 'center' },
+    iconBtnLayerSolid: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#208AEF', justifyContent: 'center', alignItems: 'center', shadowColor: '#208AEF', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10 },
+    heroTitle: { fontSize: 24, fontWeight: '800', color: '#FFF' },
+    heroDesc: { fontSize: 15, color: '#A19BB0', lineHeight: 22 },
+
+    container: { flex: 1, paddingHorizontal: 20 },
+    section: { marginTop: 20 },
+    sectionLabel: { fontSize: 12, fontWeight: '700', color: '#71717A', letterSpacing: 1.2, marginBottom: 15, textTransform: 'uppercase' },
+
+    glassCard: { backgroundColor: '#160E2A', borderRadius: 24, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)' },
+    glassCardGolden: { borderColor: 'rgba(245, 158, 11, 0.3)', backgroundColor: '#1A1423' },
+
+    cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    cardHeaderTitle: { fontSize: 18, fontWeight: '700', color: '#FFF', marginBottom: 4 },
+    cardMetaInfo: { fontSize: 13, color: '#A19BB0', fontWeight: '500' },
+    circleBadge: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.05)', justifyContent: 'center', alignItems: 'center' },
+
+    divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginVertical: 16 },
+
+    cardBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+    lightLabel: { fontSize: 12, color: '#71717A', fontWeight: '600', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+    mainFigure: { fontSize: 20, fontWeight: '800', color: '#FFF' },
+    statusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(32,138,239,0.15)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
+    statusBadgeGolden: { backgroundColor: 'rgba(245,158,11,0.15)' },
+    statusBadgeText: { fontSize: 13, fontWeight: '700', color: '#208AEF' },
+
+    emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 100 },
+    emptyIconCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(32, 138, 239, 0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
+    emptyTitle: { fontSize: 22, fontWeight: '700', color: '#FFF', marginBottom: 12 },
+    emptySubtitle: { fontSize: 15, color: '#A19BB0', textAlign: 'center', paddingHorizontal: 20, lineHeight: 22, marginBottom: 32 },
+    primaryPillBtn: { backgroundColor: '#208AEF', paddingVertical: 16, paddingHorizontal: 32, borderRadius: 30, shadowColor: '#208AEF', shadowOpacity: 0.4, shadowOffset: { width: 0, height: 6 }, shadowRadius: 15 },
+    primaryPillText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
+    bottomSheet: { backgroundColor: '#110A24', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24 },
+    sheetHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginBottom: 24 },
+    sheetHeaderWithAction: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+    closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
+    sheetTitle: { fontSize: 22, fontWeight: '800', color: '#FFF', marginBottom: 6 },
+    sheetSubtitle: { fontSize: 15, color: '#A19BB0', marginBottom: 24, lineHeight: 22 },
+
+    inputLabel: { fontSize: 13, fontWeight: '600', color: '#A19BB0', marginBottom: 10, marginTop: 10 },
+    inputField: { backgroundColor: '#1A1130', borderRadius: 16, padding: 16, color: '#FFF', fontSize: 16, borderWidth: 1, borderColor: '#2A1D45', marginBottom: 10 },
+
+    radioGroup: { flexDirection: 'row', gap: 12, marginBottom: 30 },
+    radioBtn: { flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: '#1A1130', borderWidth: 1, borderColor: '#2A1D45', alignItems: 'center' },
+    radioBtnActive: { backgroundColor: 'rgba(32,138,239,0.15)', borderColor: '#208AEF' },
+    radioText: { color: '#71717A', fontWeight: '600', fontSize: 14 },
+    radioTextActive: { color: '#208AEF', fontWeight: '700' },
+
+    actionRow: { flexDirection: 'row', gap: 12, marginTop: 10 },
+    btnSecondary: { flex: 1, paddingVertical: 16, borderRadius: 16, backgroundColor: '#2A1D45', alignItems: 'center' },
+    btnSecondaryText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+    btnPrimary: { flex: 1, paddingVertical: 16, borderRadius: 16, backgroundColor: '#4ADE80', alignItems: 'center' },
+    btnPrimaryText: { color: '#090514', fontSize: 16, fontWeight: '700' },
+
+    inviteBox: { backgroundColor: '#1A1130', borderRadius: 20, padding: 20, marginBottom: 24, borderWidth: 1, borderColor: 'rgba(74, 222, 128, 0.2)' },
+    inviteRow: { flexDirection: 'row', gap: 12 },
+    inviteInput: { flex: 1, backgroundColor: '#090514', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, color: '#FFF', fontSize: 15 },
+    inviteActionBtn: { width: 48, backgroundColor: '#4ADE80', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+
+    membersHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+    membersList: { backgroundColor: '#160E2A', borderRadius: 20, padding: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)' },
+    memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.04)' },
+    memberRowMe: { backgroundColor: 'rgba(74, 222, 128, 0.05)', borderRadius: 12, borderBottomWidth: 0 },
+    orderCircle: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#208AEF', justifyContent: 'center', alignItems: 'center' },
+    orderCircleText: { color: '#FFF', fontSize: 13, fontWeight: '800' },
+    memberName: { fontSize: 15, fontWeight: '700', color: '#FFF', marginBottom: 2 },
+    memberPhone: { fontSize: 13, color: '#71717A' },
+    sortBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#090514', justifyContent: 'center', alignItems: 'center' }
 });

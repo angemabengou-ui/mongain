@@ -16,6 +16,7 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { SecurityFlags } from '../components/SecurityWrapper';
 import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { apiGetMe, apiUpdateProfile } from '../services/api';
@@ -37,6 +38,7 @@ export default function ProfileEditScreen() {
     });
 
     const pickImage = async (field: string) => {
+        SecurityFlags.bypassAppLock = true;
         let result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'],
             allowsEditing: true,
@@ -44,6 +46,10 @@ export default function ProfileEditScreen() {
             quality: 0.1, // très basse qualité pour limiter la taille en Base64
             base64: true
         });
+
+        // Timeout pour éviter que la transition de retour au premier plan (Foreground)
+        // ne déclenche la sécurité avant qu'on ait désactivé le flag
+        setTimeout(() => { SecurityFlags.bypassAppLock = false; }, 1000);
 
         if (!result.canceled && result.assets[0].base64) {
             setDocuments((prev: any) => ({

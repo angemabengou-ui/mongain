@@ -3,13 +3,14 @@ import * as Contacts from 'expo-contacts';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../constants/theme';
 import { apiLookupUser } from '../services/api';
 
 export default function TransferScreen() {
     const COLORS = useAppTheme();
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const [phone, setPhone] = useState('');
     const [recipient, setRecipient] = useState<{ id: string; name: string; phone: string; role?: string } | null>(null);
     const [lookupError, setLookupError] = useState('');
@@ -90,7 +91,6 @@ export default function TransferScreen() {
         <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background }]}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
 
-                {/* Header Clean, sans bouton caché */}
                 <View style={styles.header}>
                     <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
                         <Ionicons name="arrow-back" size={28} color={COLORS.textPrimary} />
@@ -99,7 +99,7 @@ export default function TransferScreen() {
                     <View style={{ width: 44 }} />
                 </View>
 
-                <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+                <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 60) }]} keyboardShouldPersistTaps="handled">
 
                     {/* Grille d'Actions Massives */}
                     <View style={styles.actionGrid}>

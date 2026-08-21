@@ -16,9 +16,11 @@ import servicesRoutes from './routes/services';
 import settingsRoutes from './routes/settings';
 import tontineRoutes from './routes/tontine';
 import treasuryRoutes from './routes/treasury';
+import vaultRoutes from './routes/vault';
 import walletRoutes from './routes/wallet';
 import { logError } from './utils/errorLog';
 import { withDbRetry } from './utils/errors';
+import logger from './utils/logger';
 
 const app = express();
 const server = http.createServer(app);
@@ -97,6 +99,7 @@ app.use('/api/webhooks', webhookRoutes);
 // ==========================================
 app.use('/api/wallet', circuitBreakerMiddleware, walletRoutes);
 app.use('/api/merchant', circuitBreakerMiddleware, merchantRoutes);
+app.use('/api/vaults', circuitBreakerMiddleware, vaultRoutes);
 app.use('/api/tontine', circuitBreakerMiddleware, tontineRoutes);
 app.use('/api/services', circuitBreakerMiddleware, servicesRoutes);
 app.use('/api/agency', circuitBreakerMiddleware, agencyRoutes);
@@ -109,7 +112,7 @@ app.get('/health', (_req, res) => res.json({ status: 'ok', app: 'Mongain Backend
 // Journalisée dans ErrorLog (page "Erreurs Système" de l'admin-web) pour rester visible même
 // sans try/catch dédié à chaque endroit.
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error('Erreur non gérée:', err);
+    logger.error('Erreur non gérée:', err);
     logError('UNCAUGHT', err?.message || String(err), { stack: err?.stack, method: req.method }, { path: req.path });
     if (res.headersSent) return next(err);
     res.status(500).json({ error: 'Une erreur inattendue est survenue.' });
@@ -137,11 +140,11 @@ io.on('connection', (socket) => {
 // à faire échouer tout le déploiement ("Port scan timeout"), alors que rien de fonctionnel
 // n'en dépendait vraiment.
 server.listen(PORT, () => {
-    console.log(`✅ Serveur Mongain en ligne sur http://localhost:${PORT}`);
-    console.log(`🛰️  WebSockets (Socket.io) Actifs`);
+    logger.info(`✅ Serveur Mongain en ligne sur http://localhost:${PORT}`);
+    logger.info(`🛰️  WebSockets (Socket.io) Actifs`);
     if (isProd && !process.env.TWILIO_ACCOUNT_SID) {
-        console.warn('\n⚠️  ⚠️  ⚠️  SMS NON CONFIGURÉ EN PRODUCTION ⚠️  ⚠️  ⚠️');
-        console.warn('Tous les codes OTP (inscription, connexion, réinitialisation de PIN) sont');
+        logger.warn('\n⚠️  ⚠️  ⚠️  SMS NON CONFIGURÉ EN PRODUCTION ⚠️  ⚠️  ⚠️');
+        logger.warn('Tous les codes OTP (inscription, connexion, réinitialisation de PIN) sont');
         console.warn('actuellement fixés à "1234" — quiconque connaît ce code peut réinitialiser');
         console.warn('le PIN de N\'IMPORTE QUEL compte. Ce mode démo doit être désactivé (en');
         console.warn('configurant TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN/TWILIO_PHONE_NUMBER) avant');

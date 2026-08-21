@@ -159,7 +159,8 @@ export const apiGetDailyLimits = () =>
 
 export const apiGetSystemSettings = () =>
     request('GET', '/api/settings', undefined, false) as Promise<{
-        airtelEnabled: boolean, moovEnabled: boolean, seegEnabled: boolean, tontineEnabled: boolean
+        airtelEnabled: boolean, moovEnabled: boolean, seegEnabled: boolean, tontineEnabled: boolean,
+        taxP2P: number, taxWithdraw: number
     }>;
 
 export interface AppNotification {
@@ -198,6 +199,9 @@ export const apiTopUp = (amount: number, cardToken?: string) =>
 
 export const apiPullDeposit = (phone: string, amount: number, network: string) =>
     request('POST', '/api/wallet/pull', { phone, amount, network }, true) as Promise<{ message: string, reference: string, network: string }>;
+
+export const apiPushWithdrawal = (phone: string, amount: number, network: string, pin: string) =>
+    request('POST', '/api/wallet/push', { phone, amount, network, pin }, true) as Promise<{ message: string, reference: string, network: string }>;
 
 export const apiGenerateWithdrawCode = (amount: number) =>
     request('POST', '/api/wallet/generate-withdraw-code', { amount }, true) as Promise<{ code: string; expiresAt: string }>;
@@ -249,3 +253,37 @@ export const apiInviteToTontine = (groupId: string, phone: string) =>
 
 export const apiReorderTontine = (groupId: string, orderMap: { participantId: string, newOrder: number }[]) =>
     request('POST', '/api/tontine/reorder', { groupId, orderMap }, true) as Promise<any>;
+
+// ==========================================
+// VAULTS (CAISSE COMMUNE / MULTISIG)
+// ==========================================
+
+export const apiGetVaults = () =>
+    request('GET', '/api/vaults', undefined, true) as Promise<any>;
+
+export const apiCreateVault = (data: { name: string; description?: string }) =>
+    request('POST', '/api/vaults', data, true) as Promise<any>;
+
+export const apiGetVaultDetails = (id: string) =>
+    request('GET', `/api/vaults/${id}`, undefined, true) as Promise<any>;
+
+export const apiInviteVault = (id: string, phone: string) =>
+    request('POST', `/api/vaults/${id}/invite`, { phone }, true) as Promise<any>;
+
+export const apiUpdateVaultRoles = (id: string, data: { targetUserId: string, isInitiator: boolean, isValidator: boolean, isTreasurer: boolean, isAdmin: boolean }) =>
+    request('PUT', `/api/vaults/${id}/roles`, data, true) as Promise<any>;
+
+export const apiDepositVault = (id: string, amount: string) =>
+    request('POST', `/api/vaults/${id}/deposit`, { amount }, true) as Promise<any>;
+
+export const apiWithdrawRequestVault = (id: string, data: { amount: string, destinationType: string, destinationId?: string }) =>
+    request('POST', `/api/vaults/${id}/withdraw-request`, data, true) as Promise<any>;
+
+export const apiApproveVault = (id: string, txId: string) =>
+    request('POST', `/api/vaults/${id}/approve/${txId}`, undefined, true) as Promise<any>;
+
+export const apiGetMyVouchers = () =>
+    request('GET', '/api/vaults/vouchers/my', undefined, true) as Promise<any>;
+
+export const apiSpendVoucher = (voucherId: string, destinationPhone: string) =>
+    request('POST', `/api/vaults/vouchers/${voucherId}/spend`, { destinationPhone }, true) as Promise<any>;

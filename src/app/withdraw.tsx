@@ -183,24 +183,26 @@ export default function WithdrawScreen() {
                 <Text style={styles.sectionHeader}>PORTEFEUILLES MOBILES ET BANQUES</Text>
 
                 <View style={styles.listContainer}>
-                    <TouchableOpacity onPress={() => { }} disabled={true} style={[styles.listItem, { opacity: 0.5 }]}>
+                    <TouchableOpacity onPress={() => router.push({ pathname: '/withdraw-form', params: { method: 'AIRTEL' } })} style={styles.listItem}>
                         <View style={[styles.listIcon, { backgroundColor: '#EF444415' }]}>
                             <Ionicons name="phone-portrait" size={24} color="#EF4444" />
                         </View>
                         <View style={styles.listTextWrap}>
                             <Text style={styles.listTitle}>Vers Airtel Money</Text>
-                            <Text style={styles.listDesc}>Virement instantané (Bientôt disponible)</Text>
+                            <Text style={styles.listDesc}>Virement automatisé</Text>
                         </View>
+                        <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
                     </TouchableOpacity>
 
-                    <TouchableOpacity onPress={() => { }} disabled={true} style={[styles.listItem, styles.lastListItem, { opacity: 0.5 }]}>
+                    <TouchableOpacity onPress={() => router.push({ pathname: '/withdraw-form', params: { method: 'MOOV' } })} style={[styles.listItem, styles.lastListItem]}>
                         <View style={[styles.listIcon, { backgroundColor: '#3B82F615' }]}>
                             <Ionicons name="phone-portrait-outline" size={24} color="#3B82F6" />
                         </View>
                         <View style={styles.listTextWrap}>
                             <Text style={styles.listTitle}>Vers Moov Africa</Text>
-                            <Text style={styles.listDesc}>Virement instantané (Bientôt disponible)</Text>
+                            <Text style={styles.listDesc}>Virement automatisé</Text>
                         </View>
+                        <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
                     </TouchableOpacity>
                 </View>
 

@@ -222,8 +222,16 @@ export class CashOperationService {
 
             await tx.wallet.update({
                 where: { id: branch.wallet.id },
-                data: { balance: { increment: totalToDeduct } } // L'agence récupère l'electronique (incluant les frais potentiels ou non)
+                data: { balance: { increment: amount } } // L'agence récupère l'équivalent de ce qu'elle sort en physique
             });
+
+            if (fee > 0) {
+                // Le revenu généré par la plateforme va au Corporate
+                const corporate = await tx.user.findFirst({ where: { role: 'SUPER_ADMIN' }, include: { wallet: true }, orderBy: { id: 'asc' } });
+                if (corporate?.wallet) {
+                    await tx.wallet.update({ where: { id: corporate.wallet.id }, data: { balance: { increment: fee } } });
+                }
+            }
 
             // 8. Opération transaction
             const transaction = await tx.transaction.create({

@@ -72,6 +72,7 @@ export default function QrScreen() {
                 const targetPhone = urlParams.get('phone');
                 const targetName = urlParams.get('name') || targetPhone;
                 const targetRole = urlParams.get('role');
+                const qrAction = urlParams.get('action'); // 'pay' or 'withdraw' (added for merchants)
 
                 if (!targetPhone) {
                     showError('QR Code invalide : Numéro manquant.');
@@ -85,8 +86,11 @@ export default function QrScreen() {
                 // scanné n'appartient pas à un Agent, on refuse plutôt que de basculer
                 // silencieusement vers un transfert P2P classique (qui enverrait de l'argent au
                 // lieu d'en retirer — voir withdraw.tsx qui pointe ici avec intent=withdraw).
-                if (intent === 'withdraw' && targetRole !== 'AGENT') {
-                    showError("Ce QR n'appartient pas à un Agent. Impossible d'y effectuer un retrait.");
+                // Un retrait ne peut se faire qu'auprès d'un Agent ou d'un Marchand :
+                // si l'intent explicite est withdraw OR si le QR scanné contient action=withdraw.
+                const isWithdrawalIntent = intent === 'withdraw' || qrAction === 'withdraw';
+                if (isWithdrawalIntent && targetRole !== 'AGENT' && targetRole !== 'MERCHANT') {
+                    showError("Vous ne pouvez retirer de l'argent qu'auprès d'un Agent ou d'un Marchand.");
                     return;
                 }
 
@@ -101,9 +105,13 @@ export default function QrScreen() {
                     return;
                 }
 
-                // 2. If User scans a MERCHANT -> Payment
+                // 2. If User scans a MERCHANT -> Payment OR Withdrawal depending on the QR!
                 if (targetRole === 'MERCHANT') {
-                    router.push({ pathname: '/transfer-confirm', params: { receiverPhone: targetPhone, receiverName: targetName, isMerchant: 'true' } });
+                    if (isWithdrawalIntent) {
+                        router.replace({ pathname: '/client-withdraw-desk', params: { agentPhone: targetPhone, agentName: targetName } });
+                    } else {
+                        router.push({ pathname: '/transfer-confirm', params: { receiverPhone: targetPhone, receiverName: targetName, isMerchant: 'true' } });
+                    }
                     return;
                 }
 

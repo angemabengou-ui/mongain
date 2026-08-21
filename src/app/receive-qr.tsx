@@ -6,6 +6,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
+import { apiGetSystemSettings } from '../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -16,8 +17,20 @@ export default function ReceiveQRScreen() {
     const { user } = useAuth();
     const viewRef = useRef(null);
 
-    // This is the permanent string string we use to route peer-to-peer or merchant reads
-    const qrValue = user ? `mongain://user?phone=${encodeURIComponent(user.phone)}&name=${encodeURIComponent(user.name)}&role=${encodeURIComponent(user.role || 'USER')}` : 'UNKNOWN';
+    const [merchantAction, setMerchantAction] = React.useState<'pay' | 'withdraw'>('pay');
+    const [fees, setFees] = React.useState({ taxP2P: 0.01, taxWithdraw: 0.013 }); // Defaults
+
+    React.useEffect(() => {
+        if (user?.role === 'MERCHANT') {
+            apiGetSystemSettings().then(data => {
+                if (data) setFees({ taxP2P: data.taxP2P, taxWithdraw: data.taxWithdraw });
+            }).catch(console.error);
+        }
+    }, [user]);
+
+    // This is the permanent string we use to route peer-to-peer or merchant reads.
+    // If the user is a merchant, we inject '&action=xxx' based on their toggle choice.
+    const qrValue = user ? `mongain://user?phone=${encodeURIComponent(user.phone)}&name=${encodeURIComponent(user.name)}&role=${encodeURIComponent(user.role || 'USER')}${user.role === 'MERCHANT' ? '&action=' + merchantAction : ''}` : 'UNKNOWN';
 
     const handleShare = async () => {
         try {
@@ -78,6 +91,29 @@ export default function ReceiveQRScreen() {
                 </View>
 
                 {/* Actions */}
+                {user?.role === 'MERCHANT' && (
+                    <View style={styles.merchantToggleContainer}>
+                        <TouchableOpacity
+                            style={[styles.merchantToggleBtn, merchantAction === 'pay' && styles.merchantToggleBtnActivePay]}
+                            onPress={() => setMerchantAction('pay')}
+                        >
+                            <Ionicons name="cart-outline" size={20} color={merchantAction === 'pay' ? '#fff' : COLORS.textSecondary} style={{ marginRight: 6 }} />
+                            <Text style={[styles.merchantToggleText, merchantAction === 'pay' && styles.merchantToggleTextActive]}>
+                                Paiement ({fees.taxP2P * 100}%)
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.merchantToggleBtn, merchantAction === 'withdraw' && styles.merchantToggleBtnActiveWithdraw]}
+                            onPress={() => setMerchantAction('withdraw')}
+                        >
+                            <Ionicons name="cash-outline" size={20} color={merchantAction === 'withdraw' ? '#fff' : COLORS.textSecondary} style={{ marginRight: 6 }} />
+                            <Text style={[styles.merchantToggleText, merchantAction === 'withdraw' && styles.merchantToggleTextActive]}>
+                                Retrait Cash ({fees.taxWithdraw * 100}%)
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
                 <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
                     <Ionicons name="share-outline" size={24} color="#fff" style={{ marginRight: 8 }} />
                     <Text style={styles.shareButtonText}>Partager mon Numéro</Text>
@@ -126,5 +162,12 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
 
     shareButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#4F46E5', paddingHorizontal: 24, paddingVertical: 16, borderRadius: 20, width: '100%', justifyContent: 'center', marginBottom: 16 },
     shareButtonText: { color: '#fff', fontSize: 16, fontWeight: '800' },
-    tipText: { fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', marginTop: 8 }
+    tipText: { fontSize: 13, color: COLORS.textSecondary, textAlign: 'center', marginTop: 8 },
+
+    merchantToggleContainer: { flexDirection: 'row', backgroundColor: COLORS.border, borderRadius: 16, padding: 4, width: '100%', marginBottom: 20 },
+    merchantToggleBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12 },
+    merchantToggleBtnActivePay: { backgroundColor: '#10B981', shadowColor: '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+    merchantToggleBtnActiveWithdraw: { backgroundColor: '#F59E0B', shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+    merchantToggleText: { color: COLORS.textSecondary, fontSize: 14, fontWeight: '700' },
+    merchantToggleTextActive: { color: '#fff' }
 });

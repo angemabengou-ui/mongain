@@ -61,6 +61,12 @@ model User {
   tontineParticipations TontineParticipant[]
   createdTontines       TontineGroup[]       @relation("GroupCreator")
   apiIntegrations       ApiIntegration[]     @relation("MerchantAPI")
+
+  adminOfVaults              Vault[]            @relation("AdminVault")
+  vaultMemberships           VaultMember[]      @relation("VaultMembership")
+  requestedVaultTransactions VaultTransaction[] @relation("RequestedVaultTransactions")
+  approvedVaultTransactions  VaultApproval[]    @relation("ApprovedVaultTransactions")
+  vaultVouchers              VaultVoucher[]     @relation("VaultVouchers")
 }
 
 model Reclamation {
@@ -630,3 +636,88 @@ model ErrorLog {
   @@index([createdAt])
 }
 
+// ==========================================
+// MONGAIN V6: CAISSE COMMUNE (MULTISIG VAULT)
+// ==========================================
+
+model Vault {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  balance     Float    @default(0.0)
+  createdAt   DateTime @default(now())
+  
+  adminId     String
+  admin       User     @relation("AdminVault", fields: [adminId], references: [id])
+
+  members      VaultMember[]
+  transactions VaultTransaction[]
+  vouchers     VaultVoucher[]
+}
+
+model VaultMember {
+  id          String   @id @default(uuid())
+  vaultId     String
+  userId      String
+
+  vault       Vault    @relation(fields: [vaultId], references: [id], onDelete: Cascade)
+  user        User     @relation("VaultMembership", fields: [userId], references: [id])
+  
+  // Roles
+  isAdmin     Boolean  @default(false)
+  isInitiator Boolean  @default(false) // Responsable
+  isValidator Boolean  @default(false) // Peut approuver
+  isTreasurer Boolean  @default(false) // Trésorier désigné
+
+  joinedAt    DateTime @default(now())
+
+  @@unique([vaultId, userId])
+}
+
+model VaultTransaction {
+  id              String   @id @default(uuid())
+  vaultId         String
+  vault           Vault    @relation(fields: [vaultId], references: [id], onDelete: Cascade)
+  
+  type            String   // DEPOSIT, WITHDRAW_REQUEST
+  amount          Float
+  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED, COMPLETED
+  
+  destinationType String?  // TREASURER, VOUCHER (Physical Agency/Merchant)
+  destinationId   String?  // The User ID of the Treasurer or President
+  
+  requestedById   String
+  requestedBy     User     @relation("RequestedVaultTransactions", fields: [requestedById], references: [id])
+  
+  createdAt       DateTime @default(now())
+
+  approvals       VaultApproval[]
+}
+
+model VaultApproval {
+  id             String           @id @default(uuid())
+  transactionId  String
+  transaction    VaultTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  
+  userId         String
+  user           User             @relation("ApprovedVaultTransactions", fields: [userId], references: [id])
+  
+  approvedAt     DateTime         @default(now())
+
+  @@unique([transactionId, userId])
+}
+
+model VaultVoucher {
+  id              String   @id @default(uuid())
+  vaultId         String
+  vault           Vault    @relation(fields: [vaultId], references: [id], onDelete: Cascade)
+  
+  amount          Float
+  status          String   @default("ACTIVE") // ACTIVE, USED
+  
+  presidentId     String
+  president       User     @relation("VaultVouchers", fields: [presidentId], references: [id])
+
+  usedAt          DateTime?
+  createdAt       DateTime @default(now())
+}

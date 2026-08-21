@@ -40,20 +40,24 @@ export async function executeTontineCycle(groupId: string) {
 
     for (const p of group.participants) {
         if (p.status !== 'ACTIVE') continue;
+
+        // Idempotency: Vérifier si le client a DÉJÀ cotisé pour CE cycle (en cas de plantage/reprise)
+        const idempotencyDebitRef = `TONT_DBT_G${group.id}_C${group.currentCycle}_U${p.userId}`;
+        const existingTx = await prisma.transaction.findFirst({ where: { reference: idempotencyDebitRef } });
+
+        if (existingTx && existingTx.status === 'COMPLETED') {
+            debitedCount++;
+            totalPot += existingTx.amount;
+            continue; // Déjà prélevé lors d'une tentative précédente qui a planté
+        }
+
         const wallet = await prisma.wallet.findUnique({ where: { userId: p.userId } });
         if (!wallet) { failedCount++; continue; }
 
         try {
             await prisma.$transaction(async (tx) => {
-                // Même moteur de plafonds anti-blanchiment qu'un transfert P2P classique —
-                // sans ce contrôle, un compte non vérifié (Tier 0) pouvait cotiser sans
-                // aucune limite dans une tontine, contournant le système de paliers KYC
-                // appliqué partout ailleurs dans l'application.
                 await LimitEngine.verifyAndIncrementConsumption(tx, p.userId, wallet.id, group.contribution, settings);
 
-                // Débit atomique (garde `balance: gte`) — la vérification de solde ne se
-                // fait plus hors transaction, ce qui évitait un double-débit en cas de
-                // cycles concurrents sur le même wallet.
                 const updated = await tx.wallet.updateMany({
                     where: { id: wallet.id, balance: { gte: group.contribution } },
                     data: { balance: { decrement: group.contribution } }
@@ -70,7 +74,7 @@ export async function executeTontineCycle(groupId: string) {
                         senderWalletId: wallet.id,
                         receiverWalletId: vaultWallet.id,
                         status: "COMPLETED",
-                        reference: `TONTINE_DEBIT_${p.id}_${Date.now()}`
+                        reference: idempotencyDebitRef
                     }
                 });
                 await tx.notification.create({
@@ -80,8 +84,14 @@ export async function executeTontineCycle(groupId: string) {
             debitedCount++;
             totalPot += group.contribution;
         } catch (err: any) {
+            // Un fail ici ne stoppe pas la tontine (ex: solde insuffisant) -> on permet la
+            // défaillance partielle, d'où l'impossibilité d'utiliser une seule grosse
+            // transaction $transaction pour tout le groupe.
+            const errStr = err.message || "";
+            // Ne spammez l'utilisateur que si l'erreur n'est pas déjà notifiée récemment
+            // (TODO: throttling des alertes d'échec pour éviter le spam cron)
             await prisma.notification.create({
-                data: { userId: p.userId, title: "Échec Cotisation Tontine ⚠️", body: err.message?.includes('Plafond') ? err.message : `Solde insuffisant pour la tontine ${group.name}.`, type: "ALERT" }
+                data: { userId: p.userId, title: "Échec Cotisation Tontine ⚠️", body: errStr.includes('Plafond') ? errStr : `Solde insuffisant pour la tontine ${group.name}.`, type: "ALERT" }
             });
             failedCount++;
         }
@@ -89,30 +99,32 @@ export async function executeTontineCycle(groupId: string) {
 
     const beneficiary = group.participants.find((p: any) => p.payoutOrder === group.currentCycle && p.status === 'ACTIVE');
     if (beneficiary && totalPot > 0) {
-        const beneficiaryWallet = await prisma.wallet.findUnique({ where: { userId: beneficiary.userId } });
-        if (beneficiaryWallet) {
-            await prisma.$transaction(async (tx) => {
-                // Garde atomique (balance: gte), même principe que le débit des cotisations
-                // ci-dessus : le Coffre Tontine est un wallet système partagé par TOUS les
-                // groupes (déclenchement CRON + manuel via POST /api/tontine/debit/:groupId
-                // peuvent se chevaucher), donc un décrément non gardé pouvait faire passer son
-                // solde sous zéro si un autre cycle le vidait entre-temps.
-                const claim = await tx.wallet.updateMany({
-                    where: { id: vaultWallet.id, balance: { gte: totalPot } },
-                    data: { balance: { decrement: totalPot } }
+        const idempotencyPayoutRef = `TONT_PAY_G${group.id}_C${group.currentCycle}_U${beneficiary.userId}`;
+        const payoutDone = await prisma.transaction.findFirst({ where: { reference: idempotencyPayoutRef } });
+
+        if (!payoutDone) {
+            const beneficiaryWallet = await prisma.wallet.findUnique({ where: { userId: beneficiary.userId } });
+            if (beneficiaryWallet) {
+                await prisma.$transaction(async (tx) => {
+                    const claim = await tx.wallet.updateMany({
+                        where: { id: vaultWallet.id, balance: { gte: totalPot } },
+                        data: { balance: { decrement: totalPot } }
+                    });
+                    if (claim.count === 0) throw new Error('Coffre Tontine insuffisant pour ce paiement.');
+
+                    await tx.wallet.update({
+                        where: { id: beneficiaryWallet.id },
+                        data: { balance: { increment: totalPot } }
+                    });
+
+                    await tx.transaction.create({
+                        data: { amount: totalPot, receiverWalletId: beneficiaryWallet.id, senderWalletId: vaultWallet.id, status: "COMPLETED", reference: idempotencyPayoutRef }
+                    });
+                    await tx.notification.create({
+                        data: { userId: beneficiary.userId, title: "🎉 Cagnotte Tontine Reçue !", body: `C'est votre tour ! Vous avez reçu la cagnotte de ${totalPot} FCFA du club ${group.name}.`, type: "INFO" }
+                    });
                 });
-                if (claim.count === 0) throw new Error('Coffre Tontine insuffisant pour ce paiement.');
-                await tx.wallet.update({
-                    where: { id: beneficiaryWallet.id },
-                    data: { balance: { increment: totalPot } }
-                });
-                await tx.transaction.create({
-                    data: { amount: totalPot, receiverWalletId: beneficiaryWallet.id, senderWalletId: vaultWallet.id, status: "COMPLETED", reference: `TONTINE_PAYOUT_${beneficiary.id}_${Date.now()}` }
-                });
-                await tx.notification.create({
-                    data: { userId: beneficiary.userId, title: "🎉 Cagnotte Tontine Reçue !", body: `C'est votre tour ! Vous avez reçu la cagnotte de ${totalPot} FCFA du club ${group.name}.`, type: "INFO" }
-                });
-            });
+            }
         }
     }
 

@@ -8,6 +8,7 @@ import { AuthRequest, JWT_SECRET, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { sendSms } from '../services/sms';
 import { friendlyErrorMessage, isDbConnectivityError, withDbRetry } from '../utils/errors';
+import logger from '../utils/logger';
 
 const router = Router();
 
@@ -45,6 +46,15 @@ router.post('/request-otp', smsLimiter, async (req, res) => {
     const { phone } = parsed.data;
 
     try {
+        // VUL-02 : Rate limit supplémentaire PAR NUMERO DE TÉLÉPHONE (pas seulement par IP).
+        // Empêche le SMS pumping fraud depuis des IPs multiples (TOR, proxies).
+        const recentOtps = await prisma.verificationCode.count({
+            where: { phone, createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) } }
+        });
+        if (recentOtps >= 3) {
+            return res.status(429).json({ error: 'Trop de demandes pour ce numéro. Veuillez réessayer dans 1 heure.' });
+        }
+
         const existingUser = await prisma.user.findUnique({ where: { phone } });
         if (existingUser) return res.status(400).json({ error: 'Ce numéro est déjà inscrit.' });
 
@@ -60,14 +70,14 @@ router.post('/request-otp', smsLimiter, async (req, res) => {
         });
 
         if (useDemoMode) {
-            console.log(`[DEMO MODE] Code 1234 auto-approuvé pour ${phone}`);
+            logger.info(`[DEMO MODE] Code 1234 auto-approuvé pour ${phone}`);
         } else {
             await sendSms(phone, `Votre code de vérification Mongain est : ${code}. Il expire dans 10 minutes.`);
         }
 
         return res.json({ message: 'Code envoyé avec succès.' });
     } catch (e: any) {
-        console.error('Erreur envoi OTP:', e);
+        logger.error('Erreur envoi OTP:', e);
         return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });
@@ -82,6 +92,14 @@ router.post('/request-reset-otp', smsLimiter, async (req, res) => {
         const existingUser = await prisma.user.findUnique({ where: { phone } });
         if (!existingUser) return res.status(400).json({ error: 'Ce numéro n\'est pas reconnu.' });
 
+        // VUL-02 : Rate limit PAR NUMERO pour reset PIN aussi.
+        const recentOtps = await prisma.verificationCode.count({
+            where: { phone, createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) } }
+        });
+        if (recentOtps >= 3) {
+            return res.status(429).json({ error: 'Trop de demandes pour ce numéro. Réessayez dans 1 heure.' });
+        }
+
         const useDemoMode = !process.env.TWILIO_ACCOUNT_SID;
         const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
@@ -93,13 +111,13 @@ router.post('/request-reset-otp', smsLimiter, async (req, res) => {
         });
 
         if (useDemoMode) {
-            console.log(`[DEMO MODE] Code Reset 1234 auto-approuvé pour ${phone}`);
+            logger.info(`[DEMO MODE] Code Reset 1234 auto-approuvé pour ${phone}`);
         } else {
             await sendSms(phone, `[Mongain] Réinitialisation demandée. Votre code de sécurité est : ${code}. Valable 10 min.`);
         }
         return res.json({ message: 'Code envoyé.' });
     } catch (e: any) {
-        console.error('Erreur envoi OTP:', e);
+        logger.error('Erreur envoi OTP:', e);
         return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });
@@ -132,7 +150,7 @@ router.post('/reset-pin', async (req, res) => {
             include: { wallet: true }
         });
 
-        const token = jwt.sign({ userId: updatedUser.id, jwtVersion: updatedUser.jwtVersion }, JWT_SECRET, { expiresIn: '30d' });
+        const token = jwt.sign({ userId: updatedUser.id, jwtVersion: updatedUser.jwtVersion }, JWT_SECRET, { expiresIn: '7d' });
 
         return res.status(200).json({
             token,
@@ -171,8 +189,8 @@ router.post('/register', async (req, res) => {
 
         const user = await prisma.user.create({
             data: {
-                  accountNumber: accNum,
-                  name,
+                accountNumber: accNum,
+                name,
                 username,
                 phone,
                 pin: hashedPin,
@@ -186,7 +204,7 @@ router.post('/register', async (req, res) => {
             include: { wallet: true },
         });
 
-        const token = jwt.sign({ userId: user.id, jwtVersion: user.jwtVersion }, JWT_SECRET, { expiresIn: '30d' });
+        const token = jwt.sign({ userId: user.id, jwtVersion: user.jwtVersion }, JWT_SECRET, { expiresIn: '7d' });
 
         return res.status(201).json({
             token,
@@ -204,7 +222,7 @@ router.post('/register', async (req, res) => {
         if (e?.code === 'P2002') {
             return res.status(400).json({ error: 'Ce numéro de téléphone est déjà utilisé.' });
         }
-        console.error('Erreur /auth/register:', e);
+        logger.error('Erreur /auth/register:', e);
         return res.status(isDbConnectivityError(e) ? 503 : 500).json({ error: friendlyErrorMessage(e) });
     }
 });
@@ -283,14 +301,14 @@ router.post('/login', async (req, res) => {
         });
 
         if (useDemoMode) {
-            console.log(`[DEMO MODE] Code d'accès 1234 généré pour le login de ${targetPhone} (Pseudo: ${user.username})`);
+            logger.info(`[DEMO MODE] Code d'accès 1234 généré pour le login de ${targetPhone} (Pseudo: ${user.username})`);
         } else {
             await sendSms(targetPhone, `[Mongain] Votre code de connexion est : ${code}.`);
         }
 
         return res.json({ requireOtp: true, message: 'Un code de sécurité a été envoyé par SMS.' });
     } catch (e: any) {
-        console.error('Erreur /auth/login:', e);
+        logger.error('Erreur /auth/login:', e);
         return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });
@@ -324,7 +342,7 @@ router.post('/verify-login-otp', async (req, res) => {
             data: { failedPinAttempts: 0, lockedUntil: null, jwtVersion: { increment: 1 } },
         });
 
-        const token = jwt.sign({ userId: user.id, jwtVersion: updatedUser.jwtVersion }, JWT_SECRET, { expiresIn: '30d' });
+        const token = jwt.sign({ userId: user.id, jwtVersion: updatedUser.jwtVersion }, JWT_SECRET, { expiresIn: '7d' });
 
         return res.json({
             token,
@@ -337,7 +355,7 @@ router.post('/verify-login-otp', async (req, res) => {
             },
         });
     } catch (e: any) {
-        console.error('Erreur /auth/verify-login-otp:', e);
+        logger.error('Erreur /auth/verify-login-otp:', e);
         return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });
@@ -371,11 +389,11 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
 });
 const updateProfileSchema = z.object({
     name: z.string().min(2, 'Le nom doit comporter au moins 2 caractères.'),
-    username: z.string().optional(),
-    email: z.string().email('Format email invalide.').optional().or(z.literal('')),
-    idCardFront: z.string().optional(),
-    idCardBack: z.string().optional(),
-    selfie: z.string().optional(),
+    username: z.string().optional().nullable(),
+    email: z.string().email('Format email invalide.').optional().nullable().or(z.literal('')),
+    idCardFront: z.string().optional().nullable(),
+    idCardBack: z.string().optional().nullable(),
+    selfie: z.string().optional().nullable(),
 });
 
 // PUT /api/auth/profile

@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
-import { AuthRequest, authCorp, JWT_SECRET } from '../middleware/auth';
+import { authCorp, AuthRequest, JWT_SECRET } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { friendlyErrorMessage, withDbRetry } from '../utils/errors';
 
@@ -20,6 +20,11 @@ const loginLimiter = rateLimit({
 });
 
 router.post('/init', async (req, res) => {
+    // VUL-07 : Désactivé en production. Si un attaquant vide la table Staff,
+    // il ne peut pas s'en servir pour re-créer un SUPER_ADMIN.
+    if (process.env.NODE_ENV === 'production') {
+        return res.status(404).json({ error: 'Not found.' });
+    }
     try {
         const count = await prisma.staff.count();
         if (count > 0) return res.status(403).json({ error: 'Root already initialized' });
