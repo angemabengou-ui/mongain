@@ -53,9 +53,10 @@ export default function VaultsScreen() {
     const loadVaults = async () => {
         try {
             const res = await apiGetVaults();
-            setVaults(res.data.data);
+            // apiGetVaults returns the data object directly because of fetch() format 
+            setVaults(res.data || []);
         } catch (e: any) {
-            Alert.alert("Erreur", e.response?.data?.message || e.message);
+            Alert.alert("Erreur", e.message || "Erreur de chargement");
         } finally {
             setLoading(false);
         }
@@ -69,18 +70,18 @@ export default function VaultsScreen() {
             setNewVaultName('');
             loadVaults();
         } catch (e: any) {
-            Alert.alert("Erreur", e.response?.data?.message || "Erreur création");
+            Alert.alert("Erreur", e.message || "Erreur création");
         }
     };
 
     const openDetails = async (vaultId: string) => {
         try {
             const res = await apiGetVaultDetails(vaultId);
-            setSelectedVault(res.data.data);
-            setMyRole(res.data.role);
+            setSelectedVault(res.data);
+            setMyRole(res.role);
             setDetailsModalVisible(true);
         } catch (e: any) {
-            Alert.alert("Erreur", e.response?.data?.message || "Impossible de charger la caisse");
+            Alert.alert("Erreur", e.message || "Impossible de charger la caisse");
         }
     };
 
@@ -93,7 +94,7 @@ export default function VaultsScreen() {
             setInvitePhone('');
             openDetails(selectedVault.id);
         } catch (e: any) {
-            Alert.alert("Erreur", e.response?.data?.message || "Échec invitation");
+            Alert.alert("Erreur", e.message || "Échec invitation");
         } finally {
             setInviteLoading(false);
         }
@@ -108,7 +109,7 @@ export default function VaultsScreen() {
             openDetails(selectedVault.id);
             loadVaults();
         } catch (e: any) {
-            Alert.alert("Erreur", e.response?.data?.message || "Échec");
+            Alert.alert("Erreur", e.message || "Échec");
         }
     };
 
@@ -120,18 +121,18 @@ export default function VaultsScreen() {
             setActionAmount('');
             openDetails(selectedVault.id);
         } catch (e: any) {
-            Alert.alert("Erreur", e.response?.data?.message || "Échec");
+            Alert.alert("Erreur", e.message || "Échec");
         }
     };
 
     const handleApprove = async (txId: string) => {
         try {
             const res = await apiApproveVault(selectedVault.id, txId);
-            Alert.alert("Succès", res.data.message);
+            Alert.alert("Succès", res.message || "Opération terminée");
             openDetails(selectedVault.id);
             loadVaults();
         } catch (e: any) {
-            Alert.alert("Erreur", e.response?.data?.message || "Échec approbation");
+            Alert.alert("Erreur", e.message || "Échec approbation");
         }
     };
 

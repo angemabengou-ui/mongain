@@ -56,7 +56,7 @@ export default function TransferConfirmScreen() {
         isBiometricPinEnabled().then(setBioEnabled);
         if (isPayment) {
             apiGetMyVouchers().then(res => {
-                if (res.data?.success) setVouchers(res.data.data);
+                if (res.success) setVouchers(res.data || []);
             }).catch(console.error);
         }
     }, [isPayment]);
@@ -86,8 +86,8 @@ export default function TransferConfirmScreen() {
         try {
             const result = await apiTransfer(receiverPhone, amountNum, authResult.pin);
             setSuccess({
-                receiverName: result.data.receiverName,
-                remainingBalance: result.data.remainingBalance,
+                receiverName: result.data?.receiverName || receiverName,
+                remainingBalance: result.data?.remainingBalance || 0,
                 amount: amountNum,
             });
         } catch (e: any) {
@@ -117,8 +117,8 @@ export default function TransferConfirmScreen() {
         try {
             const result = await apiTransfer(receiverPhone, amountNum, pin);
             setSuccess({
-                receiverName: result.data.receiverName,
-                remainingBalance: result.data.remainingBalance,
+                receiverName: result.data?.receiverName || receiverName,
+                remainingBalance: result.data?.remainingBalance || 0,
                 amount: amountNum,
             });
 
@@ -157,7 +157,7 @@ export default function TransferConfirmScreen() {
         try {
             const result = await apiSpendVoucher(voucherId, receiverPhone);
             setSuccess({
-                receiverName: result.data.destination || receiverName || receiverPhone,
+                receiverName: result.destination || receiverName || receiverPhone,
                 remainingBalance: 0,
                 amount: amount,
             });
