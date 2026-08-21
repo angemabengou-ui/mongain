@@ -13,11 +13,12 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 
 import { useAppTheme } from '../../constants/theme';
 export default function LoginScreen() {
+    const insets = useSafeAreaInsets();
     const COLORS = useAppTheme();
     const styles = getStyles(COLORS);
     const router = useRouter();
@@ -143,6 +144,7 @@ export default function LoginScreen() {
                         </View>
                     </View>
                 </ScrollView>
+                {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
             </KeyboardAvoidingView>
         </SafeAreaView>
     );

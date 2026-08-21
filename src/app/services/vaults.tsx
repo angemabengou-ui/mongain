@@ -219,7 +219,8 @@ export default function VaultsScreen() {
                             <TouchableOpacity style={styles.btnPrimary} onPress={handleCreate}><Text style={styles.btnPrimaryText}>Créer</Text></TouchableOpacity>
                         </View>
                     </View>
-                </KeyboardAvoidingView>
+                    {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
+            </KeyboardAvoidingView>
             </Modal>
 
             <Modal visible={detailsModalVisible} transparent animationType="slide">
@@ -323,7 +324,8 @@ export default function VaultsScreen() {
                             </View>
                         )}
                     </View>
-                </KeyboardAvoidingView>
+                    {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
+            </KeyboardAvoidingView>
             </Modal>
         </SafeAreaView>
     );

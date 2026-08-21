@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { apiGenerateWithdrawCode, apiGetBalance } from '../services/api';
@@ -14,6 +14,7 @@ function formatCountdown(seconds: number) {
 }
 
 export default function WithdrawScreen() {
+    const insets = useSafeAreaInsets();
     const COLORS = useAppTheme();
     const styles = getStyles(COLORS);
     const router = useRouter();
@@ -97,7 +98,8 @@ export default function WithdrawScreen() {
                     <TouchableOpacity style={{ marginTop: 16, alignItems: 'center' }} onPress={() => { setShowAmountModal(false); setCodeAmount(''); }} disabled={generating}>
                         <Text style={{ color: COLORS.textSecondary, fontWeight: '600' }}>Annuler</Text>
                     </TouchableOpacity>
-                </KeyboardAvoidingView>
+                    {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
+            </KeyboardAvoidingView>
             </SafeAreaView>
         );
     }

@@ -285,7 +285,8 @@ export default function TontineScreen() {
                             </TouchableOpacity>
                         </View>
                     </View>
-                </KeyboardAvoidingView>
+                    {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
+            </KeyboardAvoidingView>
             </Modal>
 
             {/* Modal: Management */}
@@ -376,7 +377,8 @@ export default function TontineScreen() {
                             </View>
                         )}
                     </View>
-                </KeyboardAvoidingView>
+                    {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
+            </KeyboardAvoidingView>
             </Modal>
         </SafeAreaView>
     );

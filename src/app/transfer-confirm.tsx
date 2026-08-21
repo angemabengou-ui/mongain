@@ -16,7 +16,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import { apiGetMyVouchers, apiSpendVoucher, apiTransfer } from '../services/api';
 import { enableBiometricPin, isBiometricPinEnabled, verifyBiometricsOrPin } from '../services/biometrics';
@@ -33,6 +33,7 @@ const COLORS = {
 };
 
 export default function TransferConfirmScreen() {
+    const insets = useSafeAreaInsets();
     const { settings } = useAuth();
     const router = useRouter();
     const { receiverPhone, receiverName, isMerchant } = useLocalSearchParams<{ receiverPhone: string; receiverName: string; isMerchant: string }>();
@@ -424,6 +425,7 @@ export default function TransferConfirmScreen() {
                         </View>
                     )}
                 </ScrollView>
+                {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
             </KeyboardAvoidingView>
         </SafeAreaView>
     );

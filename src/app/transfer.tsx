@@ -242,6 +242,7 @@ export default function TransferScreen() {
                     </SafeAreaView>
                 </Modal>
 
+                {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
             </KeyboardAvoidingView>
         </SafeAreaView>
     );

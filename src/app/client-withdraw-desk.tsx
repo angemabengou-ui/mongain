@@ -13,13 +13,14 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { apiClientInitiatedWithdraw } from '../services/api';
 import { enableBiometricPin, isBiometricPinEnabled, verifyBiometricsOrPin } from '../services/biometrics';
 
 export default function ClientWithdrawDeskScreen() {
+    const insets = useSafeAreaInsets();
     const router = useRouter();
     const { user, settings } = useAuth();
     const COLORS = useAppTheme();
@@ -234,6 +235,7 @@ export default function ClientWithdrawDeskScreen() {
                         Montrez le reçu de succès à l'agent après validation.
                     </Text>
                 </ScrollView>
+                {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
             </KeyboardAvoidingView>
         </SafeAreaView>
     );

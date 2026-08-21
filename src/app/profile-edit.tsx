@@ -15,13 +15,14 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SecurityFlags } from '../components/SecurityWrapper';
 import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { apiGetMe, apiUpdateProfile } from '../services/api';
 
 export default function ProfileEditScreen() {
+    const insets = useSafeAreaInsets();
     const router = useRouter();
     const { user, setUser } = useAuth();
     const COLORS = useAppTheme();
@@ -201,6 +202,7 @@ export default function ProfileEditScreen() {
                         )}
                     </TouchableOpacity>
                 </View>
+                {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
             </KeyboardAvoidingView>
         </SafeAreaView>
     );

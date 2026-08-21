@@ -12,12 +12,13 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../constants/theme';
 import { apiUpdatePin } from '../services/api';
 import { disableBiometricPin } from '../services/biometrics';
 
 export default function PinChangeScreen() {
+    const insets = useSafeAreaInsets();
     const router = useRouter();
     const COLORS = useAppTheme();
     const styles = getStyles(COLORS);
@@ -125,6 +126,7 @@ export default function PinChangeScreen() {
                         )}
                     </TouchableOpacity>
                 </View>
+                {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
