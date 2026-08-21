@@ -9,7 +9,7 @@ const TONTINE_VAULT_PHONE = '+24155555555';
 // d'un identifiant de wallet fictif "VAULT_TONTINE_xxx" qui violait la contrainte de
 // clé étrangère de Transaction à chaque cycle et faisait échouer TOUT le cycle en cours,
 // empêchant historiquement le moindre prélèvement/versement de tontine).
-async function getTontineVaultWallet() {
+export async function getTontineVaultWallet() {
     let vault = await prisma.user.findUnique({ where: { phone: TONTINE_VAULT_PHONE }, include: { wallet: true } });
     if (!vault) {
         vault = await prisma.user.create({

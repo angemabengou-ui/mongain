@@ -1,4 +1,4 @@
-﻿import bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { Expo } from 'expo-server-sdk';
 import { Router } from 'express';
@@ -19,7 +19,7 @@ const CORPORATE_PHONE = process.env.CORPORATE_PHONE || '+2410000000';
 // les soldes clients. Auto-guÃ©rison (mÃªme principe que treasury.ts pour la RÃ©serve) : si le
 // compte n'existe pas encore en base, tout prÃ©lÃ¨vement de frais Ã©chouait silencieusement en
 // erreur 500 ("Compte corporate introuvable"), ce qui pouvait bloquer tous les transferts P2P.
-async function getOrCreateCorporateWallet(tx: any) {
+export async function getOrCreateCorporateWallet(tx: any) {
     let corporate = await tx.user.findUnique({ where: { phone: CORPORATE_PHONE }, include: { wallet: true } });
     if (!corporate || !corporate.wallet) {
         corporate = await tx.user.create({
@@ -170,9 +170,14 @@ router.post('/qr-cash-out', authMiddleware, async (req: AuthRequest, res) => {
 
         // Frais CentralisÃ©s (TODO: Enrober dans LimitEngine anti-fractionnement)
         const settings = await prisma.systemSettings.findFirst();
+        // Marginal sur le seul dépassement du seuil, pas sur le montant entier une fois
+        // celui-ci franchi — sinon un retrait de 500 001 FCFA payait des frais sur la
+        // totalité alors qu'un retrait de 499 999 FCFA restait gratuit (effet de seuil
+        // abrupt). Même formule que /client-initiated-withdraw plus bas, désormais la
+        // référence commune aux deux chemins.
         let feeAmount = 0;
         if (settings && amount > settings.agencyWithdrawThreshold) {
-            feeAmount = amount * settings.agencyTaxWithdraw;
+            feeAmount = (amount - settings.agencyWithdrawThreshold) * settings.agencyTaxWithdraw;
         }
 
         const totalDebit = amount + feeAmount;
@@ -229,7 +234,17 @@ import { LimitEngine, MAXIMUM_ALLOWED_LIMIT } from '../services/LimitEngine';
 // GET /api/wallet/limits
 router.get('/limits', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const user = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
+        // `select` scopé : cette route est affichée avec le solde sur l'accueil (l'écran le
+        // plus visité) et ne lisait auparavant que 6 champs sur toute la ligne User —
+        // photos KYC base64 comprises à chaque appel.
+        const user = await prisma.user.findUnique({
+            where: { id: req.userId },
+            select: {
+                role: true, kycLevel: true, kycStatus: true,
+                customLimitExpiresAt: true, customDailyLimit: true, customMonthlyLimit: true, customPerTxLimit: true,
+                wallet: { select: { dailySpent: true, monthlySpent: true } }
+            }
+        });
         if (!user || user.role !== 'USER') return res.json({ skip: true });
 
         const settings = await getSystemSettings();
@@ -275,13 +290,19 @@ router.get('/transactions', authMiddleware, async (req: AuthRequest, res) => {
         const wallet = await prisma.wallet.findUnique({ where: { userId: req.userId } });
         if (!wallet) return res.status(404).json({ error: 'Portefeuille introuvable.' });
 
+        // `select` scopé sur `user` : sans lui, chaque page de cet historique (jusqu'à
+        // 100 lignes, x2 wallets par ligne) rapatriait la ligne User complète de chaque
+        // expéditeur et destinataire — photos KYC base64 comprises — pour n'en afficher
+        // au final que le nom et le téléphone (voir formatted ci-dessous). C'est l'écran
+        // le plus rechargé de l'app (scroll de l'historique) ; GET /history juste au-dessus
+        // restreignait déjà correctement ce même sous-objet, seule cette route ne le faisait pas.
         const transactions = await prisma.transaction.findMany({
             where: {
                 OR: [{ senderWalletId: wallet.id }, { receiverWalletId: wallet.id }],
             },
             include: {
-                senderWallet: { include: { user: true } },
-                receiverWallet: { include: { user: true } },
+                senderWallet: { include: { user: { select: { phone: true, name: true } } } },
+                receiverWallet: { include: { user: { select: { phone: true, name: true } } } },
             },
             orderBy: { createdAt: 'desc' },
             skip,
@@ -685,7 +706,11 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
                 agentName: agent.name,
                 agentPhone: agent.phone
             };
-        });
+            // Timeout relevé à 15s (défaut Prisma : 5s) — cette transaction enchaîne
+            // plafonds, anti-fractionnement et plusieurs écritures ; elle expirait déjà
+            // sous charge réseau réelle contre la base distante, même chose constatée et
+            // corrigée sur CashOperationService.executeCashOut.
+        }, { timeout: 15000 });
 
         // Notify Agent via Socket.IO
         const io = req.app.get('io');
@@ -1087,8 +1112,12 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
                 data: { balance: { increment: amount } }
             });
 
-            if (fee > 0) {
-                const corporate = await getOrCreateCorporateWallet(tx);
+            // Résolu une seule fois : ce compte était recherché deux fois de suite dans la
+            // même transaction (crédit du solde, puis à nouveau pour la ligne Transaction de
+            // traçabilité des frais juste en dessous) alors que rien ne change entre les deux.
+            const corporate = fee > 0 ? await getOrCreateCorporateWallet(tx) : null;
+
+            if (fee > 0 && corporate) {
                 await tx.wallet.update({
                     where: { id: corporate.wallet.id },
                     data: { balance: { increment: fee } }
@@ -1106,8 +1135,7 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
                 }
             });
 
-            if (fee > 0) {
-                const corporate = await getOrCreateCorporateWallet(tx);
+            if (fee > 0 && corporate) {
                 await tx.transaction.create({
                     data: {
                         amount: fee,

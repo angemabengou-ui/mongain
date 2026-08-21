@@ -36,7 +36,10 @@ router.get('/stats', authMiddleware, async (req: AuthRequest, res) => {
         const agentsCount = await prisma.user.count({ where: { role: 'AGENT', isActive: true } });
         const merchantsCount = await prisma.user.count({ where: { role: 'MERCHANT', isActive: true } });
 
-        const company = await prisma.user.findUnique({ where: { phone: '+2410000000' }, include: { wallet: true } });
+        // `select` scopé : seul le solde sert (revenue ci-dessous) — la requête précédente
+        // rapatriait la ligne User complète du compte corporate (photos KYC comprises,
+        // bien qu'inutilisées sur ce compte système) à chaque ouverture du dashboard.
+        const company = await prisma.user.findUnique({ where: { phone: '+2410000000' }, select: { wallet: { select: { balance: true } } } });
 
         const circulatingWallets = await prisma.wallet.aggregate({
             where: { user: { role: { notIn: ['ADMIN'] } } },
@@ -46,9 +49,14 @@ router.get('/stats', authMiddleware, async (req: AuthRequest, res) => {
         const hqBranch = await prisma.branch.findFirst({ where: { isHQ: true }, include: { wallet: true } });
         const reserveBalance = hqBranch?.wallet?.balance || 0;
 
+        // `company` (compte corporate) était récupéré ci-dessus mais jamais lu — supprimé.
+        // `select` scopé ici : seuls `amount` et le rôle du destinataire servent (voir la
+        // boucle plus bas) ; la requête entière rapatriait auparavant chaque User complet
+        // (photos KYC comprises) pour tout l'historique FUND_AGENT- depuis le lancement, à
+        // chaque ouverture du tableau de bord admin.
         const fundTxs = await prisma.transaction.findMany({
             where: { reference: { startsWith: 'FUND_AGENT-' }, status: 'COMPLETED' },
-            include: { receiverWallet: { include: { user: true } } }
+            select: { amount: true, receiverWallet: { select: { user: { select: { role: true } } } } }
         });
 
         // The total money minted into circulation is all MINT- transactions (into the vault)
@@ -3075,6 +3083,68 @@ router.put('/error-logs/:id/resolve', authMiddleware, async (req: AuthRequest, r
         return res.json({ success: true });
     } catch (e: any) {
         return res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+// ==========================================
+// CAISSES COMMUNES (VAULTS) — VISIBILITÉ LECTURE SEULE
+// ==========================================
+// Jusqu'ici, une Caisse Commune bloquée ou contestée était un litige que
+// personne côté équipe ne pouvait voir, encore moins arbitrer — le modèle
+// Vault n'apparaissait dans aucun écran admin. Ces deux routes n'offrent que
+// de la lecture pour l'instant (RISK/COMPLIANCE_CHECKER/SUPPORT_MAKER
+// traitent les tickets, SUPER_ADMIN supervise) ; aucune action d'intervention
+// (réattribuer un rôle, forcer un retrait) n'est exposée ici.
+const VAULT_VIEW_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER'];
+
+router.get('/vaults', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!staff || !VAULT_VIEW_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+
+        const vaults = await prisma.vault.findMany({
+            orderBy: { createdAt: 'desc' },
+            include: {
+                admin: { select: { name: true, phone: true } },
+                _count: { select: { members: true, transactions: { where: { status: 'PENDING' } } } }
+            }
+        });
+
+        res.json({ vaults });
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+router.get('/vaults/:id', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!staff || !VAULT_VIEW_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+
+        const vault = await prisma.vault.findUnique({
+            where: { id: req.params.id as string },
+            include: {
+                admin: { select: { name: true, phone: true } },
+                members: { include: { user: { select: { name: true, phone: true } } } },
+                transactions: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 100,
+                    include: {
+                        requestedBy: { select: { name: true, phone: true } },
+                        approvals: { include: { user: { select: { name: true } } } }
+                    }
+                },
+                vouchers: {
+                    orderBy: { createdAt: 'desc' },
+                    include: { president: { select: { name: true, phone: true } } }
+                }
+            }
+        });
+        if (!vault) return res.status(404).json({ error: 'Caisse introuvable.' });
+
+        res.json({ vault });
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });
 

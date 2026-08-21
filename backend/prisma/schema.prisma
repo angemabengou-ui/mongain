@@ -641,12 +641,17 @@ model ErrorLog {
 // ==========================================
 
 model Vault {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  balance     Float    @default(0.0)
-  createdAt   DateTime @default(now())
-  
+  id                String   @id @default(uuid())
+  name              String
+  description       String?
+  balance           Float    @default(0.0)
+  // Nombre d'approbations de commissaires requises pour exécuter un retrait.
+  // Démarre à 1 (le créateur peut agir seul) plutôt qu'une constante codée en
+  // dur à 2 — l'ancienne logique bloquait indéfiniment toute caisse n'ayant
+  // qu'un seul validateur désigné, le cas le plus fréquent à la création.
+  requiredApprovals Int      @default(1)
+  createdAt         DateTime @default(now())
+
   adminId     String
   admin       User     @relation("AdminVault", fields: [adminId], references: [id])
 
@@ -682,9 +687,13 @@ model VaultTransaction {
   type            String   // DEPOSIT, WITHDRAW_REQUEST
   amount          Float
   status          String   @default("PENDING") // PENDING, APPROVED, REJECTED, COMPLETED
-  
-  destinationType String?  // TREASURER, VOUCHER (Physical Agency/Merchant)
-  destinationId   String?  // The User ID of the Treasurer or President
+
+  destinationType String?  // TREASURER, VOUCHER (Physical Agency/Merchant), TRANSFER (envoi direct)
+  destinationId   String?  // The User ID of the Treasurer, President, or destinataire TRANSFER
+  // Motif obligatoire sur une demande de retrait — donne aux commissaires de quoi
+  // juger la légitimité d'une sortie de fonds avant d'approuver, notamment pour un
+  // envoi direct vers un tiers qui n'est pas membre de la caisse.
+  reason          String?
   
   requestedById   String
   requestedBy     User     @relation("RequestedVaultTransactions", fields: [requestedById], references: [id])

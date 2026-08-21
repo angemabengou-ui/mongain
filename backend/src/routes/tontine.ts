@@ -2,7 +2,7 @@ import { friendlyErrorMessage } from '../utils/errors';
 import express, { Request, Response } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { prisma } from '../prisma';
-import { executeTontineCycle } from '../services/tontineService';
+import { executeTontineCycle, getTontineVaultWallet } from '../services/tontineService';
 
 const router = express.Router();
 
@@ -145,6 +145,120 @@ router.post('/invite', authMiddleware, async (req: Request, res: Response) => {
         });
 
         res.json({ success: true, message: "Membre ajouté avec succès.", data: participant });
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: friendlyErrorMessage(e, "Erreur serveur") });
+    }
+});
+
+// Quitter un club de tontine — chaque participant doit pouvoir se retirer de
+// lui-même. On ne supprime pas la ligne (elle garde la trace des cotisations et
+// cagnottes déjà versées) : on la marque LEFT, un statut déjà ignoré par le CRON
+// de prélèvement (executeTontineCycle ne traite que status === 'ACTIVE').
+router.post('/leave', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as AuthRequest).userId!;
+        const { groupId } = req.body;
+
+        const participant = await prisma.tontineParticipant.findFirst({ where: { userId, tontineGroupId: groupId } });
+        if (!participant) return res.status(404).json({ success: false, message: "Vous ne faites pas partie de ce club." });
+
+        const group = await prisma.tontineGroup.findUnique({ where: { id: String(groupId) } });
+        if (!group) return res.status(404).json({ success: false, message: "Club introuvable." });
+
+        if (group.creatorId === userId) {
+            const otherActive = await prisma.tontineParticipant.count({
+                where: { tontineGroupId: groupId, status: 'ACTIVE', userId: { not: userId } }
+            });
+            if (otherActive > 0) {
+                return res.status(400).json({ success: false, message: "En tant que créateur, vous ne pouvez pas quitter tant que d'autres membres sont actifs dans le club." });
+            }
+        }
+
+        // Les prélèvements de cotisation d'un cycle ne sont jamais forcés : le CRON
+        // (executeTontineCycle) tente un débit et abandonne silencieusement en cas de
+        // solde insuffisant, sans jamais revenir à la charge. Quitter est donc le seul
+        // moment où l'on peut vraiment faire valoir une dette — une fois LEFT, le CRON
+        // n'essaiera plus jamais de prélever cette personne. Si son tour est déjà passé
+        // (elle a déjà touché la cagnotte), elle doit encore aux cycles restants des
+        // autres membres qui, eux, n'ont pas encore été payés.
+        const alreadyPaidOut = participant.payoutOrder < group.currentCycle;
+        let debt = 0;
+
+        if (alreadyPaidOut) {
+            const remainingBeneficiaries = await prisma.tontineParticipant.count({
+                where: { tontineGroupId: groupId, status: 'ACTIVE', payoutOrder: { gte: group.currentCycle }, userId: { not: userId } }
+            });
+            debt = remainingBeneficiaries * group.contribution;
+        }
+
+        const myWallet = await prisma.wallet.findUnique({ where: { userId } });
+        if (debt > 0 && (!myWallet || myWallet.balance < debt)) {
+            const manque = debt - (myWallet?.balance || 0);
+            return res.status(400).json({
+                success: false,
+                message: `Vous avez déjà reçu la cagnotte de ce club. Il vous reste ${debt.toLocaleString('fr-FR')} FCFA à cotiser envers les membres qui n'ont pas encore eu leur tour. Rechargez votre compte d'au moins ${manque.toLocaleString('fr-FR')} FCFA puis réessayez de quitter — le montant dû sera prélevé automatiquement.`
+            });
+        }
+
+        // Récupéré hors transaction, comme le fait déjà executeTontineCycle
+        // (tontineService.ts) : cette fonction utilise le client Prisma global, pas
+        // `tx` — l'appeler depuis l'intérieur d'un $transaction() peut épuiser le
+        // pool de connexions (le client global attend une connexion que la
+        // transaction interactive retient) et fait expirer/fermer la transaction.
+        const vaultWallet = debt > 0 ? await getTontineVaultWallet() : null;
+
+        await prisma.$transaction(async (tx) => {
+            if (debt > 0 && vaultWallet) {
+                const debited = await tx.wallet.updateMany({
+                    where: { userId, balance: { gte: debt } },
+                    data: { balance: { decrement: debt } }
+                });
+                if (debited.count === 0) throw new Error('Solde insuffisant pour régler ce que vous devez au club.');
+
+                await tx.wallet.update({ where: { id: vaultWallet.id }, data: { balance: { increment: debt } } });
+                await tx.transaction.create({
+                    data: {
+                        amount: debt,
+                        senderWalletId: myWallet!.id,
+                        receiverWalletId: vaultWallet.id,
+                        status: 'COMPLETED',
+                        reference: `TONT_EXIT_G${groupId}_U${userId}`.slice(0, 40)
+                    }
+                });
+            }
+
+            await tx.tontineParticipant.update({
+                where: { id: participant.id },
+                data: { status: 'LEFT' }
+            });
+
+            // S'il partait avant son tour, son numéro de passage devient un
+            // cycle "mort" : plus personne n'a ce payoutOrder, donc ce
+            // cycle-là collecterait des cotisations sans jamais les reverser
+            // (executeTontineCycle ne trouve pas de bénéficiaire et passe son
+            // tour). On resserre l'ordre des suivants pour combler le trou.
+            // (Non applicable si son tour est déjà passé — sa dette vient
+            // d'être réglée ci-dessus, pas de trou à combler dans ce cas.)
+            if (!alreadyPaidOut) {
+                await tx.tontineParticipant.updateMany({
+                    where: { tontineGroupId: groupId, status: 'ACTIVE', payoutOrder: { gt: participant.payoutOrder } },
+                    data: { payoutOrder: { decrement: 1 } }
+                });
+            }
+
+            await tx.notification.create({
+                data: {
+                    userId,
+                    title: debt > 0 ? 'Dette de tontine réglée' : 'Tontine quittée',
+                    body: debt > 0
+                        ? `${debt.toLocaleString('fr-FR')} FCFA prélevés pour solder votre dû envers « ${group.name} ». Vous avez quitté le club.`
+                        : `Vous avez quitté « ${group.name} ». Vous ne serez plus prélevé aux prochains cycles.`,
+                    type: 'TRANSACTION'
+                }
+            });
+        });
+
+        res.json({ success: true, message: debt > 0 ? `Dette de ${debt.toLocaleString('fr-FR')} FCFA réglée. Vous avez quitté le club.` : "Vous avez quitté le club de tontine. Vous ne serez plus prélevé aux prochains cycles." });
     } catch (e: any) {
         res.status(500).json({ success: false, message: friendlyErrorMessage(e, "Erreur serveur") });
     }

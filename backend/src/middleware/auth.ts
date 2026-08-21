@@ -32,7 +32,10 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
 
         if (decoded.isCorp) {
             // Enterprise Account Routing (Bypass Consumer checks)
-            const staffCheck = await prisma.staff.findUnique({ where: { id: decoded.userId } });
+            const staffCheck = await prisma.staff.findUnique({
+                where: { id: decoded.userId },
+                select: { id: true, isActive: true, jwtVersion: true }
+            });
             if (!staffCheck || !staffCheck.isActive) throw new Error('Staff account invalid');
             // Révocation de session : un changement de mot de passe ou une suspension incrémente
             // jwtVersion, ce qui invalide immédiatement tout token déjà émis (comportement déjà
@@ -44,7 +47,17 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
             return next();
         }
 
-        const userCheck = await prisma.user.findUnique({ where: { id: decoded.userId } });
+        // `select` explicite : sans lui, cette requête — exécutée sur CHAQUE appel API
+        // authentifié de toute l'app, y compris un simple rafraîchissement de solde —
+        // rapatriait la ligne User complète depuis Postgres, y compris idCardFront/Back
+        // et selfie (les 3 photos KYC stockées en base64 directement sur ce modèle,
+        // potentiellement plusieurs centaines de Ko chacune) pour ne finalement utiliser
+        // que isActive et jwtVersion. Sur une base distante (Neon), chaque aller-retour
+        // de ce volume s'ajoute au temps de chargement perçu de l'app entière.
+        const userCheck = await prisma.user.findUnique({
+            where: { id: decoded.userId },
+            select: { id: true, isActive: true, jwtVersion: true }
+        });
         if (!userCheck) throw new Error('User not found');
         if (userCheck.isActive === false) return res.status(403).json({ error: 'Votre compte a été suspendu.' });
 
@@ -67,7 +80,10 @@ export const authCorp = async (req: AuthRequest, res: Response, next: NextFuncti
         const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as { userId: string, isCorp?: boolean, jwtVersion?: number };
         if (!decoded.isCorp) return res.status(403).json({ error: 'B2C token rejected on Corporate Gateway' });
 
-        const staff = await prisma.staff.findUnique({ where: { id: decoded.userId } });
+        const staff = await prisma.staff.findUnique({
+            where: { id: decoded.userId },
+            select: { id: true, isActive: true, jwtVersion: true }
+        });
         if (!staff || !staff.isActive) return res.status(403).json({ error: 'Staff access denied' });
         if (decoded.jwtVersion !== undefined && decoded.jwtVersion !== staff.jwtVersion) {
             return res.status(401).json({ error: 'Votre session a expiré. Veuillez vous reconnecter.' });

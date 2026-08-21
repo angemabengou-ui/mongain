@@ -1,4 +1,5 @@
 import { prisma } from '../prisma';
+import { getOrCreateCorporateWallet } from '../routes/wallet';
 import { generateReference } from '../utils/reference';
 import { LimitEngine } from './LimitEngine';
 
@@ -124,6 +125,14 @@ export class CashOperationService {
         const { amount, clientPhone, tellerId, branchId, idempotencyKey } = params;
         if (amount <= 0) throw new Error("Le montant doit être positif.");
 
+        // Résolu hors transaction, comme getTontineVaultWallet (tontineService.ts) : au
+        // tout premier retrait facturé, ce lookup crée le compte Corporate — un aller-
+        // retour de trop dans une transaction interactive déjà longue (garde par défaut
+        // Prisma de 5s), qui expirait sous charge réseau réelle (vérifié en la testant :
+        // "Transaction already closed... 5335 ms passed"). Une fois créé une bonne fois
+        // pour toutes ici, chaque appel suivant ne coûte plus qu'un miss de cache trivial.
+        const corporateWallet = (await getOrCreateCorporateWallet(prisma)).wallet;
+
         return await prisma.$transaction(async (tx) => {
             // 1. Idempotence Guard
             if (idempotencyKey) {
@@ -197,8 +206,14 @@ export class CashOperationService {
                 }
             }
 
-            // 6. Facturation et Frais dynamiques
-            const fee = amount * (settings?.taxWithdraw || 0.013);
+            // 6. Facturation et Frais dynamiques — un guichet Staff/Agence (TellerTerminal)
+            // applique le modèle Agence (gratuit jusqu'au seuil, puis un taux marginal sur
+            // le seul dépassement), pas le taux marchand fixe (taxWithdraw, 1,3%) qu'il
+            // appliquait ici par erreur — ce dernier reste réservé aux retraits chez un
+            // marchand (wallet.ts /client-initiated-withdraw), un guichet différent.
+            const threshold = settings?.agencyWithdrawThreshold ?? 500000;
+            const agencyRate = settings?.agencyTaxWithdraw ?? 0.01;
+            const fee = amount > threshold ? (amount - threshold) * agencyRate : 0;
             const totalToDeduct = amount + fee;
 
             if (client.wallet.balance < totalToDeduct) {
@@ -226,11 +241,14 @@ export class CashOperationService {
             });
 
             if (fee > 0) {
-                // Le revenu généré par la plateforme va au Corporate
-                const corporate = await tx.user.findFirst({ where: { role: 'SUPER_ADMIN' }, include: { wallet: true }, orderBy: { id: 'asc' } });
-                if (corporate?.wallet) {
-                    await tx.wallet.update({ where: { id: corporate.wallet.id }, data: { balance: { increment: fee } } });
-                }
+                // Le revenu généré par la plateforme va au Corporate — ce compte est un
+                // User dédié identifié par téléphone (CORPORATE_PHONE, wallet.ts), pas un
+                // rôle. `role: 'SUPER_ADMIN'` n'existe que sur le modèle Staff, jamais sur
+                // User : cette recherche ne trouvait donc jamais rien, et les frais
+                // prélevés au client n'étaient crédités nulle part — ils disparaissaient
+                // silencieusement à chaque retrait guichet facturé. Résolu hors transaction
+                // (corporateWallet, plus haut) plutôt que re-cherché ici.
+                await tx.wallet.update({ where: { id: corporateWallet.id }, data: { balance: { increment: fee } } });
             }
 
             // 8. Opération transaction
@@ -265,7 +283,12 @@ export class CashOperationService {
             });
 
             return transaction;
-        });
+        }, { timeout: 15000 });
+        // Timeout relevé à 15s (défaut Prisma : 5s) — cette transaction enchaîne une
+        // douzaine d'allers-retours séquentiels (session, agence, client, plafonds,
+        // anti-fractionnement, écritures) ; contre la base distante, elle expirait déjà
+        // sous charge réseau réelle, y compris avant l'ajout du crédit Corporate ci-dessus
+        // (vérifié en le reproduisant : "Transaction already closed... 5335 ms passed").
     }
 
 }

@@ -19,6 +19,7 @@ import SupportCenter from './SupportCenter';
 import TellerTerminal from './TellerTerminal';
 import Treasury from './Treasury';
 import Users from './Users';
+import Vaults from './Vaults';
 
 export default function App() {
   // VUL-05 : Le token JWT est migré vers sessionStorage au lieu de localStorage.
@@ -130,7 +131,10 @@ export default function App() {
     },
     {
       id: 'risque', label: 'RISQUE & CONFORMITÉ', icon: <ShieldAlert size={18} />, roles: ['SUPER_ADMIN', 'ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
-      items: [{ id: 'kyc', label: 'Dossiers KYC / AML' }]
+      items: [
+        { id: 'kyc', label: 'Dossiers KYC / AML' },
+        { id: 'vaults', label: 'Caisses Communes' }
+      ]
     },
     {
       id: 'litiges', label: 'LITIGES', icon: <MessageSquare size={18} />, roles: ['SUPER_ADMIN', 'ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
@@ -230,8 +234,11 @@ export default function App() {
               <div className={`nav-item ${activeTab === 'reclamations' ? 'active' : ''}`} onClick={() => handleNav('reclamations')} style={{ marginBottom: 4 }}>
                 <MessageSquare size={18} /> Support & Réclamations
               </div>
-              <div className={`nav-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => handleNav('users')} style={{ marginBottom: 8 }}>
+              <div className={`nav-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => handleNav('users')} style={{ marginBottom: 4 }}>
                 <UsersIcon size={18} /> Base Clients (C-360)
+              </div>
+              <div className={`nav-item ${activeTab === 'vaults' ? 'active' : ''}`} onClick={() => handleNav('vaults')} style={{ marginBottom: 8 }}>
+                <ShieldCheck size={18} /> Caisses Communes
               </div>
             </>
           )}
@@ -362,6 +369,7 @@ export default function App() {
               {activeTab === 'branches' && <AgencyCenter token={token} role={role} />}
               {activeTab === 'agents-legacy' && <Users token={token} staffRole={role} lockedRole="AGENT" />}
               {activeTab === 'kyc' && <KycMod token={token} />}
+              {activeTab === 'vaults' && <Vaults token={token} />}
               {activeTab === 'ledger' && <Ledger token={token} />}
               {activeTab === 'treasury' && <Treasury token={token} />}
               {activeTab === 'audit' && <AuditLogs token={token} />}

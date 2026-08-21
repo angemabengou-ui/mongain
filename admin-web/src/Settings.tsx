@@ -229,7 +229,7 @@ export default function PlatformConfig({ token }: { token: string }) {
     const [drafts, setDrafts] = useState<any>({});
 
     // FEE PREVIEW STATE
-    const [sim, setSim] = useState({ amount: 100000, type: 'CASH_OUT', kyc: 'TIER1' });
+    const [sim, setSim] = useState({ amount: 100000, type: 'CASH_OUT_AGENCE', kyc: 'TIER1' });
 
     useEffect(() => { loadAll(); }, []);
 
@@ -340,10 +340,18 @@ export default function PlatformConfig({ token }: { token: string }) {
     const simulateFee = () => {
         const amt = parseFloat(sim.amount as any) || 0;
         if (sim.type === 'CASH_IN') return amt * (settings.taxCashIn || 0);
-        if (sim.type === 'CASH_OUT') {
-            if (amt <= (settings.agencyWithdrawThreshold || 500000)) return 0;
-            return amt * (settings.taxWithdraw || 0);
+        // Retrait Agence (guichet Staff / réseau d'agents) : gratuit jusqu'au seuil, puis
+        // un taux marginal sur le seul dépassement — pas sur le montant entier une fois le
+        // seuil franchi (voir backend CashOperationService.ts / wallet.ts qr-cash-out,
+        // corrigés pour appliquer exactement cette formule).
+        if (sim.type === 'CASH_OUT_AGENCE') {
+            const threshold = settings.agencyWithdrawThreshold || 500000;
+            if (amt <= threshold) return 0;
+            return (amt - threshold) * (settings.agencyTaxWithdraw || 0);
         }
+        // Retrait chez un Marchand : taux fixe, aucun seuil gratuit — distinct du retrait
+        // Agence ci-dessus (voir wallet.ts /client-initiated-withdraw).
+        if (sim.type === 'CASH_OUT_MARCHAND') return amt * (settings.taxWithdraw || 0);
         if (sim.type === 'P2P') return amt * (settings.taxP2P || 0);
         return 0;
     };
@@ -415,11 +423,16 @@ export default function PlatformConfig({ token }: { token: string }) {
                             <div>
                                 <div className="card" style={{ padding: 24, marginBottom: 24 }}>
                                     <h3>Frais de Transactions (Taxes)</h3>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 24 }}>
                                         <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)' }}>
-                                            <h4 style={{ margin: '0 0 12px', color: 'var(--accent)' }}>Retrait (Cash-Out)</h4>
-                                            <div><label>Taux de retrait (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxWithdraw || 0) * 100} onChange={e => handleFieldChange('taxWithdraw', e.target.value)} /></div>
-                                            <div style={{ marginTop: 12 }}><label>Seuil de Retrait Gratuit (FCFA)</label><input className="input" type="number" value={drafts.agencyWithdrawThreshold || 0} onChange={e => handleFieldChange('agencyWithdrawThreshold', e.target.value)} /></div>
+                                            <h4 style={{ margin: '0 0 12px', color: 'var(--accent)' }}>Retrait Agence (guichet)</h4>
+                                            <div><label>Seuil de Retrait Gratuit (FCFA)</label><input className="input" type="number" value={drafts.agencyWithdrawThreshold || 0} onChange={e => handleFieldChange('agencyWithdrawThreshold', e.target.value)} /></div>
+                                            <div style={{ marginTop: 12 }}><label>Taux au-delà du seuil, sur le dépassement (%)</label><input className="input" type="number" step="0.01" value={(drafts.agencyTaxWithdraw || 0) * 100} onChange={e => handleFieldChange('agencyTaxWithdraw', e.target.value)} /></div>
+                                        </div>
+                                        <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)' }}>
+                                            <h4 style={{ margin: '0 0 12px', color: '#f59e0b' }}>Retrait Marchand</h4>
+                                            <div><label>Taux fixe, sans seuil (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxWithdraw || 0) * 100} onChange={e => handleFieldChange('taxWithdraw', e.target.value)} /></div>
+                                            <div style={{ marginTop: 12 }}><label>Commission reversée au marchand (%)</label><input className="input" type="number" step="0.01" value={(drafts.rewardMerchant || 0) * 100} onChange={e => handleFieldChange('rewardMerchant', e.target.value)} /></div>
                                         </div>
                                         <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)' }}>
                                             <h4 style={{ margin: '0 0 12px', color: 'var(--success)' }}>Dépôt (Cash-In) & P2P</h4>
@@ -427,13 +440,13 @@ export default function PlatformConfig({ token }: { token: string }) {
                                             <div style={{ marginTop: 12 }}><label>Taux P2P (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxP2P || 0) * 100} onChange={e => handleFieldChange('taxP2P', e.target.value)} /></div>
                                         </div>
                                     </div>
-                                    <button className="btn" style={{ marginTop: 24, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_FEES', ['taxWithdraw', 'agencyWithdrawThreshold', 'taxCashIn', 'taxP2P'])}>Déposer Changement (Maker)</button>
+                                    <button className="btn" style={{ marginTop: 24, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_FEES', ['taxWithdraw', 'agencyWithdrawThreshold', 'agencyTaxWithdraw', 'rewardMerchant', 'taxCashIn', 'taxP2P'])}>Déposer Changement (Maker)</button>
                                 </div>
 
                                 <div className="card" style={{ padding: 24, background: '#1e293b', color: 'white' }}>
                                     <h3 style={{ borderBottom: '1px solid #334155', paddingBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}><Calculator size={20} /> FEE PREVIEW / Simulateur</h3>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginTop: 16 }}>
-                                        <div><label style={{ color: '#94a3b8' }}>Type d'Opération</label><select className="input" style={{ background: '#0f172a', color: 'white', border: '1px solid #334155' }} value={sim.type} onChange={e => setSim({ ...sim, type: e.target.value })}><option value="CASH_OUT">Cash-Out (Retrait Agence)</option><option value="CASH_IN">Cash-In (Dépôt)</option><option value="P2P">Transfert (End-to-End)</option></select></div>
+                                        <div><label style={{ color: '#94a3b8' }}>Type d'Opération</label><select className="input" style={{ background: '#0f172a', color: 'white', border: '1px solid #334155' }} value={sim.type} onChange={e => setSim({ ...sim, type: e.target.value })}><option value="CASH_OUT_AGENCE">Retrait Agence (guichet)</option><option value="CASH_OUT_MARCHAND">Retrait Marchand</option><option value="CASH_IN">Cash-In (Dépôt)</option><option value="P2P">Transfert (End-to-End)</option></select></div>
                                         <div><label style={{ color: '#94a3b8' }}>Niveau Client</label><select className="input" style={{ background: '#0f172a', color: 'white', border: '1px solid #334155' }} value={sim.kyc} onChange={e => setSim({ ...sim, kyc: e.target.value })}><option value="TIER0">Non-Vérifié (Tier 0)</option><option value="TIER1">Vérifié (Tier 1)</option></select></div>
                                         <div><label style={{ color: '#94a3b8' }}>Montant</label><input className="input" type="number" style={{ background: '#0f172a', color: 'white', border: '1px solid #334155', fontSize: 18, fontWeight: 800 }} value={sim.amount} onChange={e => setSim({ ...sim, amount: Number(e.target.value) })} /></div>
                                     </div>

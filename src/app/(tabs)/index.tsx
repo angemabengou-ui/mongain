@@ -43,27 +43,26 @@ export default function DashboardScreen() {
   const [merchantStats, setMerchantStats] = useState<{ todaySalesAmount: number; todayCommission: number; allTimeCommission: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [appConfig, setAppConfig] = useState({ seegEnabled: true, tontineEnabled: true });
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
 
   const router = useRouter();
-  const { user, logout } = useAuth();
+  // `settings` (taux, seuils, activation SEEG/Tontine) est déjà chargé une fois par
+  // AuthContext au démarrage et à chaque connexion — le refaire ici à chaque focus de
+  // cet onglet (l'écran le plus visité de l'app) doublait un appel réseau identique à
+  // chaque retour sur l'accueil, sans jamais changer entre deux ouvertures de session.
+  const { user, logout, settings } = useAuth();
+  const appConfig = { seegEnabled: settings?.seegEnabled ?? true, tontineEnabled: settings?.tontineEnabled ?? true };
 
   const loadData = useCallback(async () => {
     try {
-      const [walletData, txData, settingsData] = await Promise.all([
+      const [walletData, txData] = await Promise.all([
         apiGetBalance(),
         apiGetTransactions(),
-        require('../../services/api').apiGetSystemSettings()
       ]);
       setBalance(walletData.balance);
       setCurrency(walletData.currency);
-
-      if (settingsData) {
-        setAppConfig({ seegEnabled: settingsData.seegEnabled, tontineEnabled: settingsData.tontineEnabled });
-      }
 
       setTransactions(txData.slice(0, 3)); // 3 dernières
 

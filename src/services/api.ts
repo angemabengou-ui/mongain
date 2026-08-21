@@ -254,6 +254,9 @@ export const apiInviteToTontine = (groupId: string, phone: string) =>
 export const apiReorderTontine = (groupId: string, orderMap: { participantId: string, newOrder: number }[]) =>
     request('POST', '/api/tontine/reorder', { groupId, orderMap }, true) as Promise<any>;
 
+export const apiLeaveTontine = (groupId: string) =>
+    request('POST', '/api/tontine/leave', { groupId }, true) as Promise<any>;
+
 // ==========================================
 // VAULTS (CAISSE COMMUNE / MULTISIG)
 // ==========================================
@@ -261,8 +264,14 @@ export const apiReorderTontine = (groupId: string, orderMap: { participantId: st
 export const apiGetVaults = () =>
     request('GET', '/api/vaults', undefined, true) as Promise<any>;
 
-export const apiCreateVault = (data: { name: string; description?: string }) =>
+export const apiCreateVault = (data: { name: string; description?: string; requiredApprovals?: number }) =>
     request('POST', '/api/vaults', data, true) as Promise<any>;
+
+export const apiUpdateVaultSettings = (id: string, data: { requiredApprovals: number }) =>
+    request('PUT', `/api/vaults/${id}/settings`, data, true) as Promise<any>;
+
+export const apiLeaveVault = (id: string) =>
+    request('POST', `/api/vaults/${id}/leave`, undefined, true) as Promise<any>;
 
 export const apiGetVaultDetails = (id: string) =>
     request('GET', `/api/vaults/${id}`, undefined, true) as Promise<any>;
@@ -276,7 +285,7 @@ export const apiUpdateVaultRoles = (id: string, data: { targetUserId: string, is
 export const apiDepositVault = (id: string, amount: string) =>
     request('POST', `/api/vaults/${id}/deposit`, { amount }, true) as Promise<any>;
 
-export const apiWithdrawRequestVault = (id: string, data: { amount: string, destinationType: string, destinationId?: string }) =>
+export const apiWithdrawRequestVault = (id: string, data: { amount: string, destinationType: string, destinationId?: string, destinationPhone?: string, reason: string }) =>
     request('POST', `/api/vaults/${id}/withdraw-request`, data, true) as Promise<any>;
 
 export const apiApproveVault = (id: string, txId: string) =>
@@ -285,5 +294,5 @@ export const apiApproveVault = (id: string, txId: string) =>
 export const apiGetMyVouchers = () =>
     request('GET', '/api/vaults/vouchers/my', undefined, true) as Promise<any>;
 
-export const apiSpendVoucher = (voucherId: string, destinationPhone: string) =>
-    request('POST', `/api/vaults/vouchers/${voucherId}/spend`, { destinationPhone }, true) as Promise<any>;
+export const apiSpendVoucher = (voucherId: string, destinationPhone: string, pin: string) =>
+    request('POST', `/api/vaults/vouchers/${voucherId}/spend`, { destinationPhone, pin }, true) as Promise<any>;

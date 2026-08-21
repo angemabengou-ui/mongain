@@ -1,5 +1,3 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { ArrowDownLeft, ArrowUpRight, Download, FileText, RotateCcw, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { API_URL } from './config';
@@ -109,7 +107,15 @@ export default function Ledger({ token }: { token: string }) {
         document.body.removeChild(link);
     };
 
-    const exportPDF = () => {
+    // jsPDF + jspdf-autotable (et html2canvas, dont jsPDF dépend) pesaient ~230 Ko à eux
+    // seuls dans le bundle principal, chargés sur CHAQUE page de l'admin-web alors qu'ils
+    // ne servent qu'à ce seul export PDF ponctuel. Import dynamique : le code n'est
+    // récupéré qu'au moment où l'utilisateur clique réellement sur "Exporter PDF".
+    const exportPDF = async () => {
+        const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+            import('jspdf'),
+            import('jspdf-autotable'),
+        ]);
         const doc = new jsPDF('landscape');
         doc.setFontSize(22);
         doc.setTextColor(29, 197, 233);

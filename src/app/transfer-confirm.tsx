@@ -152,13 +152,20 @@ export default function TransferConfirmScreen() {
 
     const handleSpendVoucher = async (voucherId: string, amount: number) => {
         if (submittingRef.current) return;
+        // Un bon représente de l'argent déjà validé par plusieurs commissaires — au
+        // même titre qu'un transfert normal, le dépenser exige le code PIN du
+        // porteur du bon, saisi dans le même champ que pour "Payer (PIN)" ci-dessus.
+        if (!pin || pin.length !== 4) {
+            setError('Entrez votre code PIN ci-dessus pour utiliser ce bon.');
+            return;
+        }
         submittingRef.current = true;
         setLoading(true);
         setError('');
         try {
-            const result = await apiSpendVoucher(voucherId, receiverPhone);
+            const result = await apiSpendVoucher(voucherId, receiverPhone, pin);
             setSuccess({
-                receiverName: result.destination || receiverName || receiverPhone,
+                receiverName: result.data?.destinationName || receiverName || receiverPhone,
                 remainingBalance: 0,
                 amount: amount,
             });
