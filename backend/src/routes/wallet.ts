@@ -419,7 +419,10 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
 
             // La limite Anti-Blanchiment est maintenant intÃ©gralement calculÃ©e via le moteur.
             // On vÃ©rifie de faÃ§on unifiÃ©e Daily, Monthly et Per_Tx
-            const settings = await tx.systemSettings.findFirst() || { taxP2P: 0.01, taxWithdraw: 0.013, rewardMerchant: 0.003, agencyWithdrawThreshold: 500000, agencyTaxWithdraw: 0.01 };
+            // getSystemSettings() (mis en cache, voir routes/settings.ts) au lieu d'un
+            // tx.systemSettings.findFirst() : évite un aller-retour Neon de plus à l'intérieur
+            // de cette transaction déjà proche du timeout Prisma.
+            const settings = await getSystemSettings();
             await LimitEngine.verifyAndIncrementConsumption(tx, sender.id, sender.wallet.id, amount, settings);
 
             // Un Agent qui crÃ©dite un client via cet endpoint effectue un dÃ©pÃ´t guichet
@@ -512,7 +515,11 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
                 receiverPushToken: (receiver as any).pushToken,
                 senderName: sender.name
             };
-        });
+            // Timeout relevé à 15s (défaut Prisma : 5s) — même correctif que sur
+            // CashOperationService.executeCashOut, client-initiated-withdraw et le départ
+            // de tontine : /transfer (l'endpoint le plus sollicité de toute l'app) dépassait
+            // aussi le délai par défaut sous charge réseau réelle contre la base distante.
+        }, { timeout: 15000 });
 
         // Notify Receiver via Expo Push
         if ((result as any).receiverPushToken) {
@@ -601,7 +608,9 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
             if (!agent || !agent.wallet) throw new Error("Agent introuvable.");
             if (agent.role !== 'AGENT' && agent.role !== 'MERCHANT') throw new Error("OpÃ©ration impossible. Ce QR n'appartient ni Ã  un Agent ni Ã  un CommerÃ§ant.");
 
-            const settings = await tx.systemSettings.findFirst() || { taxP2P: 0.01, taxWithdraw: 0.013, rewardMerchant: 0.003, agencyWithdrawThreshold: 500000, agencyTaxWithdraw: 0.01 };
+            // getSystemSettings() (mis en cache) au lieu d'un tx.systemSettings.findFirst() —
+            // même correctif que ci-dessus : un round-trip Neon de moins dans cette transaction.
+            const settings = await getSystemSettings();
 
             // Plafond Anti-Blanchiment : mÃªme contrÃ´le que /transfer et /pay-bill (services.ts)
             // â€” sans Ã§a, un client Tier 0 pouvait contourner sa limite journaliÃ¨re/mensuelle en

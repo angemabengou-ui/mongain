@@ -1,5 +1,6 @@
 import { prisma } from '../prisma';
 import { getOrCreateCorporateWallet } from '../routes/wallet';
+import { getSystemSettings } from '../routes/settings';
 import { generateReference } from '../utils/reference';
 import { LimitEngine } from './LimitEngine';
 
@@ -161,7 +162,9 @@ export class CashOperationService {
             if (client.riskFlags.length > 0) throw new Error(`Ce compte possède ${client.riskFlags.length} flags de risque. Fraude suspectée, retrait bloqué.`);
 
             // 5. Limit Engine Validation
-            const settings = await tx.systemSettings.findFirst();
+            // getSystemSettings() (mis en cache) plutôt que tx.systemSettings.findFirst() :
+            // un round-trip Neon de moins à l'intérieur de cette transaction.
+            const settings = await getSystemSettings();
             // Vérifie que le Cash Out n'explose pas la limite du mois ou jour.
             const limits = await LimitEngine.getApplicableLimits(client, settings);
             if (client.wallet.dailySpent + amount > limits.effectiveDaily) {

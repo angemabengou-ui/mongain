@@ -1,10 +1,9 @@
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import express from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { prisma } from '../prisma';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // ==========================================
 // 1. VAULT MANAGEMENT

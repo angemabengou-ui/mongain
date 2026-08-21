@@ -15,7 +15,26 @@ const maskSecretForHistory = (key: string, value: any) => {
     return '••••••••' + String(value).slice(-4);
 };
 
+// Cache en mémoire (TTL court) : cette ligne unique (SystemSettings n'a jamais qu'une
+// seule row) était relue à chaque requête financière — parfois plusieurs fois pour une
+// seule requête (circuitBreaker + handler + à l'intérieur même d'une transaction Prisma),
+// chaque lecture étant un aller-retour réseau vers Neon. Invalidée immédiatement à chaque
+// écriture (POST /approve/:id ci-dessous) : aucun délai de propagation pour un admin qui
+// active le circuit breaker, seulement pour d'éventuelles lectures concurrentes entre deux
+// écritures, ce qui n'a aucun effet pratique ici.
+let settingsCache: Awaited<ReturnType<typeof prisma.systemSettings.findFirst>> | null = null;
+let settingsCacheAt = 0;
+const SETTINGS_CACHE_TTL_MS = 5000;
+
+export const invalidateSettingsCache = () => {
+    settingsCache = null;
+    settingsCacheAt = 0;
+};
+
 export const getSystemSettings = async () => {
+    const now = Date.now();
+    if (settingsCache && now - settingsCacheAt < SETTINGS_CACHE_TTL_MS) return settingsCache;
+
     let settings = await prisma.systemSettings.findFirst();
     if (!settings) {
         settings = await prisma.systemSettings.create({
@@ -27,6 +46,8 @@ export const getSystemSettings = async () => {
             } as any
         });
     }
+    settingsCache = settings;
+    settingsCacheAt = now;
     return settings;
 };
 
@@ -233,6 +254,7 @@ router.post('/approve/:id', authMiddleware, async (req: AuthRequest, res) => {
                     }
                 })
             ]);
+            invalidateSettingsCache();
         }
 
         return res.json({ message: 'Modifications appliquées de façon sécurisée.' });

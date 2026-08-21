@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { prisma } from '../prisma';
+import { getSystemSettings } from '../routes/settings';
 import { LimitEngine } from './LimitEngine';
 
 const TONTINE_VAULT_PHONE = '+24155555555';
@@ -32,7 +33,7 @@ export async function executeTontineCycle(groupId: string) {
     if (!group) return { success: false, message: "Group not found" };
 
     const vaultWallet = await getTontineVaultWallet();
-    const settings = (await prisma.systemSettings.findFirst()) || {};
+    const settings = await getSystemSettings();
 
     let debitedCount = 0;
     let failedCount = 0;

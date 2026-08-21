@@ -1,9 +1,13 @@
 import { NextFunction, Request, Response } from 'express';
-import { prisma } from '../prisma';
+import { getSystemSettings } from '../routes/settings';
 
 export const circuitBreakerMiddleware = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const settings = await prisma.systemSettings.findFirst();
+        // getSystemSettings() est mis en cache (voir routes/settings.ts) : ce middleware
+        // s'exécute sur CHAQUE requête financière (wallet/merchant/vaults/tontine/services/
+        // agency), donc un aller-retour Neon non caché ici s'ajoutait systématiquement à la
+        // latence de chaque transfert, dépôt, retrait...
+        const settings = await getSystemSettings();
         if (!settings) return next();
 
         // Mode Maintenance Globale
