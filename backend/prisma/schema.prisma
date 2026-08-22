@@ -673,6 +673,11 @@ model VaultMember {
   isInitiator Boolean  @default(false) // Responsable
   isValidator Boolean  @default(false) // Peut approuver
   isTreasurer Boolean  @default(false) // Trésorier désigné
+  // Son approbation est obligatoire pour TOUT retrait, en plus du seuil numérique
+  // Vault.requiredApprovals — répond au besoin de désigner des personnes précises (pas
+  // juste "N validateurs au hasard parmi le pool"). Toujours false si isValidator=false
+  // (voir PUT /:id/roles, qui force la cohérence).
+  isRequiredValidator Boolean @default(false)
 
   joinedAt    DateTime @default(now())
 

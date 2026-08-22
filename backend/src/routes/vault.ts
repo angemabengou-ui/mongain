@@ -154,7 +154,7 @@ router.post('/:id/invite', authMiddleware, async (req: AuthRequest, res) => {
 // Mettre à jour les rôles d'un membre
 router.put('/:id/roles', authMiddleware, async (req: AuthRequest, res) => {
     const vaultId = req.params.id as string;
-    const { targetUserId, isInitiator, isValidator, isTreasurer, isAdmin } = req.body;
+    const { targetUserId, isInitiator, isValidator, isTreasurer, isAdmin, isRequiredValidator } = req.body;
 
     try {
         const adminCheck = await prisma.vaultMember.findUnique({
@@ -187,9 +187,28 @@ router.put('/:id/roles', authMiddleware, async (req: AuthRequest, res) => {
             }
         }
 
+        // Sans ce contrôle, décocher le dernier commissaire restant rendait la caisse
+        // définitivement bloquée : plus aucun retrait n'aurait jamais pu être approuvé
+        // (même bug de fond que le seuil requiredApprovals corrigé plus tôt dans cette caisse).
+        if (isValidator === false) {
+            const otherValidators = await prisma.vaultMember.count({
+                where: { vaultId, isValidator: true, userId: { not: targetUserId } }
+            });
+            if (otherValidators === 0) {
+                return res.status(400).json({ success: false, message: "Impossible de retirer le dernier commissaire — plus personne ne pourrait approuver un retrait." });
+            }
+        }
+
+        // Un validateur obligatoire est nécessairement un validateur : si Commissaire est
+        // retiré (ou jamais accordé) dans cette même requête, on efface aussi le caractère
+        // obligatoire plutôt que de laisser un état incohérent (obligatoire mais pas
+        // habilité à approuver).
+        const resolvedIsValidator = isValidator ?? targetMember.isValidator;
+        const resolvedIsRequiredValidator = resolvedIsValidator ? (isRequiredValidator ?? targetMember.isRequiredValidator) : false;
+
         const updatedRole = await prisma.vaultMember.update({
             where: { vaultId_userId: { vaultId, userId: targetUserId } },
-            data: { isInitiator, isValidator, isTreasurer, isAdmin }
+            data: { isInitiator, isValidator, isTreasurer, isAdmin, isRequiredValidator: resolvedIsRequiredValidator }
         });
 
         res.json({ success: true, data: updatedRole });
@@ -459,7 +478,8 @@ router.post('/:id/approve/:txId', authMiddleware, async (req: AuthRequest, res) 
                 }
             });
 
-            const currentApprovalsCount = vaultTx.approvals.length + 1;
+            const approvedUserIds = [...vaultTx.approvals.map(a => a.userId), req.userId!];
+            const currentApprovalsCount = approvedUserIds.length;
             const validatorCountArray = await tx.vaultMember.findMany({ where: { vaultId, isValidator: true } });
 
             // Le seuil configuré par la caisse (vault.requiredApprovals, réglable par le
@@ -473,7 +493,14 @@ router.post('/:id/approve/:txId', authMiddleware, async (req: AuthRequest, res) 
             // un plancher de 1.
             const requiredApprovals = Math.max(1, Math.min(vaultTx.vault.requiredApprovals, validatorCountArray.length));
 
-            if (currentApprovalsCount >= requiredApprovals) {
+            // Au-delà du simple seuil numérique, le Président peut désigner des commissaires
+            // dont l'approbation est spécifiquement obligatoire (VaultMember.isRequiredValidator)
+            // — répond au besoin de choisir QUI doit valider, pas seulement COMBIEN. Tant que
+            // l'un d'eux n'a pas approuvé, le retrait reste bloqué même si le seuil numérique
+            // est déjà atteint par d'autres commissaires.
+            const missingRequiredValidators = validatorCountArray.filter(v => v.isRequiredValidator && !approvedUserIds.includes(v.userId));
+
+            if (currentApprovalsCount >= requiredApprovals && missingRequiredValidators.length === 0) {
                 // Débit Caisse — garde atomique (balance: gte) : deux demandes de retrait
                 // approuvées au même moment pouvaient toutes deux passer ce point et faire
                 // passer le solde de la caisse en négatif.
@@ -539,12 +566,20 @@ router.post('/:id/approve/:txId', authMiddleware, async (req: AuthRequest, res) 
             }
 
             // Retrait pas encore exécuté : le demandeur voit sa progression sans avoir
-            // à rouvrir la caisse pour vérifier lui-même où en sont les approbations.
+            // à rouvrir la caisse pour vérifier lui-même où en sont les approbations —
+            // et, le cas échéant, QUI bloque encore (validateur obligatoire non répondu),
+            // pas seulement combien il en manque.
+            const missingNames = missingRequiredValidators.length > 0
+                ? (await tx.user.findMany({ where: { id: { in: missingRequiredValidators.map(v => v.userId) } }, select: { name: true } })).map(u => u.name)
+                : [];
+            const progressBody = missingNames.length > 0
+                ? `${currentApprovalsCount}/${requiredApprovals} approbations reçues sur « ${vaultTx.vault.name} ». En attente de : ${missingNames.join(', ')} (validateur obligatoire).`
+                : `${currentApprovalsCount}/${requiredApprovals} approbations reçues sur « ${vaultTx.vault.name} ».`;
             await tx.notification.create({
                 data: {
                     userId: vaultTx.requestedById,
                     title: 'Retrait approuvé — en attente',
-                    body: `${currentApprovalsCount}/${requiredApprovals} approbations reçues sur « ${vaultTx.vault.name} ».`,
+                    body: progressBody,
                     type: 'TRANSACTION'
                 }
             });

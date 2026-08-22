@@ -279,7 +279,7 @@ export const apiGetVaultDetails = (id: string) =>
 export const apiInviteVault = (id: string, phone: string) =>
     request('POST', `/api/vaults/${id}/invite`, { phone }, true) as Promise<any>;
 
-export const apiUpdateVaultRoles = (id: string, data: { targetUserId: string, isInitiator: boolean, isValidator: boolean, isTreasurer: boolean, isAdmin: boolean }) =>
+export const apiUpdateVaultRoles = (id: string, data: { targetUserId: string, isInitiator: boolean, isValidator: boolean, isTreasurer: boolean, isAdmin: boolean, isRequiredValidator?: boolean }) =>
     request('PUT', `/api/vaults/${id}/roles`, data, true) as Promise<any>;
 
 export const apiDepositVault = (id: string, amount: string) =>

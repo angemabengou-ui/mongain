@@ -29,11 +29,12 @@ import {
 } from '../services/api';
 
 // Un membre peut cumuler plusieurs rôles (le Président a les quatre par défaut à
-// la création) — chaque bascule est indépendante des autres.
-const ROLE_TOGGLES: { key: 'isAdmin' | 'isInitiator' | 'isValidator' | 'isTreasurer'; label: string }[] = [
+// la création) — chaque bascule est indépendante des autres. Commissaire (isValidator)
+// se gère depuis la carte « Approbations requises » ci-dessous, à côté du nombre requis,
+// pas ici — les deux réglages sont liés et doivent rester visibles ensemble.
+const ROLE_TOGGLES: { key: 'isAdmin' | 'isInitiator' | 'isTreasurer'; label: string }[] = [
     { key: 'isAdmin', label: 'Président' },
     { key: 'isInitiator', label: 'Secrétaire' },
-    { key: 'isValidator', label: 'Commissaire' },
     { key: 'isTreasurer', label: 'Trésorier' },
 ];
 
@@ -180,7 +181,7 @@ export default function VaultDetailScreen() {
         }
     };
 
-    const handleToggleRole = async (member: any, key: 'isAdmin' | 'isInitiator' | 'isValidator' | 'isTreasurer') => {
+    const handleToggleRole = async (member: any, key: 'isAdmin' | 'isInitiator' | 'isValidator' | 'isTreasurer' | 'isRequiredValidator') => {
         setRoleUpdateLoading(true);
         try {
             await apiUpdateVaultRoles(id, {
@@ -189,6 +190,7 @@ export default function VaultDetailScreen() {
                 isInitiator: key === 'isInitiator' ? !member.isInitiator : !!member.isInitiator,
                 isValidator: key === 'isValidator' ? !member.isValidator : !!member.isValidator,
                 isTreasurer: key === 'isTreasurer' ? !member.isTreasurer : !!member.isTreasurer,
+                isRequiredValidator: key === 'isRequiredValidator' ? !member.isRequiredValidator : !!member.isRequiredValidator,
             });
             load();
         } catch (e: any) {
@@ -429,6 +431,8 @@ export default function VaultDetailScreen() {
                             {pendingTx.map((tx: any) => {
                                 const required = Math.max(1, Math.min(vault.requiredApprovals, (vault.members || []).filter((m: any) => m.isValidator).length || 1));
                                 const iApproved = tx.approvals.some((a: any) => a.userId === user?.id);
+                                const approvedIds = tx.approvals.map((a: any) => a.userId);
+                                const missingRequired = (vault.members || []).filter((m: any) => m.isRequiredValidator && !approvedIds.includes(m.userId));
                                 return (
                                     <View key={tx.id} style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
                                         <View style={styles.cardRow}>
@@ -440,6 +444,11 @@ export default function VaultDetailScreen() {
                                         </View>
                                         {tx.reason && (
                                             <Text style={{ color: COLORS.textPrimary, fontSize: 13, marginTop: 10, fontStyle: 'italic' }}>« {tx.reason} »</Text>
+                                        )}
+                                        {missingRequired.length > 0 && (
+                                            <Text style={{ color: COLORS.error, fontSize: 12, marginTop: 8, fontWeight: '600' }}>
+                                                En attente de la validation obligatoire de : {missingRequired.map((m: any) => m.user.name).join(', ')}
+                                            </Text>
                                         )}
                                         {tx.destinationType === 'TRANSFER' && (
                                             <View style={[styles.transferTag, { backgroundColor: COLORS.error + '15' }]}>
@@ -478,6 +487,37 @@ export default function VaultDetailScreen() {
                                 </View>
                                 <Text style={[styles.helper, { color: COLORS.textSecondary, marginTop: 10 }]}>
                                     S'applique à tous les retraits, envois directs compris. 1 : vous pouvez agir seul. 2 ou plus : chaque sortie de fonds attend d'être validée par ce nombre de commissaires avant de partir.
+                                </Text>
+
+                                <Text style={[styles.helper, { color: COLORS.textSecondary, marginTop: 16, marginBottom: 6, fontWeight: '700' }]}>
+                                    Qui sont les commissaires (cochez qui peut valider) :
+                                </Text>
+                                {vault.members.map((m: any, idx: number) => (
+                                    <View key={m.id} style={{ borderBottomWidth: idx === vault.members.length - 1 ? 0 : 1, borderColor: COLORS.border }}>
+                                        <TouchableOpacity
+                                            style={[styles.memberRow, { borderColor: COLORS.border, paddingHorizontal: 0, borderBottomWidth: 0, paddingBottom: m.isValidator ? 4 : 12 }]}
+                                            onPress={() => handleToggleRole(m, 'isValidator')}
+                                            disabled={roleUpdateLoading}
+                                        >
+                                            <Text style={{ color: COLORS.textPrimary }}>{m.user.name}{m.userId === user?.id ? ' (Vous)' : ''}</Text>
+                                            <Ionicons name={m.isValidator ? 'checkbox' : 'square-outline'} size={22} color={m.isValidator ? COLORS.primary : COLORS.textSecondary} />
+                                        </TouchableOpacity>
+                                        {m.isValidator && (
+                                            <TouchableOpacity
+                                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6, paddingBottom: 12 }}
+                                                onPress={() => handleToggleRole(m, 'isRequiredValidator')}
+                                                disabled={roleUpdateLoading}
+                                            >
+                                                <Text style={{ color: m.isRequiredValidator ? COLORS.error : COLORS.textSecondary, fontSize: 12, fontWeight: '600' }}>
+                                                    Son approbation est obligatoire
+                                                </Text>
+                                                <Ionicons name={m.isRequiredValidator ? 'checkbox' : 'square-outline'} size={18} color={m.isRequiredValidator ? COLORS.error : COLORS.textSecondary} />
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+                                ))}
+                                <Text style={[styles.helper, { color: COLORS.textSecondary, marginTop: 10 }]}>
+                                    « Obligatoire » : le retrait reste bloqué tant que cette personne précise n'a pas validé, même si le nombre requis ci-dessus est déjà atteint par d'autres commissaires.
                                 </Text>
                             </View>
                         </>
