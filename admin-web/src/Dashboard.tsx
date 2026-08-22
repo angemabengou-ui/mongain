@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import apiClient from './utils/apiClient';
 
-export default function Dashboard({ token }: { token?: string }) {
+export default function Dashboard() {
     const [stats, setStats] = useState<any>(null);
     const [chartData, setChartData] = useState<any[]>([]);
     const [error, setError] = useState('');

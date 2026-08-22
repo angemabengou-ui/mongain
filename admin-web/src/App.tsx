@@ -361,7 +361,7 @@ export default function App() {
 
           {isSuperAdmin && (
             <>
-              {activeTab === 'dashboard' && <Dashboard token={token} />}
+              {activeTab === 'dashboard' && <Dashboard />}
               {activeTab === 'macro-stats' && <MacroStats token={token} />}
               {activeTab === 'staff-create' && <StaffCreate token={token} />}
               {activeTab === 'staff-assign' && <StaffAssignBranch token={token} />}
