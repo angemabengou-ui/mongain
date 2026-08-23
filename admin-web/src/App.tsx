@@ -1,6 +1,6 @@
-import { Activity, Banknote, Building2, ChevronDown, ChevronRight, LayoutDashboard, LogOut, MessageSquare, Repeat, Settings as SettingsIcon, ShieldAlert, ShieldCheck, Store, Users as UsersIcon } from 'lucide-react';
+import { Activity, Banknote, ChevronDown, ChevronRight, LayoutDashboard, LogOut, MessageSquare, Repeat, Settings as SettingsIcon, Shield, ShieldAlert, ShieldCheck, Store, Users as UsersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import AgencyCenter from './AgencyCenter';
+import Accounts from './Accounts';
 import AuditLogs from './AuditLogs';
 import BranchDashboard from './BranchDashboard';
 import ChangePassword from './ChangePassword';
@@ -13,11 +13,7 @@ import Ledger from './Ledger';
 import Login from './Login';
 import MacroStats from './MacroStats';
 import Settings from './Settings';
-import StaffAccessRights from './StaffAccessRights';
-import StaffAssignBranch from './StaffAssignBranch';
-import StaffCreate from './StaffCreate';
 import SupportCenter from './SupportCenter';
-import SystemAccounts from './SystemAccounts';
 import TellerTerminal from './TellerTerminal';
 import Tontines from './Tontines';
 import Treasury from './Treasury';
@@ -123,13 +119,11 @@ export default function App() {
 
   if (mustChangePassword) return <ChangePassword token={token} onLogout={logout} />;
 
-  // Navigation Map — réorganisée pour éliminer les doublons : "Business" (Marchands &
-  // Agents) et "Clients & Comptes" menaient tous deux au même écran Users.tsx (qui, côté
-  // backend, ne pouvait de toute façon renvoyer que des clients — les agents/marchands en
-  // étaient exclus). Users.tsx gère maintenant ces trois segments via un sélecteur interne,
-  // donc un seul point d'entrée suffit. Même chose pour "Transactions" et "Finance", qui
-  // pointaient tous deux vers le Grand Livre (Ledger). "Organisation" est explicitement
-  // nommée "interne" pour la distinguer des comptes clients/agents/marchands ci-dessus.
+  // Navigation Map — "COMPTES" (Accounts.tsx) regroupe en un seul point d'entrée tout ce
+  // qui gérait auparavant un type de compte séparément (Clients/Agents/Marchands via
+  // Users.tsx, Personnel via StaffCreate/StaffAssignBranch/StaffAccessRights, Agences via
+  // AgencyCenter, Comptes Système). "Transactions" et "Finance" pointaient tous deux vers
+  // le Grand Livre (Ledger), d'où un seul point d'entrée aussi pour ce groupe.
   type NavGroup = { id: string, label: string, icon: any, roles: string[], items: { id: string, label: string, route?: string, roleExclude?: string[] }[] }; const SUPER_ADMIN_GROUPS: NavGroup[] = [
     {
       id: 'control-center', label: 'TABLEAU DE BORD', icon: <LayoutDashboard size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
@@ -139,13 +133,18 @@ export default function App() {
       ]
     },
     {
-      id: 'clients-comptes', label: 'CLIENTS, AGENTS & MARCHANDS', icon: <UsersIcon size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
-      // Caisses Communes rattachée ici (plutôt qu'à Risque & Conformité) : c'est un
-      // produit détenu par les clients, au même titre qu'un wallet — un agent qui
-      // cherche "où sont les comptes/produits clients" doit la trouver du premier
-      // coup, sans avoir à deviner qu'elle sert aussi d'outil d'investigation litige.
+      // Point d'entrée unique pour tout ce qui est "un compte" (clients, agents,
+      // marchands, personnel, agences, comptes système) — avant, il fallait deviner
+      // dans lequel de 3 groupes de menu séparés chercher. Voir Accounts.tsx.
+      id: 'comptes', label: 'COMPTES', icon: <UsersIcon size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
+      items: [{ id: 'accounts', label: 'Gestion des Comptes' }]
+    },
+    {
+      id: 'clients-comptes', label: 'PRODUITS COLLECTIFS', icon: <Shield size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
+      // Caisses Communes / Tontines sont des produits détenus par les clients, pas des
+      // comptes en tant que tels — restent distincts de "COMPTES" ci-dessus, qui
+      // regroupe les PARTIES (qui a un compte), pas les produits qu'elles détiennent.
       items: [
-        { id: 'users', label: 'Base Clients (C-360)' },
         { id: 'vaults', label: 'Caisses Communes' },
         { id: 'tontines', label: 'Tontines' }
       ]
@@ -156,10 +155,7 @@ export default function App() {
     },
     {
       id: 'tresorerie', label: 'TRÉSORERIE', icon: <Banknote size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
-      items: [
-        { id: 'treasury', label: 'Réserve & Liquidités du Siège' },
-        { id: 'system-accounts', label: 'Comptes Système' }
-      ]
+      items: [{ id: 'treasury', label: 'Réserve & Liquidités du Siège' }]
     },
     {
       id: 'risque', label: 'RISQUE & CONFORMITÉ', icon: <ShieldAlert size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
@@ -170,24 +166,6 @@ export default function App() {
     {
       id: 'litiges', label: 'LITIGES', icon: <MessageSquare size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
       items: [{ id: 'reclamations', label: 'Support & Réclamations' }]
-    },
-    {
-      id: 'organisation', label: 'ORGANISATION INTERNE', icon: <Building2 size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
-      // Onboarding du personnel volontairement éclaté en 3 pages distinctes (au lieu d'un
-      // seul écran à modales) : créer l'identité, l'affecter à une agence, puis décider
-      // ses droits — trois décisions séparées, jamais mélangées dans le même geste.
-      items: [
-        { id: 'staff-create', label: '1. Créer un Utilisateur' },
-        { id: 'staff-assign', label: '2. Affecter à une Agence' },
-        { id: 'staff-rights', label: "3. Droits d'Accès" },
-        { id: 'branches', label: 'Centre des Agences' },
-        // Ancien modèle d'agent (User.role='AGENT', sans rattachement à une agence) —
-        // rattaché ici plutôt qu'à l'écran Clients, car un agent opère pour Mongain et
-        // non comme client externe. Pour un nouvel agent avec les vrais droits
-        // opérationnels (session de caisse, coffre physique), utiliser le parcours
-        // "Créer un Utilisateur" ci-dessus (rôle TELLER, lié à une agence via branchId).
-        { id: 'agents-legacy', label: 'Agents Mongain (ancien système)' }
-      ]
     },
     {
       id: 'platform', label: 'PARAMÈTRES SYSTÈME', icon: <SettingsIcon size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
@@ -417,15 +395,10 @@ export default function App() {
             <>
               {activeTab === 'dashboard' && <Dashboard />}
               {activeTab === 'macro-stats' && <MacroStats token={token} />}
-              {activeTab === 'staff-create' && <StaffCreate token={token} />}
-              {activeTab === 'staff-assign' && <StaffAssignBranch token={token} />}
-              {activeTab === 'staff-rights' && <StaffAccessRights token={token} />}
-              {activeTab === 'branches' && <AgencyCenter token={token} role={role} />}
-              {activeTab === 'agents-legacy' && <Users token={token} staffRole={role} lockedRole="AGENT" />}
+              {activeTab === 'accounts' && <Accounts token={token} role={role} onAdjustSystemAccount={(walletId, name) => { setAdjustTarget({ walletId, name }); setActiveTab('treasury'); }} />}
               {activeTab === 'kyc' && <KycMod token={token} />}
               {activeTab === 'ledger' && <Ledger token={token} />}
               {activeTab === 'treasury' && <Treasury token={token} prefillAdjustTarget={adjustTarget} />}
-              {activeTab === 'system-accounts' && <SystemAccounts token={token} onAdjust={(walletId, name) => { setAdjustTarget({ walletId, name }); setActiveTab('treasury'); }} />}
               {activeTab === 'audit' && <AuditLogs token={token} />}
               {activeTab === 'error-logs' && <ErrorLogs token={token} />}
               {activeTab === 'settings' && <Settings token={token} />}

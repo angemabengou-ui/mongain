@@ -6,6 +6,7 @@ import App from '../App';
 // Isole App.tsx : on remplace chaque page enfant par un stub minimal pour ne tester
 // que la logique de routage/permissions/session propre à App (nav par rôle, logout,
 // gate mustChangePassword) sans dépendre du comportement interne de chaque écran.
+vi.mock('../Accounts', () => ({ default: () => <div>Accounts Mock</div> }));
 vi.mock('../AgencyCenter', () => ({ default: () => <div>AgencyCenter Mock</div> }));
 vi.mock('../AuditLogs', () => ({ default: () => <div>AuditLogs Mock</div> }));
 vi.mock('../BranchDashboard', () => ({ default: () => <div>BranchDashboard Mock</div> }));
@@ -86,13 +87,14 @@ describe('App', () => {
 
         await screen.findByText('Dashboard Mock');
         expect(screen.getByText('TABLEAU DE BORD')).toBeInTheDocument();
-        // TRÉSORERIE a 2 destinations (Réserve du Siège + Comptes Système) : groupe
-        // repliable, replié par défaut — il faut l'ouvrir pour voir ses items.
-        expect(screen.getByText('TRÉSORERIE')).toBeInTheDocument();
-        await user.click(screen.getByText('TRÉSORERIE'));
+        // "Gestion des Comptes" (Accounts.tsx) et "Réserve & Liquidités du Siège" n'ont
+        // chacun qu'une seule destination : rendus en liens directs, pas de groupe à ouvrir.
+        expect(screen.getByText('Gestion des Comptes')).toBeInTheDocument();
         expect(screen.getByText('Réserve & Liquidités du Siège')).toBeInTheDocument();
-        expect(screen.getByText('Comptes Système')).toBeInTheDocument();
         expect(screen.getByText('Déconnexion')).toBeInTheDocument();
+
+        await user.click(screen.getByText('Gestion des Comptes'));
+        expect(await screen.findByText('Accounts Mock')).toBeInTheDocument();
     });
 
     it("réserve la navigation Guichet aux rôles d'agence (TELLER) et masque les groupes admin", async () => {
