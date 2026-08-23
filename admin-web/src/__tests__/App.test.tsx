@@ -113,7 +113,7 @@ describe('App', () => {
 
     it('déconnecte un utilisateur et réinitialise le stockage de session', async () => {
         sessionStorage.setItem('admin_token', 'tok-xyz');
-        localStorage.setItem('admin_role', 'ADMIN');
+        localStorage.setItem('admin_role', 'SUPER_ADMIN');
         localStorage.setItem('admin_name', 'Bob');
         setupFetch();
         const user = userEvent.setup();
@@ -130,7 +130,7 @@ describe('App', () => {
 
     it('déconnecte automatiquement si le token est révoqué (401 sur /api/corp/me)', async () => {
         sessionStorage.setItem('admin_token', 'tok-expired');
-        localStorage.setItem('admin_role', 'ADMIN');
+        localStorage.setItem('admin_role', 'SUPER_ADMIN');
         setupFetch(() => Promise.resolve({ status: 401, ok: false, json: async () => ({}) }));
 
         render(<App />);
@@ -141,7 +141,7 @@ describe('App', () => {
 
     it('affiche ChangePassword si un changement de mot de passe est requis', async () => {
         sessionStorage.setItem('admin_token', 'tok-mcp');
-        localStorage.setItem('admin_role', 'ADMIN');
+        localStorage.setItem('admin_role', 'SUPER_ADMIN');
         localStorage.setItem('admin_must_change_pw', '1');
         setupFetch(() => Promise.resolve({ ok: true, status: 200, json: async () => ({ mustChangePassword: true }) }));
 

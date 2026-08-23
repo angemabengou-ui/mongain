@@ -35,8 +35,11 @@ export default function App() {
   const [phone, setPhone] = useState(localStorage.getItem('admin_phone') || '');
   const [mustChangePassword, setMustChangePassword] = useState(localStorage.getItem('admin_must_change_pw') === '1');
 
-  const isBranchOps = ['TELLER', 'BRANCH_MANAGER'].includes(role) || ['ADMIN', 'SUPER_ADMIN'].includes(role);
-  const isSuperAdmin = ['ADMIN', 'SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(role);
+  // 'ADMIN' n'est plus un rôle Staff joignable (voir Login.tsx allowedRoles / backend
+  // STAFF_ROLES) — c'était un vestige de l'ancien modèle où User.role='ADMIN' faisait
+  // office de super-admin, avant le modèle Staff dédié au portail Corporate.
+  const isBranchOps = ['TELLER', 'BRANCH_MANAGER', 'SUPER_ADMIN'].includes(role);
+  const isSuperAdmin = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(role);
   // SUPPORT_MAKER : accès Support/Réclamations & Customer 360 uniquement (voir SUPPORT_ROLES / CRM_FULL_ACCESS côté backend admin.ts)
   const isSupportRole = role === 'SUPPORT_MAKER';
 
@@ -125,14 +128,14 @@ export default function App() {
   // nommée "interne" pour la distinguer des comptes clients/agents/marchands ci-dessus.
   type NavGroup = { id: string, label: string, icon: any, roles: string[], items: { id: string, label: string, route?: string, roleExclude?: string[] }[] }; const SUPER_ADMIN_GROUPS: NavGroup[] = [
     {
-      id: 'control-center', label: 'TABLEAU DE BORD', icon: <LayoutDashboard size={18} />, roles: ['SUPER_ADMIN', 'ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
+      id: 'control-center', label: 'TABLEAU DE BORD', icon: <LayoutDashboard size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
       items: [
         { id: 'dashboard', label: 'Vue Globale' },
         { id: 'macro-stats', label: 'Analytique Globale' }
       ]
     },
     {
-      id: 'clients-comptes', label: 'CLIENTS, AGENTS & MARCHANDS', icon: <UsersIcon size={18} />, roles: ['SUPER_ADMIN', 'ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
+      id: 'clients-comptes', label: 'CLIENTS, AGENTS & MARCHANDS', icon: <UsersIcon size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
       // Caisses Communes rattachée ici (plutôt qu'à Risque & Conformité) : c'est un
       // produit détenu par les clients, au même titre qu'un wallet — un agent qui
       // cherche "où sont les comptes/produits clients" doit la trouver du premier
@@ -144,25 +147,25 @@ export default function App() {
       ]
     },
     {
-      id: 'transactions', label: 'TRANSACTIONS & FINANCE', icon: <Activity size={18} />, roles: ['SUPER_ADMIN', 'ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
+      id: 'transactions', label: 'TRANSACTIONS & FINANCE', icon: <Activity size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
       items: [{ id: 'ledger', label: 'Grand Livre (Ledger)' }]
     },
     {
-      id: 'tresorerie', label: 'TRÉSORERIE', icon: <Banknote size={18} />, roles: ['SUPER_ADMIN', 'ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
+      id: 'tresorerie', label: 'TRÉSORERIE', icon: <Banknote size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
       items: [{ id: 'treasury', label: 'Réserve & Liquidités du Siège' }]
     },
     {
-      id: 'risque', label: 'RISQUE & CONFORMITÉ', icon: <ShieldAlert size={18} />, roles: ['SUPER_ADMIN', 'ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
+      id: 'risque', label: 'RISQUE & CONFORMITÉ', icon: <ShieldAlert size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
       items: [
         { id: 'kyc', label: 'Dossiers KYC / AML' }
       ]
     },
     {
-      id: 'litiges', label: 'LITIGES', icon: <MessageSquare size={18} />, roles: ['SUPER_ADMIN', 'ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
+      id: 'litiges', label: 'LITIGES', icon: <MessageSquare size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
       items: [{ id: 'reclamations', label: 'Support & Réclamations' }]
     },
     {
-      id: 'organisation', label: 'ORGANISATION INTERNE', icon: <Building2 size={18} />, roles: ['SUPER_ADMIN', 'ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
+      id: 'organisation', label: 'ORGANISATION INTERNE', icon: <Building2 size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
       // Onboarding du personnel volontairement éclaté en 3 pages distinctes (au lieu d'un
       // seul écran à modales) : créer l'identité, l'affecter à une agence, puis décider
       // ses droits — trois décisions séparées, jamais mélangées dans le même geste.
@@ -180,11 +183,11 @@ export default function App() {
       ]
     },
     {
-      id: 'platform', label: 'PARAMÈTRES SYSTÈME', icon: <SettingsIcon size={18} />, roles: ['SUPER_ADMIN', 'ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
+      id: 'platform', label: 'PARAMÈTRES SYSTÈME', icon: <SettingsIcon size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
       items: [{ id: 'settings', label: 'Configuration & API' }]
     },
     {
-      id: 'securite', label: 'SÉCURITÉ', icon: <ShieldCheck size={18} />, roles: ['SUPER_ADMIN', 'ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
+      id: 'securite', label: 'SÉCURITÉ', icon: <ShieldCheck size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
       items: [
         { id: 'audit', label: 'Centre d\'Audit' },
         { id: 'error-logs', label: 'Erreurs Système' }
@@ -193,14 +196,14 @@ export default function App() {
   ];
 
   const ROLE_LABELS: Record<string, string> = {
-    SUPER_ADMIN: 'Super Administrateur', ADMIN: 'Administrateur', RISK: 'Analyste Risque',
+    SUPER_ADMIN: 'Super Administrateur', RISK: 'Analyste Risque',
     COMPLIANCE_CHECKER: 'Conformité', SUPPORT_MAKER: 'Support Client', BRANCH_MANAGER: 'Responsable d\'Agence',
     TELLER: 'Caissier'
   };
 
   const BRANCH_GROUPS: NavGroup[] = [
     {
-      id: 'ops-agence', label: 'GUICHET & AGENCE', icon: <Store size={18} />, roles: ['TELLER', 'BRANCH_MANAGER', 'SUPER_ADMIN', 'ADMIN'],
+      id: 'ops-agence', label: 'GUICHET & AGENCE', icon: <Store size={18} />, roles: ['TELLER', 'BRANCH_MANAGER', 'SUPER_ADMIN'],
       items: [
         { id: 'branch-dash', label: 'Tableau de Bord Agence', roleExclude: ['TELLER'] },
         { id: 'teller-terminal', label: 'Opérations Guichet' }
