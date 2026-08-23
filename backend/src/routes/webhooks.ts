@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import express from 'express';
 import { prisma } from '../prisma';
 import { logError } from '../utils/errorLog';
@@ -17,11 +18,20 @@ router.post('/pvit-status', async (req, res) => {
     const ack = (code: any) => res.status(200).json({ transactionId: req.body?.transactionId, responseCode: code });
 
     const settings = await getSystemSettings();
-    if (!settings.pvitWebhookSecret || req.query.key !== settings.pvitWebhookSecret) {
+    const providedKey = typeof req.query.key === 'string' ? req.query.key : '';
+    const expectedKey = settings.pvitWebhookSecret || '';
+    // Comparaison à temps constant : une égalité `!==` ordinaire sort dès le premier octet
+    // différent, ce qui fuit un signal (marginal mais mesurable) sur la position du premier
+    // caractère incorrect. `timingSafeEqual` exige des buffers de même longueur, d'où la
+    // vérification de longueur avant l'appel (sinon il lève une exception).
+    const keyValid = expectedKey.length > 0
+        && providedKey.length === expectedKey.length
+        && crypto.timingSafeEqual(Buffer.from(providedKey), Buffer.from(expectedKey));
+    if (!keyValid) {
         return res.status(403).json({ error: 'Clé de webhook invalide.' });
     }
 
-    const { merchantReferenceId, status, code, amountCredited } = req.body || {};
+    const { merchantReferenceId, status, code } = req.body || {};
 
     try {
         if (!merchantReferenceId) return ack(code);
@@ -37,10 +47,13 @@ router.post('/pvit-status', async (req, res) => {
                 if (claim.count === 0) return;
 
                 if (transaction.type === 'CASH_IN') {
-                    // Dépôt : on crédite le destinataire
+                    // Dépôt : on crédite le destinataire du montant réellement enregistré en
+                    // base à l'initiation (/wallet/pull) — jamais un montant fourni par le
+                    // payload du webhook externe, qui n'est ni borné ni comparé à ce montant
+                    // et permettait de créditer n'importe quelle somme pour un dépôt réel minime.
                     const wallet = await tx.wallet.update({
                         where: { id: transaction.receiverWalletId },
-                        data: { balance: { increment: amountCredited ?? transaction.amount } },
+                        data: { balance: { increment: transaction.amount } },
                         include: { user: true }
                     });
                     if (wallet.user) {
@@ -48,7 +61,7 @@ router.post('/pvit-status', async (req, res) => {
                             data: {
                                 userId: wallet.user.id,
                                 title: 'Dépôt reçu',
-                                body: `Votre dépôt Mobile Money de ${(amountCredited ?? transaction.amount).toLocaleString('fr-FR')} FCFA a été crédité.`,
+                                body: `Votre dépôt Mobile Money de ${transaction.amount.toLocaleString('fr-FR')} FCFA a été crédité.`,
                                 type: 'TRANSACTION'
                             }
                         });

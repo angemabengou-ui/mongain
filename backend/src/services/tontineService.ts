@@ -57,11 +57,14 @@ export async function executeTontineCycle(groupId: string) {
 
         try {
             await prisma.$transaction(async (tx) => {
-                await LimitEngine.verifyAndIncrementConsumption(tx, p.userId, wallet.id, group.contribution, settings);
+                const fee = group.contribution * settings.taxP2P;
+                const totalDebit = group.contribution + fee;
+
+                await LimitEngine.verifyAndIncrementConsumption(tx, p.userId, wallet.id, totalDebit, settings);
 
                 const updated = await tx.wallet.updateMany({
-                    where: { id: wallet.id, balance: { gte: group.contribution } },
-                    data: { balance: { decrement: group.contribution } }
+                    where: { id: wallet.id, balance: { gte: totalDebit } },
+                    data: { balance: { decrement: totalDebit } }
                 });
                 if (updated.count === 0) throw new Error('Solde insuffisant.');
 
@@ -69,9 +72,20 @@ export async function executeTontineCycle(groupId: string) {
                     where: { id: vaultWallet.id },
                     data: { balance: { increment: group.contribution } }
                 });
+
+                if (fee > 0) {
+                    const { getOrCreateCorporateWallet } = await import('../routes/wallet');
+                    const corporate = await getOrCreateCorporateWallet(tx);
+                    await tx.wallet.update({
+                        where: { id: corporate.wallet.id },
+                        data: { balance: { increment: fee } }
+                    });
+                }
+
                 await tx.transaction.create({
                     data: {
                         amount: group.contribution,
+                        fee: fee,
                         senderWalletId: wallet.id,
                         receiverWalletId: vaultWallet.id,
                         status: "COMPLETED",
@@ -79,7 +93,7 @@ export async function executeTontineCycle(groupId: string) {
                     }
                 });
                 await tx.notification.create({
-                    data: { userId: p.userId, title: "Cotisation Tontine prélevée 💸", body: `Votre cotisation de ${group.contribution} FCFA pour ${group.name} a été débitée.`, type: "INFO" }
+                    data: { userId: p.userId, title: "Cotisation Tontine prélevée 💸", body: `Votre cotisation de ${group.contribution} FCFA pour ${group.name} a été débitée (incluant ${fee} FCFA de frais).`, type: "INFO" }
                 });
             });
             debitedCount++;
@@ -98,7 +112,12 @@ export async function executeTontineCycle(groupId: string) {
         }
     }
 
-    const beneficiary = group.participants.find((p: any) => p.payoutOrder === group.currentCycle && p.status === 'ACTIVE');
+    // `!p.hasReceivedPayout` : sans ça, le créateur (seul habilité à réordonner via
+    // POST /tontine/reorder, où `newOrder` n'est pas borné) pouvait réassigner son propre
+    // payoutOrder au cycle courant avant chaque exécution et s'attribuer la cagnotte
+    // indéfiniment. Un participant déjà payé une fois ne peut plus jamais être sélectionné,
+    // quelle que soit la valeur de payoutOrder au moment du cycle suivant.
+    const beneficiary = group.participants.find((p: any) => p.payoutOrder === group.currentCycle && p.status === 'ACTIVE' && !p.hasReceivedPayout);
     if (beneficiary && totalPot > 0) {
         const idempotencyPayoutRef = `TONT_PAY_G${group.id}_C${group.currentCycle}_U${beneficiary.userId}`;
         const payoutDone = await prisma.transaction.findFirst({ where: { reference: idempotencyPayoutRef } });
@@ -120,6 +139,10 @@ export async function executeTontineCycle(groupId: string) {
 
                     await tx.transaction.create({
                         data: { amount: totalPot, receiverWalletId: beneficiaryWallet.id, senderWalletId: vaultWallet.id, status: "COMPLETED", reference: idempotencyPayoutRef }
+                    });
+                    await tx.tontineParticipant.update({
+                        where: { id: beneficiary.id },
+                        data: { hasReceivedPayout: true }
                     });
                     await tx.notification.create({
                         data: { userId: beneficiary.userId, title: "🎉 Cagnotte Tontine Reçue !", body: `C'est votre tour ! Vous avez reçu la cagnotte de ${totalPot} FCFA du club ${group.name}.`, type: "INFO" }

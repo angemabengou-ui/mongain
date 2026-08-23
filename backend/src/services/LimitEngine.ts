@@ -90,7 +90,16 @@ export class LimitEngine {
             throw new Error('Le compte est gelé ou suspendu. Action interdite.');
         }
 
-        // 2. Charger le Wallet (Pessimistic lock implicite dans la transaction P2P)
+        // 2. Charger le Wallet SOUS VERROU DE LIGNE explicite. Un simple `findUnique` ne
+        // verrouille rien en PostgreSQL (READ COMMITTED) : N requêtes concurrentes sur le même
+        // wallet lisent toutes le même `dailySpent`/`monthlySpent` de départ, passent toutes
+        // le contrôle des plafonds ci-dessous, puis s'incrémentent chacune correctement (pas de
+        // perte de compteur) — mais la DÉCISION, elle, a déjà été prise N fois sur une valeur
+        // périmée : le plafond réglementaire peut être dépassé d'un facteur N en parallélisant
+        // les requêtes, alors même que le solde réel reste protégé par la garde `balance: gte`
+        // des appelants. `SELECT ... FOR UPDATE` fait attendre toute transaction concurrente
+        // sur ce wallet jusqu'au commit de celle-ci, fermant la fenêtre de course.
+        await tx.$queryRaw`SELECT id FROM "Wallet" WHERE id = ${walletId} FOR UPDATE`;
         const wallet = await tx.wallet.findUnique({ where: { id: walletId } });
         if (!wallet) throw new Error('Portefeuille introuvable');
 
@@ -107,17 +116,18 @@ export class LimitEngine {
         const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-        let currentDailySpent = wallet.dailySpent;
-        let currentMonthlySpent = wallet.monthlySpent || 0;
+        // `dailyReset`/`monthlyReset` calculés UNE SEULE FOIS ici, sur les valeurs ORIGINALES
+        // de `wallet` (jamais mutées) — la version précédente écrivait `wallet.dailySpentResetAt
+        // = now` avant de comparer `wallet.dailySpentResetAt < startOfDay` plus bas (point 7),
+        // donc cette comparaison portait toujours sur `now < startOfDay` (toujours faux) : ni
+        // `dailySpent` ni `monthlySpent` n'étaient JAMAIS réellement remis à zéro par ce code —
+        // seul un CRON séparé (cron.ts) compensait pour le journalier, rien n'existait pour le
+        // mensuel, qui grossissait indéfiniment et rendait le plafond mensuel inopposable.
+        const dailyReset = wallet.dailySpentResetAt < startOfDay;
+        const monthlyReset = !wallet.monthlySpentResetAt || wallet.monthlySpentResetAt < startOfMonth;
 
-        if (wallet.dailySpentResetAt < startOfDay) {
-            currentDailySpent = 0;
-            wallet.dailySpentResetAt = now;
-        }
-        if (!wallet.monthlySpentResetAt || wallet.monthlySpentResetAt < startOfMonth) {
-            currentMonthlySpent = 0;
-            wallet.monthlySpentResetAt = now;
-        }
+        const currentDailySpent = dailyReset ? 0 : wallet.dailySpent;
+        const currentMonthlySpent = monthlyReset ? 0 : (wallet.monthlySpent || 0);
 
         // 6. Vérifications des Cumuls
         const newDaily = currentDailySpent + requestedAmount;
@@ -140,9 +150,7 @@ export class LimitEngine {
         // pouvait ainsi être dépassé en enchaînant des requêtes en parallèle (le solde
         // réel reste protégé par la garde `balance: gte` des routes appelantes, mais le
         // suivi de conformité AML/plafonds, lui, se corrompait silencieusement).
-        const dailyReset = wallet.dailySpentResetAt < startOfDay;
-        const monthlyReset = !wallet.monthlySpentResetAt || wallet.monthlySpentResetAt < startOfMonth;
-
+        // (dailyReset/monthlyReset déjà calculés au point 5, sur les valeurs non mutées.)
         await tx.wallet.update({
             where: { id: walletId },
             data: {

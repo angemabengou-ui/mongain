@@ -20,6 +20,30 @@ export interface AuthRequest extends Request {
     userId?: string;
 }
 
+// ─── Session longue durée (access token court + refresh token) ────────────
+// L'access token JWT est volontairement court (contrairement à l'ancien réglage à 7
+// jours, qui déconnectait complètement le client après ce délai puisqu'aucun
+// mécanisme de renouvellement n'existait). Le refresh token, lui, est un secret
+// opaque à haute entropie (pas un JWT) : le client le renvoie à /auth/refresh pour
+// obtenir un nouvel access token, avec rotation à chaque appel (fenêtre glissante —
+// tant que le client revient au moins une fois tous les REFRESH_TOKEN_TTL_MS, la
+// session ne meurt jamais).
+export const ACCESS_TOKEN_TTL = '30m';
+export const REFRESH_TOKEN_TTL_MS = 60 * 24 * 60 * 60 * 1000; // 60 jours
+
+export function generateRefreshToken(): string {
+    return crypto.randomBytes(40).toString('hex');
+}
+
+// SHA-256 (pas bcrypt) : le refresh token est déjà un secret aléatoire à haute
+// entropie, pas un mot de passe/PIN à faible entropie — un hash rapide et
+// déterministe suffit pour le stocker sans le garder en clair, et permet une
+// recherche directe par égalité de hash (contrairement à bcrypt, qui est salé et ne
+// permettrait pas de retrouver la ligne correspondante sans stocker le token en clair).
+export function hashRefreshToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
+}
+
 export const authMiddleware = async (req: AuthRequest, res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {

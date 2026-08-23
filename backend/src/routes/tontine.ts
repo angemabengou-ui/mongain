@@ -58,7 +58,11 @@ router.get('/groups', authMiddleware, async (req: Request, res: Response) => {
             include: {
                 group: {
                     include: {
-                        _count: { select: { participants: true } }
+                        // Filtré sur ACTIVE (comme tontine-detail.tsx, qui compte lui aussi les
+                        // seuls participants actifs) — sans ce filtre, le nombre affiché ici
+                        // incluait aussi les LEFT, divergeant de l'écran de détail du même groupe
+                        // (ex: "3 sur 5" ici, "Ordre de passage (3)" dans le détail).
+                        _count: { select: { participants: { where: { status: 'ACTIVE' } } } }
                     }
                 }
             },
@@ -278,6 +282,17 @@ router.post('/reorder', authMiddleware, async (req: Request, res: Response) => {
 
         if (!Array.isArray(orderMap) || orderMap.length === 0) {
             return res.status(400).json({ success: false, message: "orderMap invalide." });
+        }
+
+        // Défense en profondeur (en plus de `hasReceivedPayout` dans tontineService.ts, qui
+        // ferme réellement l'exploit) : un `newOrder` doit être un entier positif, et deux
+        // participants ne peuvent pas revendiquer le même tour dans une seule requête.
+        const newOrders = orderMap.map((item: any) => Number(item.newOrder));
+        if (newOrders.some((n: number) => !Number.isInteger(n) || n < 1)) {
+            return res.status(400).json({ success: false, message: "Chaque tour (newOrder) doit être un entier positif." });
+        }
+        if (new Set(newOrders).size !== newOrders.length) {
+            return res.status(400).json({ success: false, message: "Deux participants ne peuvent pas avoir le même tour." });
         }
 
         // IDOR guard : chaque participantId ciblé doit appartenir à CE groupe — sans ce

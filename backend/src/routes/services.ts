@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { LimitEngine } from '../services/LimitEngine';
+import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
 import { getSystemSettings } from './settings';
 
@@ -37,12 +38,10 @@ router.post('/pay-bill', authMiddleware, async (req: AuthRequest, res) => {
         const user = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
         if (!user || !user.wallet) return res.status(404).json({ error: 'Compte introuvable.' });
 
-        const pinMatch = await bcrypt.compare(pin, user.pin);
-        // 400, pas 401 : ce endpoint est authentifié (token valide requis) — un 401 ici
-        // serait à tort intercepté par le client mobile comme "session expirée"
-        // (src/services/api.ts, request()), qui masque "Code PIN incorrect." et force un
-        // logout complet. Même correctif que /api/wallet/transfer.
-        if (!pinMatch) return res.status(400).json({ error: 'Code PIN incorrect.' });
+        // verifyUserPin applique le verrouillage 3 échecs/15min (absent ici jusqu'ici) et
+        // conserve le statut 400 (pas 401) — voir commentaire dans /login.
+        const pinCheck = await verifyUserPin(user, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         // Trouver ou créer le portefeuille du Service (SEEG / CANAL)
         const servicePhone = service === 'SEEG' ? '+24188888888' : '+24177777777';
@@ -138,9 +137,9 @@ router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
         const user = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
         if (!user || !user.wallet) return res.status(404).json({ error: 'Compte introuvable.' });
 
-        const pinMatch = await bcrypt.compare(pin, user.pin);
-        // 400, pas 401 — même correctif que /pay-bill ci-dessus.
-        if (!pinMatch) return res.status(400).json({ error: 'Code PIN incorrect.' });
+        // Même correctif que /pay-bill ci-dessus (verrouillage 3 échecs/15min).
+        const pinCheck = await verifyUserPin(user, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         const telecomPhone = '+24166666666'; // MOCK AGGREGATOR WALLET
         let telecomUser = await prisma.user.findUnique({ where: { phone: telecomPhone }, include: { wallet: true } });

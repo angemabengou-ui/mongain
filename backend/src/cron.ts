@@ -1,6 +1,8 @@
 import cron from 'node-cron';
 import { prisma } from './prisma';
+import { getSystemSettings } from './routes/settings';
 import { executeTontineCycle } from './services/tontineService';
+import { startOfDayInTimezone, startOfMonthInTimezone } from './utils/timezone';
 
 export function initCronJobs() {
     // ─── Tontine : Tous les jours à minuit ─────────────────────────
@@ -65,8 +67,11 @@ export function initCronJobs() {
     cron.schedule('1 0 * * *', async () => {
         console.log('🔄 CRON: Remise à zéro des dépenses journalières...');
         try {
-            const todayStart = new Date();
-            todayStart.setHours(0, 0, 0, 0);
+            // Minuit dans le fuseau configuré (Africa/Libreville, UTC+1), pas minuit serveur
+            // (UTC) — même correctif que merchant.ts (voir utils/timezone.ts), pour que ce
+            // reset s'aligne sur la même frontière de journée que LimitEngine.
+            const settings = await getSystemSettings();
+            const todayStart = startOfDayInTimezone(settings?.timezone || 'Africa/Libreville');
 
             // Remettre à zéro uniquement les wallets dont le reset n'a pas encore eu lieu aujourd'hui
             await prisma.wallet.updateMany({
@@ -76,6 +81,30 @@ export function initCronJobs() {
             console.log('✅ CRON: Plafonds journaliers réinitialisés.');
         } catch (e) {
             console.error('Erreur CRON reset plafonds:', e);
+        }
+    });
+
+    // ─── Remise à zéro des plafonds mensuels (Wallets) ─────────────
+    // Miroir du CRON journalier ci-dessus : LimitEngine.verifyAndIncrementConsumption
+    // réinitialise déjà monthlySpent au premier passage du mois (correctif du bug où la
+    // mutation de `wallet` avant comparaison empêchait tout reset réel), mais un wallet
+    // resté inactif pendant la bascule ne recevra sa remise à zéro qu'à sa prochaine
+    // opération — ce CRON la rafraîchit proactivement pour tous, comme pour le journalier.
+    cron.schedule('2 0 1 * *', async () => {
+        console.log('🔄 CRON: Remise à zéro des dépenses mensuelles...');
+        try {
+            const monthlySettings = await getSystemSettings();
+            const monthStart = startOfMonthInTimezone(monthlySettings?.timezone || 'Africa/Libreville');
+
+            await prisma.wallet.updateMany({
+                // monthlySpentResetAt est non-nullable (@default(now()) en base) : pas besoin
+                // de gérer un cas null, contrairement à ce que suggérait LimitEngine.ts.
+                where: { monthlySpentResetAt: { lt: monthStart } },
+                data: { monthlySpent: 0, monthlySpentResetAt: new Date() }
+            });
+            console.log('✅ CRON: Plafonds mensuels réinitialisés.');
+        } catch (e) {
+            console.error('Erreur CRON reset plafonds mensuels:', e);
         }
     });
 

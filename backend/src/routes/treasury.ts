@@ -72,8 +72,13 @@ router.get('/overview', authMiddleware, async (req: AuthRequest, res) => {
 // 1. Lister les requêtes de Trésorerie
 router.get('/requests', authMiddleware, async (req: AuthRequest, res) => {
     try {
+        // Même whitelist que POST /requests ci-dessous — sans elle, tout staff actif (y
+        // compris TELLER) lisait la liquidité et le calendrier d'approvisionnement de
+        // toutes les agences, une information directement exploitable pour un vol physique.
         const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!admin || admin.isActive === false) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!admin || admin.isActive === false || !['SUPER_ADMIN', 'COMPLIANCE_CHECKER', 'RISK', 'BRANCH_MANAGER'].includes(admin.role)) {
+            return res.status(403).json({ error: 'Accès refusé.' });
+        }
 
         const requests = await prisma.treasuryRequest.findMany({
             include: {
@@ -253,7 +258,8 @@ router.post('/requests/:id/approve', authMiddleware, async (req: AuthRequest, re
                         amount: request.amount,
                         receiverWalletId: reserve.wallet!.id,
                         status: 'COMPLETED',
-                        reference: request.reference
+                        reference: request.reference,
+                        type: request.type
                     }
                 });
             }
@@ -284,7 +290,8 @@ router.post('/requests/:id/approve', authMiddleware, async (req: AuthRequest, re
                             senderWalletId: reserve.wallet!.id,
                             receiverWalletId: request.targetBranch.walletId,
                             status: 'COMPLETED',
-                            reference: request.reference
+                            reference: request.reference,
+                            type: request.type
                         }
                     });
                 } else if (request.targetWalletId) {
@@ -298,7 +305,8 @@ router.post('/requests/:id/approve', authMiddleware, async (req: AuthRequest, re
                             senderWalletId: reserve.wallet!.id,
                             receiverWalletId: request.targetWalletId,
                             status: 'COMPLETED',
-                            reference: request.reference
+                            reference: request.reference,
+                            type: request.type
                         }
                     });
                 } else {
@@ -332,7 +340,8 @@ router.post('/requests/:id/approve', authMiddleware, async (req: AuthRequest, re
                         senderWalletId: request.targetBranch.walletId,
                         receiverWalletId: reserve.wallet!.id,
                         status: 'COMPLETED',
-                        reference: request.reference
+                        reference: request.reference,
+                        type: request.type
                     }
                 });
             }
@@ -381,6 +390,16 @@ router.post('/requests/:id/approve', authMiddleware, async (req: AuthRequest, re
                     await tx.transaction.create({
                         data: { amount: request.amount, receiverWalletId: request.targetWalletId, senderWalletId: reserve.wallet!.id, status: 'COMPLETED', reference: request.reference, type: request.type }
                     });
+                } else {
+                    // Cas non couvert par les 3 branches ci-dessus : `targetBranch` existe mais
+                    // sans `walletId` (agence créée sans wallet configuré). Sans ce garde-fou,
+                    // le `claim` juste au-dessus marquait déjà la demande EXECUTED et l'audit
+                    // log s'écrivait plus bas SANS AUCUN mouvement de fonds réel — un ajustement
+                    // "exécuté avec succès" qui ne faisait en réalité rien, de façon
+                    // irréversible (statut non-PENDING, ré-approbation impossible). Le throw ici
+                    // fait échouer toute la transaction, y compris le `claim` : la demande
+                    // redevient PENDING pour être corrigée puis réessayée.
+                    throw new Error("Cible d'ajustement invalide : l'agence ciblée n'a pas de portefeuille configuré.");
                 }
             }
 

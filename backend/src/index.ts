@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import cors from 'cors';
+import crypto from 'crypto';
 import express from 'express';
 import helmet from 'helmet';
 import http from 'http';
@@ -159,7 +160,11 @@ async function seedCorporateAccount() {
     try {
         const existing = await withDbRetry(() => prisma.user.findUnique({ where: { phone: corpPhone } }));
         if (!existing) {
-            const hashedPin = await bcrypt.hash('0000', 10);
+            // PIN aléatoire non journalisé (cohérent avec getOrCreateCorporateWallet dans
+            // wallet.ts) — ce compte est un portefeuille technique, jamais censé être utilisé
+            // pour se connecter. Un PIN "0000" fixe et documenté en dur était un accès admin
+            // total trivialement devinable dès que l'OTP est en mode démo (voir auth.ts).
+            const hashedPin = await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10);
             await prisma.user.create({
                 data: {
                     name: 'Mongain Corporate',

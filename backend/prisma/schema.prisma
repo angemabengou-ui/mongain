@@ -31,6 +31,14 @@ model User {
   jwtVersion        Int       @default(0) // Invalidates sessions when logged in elsewhere
   pushToken         String?
 
+  // Refresh token (session longue durée) : un seul actif à la fois par utilisateur,
+  // cohérent avec le single-device enforcement déjà en place via jwtVersion — une
+  // nouvelle connexion écrase l'ancien refresh token. On stocke un hash SHA-256 (pas
+  // le token en clair) pour qu'une fuite de la base ne permette pas de rejouer une
+  // session ; rotation à chaque appel /auth/refresh (voir routes/auth.ts).
+  refreshTokenHash      String?   @unique
+  refreshTokenExpiresAt DateTime?
+
   // Rattachement agence (pertinent pour role=AGENT) — référence libre, cohérente avec
   // Transaction.branchId/tellerId (bounded context Ledger volontairement découplé, voir
   // Reclamation.branchId plus bas). Les opérations effectuées par un agent rattaché sont
@@ -356,6 +364,12 @@ model TontineParticipant {
   status         String       @default("ACTIVE") // ACTIVE, PAUSED
   joinedAt       DateTime     @default(now())
   payoutOrder    Int          @default(0)
+  // Empêche un participant (typiquement le créateur, seul habilité à réordonner via
+  // POST /tontine/reorder) de se réattribuer indéfiniment la cagnotte en réassignant son
+  // propre payoutOrder au cycle courant avant chaque exécution — voir tontineService.ts,
+  // executeTontineCycle : un participant déjà payé n'est plus jamais sélectionné comme
+  // bénéficiaire, quelle que soit la valeur de payoutOrder au moment du cycle.
+  hasReceivedPayout Boolean    @default(false)
 }
 
 // ==========================================
@@ -702,8 +716,18 @@ model VaultTransaction {
   
   requestedById   String
   requestedBy     User     @relation("RequestedVaultTransactions", fields: [requestedById], references: [id])
-  
+
   createdAt       DateTime @default(now())
+
+  // Seuil et liste des commissaires obligatoires figés au moment de la CRÉATION de la
+  // demande (routes/vault.ts, POST /:id/withdraw-request), plutôt que recalculés à chaque
+  // approbation depuis les VaultMember courants. Sans ce gel, un initiateur malveillant
+  // pouvait faire partir des commissaires (dont un validateur obligatoire) APRÈS avoir fait
+  // approuver sa propre demande par un complice, pour faire mécaniquement chuter le seuil
+  // effectif (min(seuil configuré, nb de commissaires restants)) et faire disparaître
+  // l'obligation du validateur parti — voir POST /:id/approve/:txId.
+  requiredApprovalsSnapshot    Int?
+  requiredValidatorIdsSnapshot String[] @default([])
 
   approvals       VaultApproval[]
 }

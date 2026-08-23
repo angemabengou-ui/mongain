@@ -817,9 +817,17 @@ router.get('/ledger', authMiddleware, async (req: AuthRequest, res) => {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
         if (!admin || !['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(admin.role)) return res.status(403).json({ error: 'Accès refusé.' });
 
+        // Les courbes 7j/14j et le Grand Livre (admin-web Dashboard.tsx, MacroStats.tsx,
+        // Ledger.tsx) agrègent/filtrent TOUT côté client sur ce même jeu de résultats. À
+        // `take: 200`, une agence à fort volume peut épuiser les 200 lignes en quelques
+        // heures — les jours précédents retombent alors silencieusement à zéro dans les
+        // graphiques, et la recherche du Grand Livre ne porte que sur ces mêmes 200 lignes.
+        // 2000 réduit fortement le risque sans le résoudre en théorie ; une vraie solution
+        // nécessiterait une agrégation par plage de dates côté serveur plutôt qu'une simple
+        // liste tronquée — hors périmètre de ce correctif.
         const txs = await prisma.transaction.findMany({
             orderBy: { createdAt: 'desc' },
-            take: 200, // Les 200 derni?res transactions
+            take: 2000,
             include: {
                 senderWallet: { include: { user: { select: { id: true, name: true, phone: true, role: true } } } },
                 receiverWallet: { include: { user: { select: { id: true, name: true, phone: true, role: true } } } },
@@ -1227,6 +1235,8 @@ router.put('/staff/:id/approve', authMiddleware, async (req: AuthRequest, res) =
     }
 });
 
+const STAFF_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER', 'BRANCH_MANAGER', 'TELLER'];
+
 router.put('/staff/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
@@ -1237,6 +1247,26 @@ router.put('/staff/:id', authMiddleware, async (req: AuthRequest, res) => {
         const targetId = req.params.id as string;
         // Allows modifying Role and BranchId
         const { role, branchId, isActive } = req.body;
+
+        // Le changement de rôle (et l'activation/désactivation d'un compte SUPER_ADMIN) est
+        // réservé au SUPER_ADMIN : un RISK ne doit pas pouvoir s'auto-promouvoir ni éjecter un
+        // SUPER_ADMIN en le désactivant. `role` est validé par la même whitelist que la
+        // création (POST /staff) — sans ça, n'importe quelle chaîne était acceptée telle
+        // quelle et écrite en base.
+        if (role !== undefined) {
+            if (admin.role !== 'SUPER_ADMIN') {
+                return res.status(403).json({ error: 'Seul un SUPER_ADMIN peut modifier un rôle.' });
+            }
+            if (targetId === admin.id) {
+                return res.status(400).json({ error: 'Vous ne pouvez pas modifier votre propre rôle.' });
+            }
+            if (!STAFF_ROLES.includes(role)) {
+                return res.status(400).json({ error: 'Rôle invalide.' });
+            }
+        }
+        if (isActive !== undefined && targetId === admin.id) {
+            return res.status(400).json({ error: 'Vous ne pouvez pas modifier votre propre statut d\'activation.' });
+        }
 
         // N'écrit branchId que si la clé est explicitement présente dans le body : sinon
         // `branchId || null` écrasait systématiquement l'affectation existante à null dès
@@ -1435,8 +1465,11 @@ router.post('/users/:id/reset-pin-request', authMiddleware, async (req: AuthRequ
 // GET Limit Requests specific to a user
 router.get('/users/:id/limit-requests', authMiddleware, async (req: AuthRequest, res) => {
     try {
+        // Historique de relèvement de plafond client : donnée de conformité, réservée aux
+        // mêmes rôles que le reste du dossier Customer 360 sensible — un simple `if (!staff)`
+        // laissait n'importe quel rôle (TELLER inclus) la consulter pour n'importe quel client.
         const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff) return res.status(403).json({ error: 'Interdit' });
+        if (!staff || !CRM_FULL_ACCESS.includes(staff.role)) return res.status(403).json({ error: 'Interdit' });
 
         const requests = await prisma.settingsApproval.findMany({
             where: {
@@ -1790,8 +1823,11 @@ router.get('/users/:id/360', authMiddleware, async (req: AuthRequest, res) => {
                 failedPinAttempts: true,
                 lockedUntil: true,
                 jwtVersion: true,
-                freezeReason: true,
-                frozenUntil: true,
+                // Motif de gel et description des alertes de risque : notes de conformité en
+                // clair, jamais destinées à un rôle guichet (TELLER) ou d'agence
+                // (BRANCH_MANAGER) — désormais masquées comme le reste des champs sensibles.
+                freezeReason: isSensitive ? true : false,
+                frozenUntil: isSensitive ? true : false,
                 customDailyLimit: isSensitive ? true : false,
                 customMonthlyLimit: isSensitive ? true : false,
                 customPerTxLimit: isSensitive ? true : false,
@@ -1802,7 +1838,9 @@ router.get('/users/:id/360', authMiddleware, async (req: AuthRequest, res) => {
                 riskFlags: {
                     orderBy: { createdAt: 'desc' },
                     take: 5,
-                    select: { id: true, type: true, status: true, description: true, createdAt: true, author: { select: { name: true } } }
+                    select: isSensitive
+                        ? { id: true, type: true, status: true, description: true, createdAt: true, author: { select: { name: true } } }
+                        : { id: true, type: true, status: true, createdAt: true },
                 },
                 reclamations: {
                     orderBy: { createdAt: 'desc' },
@@ -2208,11 +2246,20 @@ router.get('/users/:id/reclamations', authMiddleware, async (req: AuthRequest, r
         if (!staff || !CRM_BROAD_ACCESS.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
 
         const customerId = req.params.id as string;
+        const isSensitive = CRM_FULL_ACCESS.includes(staff.role);
         const reclamations = await prisma.reclamation.findMany({
             where: { userId: customerId },
             orderBy: { createdAt: 'desc' },
             include: {
-                notes: { orderBy: { createdAt: 'asc' }, select: { id: true, content: true, isInternal: true, authorName: true, createdAt: true } },
+                // Notes internes (support/conformité) masquées aux rôles guichet/agence
+                // (TELLER, BRANCH_MANAGER) — même filtre que la route client (reclamation.ts),
+                // absent ici jusqu'à présent alors que ce endpoint est accessible à
+                // CRM_BROAD_ACCESS, plus large que CRM_FULL_ACCESS.
+                notes: {
+                    where: isSensitive ? undefined : { isInternal: false },
+                    orderBy: { createdAt: 'asc' },
+                    select: { id: true, content: true, isInternal: true, authorName: true, createdAt: true },
+                },
                 assignee: { select: { name: true, role: true } }
             }
         });

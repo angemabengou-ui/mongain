@@ -309,9 +309,13 @@ router.post('/:id/deposit', authMiddleware, async (req: AuthRequest, res) => {
             if (!membership) throw new Error("Vous n'êtes pas membre de cette caisse.");
 
             // Vérifier solde utilisateur
+            const settings = await tx.systemSettings.findFirst();
+            const fee = settings ? parsedAmount * settings.taxP2P : 0;
+            const totalDebit = parsedAmount + fee;
+
             const userWallet = await tx.wallet.findUnique({ where: { userId: req.userId! } });
-            if (!userWallet || userWallet.balance < parsedAmount) {
-                throw new Error("Solde personnel insuffisant");
+            if (!userWallet || userWallet.balance < totalDebit) {
+                throw new Error(`Solde personnel insuffisant pour ce dépôt (incluant ${fee} FCFA de frais).`);
             }
 
             // Débit Wallet, Crédit Vault — garde atomique (balance: gte) : le contrôle
@@ -319,8 +323,8 @@ router.post('/:id/deposit', authMiddleware, async (req: AuthRequest, res) => {
             // (double-tap, deux appareils) pouvaient tous deux le passer et faire
             // passer le solde du déposant en négatif.
             const debited = await tx.wallet.updateMany({
-                where: { id: userWallet.id, balance: { gte: parsedAmount } },
-                data: { balance: { decrement: parsedAmount } }
+                where: { id: userWallet.id, balance: { gte: totalDebit } },
+                data: { balance: { decrement: totalDebit } }
             });
             if (debited.count === 0) throw new Error("Solde personnel insuffisant");
 
@@ -328,6 +332,15 @@ router.post('/:id/deposit', authMiddleware, async (req: AuthRequest, res) => {
                 where: { id: vaultId },
                 data: { balance: { increment: parsedAmount } }
             });
+
+            if (fee > 0) {
+                const { getOrCreateCorporateWallet } = await import('./wallet');
+                const corporate = await getOrCreateCorporateWallet(tx);
+                await tx.wallet.update({
+                    where: { id: corporate.wallet.id },
+                    data: { balance: { increment: fee } }
+                });
+            }
 
             // Trace VaultTransaction
             const vtx = await tx.vaultTransaction.create({
@@ -337,6 +350,18 @@ router.post('/:id/deposit', authMiddleware, async (req: AuthRequest, res) => {
                     amount: parsedAmount,
                     status: 'COMPLETED',
                     requestedById: req.userId!
+                }
+            });
+
+            // Trace dans l'historique standard
+            await tx.transaction.create({
+                data: {
+                    amount: parsedAmount,
+                    fee: fee,
+                    senderWalletId: userWallet.id,
+                    receiverWalletId: userWallet.id,
+                    status: 'COMPLETED',
+                    reference: 'VAULTDEPOSIT'
                 }
             });
 
@@ -402,6 +427,13 @@ router.post('/:id/withdraw-request', authMiddleware, async (req: AuthRequest, re
             destinationLabel = recipient.name;
         }
 
+        // Seuil et commissaires obligatoires figés dès la création (voir commentaire sur
+        // requiredApprovalsSnapshot dans schema.prisma) : un membre qui quitte APRÈS n'érode
+        // plus le quorum applicable à CETTE demande.
+        const validatorsAtCreation = await prisma.vaultMember.findMany({ where: { vaultId, isValidator: true } });
+        const requiredApprovalsSnapshot = Math.max(1, Math.min(vault.requiredApprovals, validatorsAtCreation.length));
+        const requiredValidatorIdsSnapshot = validatorsAtCreation.filter(v => v.isRequiredValidator).map(v => v.userId);
+
         const tx = await prisma.vaultTransaction.create({
             data: {
                 vaultId,
@@ -411,7 +443,9 @@ router.post('/:id/withdraw-request', authMiddleware, async (req: AuthRequest, re
                 destinationType: destinationType || 'VOUCHER',
                 destinationId: resolvedDestinationId,
                 reason: String(reason).trim(),
-                requestedById: req.userId!
+                requestedById: req.userId!,
+                requiredApprovalsSnapshot,
+                requiredValidatorIdsSnapshot,
             }
         });
 
@@ -480,25 +514,23 @@ router.post('/:id/approve/:txId', authMiddleware, async (req: AuthRequest, res) 
 
             const approvedUserIds = [...vaultTx.approvals.map(a => a.userId), req.userId!];
             const currentApprovalsCount = approvedUserIds.length;
-            const validatorCountArray = await tx.vaultMember.findMany({ where: { vaultId, isValidator: true } });
 
-            // Le seuil configuré par la caisse (vault.requiredApprovals, réglable par le
-            // Président depuis PUT /:id/settings) gouverne tous les types de retrait de
-            // la même façon, envoi direct compris — 1 pour pouvoir agir seul, 2 ou plus
-            // pour exiger une validation collective. C'est un choix de gouvernance laissé
-            // au Président, pas une règle différente selon la destination. Il ne peut
-            // toutefois jamais dépasser le nombre de commissaires réellement disponibles
-            // (sinon un commissaire qui quitte la caisse rendrait tout retrait futur
-            // définitivement impossible à approuver) — d'où le plus petit des deux, avec
-            // un plancher de 1.
-            const requiredApprovals = Math.max(1, Math.min(vaultTx.vault.requiredApprovals, validatorCountArray.length));
+            // Seuil et commissaires obligatoires : lus depuis l'instantané figé à la CRÉATION
+            // de la demande (requiredApprovalsSnapshot/requiredValidatorIdsSnapshot), pas
+            // recalculés depuis les VaultMember courants — sinon un membre qui quitte APRÈS
+            // qu'une demande a reçu ses premières approbations abaisse rétroactivement le
+            // quorum applicable, voire fait disparaître l'obligation d'un validateur désigné
+            // qui vient de partir. Repli sur l'ancien calcul en direct uniquement pour les
+            // demandes déjà en attente créées avant l'ajout de cet instantané (snapshot null).
+            let requiredApprovals = vaultTx.requiredApprovalsSnapshot;
+            let requiredValidatorIds: string[] = vaultTx.requiredValidatorIdsSnapshot;
+            if (requiredApprovals === null || requiredApprovals === undefined) {
+                const validatorCountArray = await tx.vaultMember.findMany({ where: { vaultId, isValidator: true } });
+                requiredApprovals = Math.max(1, Math.min(vaultTx.vault.requiredApprovals, validatorCountArray.length));
+                requiredValidatorIds = validatorCountArray.filter(v => v.isRequiredValidator).map(v => v.userId);
+            }
 
-            // Au-delà du simple seuil numérique, le Président peut désigner des commissaires
-            // dont l'approbation est spécifiquement obligatoire (VaultMember.isRequiredValidator)
-            // — répond au besoin de choisir QUI doit valider, pas seulement COMBIEN. Tant que
-            // l'un d'eux n'a pas approuvé, le retrait reste bloqué même si le seuil numérique
-            // est déjà atteint par d'autres commissaires.
-            const missingRequiredValidators = validatorCountArray.filter(v => v.isRequiredValidator && !approvedUserIds.includes(v.userId));
+            const missingRequiredValidators = requiredValidatorIds.filter(id => !approvedUserIds.includes(id));
 
             if (currentApprovalsCount >= requiredApprovals && missingRequiredValidators.length === 0) {
                 // Débit Caisse — garde atomique (balance: gte) : deux demandes de retrait
@@ -520,17 +552,42 @@ router.post('/:id/approve/:txId', authMiddleware, async (req: AuthRequest, res) 
                     const destWallet = await tx.wallet.findUnique({ where: { userId: vaultTx.destinationId } });
                     if (!destWallet) throw new Error("Portefeuille destinataire introuvable.");
 
+                    // Appliquer les frais P2P sur les retraits vers Trésorier / Transfer
+                    const settings = await tx.systemSettings.findFirst();
+                    const fee = settings ? vaultTx.amount * settings.taxP2P : 0;
+                    const netAmount = vaultTx.amount - fee;
+
                     await tx.wallet.update({
                         where: { id: destWallet.id },
-                        data: { balance: { increment: vaultTx.amount } }
+                        data: { balance: { increment: netAmount } }
                     });
+
+                    if (fee > 0) {
+                        const { getOrCreateCorporateWallet } = await import('./wallet');
+                        const corporate = await getOrCreateCorporateWallet(tx);
+                        await tx.wallet.update({
+                            where: { id: corporate.wallet.id },
+                            data: { balance: { increment: fee } }
+                        });
+                    }
 
                     await tx.notification.create({
                         data: {
                             userId: vaultTx.destinationId,
                             title: 'Vous avez reçu un virement de caisse commune',
-                            body: `${vaultTx.amount.toLocaleString('fr-FR')} FCFA reçus depuis « ${vaultTx.vault.name} ».`,
+                            body: `${netAmount.toLocaleString('fr-FR')} FCFA reçus depuis « ${vaultTx.vault.name} » (après ${fee} FCFA de frais).`,
                             type: 'TRANSACTION'
+                        }
+                    });
+
+                    await tx.transaction.create({
+                        data: {
+                            amount: vaultTx.amount,
+                            fee: fee,
+                            senderWalletId: destWallet.id,
+                            receiverWalletId: destWallet.id,
+                            status: 'COMPLETED',
+                            reference: 'VAULTOUT'
                         }
                     });
                 } else if (vaultTx.destinationType === 'VOUCHER') {
@@ -570,7 +627,7 @@ router.post('/:id/approve/:txId', authMiddleware, async (req: AuthRequest, res) 
             // et, le cas échéant, QUI bloque encore (validateur obligatoire non répondu),
             // pas seulement combien il en manque.
             const missingNames = missingRequiredValidators.length > 0
-                ? (await tx.user.findMany({ where: { id: { in: missingRequiredValidators.map(v => v.userId) } }, select: { name: true } })).map(u => u.name)
+                ? (await tx.user.findMany({ where: { id: { in: missingRequiredValidators } }, select: { name: true } })).map(u => u.name)
                 : [];
             const progressBody = missingNames.length > 0
                 ? `${currentApprovalsCount}/${requiredApprovals} approbations reçues sur « ${vaultTx.vault.name} ». En attente de : ${missingNames.join(', ')} (validateur obligatoire).`
@@ -656,17 +713,24 @@ router.post('/vouchers/:id/spend', authMiddleware, async (req: AuthRequest, res)
 
             const merchantWallet = merchantUser.wallet;
 
+            // Réclamer le bon AVANT de créditer quoi que ce soit : le `findUnique` ci-dessus
+            // ne verrouille aucune ligne, donc deux appels concurrents liraient tous deux
+            // `ACTIVE` avant qu'aucun des deux n'écrive. Seule cette transition conditionnelle
+            // (Ã©valuÃ©e par Postgres sous le verrou de ligne pris par l'UPDATE) empÃªche un
+            // double crÃ©dit marchand pour un seul bon.
+            const claim = await tx.vaultVoucher.updateMany({
+                where: { id: voucherId, status: 'ACTIVE' },
+                data: { status: 'USED', usedAt: new Date() }
+            });
+            if (claim.count === 0) throw new Error("Ce bon de retrait est déjà utilisé ou inactif.");
+
             // Exécution
             await tx.wallet.update({
                 where: { id: merchantWallet.id },
                 data: { balance: { increment: voucher.amount } }
             });
 
-            // Marquer le bon comme utilisé
-            const updatedVoucher = await tx.vaultVoucher.update({
-                where: { id: voucherId },
-                data: { status: 'USED', usedAt: new Date() }
-            });
+            const updatedVoucher = { ...voucher, status: 'USED' as const, usedAt: new Date() };
 
             await tx.notification.create({
                 data: {

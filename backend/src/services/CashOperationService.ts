@@ -21,6 +21,10 @@ export class CashOperationService {
         const { amount, clientPhone, tellerId, branchId, idempotencyKey } = params;
         if (amount <= 0) throw new Error("Le montant doit être positif.");
 
+        // Résolu hors transaction, comme dans executeCashOut ci-dessous (même raison : éviter
+        // un aller-retour de plus dans une transaction interactive déjà longue).
+        const corporateWallet = (await getOrCreateCorporateWallet(prisma)).wallet;
+
         return await prisma.$transaction(async (tx) => {
             // 1. Idempotence Guard
             if (idempotencyKey) {
@@ -63,16 +67,25 @@ export class CashOperationService {
                 data: { balance: { decrement: amount } }
             });
 
-            // Aucuns frais par défaut pour le client en Cash-In, mais s'il y en a (taxCashIn), on le prélève en P2P ? 
-            // V6 Spec: "Le cash in peut générer un fee". Si taxCashIn = 1.5%, qui paie ? 
-            // Supposons qu'il dépose 10,000, il reçoit 10,000 net, l'agence encaisse un Cash In Fee ?
-            // On va simplifier selon le Prompt 14: on update direct.
-            const netAmount = amount; // Sans frais pour l'instant pour le Cash-In
+            // Frais de dépôt configurables (taxCashIn, Settings.tsx > Politique de Frais) :
+            // affichés au Checker par le simulateur de frais de l'admin (amt * taxCashIn) mais
+            // jamais réellement prélevés ici — l'admin pouvait fixer un taux, le simulateur le
+            // confirmait, et aucun revenu n'était jamais généré ni prélevé au dépôt.
+            const settings = await getSystemSettings();
+            const fee = Math.round(amount * (settings?.taxCashIn || 0));
+            const netAmount = amount - fee; // Le client reçoit le dépôt net de frais
 
             await tx.wallet.update({
                 where: { id: client.wallet.id },
                 data: { balance: { increment: netAmount } }
             });
+
+            if (fee > 0) {
+                // Même bénéficiaire que le revenu des frais de Cash-Out (voir executeCashOut) —
+                // conserve l'équilibre : l'agence débite `amount` électronique, redistribué en
+                // `netAmount` (client) + `fee` (Corporate) = `amount`.
+                await tx.wallet.update({ where: { id: corporateWallet.id }, data: { balance: { increment: fee } } });
+            }
 
             // 6. Enregistrement Transaction
             const transaction = await tx.transaction.create({
@@ -80,7 +93,7 @@ export class CashOperationService {
                     senderWalletId: branch.wallet.id,
                     receiverWalletId: client.wallet.id,
                     amount,
-                    fee: 0,
+                    fee,
                     type: 'CASH_IN',
                     status: 'COMPLETED',
                     reference,
@@ -105,7 +118,7 @@ export class CashOperationService {
             // Comme /transfer et /refund-requests : sans ça, le client n'a aucune trace de ce
             // dépôt physique en agence dans son historique de notifications.
             await tx.notification.create({
-                data: { userId: client.id, title: 'Dépôt reçu', body: `Vous avez reçu un dépôt de ${amount.toLocaleString('fr-FR')} FCFA en agence.`, type: 'TRANSACTION' }
+                data: { userId: client.id, title: 'Dépôt reçu', body: fee > 0 ? `Vous avez reçu un dépôt de ${netAmount.toLocaleString('fr-FR')} FCFA en agence (${amount.toLocaleString('fr-FR')} FCFA déposés, ${fee.toLocaleString('fr-FR')} FCFA de frais).` : `Vous avez reçu un dépôt de ${amount.toLocaleString('fr-FR')} FCFA en agence.`, type: 'TRANSACTION' }
             });
 
             return transaction;
@@ -165,14 +178,18 @@ export class CashOperationService {
             // getSystemSettings() (mis en cache) plutôt que tx.systemSettings.findFirst() :
             // un round-trip Neon de moins à l'intérieur de cette transaction.
             const settings = await getSystemSettings();
-            // Vérifie que le Cash Out n'explose pas la limite du mois ou jour.
-            const limits = await LimitEngine.getApplicableLimits(client, settings);
-            if (client.wallet.dailySpent + amount > limits.effectiveDaily) {
-                throw new Error(`Dépassement du plafond journalier (Restant: ${limits.effectiveDaily - client.wallet.dailySpent} FCFA)`);
-            }
-            if (client.wallet.monthlySpent + amount > limits.effectiveMonthly) {
-                throw new Error(`Dépassement du plafond mensuel.`);
-            }
+            // Délégué à LimitEngine (comme tous les autres rails sortants — /transfer,
+            // /client-initiated-withdraw, /push, /pay-bill) plutôt que réimplémenté ici : la
+            // version précédente lisait `client.wallet.dailySpent/monthlySpent` bruts sans
+            // AUCUNE logique de remise à zéro (contrairement à LimitEngine, qui gère la bascule
+            // jour/mois) — un compte pouvait ainsi voir son plafond mensuel devenir
+            // définitivement infranchissable au guichet une fois le cumul de sa vie entière
+            // dépassé, alors que le même montant passait sans problème par un transfert P2P
+            // (qui, lui, passait bien par LimitEngine). Vérifie aussi le plafond PAR
+            // TRANSACTION (effectivePerTx), absent du contrôle manuel précédent. Basé sur
+            // `amount` seul (pas `amount + fee`), comme toutes les autres routes — les frais de
+            // service ne comptent pas dans le suivi AML du montant réellement déplacé.
+            await LimitEngine.verifyAndIncrementConsumption(tx, client.id, client.wallet.id, amount, settings);
 
             // 6. Anti-Fractionnement Check global (Toutes succursales confondues)
             if (settings) {
@@ -229,13 +246,14 @@ export class CashOperationService {
             // point 6 lit une balance non verrouillée, donc deux Cash-Out simultanés pour le même
             // client (ex: le même code secret redeemé par deux agents en parallèle) passeraient
             // tous deux ce contrôle et pourraient faire passer le solde en négatif.
+            // dailySpent/monthlySpent déjà incrémentés (sur `amount`, avec la bonne logique de
+            // reset) par LimitEngine.verifyAndIncrementConsumption ci-dessus — les incrémenter
+            // une seconde fois ici (sur `totalToDeduct`, sans reset) comptait les frais deux
+            // fois dans le suivi AML et re-corrompait le cumul juste après que LimitEngine
+            // l'ait correctement remis à zéro au passage du jour/mois.
             await tx.wallet.update({
                 where: { id: client.wallet.id, balance: { gte: totalToDeduct } },
-                data: {
-                    balance: { decrement: totalToDeduct },
-                    dailySpent: { increment: totalToDeduct },
-                    monthlySpent: { increment: totalToDeduct }
-                }
+                data: { balance: { decrement: totalToDeduct } }
             });
 
             await tx.wallet.update({

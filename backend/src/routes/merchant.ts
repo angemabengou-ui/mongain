@@ -2,6 +2,8 @@ import { friendlyErrorMessage } from '../utils/errors';
 import express from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { getSystemSettings } from './settings';
+import { startOfDayInTimezone } from '../utils/timezone';
 
 const router = express.Router();
 
@@ -10,8 +12,11 @@ router.get('/stats', authMiddleware, async (req: AuthRequest, res) => {
         const user = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
         if (!user || user.role !== 'MERCHANT') return res.status(403).json({ error: 'Accès refusé.' });
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // Minuit dans le fuseau configuré (Africa/Libreville par défaut, UTC+1), pas minuit
+        // heure serveur (UTC sur Render) — sinon une vente entre 00h00 et 00h59 heure locale
+        // gabonaise disparaissait de "todaySales" jusqu'au lendemain (comptée sur J-1 côté UTC).
+        const settings = await getSystemSettings();
+        const today = startOfDayInTimezone(settings?.timezone || 'Africa/Libreville');
 
         // Les ventes réelles ont une `reference` normale ; REWARD-xxx est l'enregistrement
         // de la commission elle-même (voir wallet.ts /client-initiated-withdraw) et ne doit

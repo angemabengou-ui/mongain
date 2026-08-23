@@ -4,11 +4,12 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
-import { AuthRequest, JWT_SECRET, authMiddleware } from '../middleware/auth';
+import { ACCESS_TOKEN_TTL, AuthRequest, JWT_SECRET, REFRESH_TOKEN_TTL_MS, authMiddleware, generateRefreshToken, hashRefreshToken } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { sendSms } from '../services/sms';
 import { friendlyErrorMessage, isDbConnectivityError, withDbRetry } from '../utils/errors';
 import logger from '../utils/logger';
+import { verifyUserPin } from '../utils/pinAuth';
 
 const router = Router();
 
@@ -28,6 +29,18 @@ const loginSchema = z.object({
     phone: z.string().transform(val => val.replace(/\s+/g, '').replace(/^\+2410/, '+241')),
     pin: z.string(),
 });
+
+// Génère un nouveau refresh token + son hash à persister ; l'appelant l'inclut dans
+// le `data` de son propre create/update (register, verify-login-otp, reset-pin) pour
+// éviter un aller-retour DB supplémentaire.
+function issueRefreshToken() {
+    const refreshToken = generateRefreshToken();
+    return {
+        refreshToken,
+        refreshTokenHash: hashRefreshToken(refreshToken),
+        refreshTokenExpiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+    };
+}
 
 const smsLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -144,16 +157,18 @@ router.post('/reset-pin', async (req, res) => {
         const hashedPin = await bcrypt.hash(newPin, 10);
         await prisma.verificationCode.delete({ where: { phone_purpose: { phone, purpose: 'RESET_PIN' } } });
 
+        const { refreshToken, refreshTokenHash, refreshTokenExpiresAt } = issueRefreshToken();
         const updatedUser = await prisma.user.update({
             where: { phone },
-            data: { pin: hashedPin, failedPinAttempts: 0, lockedUntil: null, jwtVersion: { increment: 1 } },
+            data: { pin: hashedPin, failedPinAttempts: 0, lockedUntil: null, jwtVersion: { increment: 1 }, refreshTokenHash, refreshTokenExpiresAt },
             include: { wallet: true }
         });
 
-        const token = jwt.sign({ userId: updatedUser.id, jwtVersion: updatedUser.jwtVersion }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ userId: updatedUser.id, jwtVersion: updatedUser.jwtVersion }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
 
         return res.status(200).json({
             token,
+            refreshToken,
             user: { id: updatedUser.id, name: updatedUser.name, phone: updatedUser.phone, role: updatedUser.role, wallet: updatedUser.wallet },
         });
     } catch {
@@ -187,6 +202,7 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ error: 'Ce pseudo est déjà utilisé par un autre compte.' });
         }
 
+        const { refreshToken, refreshTokenHash, refreshTokenExpiresAt } = issueRefreshToken();
         const user = await prisma.user.create({
             data: {
                 accountNumber: accNum,
@@ -194,6 +210,8 @@ router.post('/register', async (req, res) => {
                 username,
                 phone,
                 pin: hashedPin,
+                refreshTokenHash,
+                refreshTokenExpiresAt,
                 wallet: {
                     create: {
                         balance: 0,
@@ -204,10 +222,11 @@ router.post('/register', async (req, res) => {
             include: { wallet: true },
         });
 
-        const token = jwt.sign({ userId: user.id, jwtVersion: user.jwtVersion }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ userId: user.id, jwtVersion: user.jwtVersion }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
 
         return res.status(201).json({
             token,
+            refreshToken,
             user: {
                 id: user.id,
                 name: user.name,
@@ -337,15 +356,17 @@ router.post('/verify-login-otp', async (req, res) => {
         if (!user) return res.status(404).json({ error: 'Compte introuvable.' });
 
         // Single Device Enforcement: Increment the jwtVersion
+        const { refreshToken, refreshTokenHash, refreshTokenExpiresAt } = issueRefreshToken();
         const updatedUser = await prisma.user.update({
             where: { id: user.id },
-            data: { failedPinAttempts: 0, lockedUntil: null, jwtVersion: { increment: 1 } },
+            data: { failedPinAttempts: 0, lockedUntil: null, jwtVersion: { increment: 1 }, refreshTokenHash, refreshTokenExpiresAt },
         });
 
-        const token = jwt.sign({ userId: user.id, jwtVersion: updatedUser.jwtVersion }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ userId: user.id, jwtVersion: updatedUser.jwtVersion }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
 
         return res.json({
             token,
+            refreshToken,
             user: {
                 id: user.id,
                 name: user.name,
@@ -356,6 +377,62 @@ router.post('/verify-login-otp', async (req, res) => {
         });
     } catch (e: any) {
         logger.error('Erreur /auth/verify-login-otp:', e);
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+const refreshSchema = z.object({
+    refreshToken: z.string().min(1, 'Refresh token requis.'),
+});
+
+// POST /api/auth/refresh — échange un refresh token valide contre un nouvel access
+// token. Rotation à chaque appel (fenêtre glissante) : tant que le client revient
+// avant l'expiration du refresh token, il n'est jamais déconnecté.
+router.post('/refresh', async (req, res) => {
+    const parsed = refreshSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+    try {
+        const incomingHash = hashRefreshToken(parsed.data.refreshToken);
+        const user = await prisma.user.findUnique({ where: { refreshTokenHash: incomingHash } });
+
+        if (!user || !user.refreshTokenExpiresAt || user.refreshTokenExpiresAt < new Date()) {
+            return res.status(401).json({ error: 'Session expirée. Veuillez vous reconnecter.' });
+        }
+        if (user.isActive === false || user.accountStatus !== 'ACTIVE') {
+            return res.status(403).json({ error: 'Votre compte a été suspendu.' });
+        }
+
+        const { refreshToken, refreshTokenHash, refreshTokenExpiresAt } = issueRefreshToken();
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { refreshTokenHash, refreshTokenExpiresAt },
+        });
+
+        const token = jwt.sign({ userId: user.id, jwtVersion: user.jwtVersion }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
+
+        return res.json({ token, refreshToken });
+    } catch (e: any) {
+        logger.error('Erreur /auth/refresh:', e);
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+// POST /api/auth/logout — révoque le refresh token côté serveur (déconnexion
+// explicite). Best-effort côté client : la session locale est de toute façon
+// effacée même si cet appel échoue (hors ligne, etc).
+router.post('/logout', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        // jwtVersion incrémenté en plus de la purge du refresh token : sans ça, l'access
+        // token déjà émis (30 min) restait accepté par authMiddleware après une déconnexion
+        // volontaire — un token déjà capturé survivait à la révocation côté serveur.
+        await prisma.user.update({
+            where: { id: req.userId },
+            data: { refreshTokenHash: null, refreshTokenExpiresAt: null, jwtVersion: { increment: 1 } },
+        });
+        return res.json({ message: 'Déconnecté.' });
+    } catch (e: any) {
+        logger.error('Erreur /auth/logout:', e);
         return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });
@@ -479,20 +556,23 @@ router.put('/pin', authMiddleware, async (req: AuthRequest, res) => {
             return res.status(404).json({ error: 'Utilisateur non trouvé' });
         }
 
-        const isPinValid = await bcrypt.compare(oldPin, user.pin);
-        if (!isPinValid) {
-            // 400, pas 401 — voir commentaire dans /login : ce endpoint est authentifié
-            // (token valide requis), donc un 401 ici serait indiscernable côté client d'un
-            // vrai token expiré et déclencherait un logout complet + message trompeur pour
-            // une simple erreur de saisie de l'ancien PIN.
-            return res.status(400).json({ error: 'Ancien code PIN incorrect' });
-        }
+        // 400, pas 401 — voir commentaire dans /login : ce endpoint est authentifié (token
+        // valide requis), donc un 401 ici serait indiscernable côté client d'un vrai token
+        // expiré et déclencherait un logout complet + message trompeur pour une simple
+        // erreur de saisie de l'ancien PIN. verifyUserPin applique aussi le verrouillage à 3
+        // échecs — absent ici jusqu'ici, ce qui permettait de brute-forcer l'ancien PIN
+        // (4 chiffres, 10 000 combinaisons) sans aucune limite depuis une session compromise.
+        const pinCheck = await verifyUserPin(user, oldPin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         const hashedPin = await bcrypt.hash(newPin, 10);
 
+        // Invalide toute session déjà ouverte (y compris le refresh token) : un changement de
+        // PIN est le geste de remédiation attendu après une compromission suspectée, il doit
+        // couper l'accès de quiconque détenait déjà un token valide.
         await prisma.user.update({
             where: { id: req.userId },
-            data: { pin: hashedPin },
+            data: { pin: hashedPin, jwtVersion: { increment: 1 }, refreshTokenHash: null, refreshTokenExpiresAt: null },
         });
 
         return res.json({ message: 'Code PIN mis à jour avec succès' });

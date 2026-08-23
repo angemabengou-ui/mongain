@@ -102,6 +102,21 @@ export async function initiatePvitPayment(settings: PVitSettings, params: {
         });
         throw new Error(detail ? `PVit : ${detail}` : `PVit a refusé la demande (HTTP ${res.status}).`);
     }
+
+    // Un HTTP 200 ne garantit pas que PVit ait accepté la demande — `status`/`status_code`
+    // dans le corps peuvent indiquer un rejet immédiat (compte destinataire invalide, solde
+    // marchand insuffisant côté PVit...) sans jamais être vérifiés jusqu'ici : l'appelant
+    // (wallet.ts /pull) traitait alors un dépôt refusé comme "initié avec succès", sans trace
+    // dans ErrorLog, alors qu'aucune confirmation ne viendrait jamais par webhook.
+    if (typeof data.status === 'string' && /FAIL|ERROR|REJECT|REFUS/i.test(data.status)) {
+        await logError('PVIT_PAYMENT', `Statut refusé : ${data.status} (${data.status_code || '?'}) — ${data.message || ''}`, {
+            requestReference: params.reference,
+            network: params.network,
+            pvitStatus: data.status,
+            pvitStatusCode: data.status_code,
+        });
+        throw new Error(data.message ? `PVit : ${data.message}` : `PVit a refusé le dépôt (statut : ${data.status}).`);
+    }
     return data;
 }
 
@@ -158,6 +173,20 @@ export async function initiatePvitTransfer(settings: PVitSettings, params: {
             network: params.network,
         });
         throw new Error(detail ? `PVit : ${detail}` : `PVit a refusé la demande de transfert (HTTP ${res.status}).`);
+    }
+
+    // Même garde que initiatePvitPayment ci-dessus : un rejet signalé uniquement dans le
+    // corps (status/status_code), pas par le code HTTP, laissait wallet.ts /push répondre
+    // "retrait initié" au client alors que le wallet avait déjà été débité et qu'aucune
+    // confirmation ne viendrait jamais.
+    if (typeof data.status === 'string' && /FAIL|ERROR|REJECT|REFUS/i.test(data.status)) {
+        await logError('PVIT_TRANSFER', `Statut refusé : ${data.status} (${data.status_code || '?'}) — ${data.message || ''}`, {
+            requestReference: params.reference,
+            network: params.network,
+            pvitStatus: data.status,
+            pvitStatusCode: data.status_code,
+        });
+        throw new Error(data.message ? `PVit : ${data.message}` : `PVit a refusé le retrait (statut : ${data.status}).`);
     }
     return data;
 }

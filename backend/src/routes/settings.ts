@@ -136,8 +136,12 @@ const settingsSchema = z.object({
 // POST /api/settings/request (Maker System)
 router.post('/request', authMiddleware, async (req: AuthRequest, res) => {
     try {
+        // Même whitelist que /approve, /requests et /history ci-dessous — sans elle, n'importe
+        // quel staff actif (TELLER, SUPPORT_MAKER) pouvait soumettre une demande sur les
+        // paramètres les plus critiques de la plateforme (webhooks, frais, circuit breaker),
+        // qu'un Checker légitime n'avait ensuite qu'à approuver sans connaître l'origine.
         const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !staff.isActive) {
+        if (!staff || !staff.isActive || !['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(staff.role)) {
             return res.status(403).json({ error: 'Accès non autorisé.' });
         }
 

@@ -7,6 +7,7 @@ import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { initiatePvitPayment, initiatePvitTransfer, isPvitConfigured, toPvitCustomerAccountNumber } from '../services/pvit';
 import { friendlyErrorMessage } from '../utils/errors';
+import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
 import { getSystemSettings } from './settings';
 
@@ -151,12 +152,12 @@ router.post('/qr-cash-out', authMiddleware, async (req: AuthRequest, res) => {
         const client = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
         if (!client || !client.wallet) return res.status(404).json({ error: 'Client introuvable.' });
 
-        const isPinValid = await bcrypt.compare(pin, client.pin);
-        // 400, pas 401 : le client mobile traite tout 401 comme "session expirÃ©e" (voir
-        // src/services/api.ts, request()) et force une dÃ©connexion complÃ¨te avec suppression
-        // du token â€” un simple mauvais PIN ne doit jamais faire Ã§a. MÃªme correctif que
-        // /pay-bill, /topup et /verify-pin, manquÃ© ici lors de ce prÃ©cÃ©dent passage.
-        if (!isPinValid) return res.status(400).json({ error: 'Code PIN incorrect.' });
+        // Applique aussi le verrouillage 3 échecs/15min — absent ici jusqu'ici (bcrypt.compare
+        // seul), ce qui permettait de brute-forcer le PIN (4 chiffres) sans aucune limite dès
+        // qu'une session valide était compromise. Statut 400 conservé (pas 401) : voir
+        // commentaire dans /login, un 401 ici serait à tort traité comme "session expirée".
+        const pinCheck = await verifyUserPin(client, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         const branch = await prisma.branch.findUnique({ where: { code: branchCode }, include: { wallet: true, sessions: { where: { status: 'OPEN' } } } });
 
@@ -205,7 +206,7 @@ router.post('/qr-cash-out', authMiddleware, async (req: AuthRequest, res) => {
             }
 
             await tx.transaction.create({
-                data: { senderWalletId: client.wallet!.id, receiverWalletId: branch.wallet!.id, amount: amount, status: 'COMPLETED', reference: generateReference('QROUT') }
+                data: { senderWalletId: client.wallet!.id, receiverWalletId: branch.wallet!.id, amount: amount, fee: feeAmount, status: 'COMPLETED', reference: generateReference('QROUT') }
             });
 
             await tx.branch.update({ where: { id: branch.id, balance: { gte: amount } }, data: { balance: { decrement: amount } } });
@@ -472,6 +473,7 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
             const transaction = await tx.transaction.create({
                 data: {
                     amount, // The user sees they sent X amount to Y
+                    fee,
                     senderWalletId: sender.wallet.id,
                     receiverWalletId: receiver.wallet.id,
                     status: 'COMPLETED',
@@ -623,6 +625,15 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
             if (agent.role === 'MERCHANT') {
                 fee = amount * settings.taxWithdraw;
                 merchantReward = amount * settings.rewardMerchant;
+                // Si un admin configure rewardMerchant > taxWithdraw (commission marchand plus
+                // élevée que les frais qui la financent), `corporateCut = fee - merchantReward`
+                // plus bas devient négatif et le garde-fou `if (corporateCut > 0)` ne prélève
+                // alors RIEN pour compenser — le marchand est crédité `amount + merchantReward`
+                // pour un débit client de seulement `amount + fee` : de la monnaie électronique
+                // créée à partir de rien à chaque retrait. Plafonné ici pour que la commission
+                // ne puisse jamais dépasser les frais qui la financent, quelle que soit la
+                // configuration en base.
+                if (merchantReward > fee) merchantReward = fee;
             } else if (agent.role === 'AGENT') {
                 if (amount > settings.agencyWithdrawThreshold) {
                     fee = (amount - settings.agencyWithdrawThreshold) * settings.agencyTaxWithdraw;
@@ -658,6 +669,7 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
             const transaction = await tx.transaction.create({
                 data: {
                     amount,
+                    fee,
                     senderWalletId: sender.wallet.id,
                     receiverWalletId: agent.wallet.id,
                     status: 'COMPLETED',
@@ -1110,11 +1122,18 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
             // Anti-blanchiment
             await LimitEngine.verifyAndIncrementConsumption(tx, user.id, user.wallet!.id, amount, settings);
 
-            // On dÃ©duit directement pour verrouiller les fonds
-            await tx.wallet.update({
-                where: { id: user.wallet!.id },
+            // On dÃ©duit directement pour verrouiller les fonds — updateMany + garde `gte`
+            // (pas un simple `update`) : la lecture ci-dessus ne prend aucun verrou de ligne,
+            // donc deux appels concurrents peuvent tous deux passer le contrÃ´le JS avant que
+            // l'un ou l'autre n'Ã©crive. Seule la condition Ã©valuÃ©e par Postgres AU MOMENT de
+            // l'Ã©criture (sous le verrou de ligne pris par l'UPDATE) empÃªche le double-retrait.
+            const debited = await tx.wallet.updateMany({
+                where: { id: user.wallet!.id, balance: { gte: totalRequired } },
                 data: { balance: { decrement: totalRequired } }
             });
+            if (debited.count === 0) {
+                throw new Error(`Solde insuffisant pour le montant et les ${fee} FCFA de frais de retrait.`);
+            }
             // L'argent "sort" vers la passerelle
             await tx.wallet.update({
                 where: { id: gateway!.wallet!.id },
