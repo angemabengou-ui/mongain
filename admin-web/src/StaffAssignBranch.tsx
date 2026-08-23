@@ -185,7 +185,7 @@ export default function StaffAssignBranch({ token }: { token: string }) {
                                     <div style={{ fontWeight: 600 }}>{s.name}</div>
                                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{s.email}</div>
                                 </td>
-                                <td style={{ fontFamily: 'monospace', fontSize: 13 }}>{s.matricule || 'N/A'}</td>
+                                <td style={{ fontFamily: 'monospace', fontSize: 13 }}>{s.matricule || '—'}</td>
                                 <td>
                                     {s.branch ? (
                                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)' }}><Building size={14} /> {s.branch.name}</span>

@@ -18,8 +18,61 @@ const STATUS_COLORS: Record<string, string> = {
     RESOLVED: 'var(--success)', CLOSED: '#6b7280',
 };
 
+const TICKET_STATUS_LABELS: Record<string, string> = {
+    OPEN: 'Ouvert', ASSIGNED: 'Assigné', IN_PROGRESS: 'En cours',
+    WAITING_CUSTOMER: 'Attente client', WAITING_INTERNAL: 'Attente interne',
+    ESCALATED: 'Escaladé', REOPENED: 'Réouvert',
+    RESOLVED: 'Résolu', CLOSED: 'Clos',
+};
+
 const PRIORITY_COLORS: Record<string, string> = {
     LOW: '#6b7280', NORMAL: '#3b82f6', HIGH: 'var(--warning)', CRITICAL: 'var(--danger)',
+};
+
+const PRIORITY_LABELS: Record<string, string> = {
+    LOW: 'Faible', NORMAL: 'Normale', HIGH: 'Haute', CRITICAL: 'Critique',
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+    ACCOUNT: 'Compte', KYC: 'KYC', TRANSACTION: 'Transaction', CASH_IN: 'Dépôt',
+    CASH_OUT: 'Retrait', MERCHANT: 'Marchand', AGENCY: 'Agence', FRAUD: 'Fraude',
+    REFUND: 'Remboursement', TECHNICAL: 'Technique', LIMIT: 'Plafond', OTHER: 'Autre',
+};
+
+const FRAUD_TYPE_LABELS: Record<string, string> = {
+    SUSPICIOUS_ACTIVITY: 'Activité suspecte', ACCOUNT_TAKEOVER: 'Piratage de compte',
+    MONEY_LAUNDERING: 'Blanchiment', IDENTITY_THEFT: "Usurpation d'identité",
+};
+
+// riskLevel par défaut du backend est MEDIUM (pas NORMAL comme la priorité des tickets) —
+// carte de couleurs séparée pour ne pas retomber en gris faute de correspondance.
+const RISK_LEVEL_COLORS: Record<string, string> = {
+    LOW: '#6b7280', MEDIUM: '#3b82f6', HIGH: 'var(--warning)', CRITICAL: 'var(--danger)',
+};
+
+const RISK_LEVEL_LABELS: Record<string, string> = {
+    LOW: 'Faible', MEDIUM: 'Moyen', HIGH: 'Élevé', CRITICAL: 'Critique',
+};
+
+const FRAUD_STATUS_COLORS: Record<string, string> = {
+    OPEN: 'var(--warning)', INVESTIGATION: '#8b5cf6', CONFIRMED: 'var(--danger)',
+    FALSE_POSITIVE: 'var(--success)', CLOSED: '#6b7280',
+};
+
+const FRAUD_STATUS_LABELS: Record<string, string> = {
+    OPEN: 'Ouvert', INVESTIGATION: 'Investigation', CONFIRMED: 'Confirmé',
+    FALSE_POSITIVE: 'Faux positif', CLOSED: 'Clos',
+};
+
+const REFUND_TYPE_LABELS: Record<string, string> = { FULL: 'Total', PARTIAL: 'Partiel' };
+
+const REFUND_STATUS_LABELS: Record<string, string> = {
+    REQUESTED: 'Demandé', UNDER_REVIEW: 'En révision', APPROVED: 'Approuvé',
+    EXECUTED: 'Exécuté', REJECTED: 'Rejeté',
+};
+
+const TRANSACTION_STATUS_LABELS: Record<string, string> = {
+    PENDING: 'En attente', COMPLETED: 'Terminée', FAILED: 'Échouée',
 };
 
 function Badge({ text, color }: { text: string; color: string }) {
@@ -253,15 +306,15 @@ export default function SupportCenter({ token, role }: SupportCenterProps) {
                                 style={{ flex: 1, minWidth: 200, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 12px', color: 'var(--text-primary)', fontSize: 13 }} />
                             <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); }} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-primary)', fontSize: 12 }}>
                                 <option value="">Tous statuts</option>
-                                {STATUSES.map(s => <option key={s}>{s}</option>)}
+                                {STATUSES.map(s => <option key={s} value={s}>{TICKET_STATUS_LABELS[s] || s}</option>)}
                             </select>
                             <select value={priorityFilter} onChange={e => { setPriorityFilter(e.target.value); }} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-primary)', fontSize: 12 }}>
                                 <option value="">Toutes prios</option>
-                                {['LOW', 'NORMAL', 'HIGH', 'CRITICAL'].map(p => <option key={p}>{p}</option>)}
+                                {['LOW', 'NORMAL', 'HIGH', 'CRITICAL'].map(p => <option key={p} value={p}>{PRIORITY_LABELS[p] || p}</option>)}
                             </select>
                             <select value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); }} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-primary)', fontSize: 12 }}>
                                 <option value="">Toutes catégories</option>
-                                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                                {CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_LABELS[c] || c}</option>)}
                             </select>
                             <button onClick={() => setSlaFilter(!slaFilter)} style={{ background: slaFilter ? 'var(--danger-bg)' : 'var(--bg-card)', border: `1px solid ${slaFilter ? 'var(--danger)' : 'var(--border)'}`, borderRadius: 8, padding: '6px 10px', color: slaFilter ? 'var(--danger)' : 'var(--text-muted)', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <AlertTriangle size={13} /> SLA Dépassés
@@ -287,12 +340,12 @@ export default function SupportCenter({ token, role }: SupportCenterProps) {
                                             <tr key={t.id} onClick={() => openTicket(t)} style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer', background: selectedTicket?.id === t.id ? 'var(--accent-bg)' : 'transparent', transition: 'background .1s' }}>
                                                 <td style={{ padding: '8px', fontFamily: 'monospace', color: 'var(--text-muted)', fontSize: 10 }}>{t.id.slice(0, 8)}</td>
                                                 <td style={{ padding: '8px', color: 'var(--text-primary)', fontWeight: 500 }}>{t.user?.name}<br /><span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{t.user?.phone}</span></td>
-                                                <td style={{ padding: '8px' }}><Badge text={t.category} color="var(--accent)" /></td>
-                                                <td style={{ padding: '8px' }}><Badge text={t.priority} color={PRIORITY_COLORS[t.priority] || '#6b7280'} /></td>
-                                                <td style={{ padding: '8px' }}><Badge text={t.status} color={STATUS_COLORS[t.status] || '#6b7280'} /></td>
+                                                <td style={{ padding: '8px' }}><Badge text={CATEGORY_LABELS[t.category] || t.category} color="var(--accent)" /></td>
+                                                <td style={{ padding: '8px' }}><Badge text={PRIORITY_LABELS[t.priority] || t.priority} color={PRIORITY_COLORS[t.priority] || '#6b7280'} /></td>
+                                                <td style={{ padding: '8px' }}><Badge text={TICKET_STATUS_LABELS[t.status] || t.status} color={STATUS_COLORS[t.status] || '#6b7280'} /></td>
                                                 <td style={{ padding: '8px' }}>{sla(t)}</td>
                                                 <td style={{ padding: '8px', fontSize: 11, color: 'var(--text-muted)' }}>{t.assignee?.name || '—'}</td>
-                                                <td style={{ padding: '8px', fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(t.createdAt).toLocaleDateString()}</td>
+                                                <td style={{ padding: '8px', fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(t.createdAt).toLocaleDateString('fr-FR')}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -308,7 +361,7 @@ export default function SupportCenter({ token, role }: SupportCenterProps) {
                             <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div>
                                     <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{selectedTicket.title}</div>
-                                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>#{selectedTicket.id.slice(0, 8)} · {selectedTicket.category} · <Badge text={selectedTicket.priority} color={PRIORITY_COLORS[selectedTicket.priority]} /> · <Badge text={selectedTicket.status} color={STATUS_COLORS[selectedTicket.status]} /></div>
+                                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>#{selectedTicket.id.slice(0, 8)} · {CATEGORY_LABELS[selectedTicket.category] || selectedTicket.category} · <Badge text={PRIORITY_LABELS[selectedTicket.priority] || selectedTicket.priority} color={PRIORITY_COLORS[selectedTicket.priority]} /> · <Badge text={TICKET_STATUS_LABELS[selectedTicket.status] || selectedTicket.status} color={STATUS_COLORS[selectedTicket.status]} /></div>
                                 </div>
                                 <button onClick={() => setSelectedTicket(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16 }}>✕</button>
                             </div>
@@ -318,7 +371,7 @@ export default function SupportCenter({ token, role }: SupportCenterProps) {
                                 <span>👤 <b style={{ color: 'var(--text-primary)' }}>{selectedTicket.user?.name}</b> · {selectedTicket.user?.phone}</span>
                                 {selectedTicket.assignee && <span>📋 Assigné: <b style={{ color: 'var(--text-primary)' }}>{selectedTicket.assignee.name}</b></span>}
                                 {selectedTicket.transactionDetails && (
-                                    <span>💳 TX: <b style={{ color: 'var(--success)' }}>{selectedTicket.transactionDetails.amount?.toLocaleString()} FCFA</b> [{selectedTicket.transactionDetails.status}]</span>
+                                    <span>💳 TX: <b style={{ color: 'var(--success)' }}>{selectedTicket.transactionDetails.amount?.toLocaleString('fr-FR')} FCFA</b> [{TRANSACTION_STATUS_LABELS[selectedTicket.transactionDetails.status] || selectedTicket.transactionDetails.status}]</span>
                                 )}
                                 {selectedTicket.branchDetails && (
                                     <span>🏢 Agence: <b style={{ color: 'var(--text-primary)' }}>{selectedTicket.branchDetails.name}</b></span>
@@ -353,7 +406,7 @@ export default function SupportCenter({ token, role }: SupportCenterProps) {
                                             <span>📝 <b>{n.authorName}</b></span>
                                             <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                                                 {n.isInternal && <Badge text="INTERNE" color="var(--warning)" />}
-                                                {new Date(n.createdAt).toLocaleString()}
+                                                {new Date(n.createdAt).toLocaleString('fr-FR')}
                                             </span>
                                         </div>
                                         <div style={{ fontSize: 12, color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>{n.content}</div>
@@ -390,7 +443,7 @@ export default function SupportCenter({ token, role }: SupportCenterProps) {
                         <select value={fraudStatusFilter} onChange={e => setFraudStatusFilter(e.target.value)}
                             style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-primary)', fontSize: 12 }}>
                             <option value="">Tous statuts</option>
-                            {['OPEN', 'INVESTIGATION', 'CONFIRMED', 'FALSE_POSITIVE', 'CLOSED'].map(s => <option key={s}>{s}</option>)}
+                            {['OPEN', 'INVESTIGATION', 'CONFIRMED', 'FALSE_POSITIVE', 'CLOSED'].map(s => <option key={s} value={s}>{FRAUD_STATUS_LABELS[s] || s}</option>)}
                         </select>
                         <button onClick={fetchFraudCases} style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, padding: '6px 14px', color: '#fff', cursor: 'pointer', fontSize: 12 }}>Rafraîchir</button>
                     </div>
@@ -408,11 +461,11 @@ export default function SupportCenter({ token, role }: SupportCenterProps) {
                                     <tr key={fc.id} style={{ borderBottom: '1px solid var(--border)' }}>
                                         <td style={{ padding: '8px', fontFamily: 'monospace', fontSize: 10, color: 'var(--text-muted)' }}>{fc.id.slice(0, 8)}</td>
                                         <td style={{ padding: '8px', color: 'var(--text-primary)', fontWeight: 500 }}>{fc.user?.name}<br /><span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{fc.user?.phone}</span></td>
-                                        <td style={{ padding: '8px' }}><Badge text={fc.type} color="#8b5cf6" /></td>
-                                        <td style={{ padding: '8px' }}><Badge text={fc.riskLevel} color={PRIORITY_COLORS[fc.riskLevel] || '#6b7280'} /></td>
-                                        <td style={{ padding: '8px' }}><Badge text={fc.status} color={STATUS_COLORS[fc.status] || '#6b7280'} /></td>
+                                        <td style={{ padding: '8px' }}><Badge text={FRAUD_TYPE_LABELS[fc.type] || fc.type} color="#8b5cf6" /></td>
+                                        <td style={{ padding: '8px' }}><Badge text={RISK_LEVEL_LABELS[fc.riskLevel] || fc.riskLevel} color={RISK_LEVEL_COLORS[fc.riskLevel] || '#6b7280'} /></td>
+                                        <td style={{ padding: '8px' }}><Badge text={FRAUD_STATUS_LABELS[fc.status] || fc.status} color={FRAUD_STATUS_COLORS[fc.status] || '#6b7280'} /></td>
                                         <td style={{ padding: '8px', fontSize: 11, color: 'var(--text-muted)' }}>{fc.analyst?.name || '—'}</td>
-                                        <td style={{ padding: '8px', fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(fc.createdAt).toLocaleDateString()}</td>
+                                        <td style={{ padding: '8px', fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(fc.createdAt).toLocaleDateString('fr-FR')}</td>
                                         <td style={{ padding: '8px' }}>
                                             <div style={{ display: 'flex', gap: 4 }}>
                                                 {fc.status === 'OPEN' && <button onClick={() => updateFraudCase(fc.id, 'INVESTIGATION')} style={{ background: '#3b82f611', border: '1px solid #3b82f633', color: '#3b82f6', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>Investiguer</button>}
@@ -439,7 +492,7 @@ export default function SupportCenter({ token, role }: SupportCenterProps) {
                         <select value={refundStatusFilter} onChange={e => setRefundStatusFilter(e.target.value)}
                             style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-primary)', fontSize: 12 }}>
                             <option value="">Tous statuts</option>
-                            {['REQUESTED', 'UNDER_REVIEW', 'APPROVED', 'EXECUTED', 'REJECTED'].map(s => <option key={s}>{s}</option>)}
+                            {['REQUESTED', 'UNDER_REVIEW', 'APPROVED', 'EXECUTED', 'REJECTED'].map(s => <option key={s} value={s}>{REFUND_STATUS_LABELS[s] || s}</option>)}
                         </select>
                         <button onClick={fetchRefunds} style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, padding: '6px 14px', color: '#fff', cursor: 'pointer', fontSize: 12 }}>Rafraîchir</button>
                     </div>
@@ -458,12 +511,12 @@ export default function SupportCenter({ token, role }: SupportCenterProps) {
                                     <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
                                         <td style={{ padding: '8px', fontFamily: 'monospace', fontSize: 10, color: 'var(--text-muted)' }}>{r.id.slice(0, 8)}</td>
                                         <td style={{ padding: '8px', color: 'var(--text-primary)', fontWeight: 500 }}>{r.user?.name}<br /><span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{r.user?.phone}</span></td>
-                                        <td style={{ padding: '8px', color: 'var(--success)', fontWeight: 700 }}>{r.amount?.toLocaleString()} FCFA</td>
-                                        <td style={{ padding: '8px' }}><Badge text={r.refundType} color="#0ea5e9" /></td>
+                                        <td style={{ padding: '8px', color: 'var(--success)', fontWeight: 700 }}>{r.amount?.toLocaleString('fr-FR')} FCFA</td>
+                                        <td style={{ padding: '8px' }}><Badge text={REFUND_TYPE_LABELS[r.refundType] || r.refundType} color="#0ea5e9" /></td>
                                         <td style={{ padding: '8px', maxWidth: 160, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.reason}</td>
                                         <td style={{ padding: '8px', fontSize: 11, color: 'var(--text-muted)' }}>{r.requester?.name || '—'}</td>
                                         <td style={{ padding: '8px', fontSize: 11, color: 'var(--text-muted)' }}>{r.approver?.name || '—'}</td>
-                                        <td style={{ padding: '8px' }}><Badge text={r.status} color={r.status === 'EXECUTED' ? 'var(--success)' : r.status === 'REJECTED' ? 'var(--danger)' : r.status === 'APPROVED' ? '#3b82f6' : 'var(--warning)'} /></td>
+                                        <td style={{ padding: '8px' }}><Badge text={REFUND_STATUS_LABELS[r.status] || r.status} color={r.status === 'EXECUTED' ? 'var(--success)' : r.status === 'REJECTED' ? 'var(--danger)' : r.status === 'APPROVED' ? '#3b82f6' : 'var(--warning)'} /></td>
                                         <td style={{ padding: '8px' }}>
                                             <div style={{ display: 'flex', gap: 4 }}>
                                                 {(r.status === 'REQUESTED' || r.status === 'UNDER_REVIEW') && (canApproveRefunds ? <>

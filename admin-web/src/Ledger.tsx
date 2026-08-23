@@ -2,6 +2,15 @@ import { ArrowDownLeft, ArrowUpRight, Download, FileText, RotateCcw, Search } fr
 import { useEffect, useState } from 'react';
 import { API_URL } from './config';
 
+const STATUS_LABELS: Record<string, string> = {
+    PENDING: 'En attente',
+    COMPLETED: 'Terminée',
+    FAILED: 'Échouée',
+    REFUNDED: 'Remboursée',
+    CANCELLED: 'Annulée',
+};
+const statusLabel = (status: string) => STATUS_LABELS[status] || status;
+
 export default function Ledger({ token }: { token: string }) {
     const [transactions, setTransactions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -86,15 +95,15 @@ export default function Ledger({ token }: { token: string }) {
     const exportCSV = () => {
         const headers = ["Date", "Expediteur", "Beneficiaire", "Montant", "Reference", "Statut"];
         const rows = filteredTransactions.map(tx => {
-            const sender = `${tx.senderWallet?.user?.name || 'Inconnu'} (${tx.senderWallet?.user?.phone || 'N/A'})`;
-            const receiver = `${tx.receiverWallet?.user?.name || 'Inconnu'} (${tx.receiverWallet?.user?.phone || 'N/A'})`;
+            const sender = `${tx.senderWallet?.user?.name || 'Inconnu'} (${tx.senderWallet?.user?.phone || '—'})`;
+            const receiver = `${tx.receiverWallet?.user?.name || 'Inconnu'} (${tx.receiverWallet?.user?.phone || '—'})`;
             return [
                 new Date(tx.createdAt).toLocaleString('fr-FR'),
                 `"${sender}"`,
                 `"${receiver}"`,
                 tx.amount,
                 tx.reference || tx.id,
-                tx.status
+                statusLabel(tx.status)
             ].join(',');
         });
         const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
@@ -126,11 +135,11 @@ export default function Ledger({ token }: { token: string }) {
         const tableColumn = ["Date", "Expediteur", "Beneficiaire", "Montant (FCFA)", "Reference", "Statut"];
         const tableRows = filteredTransactions.map(tx => [
             new Date(tx.createdAt).toLocaleString('fr-FR'),
-            (tx.senderWallet?.user?.name || 'Systeme') + ' (' + (tx.senderWallet?.user?.phone || 'N/A') + ')',
-            (tx.receiverWallet?.user?.name || 'Systeme') + ' (' + (tx.receiverWallet?.user?.phone || 'N/A') + ')',
+            (tx.senderWallet?.user?.name || 'Systeme') + ' (' + (tx.senderWallet?.user?.phone || '—') + ')',
+            (tx.receiverWallet?.user?.name || 'Systeme') + ' (' + (tx.receiverWallet?.user?.phone || '—') + ')',
             tx.amount.toString(),
             tx.reference || tx.id,
-            tx.status
+            statusLabel(tx.status)
         ]);
         autoTable(doc, { head: [tableColumn], body: tableRows, startY: 40, theme: 'grid', styles: { fontSize: 10, cellPadding: 4 }, headStyles: { fillColor: [41, 128, 185], textColor: 255 } });
         doc.save('Mongain_Ledger_' + new Date().toISOString().split('T')[0] + '.pdf');
@@ -189,9 +198,9 @@ export default function Ledger({ token }: { token: string }) {
                         <tbody>
                             {filteredTransactions.map(tx => {
                                 const senderName = tx.senderWallet?.user?.name || 'Inconnu';
-                                const senderPhone = tx.senderWallet?.user?.phone || 'N/A';
+                                const senderPhone = tx.senderWallet?.user?.phone || '—';
                                 const receiverName = tx.receiverWallet?.user?.name || 'Inconnu';
-                                const receiverPhone = tx.receiverWallet?.user?.phone || 'N/A';
+                                const receiverPhone = tx.receiverWallet?.user?.phone || '—';
 
                                 const isFee = tx.reference?.startsWith('FEE');
                                 const isMint = tx.reference?.startsWith('MINT');
@@ -235,7 +244,7 @@ export default function Ledger({ token }: { token: string }) {
                                                 backgroundColor: tx.status === 'COMPLETED' ? 'var(--success-bg)' : tx.status === 'REFUNDED' ? 'var(--danger-bg)' : 'var(--warning-bg)',
                                                 color: tx.status === 'COMPLETED' ? 'var(--success)' : tx.status === 'REFUNDED' ? 'var(--danger)' : 'var(--warning)'
                                             }}>
-                                                {tx.status}
+                                                {statusLabel(tx.status)}
                                             </span>
                                         </td>
                                         <td style={{ padding: '16px', textAlign: 'right' }}>

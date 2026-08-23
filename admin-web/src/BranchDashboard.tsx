@@ -212,8 +212,8 @@ export default function BranchDashboard({ token, staffId }: { token: string; sta
                                     </span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)' }}>
-                                    <span>{a.amount.toLocaleString()} FCFA</span>
-                                    <span>{new Date(a.createdAt).toLocaleDateString()}</span>
+                                    <span>{a.amount.toLocaleString('fr-FR')} FCFA</span>
+                                    <span>{new Date(a.createdAt).toLocaleDateString('fr-FR')}</span>
                                 </div>
                             </div>
                         ))}
@@ -326,10 +326,10 @@ function ReconciliationReport({ token }: { token: string }) {
                         {report?.map((r, i) => (
                             <tr key={i}>
                                 <td style={{ fontWeight: 'bold' }}>{r.tellerName}</td>
-                                <td>{r.initialCash.toLocaleString()}</td>
-                                <td style={{ color: 'var(--success)' }}>+{r.cashIn.toLocaleString()}</td>
-                                <td style={{ color: 'var(--danger)' }}>-{r.cashOut.toLocaleString()}</td>
-                                <td style={{ fontWeight: 800 }}>{r.expectedCash.toLocaleString()} FCFA</td>
+                                <td>{r.initialCash.toLocaleString('fr-FR')}</td>
+                                <td style={{ color: 'var(--success)' }}>+{r.cashIn.toLocaleString('fr-FR')}</td>
+                                <td style={{ color: 'var(--danger)' }}>-{r.cashOut.toLocaleString('fr-FR')}</td>
+                                <td style={{ fontWeight: 800 }}>{r.expectedCash.toLocaleString('fr-FR')} FCFA</td>
                             </tr>
                         ))}
                     </tbody>

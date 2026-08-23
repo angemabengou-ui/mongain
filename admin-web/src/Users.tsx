@@ -3,6 +3,13 @@ import { useEffect, useState } from 'react';
 import { API_URL } from './config';
 import Customer360 from './Customer360';
 
+const KYC_STATUS_LABELS: Record<string, string> = {
+    UNVERIFIED: 'Non vérifié',
+    PENDING: 'En attente',
+    APPROVED: 'Approuvé',
+    REJECTED: 'Rejeté',
+};
+
 export default function UsersManagement({ token, staffRole, lockedRole }: { token: string; staffRole?: string; lockedRole?: 'AGENT' }) {
     const [users, setUsers] = useState<any[]>([]);
     const [total, setTotal] = useState(0);
@@ -275,12 +282,12 @@ export default function UsersManagement({ token, staffRole, lockedRole }: { toke
                                             color: u.kycStatus === 'UNVERIFIED' ? '#94a3b8' : u.kycStatus === 'APPROVED' ? 'var(--success)' : 'var(--warning)',
                                             border: '1px solid var(--border)'
                                         }}>
-                                            {u.kycStatus}
+                                            {KYC_STATUS_LABELS[u.kycStatus] || u.kycStatus}
                                         </span>
                                     </td>
 
                                     <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>
-                                        {u.wallet?.updatedAt ? new Date(u.wallet.updatedAt).toLocaleDateString() : 'N/A'}
+                                        {u.wallet?.updatedAt ? new Date(u.wallet.updatedAt).toLocaleDateString('fr-FR') : '—'}
                                     </td>
 
                                     <td style={{ padding: '16px' }}>

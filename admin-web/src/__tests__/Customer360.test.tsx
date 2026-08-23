@@ -42,13 +42,12 @@ function setupFetch(overrides: Record<string, any> = {}) {
 
 describe('Customer360', () => {
     let alertSpy: ReturnType<typeof vi.spyOn>;
-    let confirmSpy: ReturnType<typeof vi.spyOn>;
     const onBack = vi.fn();
 
     beforeEach(() => {
         onBack.mockReset();
-        alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-        confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => { });
+        window.confirm = vi.fn(() => true) as any;
     });
 
     afterEach(() => {

@@ -43,7 +43,7 @@ export default function KycMod({ token }: { token: string }) {
             if (!reason || reason.trim().length < 3) { alert('Motif de rejet requis (minimum 3 caractères).'); return; }
         }
 
-        if (!confirm(`Confirmez-vous le statut ${status} pour ce dossier ?`)) return;
+        if (!confirm(`Confirmez-vous le statut "${status === 'APPROVED' ? 'Approuvé' : 'Rejeté'}" pour ce dossier ?`)) return;
 
         try {
             const res = await fetch(API_URL + `/api/admin/users/${userId}/kyc`, {
@@ -98,7 +98,7 @@ export default function KycMod({ token }: { token: string }) {
                         <div key={p.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', padding: '20px', marginBottom: '10px' }}>
                             <div>
                                 <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>{p.name}</h3>
-                                <p style={{ margin: '5px 0', color: 'var(--text-muted)' }}>{p.phone} - Soumis le {new Date(p.createdAt).toLocaleDateString()}</p>
+                                <p style={{ margin: '5px 0', color: 'var(--text-muted)' }}>{p.phone} - Soumis le {new Date(p.createdAt).toLocaleDateString('fr-FR')}</p>
 
                                 <div style={{ display: 'flex', gap: '15px', marginTop: '15px' }}>
                                     <div style={{ position: 'relative' }}>

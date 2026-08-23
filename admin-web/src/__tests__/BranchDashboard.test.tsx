@@ -20,7 +20,7 @@ describe('BranchDashboard', () => {
     beforeEach(() => {
         fetchMock = vi.fn();
         vi.stubGlobal('fetch', fetchMock);
-        vi.spyOn(window, 'alert').mockImplementation(() => {});
+        vi.spyOn(window, 'alert').mockImplementation(() => { });
     });
 
     afterEach(() => {
@@ -31,7 +31,7 @@ describe('BranchDashboard', () => {
     it("affiche un message de chargement puis les données de l'agence", async () => {
         fetchMock.mockResolvedValueOnce({ ok: true, json: async () => branchData });
 
-        render(<BranchDashboard token={token} />);
+        render(<BranchDashboard token={token} staffId="staff-1" />);
 
         expect(screen.getByText(/Chargement sécurisé de l'agence/)).toBeInTheDocument();
 
@@ -45,7 +45,7 @@ describe('BranchDashboard', () => {
     it("affiche un message d'erreur si le chargement échoue", async () => {
         fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'Accès refusé' }) });
 
-        render(<BranchDashboard token={token} />);
+        render(<BranchDashboard token={token} staffId="staff-1" />);
 
         await screen.findByText(/Erreur critique/);
         expect(screen.getByText(/Accès refusé/)).toBeInTheDocument();
@@ -57,7 +57,7 @@ describe('BranchDashboard', () => {
         fetchMock.mockResolvedValueOnce({ ok: true, json: async () => branchData }); // refetch après ouverture
 
         const user = userEvent.setup();
-        render(<BranchDashboard token={token} />);
+        render(<BranchDashboard token={token} staffId="staff-1" />);
 
         await screen.findByText(/Tableau de Bord Agence/);
 

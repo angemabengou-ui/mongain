@@ -1,4 +1,3 @@
-/// <reference types="vitest/config" />
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
@@ -10,4 +9,4 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/setupTests.ts'],
   },
-})
+} as any)

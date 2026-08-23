@@ -244,7 +244,7 @@ export default function Treasury({ token }: { token: string }) {
                                             <td style={{ padding: '14px 16px', fontWeight: 900, color: '#8b5cf6' }}>{fmt(a.physicalVault)}</td>
                                             <td style={{ padding: '14px 16px' }}>
                                                 <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 800, background: a.status === 'CRITICAL' ? 'var(--danger-bg)' : a.status === 'LOW' ? 'var(--warning-bg)' : 'var(--success-bg)', color: a.status === 'CRITICAL' ? 'var(--danger)' : a.status === 'LOW' ? 'var(--warning)' : 'var(--success)' }}>
-                                                    {a.status}
+                                                    {a.status === 'CRITICAL' ? 'Critique' : a.status === 'LOW' ? 'Faible' : 'Normal'}
                                                 </span>
                                             </td>
                                         </tr>
@@ -283,7 +283,7 @@ export default function Treasury({ token }: { token: string }) {
                                                     background: r.status === 'UNDER_REVIEW' ? 'var(--warning-bg)' : r.status === 'MISMATCH' ? 'var(--danger-bg)' : 'var(--success-bg)',
                                                     color: r.status === 'UNDER_REVIEW' ? 'var(--warning)' : r.status === 'MISMATCH' ? 'var(--danger)' : 'var(--success)'
                                                 }}>
-                                                    {r.status}
+                                                    {r.status === 'UNDER_REVIEW' ? 'En révision' : r.status === 'MISMATCH' ? 'Écart' : 'Résolu'}
                                                 </span>
                                             </td>
                                             <td style={{ padding: '14px 16px' }}>

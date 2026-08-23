@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SupportCenter from '../SupportCenter';
@@ -135,7 +135,7 @@ describe('SupportCenter', () => {
         await user.click(screen.getByRole('button', { name: /Fraudes/i }));
 
         expect(await screen.findByText('Marie Curie')).toBeInTheDocument();
-        expect(screen.getByText('IDENTITY_THEFT')).toBeInTheDocument();
+        expect(screen.getByText("Usurpation d'identité")).toBeInTheDocument();
     });
 
     it("ajoute une note interne sur un ticket et l'affiche dans la chronologie", async () => {
