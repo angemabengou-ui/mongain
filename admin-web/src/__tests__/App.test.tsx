@@ -83,7 +83,9 @@ describe('App', () => {
 
         await screen.findByText('Dashboard Mock');
         expect(screen.getByText('TABLEAU DE BORD')).toBeInTheDocument();
-        expect(screen.getByText('TRÉSORERIE')).toBeInTheDocument();
+        // TRÉSORERIE n'a qu'une seule destination : rendu en lien direct (libellé de
+        // l'écran, pas du groupe) plutôt qu'en groupe repliable à un seul item.
+        expect(screen.getByText('Réserve & Liquidités du Siège')).toBeInTheDocument();
         expect(screen.getByText('Déconnexion')).toBeInTheDocument();
     });
 
@@ -100,8 +102,9 @@ describe('App', () => {
         expect(screen.queryByText('TABLEAU DE BORD')).not.toBeInTheDocument();
         expect(screen.queryByText('TRÉSORERIE')).not.toBeInTheDocument();
 
-        // le groupe Guichet & Agence est replié par défaut (seul "control-center" l'est) : il faut l'ouvrir
-        await user.click(screen.getByText('GUICHET & AGENCE'));
+        // Un TELLER ne voit qu'une seule destination Guichet (branch-dash exclu) : lien
+        // direct, sans groupe repliable "GUICHET & AGENCE" à ouvrir au préalable.
+        expect(screen.queryByText('GUICHET & AGENCE')).not.toBeInTheDocument();
         expect(screen.getByText('Opérations Guichet')).toBeInTheDocument();
 
         await user.click(screen.getByText('Opérations Guichet'));

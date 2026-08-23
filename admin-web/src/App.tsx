@@ -1,4 +1,4 @@
-import { Activity, Banknote, Building2, ChevronDown, ChevronRight, LayoutDashboard, LogOut, MessageSquare, Settings as SettingsIcon, ShieldAlert, ShieldCheck, Store, Users as UsersIcon } from 'lucide-react';
+import { Activity, Banknote, Building2, ChevronDown, ChevronRight, LayoutDashboard, LogOut, MessageSquare, Repeat, Settings as SettingsIcon, ShieldAlert, ShieldCheck, Store, Users as UsersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import AgencyCenter from './AgencyCenter';
 import AuditLogs from './AuditLogs';
@@ -17,6 +17,7 @@ import StaffAssignBranch from './StaffAssignBranch';
 import StaffCreate from './StaffCreate';
 import SupportCenter from './SupportCenter';
 import TellerTerminal from './TellerTerminal';
+import Tontines from './Tontines';
 import Treasury from './Treasury';
 import Users from './Users';
 import Vaults from './Vaults';
@@ -128,7 +129,15 @@ export default function App() {
     },
     {
       id: 'clients-comptes', label: 'CLIENTS, AGENTS & MARCHANDS', icon: <UsersIcon size={18} />, roles: ['SUPER_ADMIN', 'ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
-      items: [{ id: 'users', label: 'Base Clients (C-360)' }]
+      // Caisses Communes rattachée ici (plutôt qu'à Risque & Conformité) : c'est un
+      // produit détenu par les clients, au même titre qu'un wallet — un agent qui
+      // cherche "où sont les comptes/produits clients" doit la trouver du premier
+      // coup, sans avoir à deviner qu'elle sert aussi d'outil d'investigation litige.
+      items: [
+        { id: 'users', label: 'Base Clients (C-360)' },
+        { id: 'vaults', label: 'Caisses Communes' },
+        { id: 'tontines', label: 'Tontines' }
+      ]
     },
     {
       id: 'transactions', label: 'TRANSACTIONS & FINANCE', icon: <Activity size={18} />, roles: ['SUPER_ADMIN', 'ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
@@ -141,8 +150,7 @@ export default function App() {
     {
       id: 'risque', label: 'RISQUE & CONFORMITÉ', icon: <ShieldAlert size={18} />, roles: ['SUPER_ADMIN', 'ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
       items: [
-        { id: 'kyc', label: 'Dossiers KYC / AML' },
-        { id: 'vaults', label: 'Caisses Communes' }
+        { id: 'kyc', label: 'Dossiers KYC / AML' }
       ]
     },
     {
@@ -224,20 +232,6 @@ export default function App() {
 
         <div className="nav-links" style={{ flex: 1, overflowY: 'auto', padding: '0 16px 32px' }}>
 
-          {/* ── VUE GLOBALE – always pinned at top for admins ── */}
-          {isSuperAdmin && (
-            <>
-              <div
-                className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
-                onClick={() => setActiveTab('dashboard')}
-                style={{ fontWeight: 700, fontSize: 13, marginBottom: 4, padding: '10px 14px' }}
-              >
-                <LayoutDashboard size={17} /> Vue Globale
-              </div>
-              <div className="nav-divider" style={{ margin: '8px 0 12px' }} />
-            </>
-          )}
-
           {isSupportRole && (
             <>
               <div className={`nav-item ${activeTab === 'reclamations' ? 'active' : ''}`} onClick={() => handleNav('reclamations')} style={{ marginBottom: 4 }}>
@@ -246,47 +240,63 @@ export default function App() {
               <div className={`nav-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => handleNav('users')} style={{ marginBottom: 4 }}>
                 <UsersIcon size={18} /> Base Clients (C-360)
               </div>
-              <div className={`nav-item ${activeTab === 'vaults' ? 'active' : ''}`} onClick={() => handleNav('vaults')} style={{ marginBottom: 8 }}>
+              <div className={`nav-item ${activeTab === 'vaults' ? 'active' : ''}`} onClick={() => handleNav('vaults')} style={{ marginBottom: 4 }}>
                 <ShieldCheck size={18} /> Caisses Communes
+              </div>
+              <div className={`nav-item ${activeTab === 'tontines' ? 'active' : ''}`} onClick={() => handleNav('tontines')} style={{ marginBottom: 8 }}>
+                <Repeat size={18} /> Tontines
               </div>
             </>
           )}
 
           {/* MAIN SUPER ADMIN CONTROLS */}
           {isSuperAdmin && SUPER_ADMIN_GROUPS.filter(g => g.roles.includes(role)).map(group => (
-            <div key={group.id} style={{ marginBottom: 4 }}>
+            group.items.length === 1 ? (
+              // Groupe à destination unique : lien direct plutôt qu'un déplier/replier
+              // qui n'aurait servi qu'à cacher un seul écran derrière un clic de plus.
               <div
-                onClick={() => toggleGroup(group.id)}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '12px 14px', borderRadius: 8, cursor: 'pointer',
-                  color: expandedGroup === group.id ? 'var(--sidebar-text-active)' : 'var(--sidebar-text)',
-                  fontWeight: 600, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5,
-                  background: expandedGroup === group.id ? 'var(--sidebar-hover)' : 'transparent'
-                }}
+                key={group.id}
+                className={`nav-item ${(activeTab === group.items[0].id || activeTab === group.items[0].route) ? 'active' : ''}`}
+                onClick={() => handleNav(group.items[0].id, group.items[0].route)}
+                style={{ marginBottom: 4 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ color: expandedGroup === group.id ? 'var(--accent-light)' : 'inherit' }}>{group.icon}</span>
-                  {group.label}
-                </div>
-                {expandedGroup === group.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                {group.icon} {group.items[0].label}
               </div>
-
-              {expandedGroup === group.id && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '4px 0 4px 28px' }}>
-                  {group.items.map(item => (
-                    <div
-                      key={item.id}
-                      className={`nav-item ${(activeTab === item.id || activeTab === item.route) ? 'active' : ''}`}
-                      onClick={() => handleNav(item.id, item.route)}
-                      style={{ padding: '8px 12px', fontSize: 13 }}
-                    >
-                      {item.label}
-                    </div>
-                  ))}
+            ) : (
+              <div key={group.id} style={{ marginBottom: 4 }}>
+                <div
+                  onClick={() => toggleGroup(group.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 14px', borderRadius: 8, cursor: 'pointer',
+                    color: expandedGroup === group.id ? 'var(--sidebar-text-active)' : 'var(--sidebar-text)',
+                    fontWeight: 600, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5,
+                    background: expandedGroup === group.id ? 'var(--sidebar-hover)' : 'transparent'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ color: expandedGroup === group.id ? 'var(--accent-light)' : 'inherit' }}>{group.icon}</span>
+                    {group.label}
+                  </div>
+                  {expandedGroup === group.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                 </div>
-              )}
-            </div>
+
+                {expandedGroup === group.id && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '4px 0 4px 28px' }}>
+                    {group.items.map(item => (
+                      <div
+                        key={item.id}
+                        className={`nav-item ${(activeTab === item.id || activeTab === item.route) ? 'active' : ''}`}
+                        onClick={() => handleNav(item.id, item.route)}
+                        style={{ padding: '8px 12px', fontSize: 13 }}
+                      >
+                        {item.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
           ))}
 
           {/* BRANCH OPS CONTROLS */}
@@ -294,39 +304,52 @@ export default function App() {
             <>
               {isSuperAdmin && <div className="nav-divider" style={{ margin: '24px 0' }}></div>}
               {BRANCH_GROUPS.filter(g => g.roles.includes(role)).map(group => (
-                <div key={group.id} style={{ marginBottom: 4 }}>
+                group.items.length === 1 ? (
+                  // Ex: un TELLER ne voit que "Opérations Guichet" (branch-dash exclu par
+                  // roleExclude) — pas la peine d'imposer un groupe repliable pour un seul lien.
                   <div
-                    onClick={() => toggleGroup(group.id)}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '12px 14px', borderRadius: 8, cursor: 'pointer',
-                      color: expandedGroup === group.id ? 'var(--sidebar-text-active)' : 'var(--sidebar-text)',
-                      fontWeight: 600, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5,
-                      background: expandedGroup === group.id ? 'var(--sidebar-hover)' : 'transparent'
-                    }}
+                    key={group.id}
+                    className={`nav-item ${(activeTab === group.items[0].id || activeTab === group.items[0].route) ? 'active' : ''}`}
+                    onClick={() => handleNav(group.items[0].id, group.items[0].route)}
+                    style={{ marginBottom: 4 }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ color: expandedGroup === group.id ? 'var(--success)' : 'inherit' }}>{group.icon}</span>
-                      {group.label}
-                    </div>
-                    {expandedGroup === group.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    {group.icon} {group.items[0].label}
                   </div>
-
-                  {expandedGroup === group.id && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '4px 0 4px 28px' }}>
-                      {group.items.map(item => (
-                        <div
-                          key={item.id}
-                          className={`nav-item ${(activeTab === item.id || activeTab === item.route) ? 'active' : ''}`}
-                          onClick={() => handleNav(item.id, item.route)}
-                          style={{ padding: '8px 12px', fontSize: 13 }}
-                        >
-                          {item.label}
-                        </div>
-                      ))}
+                ) : (
+                  <div key={group.id} style={{ marginBottom: 4 }}>
+                    <div
+                      onClick={() => toggleGroup(group.id)}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '12px 14px', borderRadius: 8, cursor: 'pointer',
+                        color: expandedGroup === group.id ? 'var(--sidebar-text-active)' : 'var(--sidebar-text)',
+                        fontWeight: 600, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5,
+                        background: expandedGroup === group.id ? 'var(--sidebar-hover)' : 'transparent'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ color: expandedGroup === group.id ? 'var(--success)' : 'inherit' }}>{group.icon}</span>
+                        {group.label}
+                      </div>
+                      {expandedGroup === group.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                     </div>
-                  )}
-                </div>
+
+                    {expandedGroup === group.id && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '4px 0 4px 28px' }}>
+                        {group.items.map(item => (
+                          <div
+                            key={item.id}
+                            className={`nav-item ${(activeTab === item.id || activeTab === item.route) ? 'active' : ''}`}
+                            onClick={() => handleNav(item.id, item.route)}
+                            style={{ padding: '8px 12px', fontSize: 13 }}
+                          >
+                            {item.label}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
               ))}
             </>
           )}
@@ -367,6 +390,11 @@ export default function App() {
 
           {(isSuperAdmin || isSupportRole) && activeTab === 'users' && <Users token={token} staffRole={role} />}
           {(isSuperAdmin || isSupportRole) && activeTab === 'reclamations' && <SupportCenter token={token} role={role} />}
+          {/* Caisses Communes / Tontines : accessibles à SUPPORT_MAKER côté nav et backend
+              (VAULT_VIEW_ROLES / TONTINE_VIEW_ROLES) — rendu hors du bloc isSuperAdmin,
+              qui exclut ce rôle, sans quoi le lien restait mort (page vide) pour lui. */}
+          {(isSuperAdmin || isSupportRole) && activeTab === 'vaults' && <Vaults token={token} />}
+          {(isSuperAdmin || isSupportRole) && activeTab === 'tontines' && <Tontines token={token} />}
 
           {isSuperAdmin && (
             <>
@@ -378,7 +406,6 @@ export default function App() {
               {activeTab === 'branches' && <AgencyCenter token={token} role={role} />}
               {activeTab === 'agents-legacy' && <Users token={token} staffRole={role} lockedRole="AGENT" />}
               {activeTab === 'kyc' && <KycMod token={token} />}
-              {activeTab === 'vaults' && <Vaults token={token} />}
               {activeTab === 'ledger' && <Ledger token={token} />}
               {activeTab === 'treasury' && <Treasury token={token} />}
               {activeTab === 'audit' && <AuditLogs token={token} />}

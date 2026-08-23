@@ -3195,6 +3195,70 @@ router.get('/vaults/:id', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
+// ==========================================
+// TONTINES — VISIBILITÉ LECTURE SEULE
+// ==========================================
+// Même constat que pour les Caisses Communes ci-dessus : un litige sur une tontine
+// (cagnotte non reçue, cotisation prélevée en double, ordre de versement contesté)
+// était invisible pour toute l'équipe — TontineGroup n'apparaissait dans aucun écran
+// admin. Lecture seule uniquement, aucune action d'intervention exposée ici.
+const TONTINE_VIEW_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER'];
+
+router.get('/tontines', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!staff || !TONTINE_VIEW_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+
+        const groups = await prisma.tontineGroup.findMany({
+            orderBy: { createdAt: 'desc' },
+            include: {
+                creator: { select: { name: true, phone: true } },
+                _count: { select: { participants: true } }
+            }
+        });
+
+        res.json({ groups });
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+router.get('/tontines/:id', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!staff || !TONTINE_VIEW_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+
+        const group = await prisma.tontineGroup.findUnique({
+            where: { id: req.params.id as string },
+            include: {
+                creator: { select: { name: true, phone: true } },
+                participants: {
+                    orderBy: { payoutOrder: 'asc' },
+                    include: { user: { select: { name: true, phone: true } } }
+                }
+            }
+        });
+        if (!group) return res.status(404).json({ error: 'Tontine introuvable.' });
+
+        // Les cotisations/versements transitent par Transaction (aucun modèle dédié) —
+        // référencés TONT_DBT_G{id}_C{cycle}_U{userId} / TONT_PAY_G{id}_C{cycle}_U{userId}
+        // (voir tontineService.ts). Le `_G{id}_` cible ce groupe précis sans ambiguïté.
+        const transactions = await prisma.transaction.findMany({
+            where: { reference: { contains: `_G${group.id}_` } },
+            orderBy: { createdAt: 'desc' },
+            take: 200,
+            include: {
+                senderWallet: { include: { user: { select: { name: true, phone: true } } } },
+                receiverWallet: { include: { user: { select: { name: true, phone: true } } } }
+            }
+        });
+
+        res.json({ group, transactions });
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
 export default router;
 
 

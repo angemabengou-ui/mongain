@@ -35,7 +35,7 @@ const PRIORITY_LABELS: Record<string, string> = {
 
 const CATEGORY_LABELS: Record<string, string> = {
     ACCOUNT: 'Compte', KYC: 'KYC', TRANSACTION: 'Transaction', CASH_IN: 'Dépôt',
-    CASH_OUT: 'Retrait', MERCHANT: 'Marchand', AGENCY: 'Agence', FRAUD: 'Fraude',
+    CASH_OUT: 'Retrait', MERCHANT: 'Marchand', AGENCY: 'Agence', TONTINE: 'Tontine', FRAUD: 'Fraude',
     REFUND: 'Remboursement', TECHNICAL: 'Technique', LIMIT: 'Plafond', OTHER: 'Autre',
 };
 
@@ -240,7 +240,7 @@ export default function SupportCenter({ token, role }: SupportCenterProps) {
     useEffect(() => { if (tab === 'fraud') fetchFraudCases(); }, [tab, fetchFraudCases]);
     useEffect(() => { if (tab === 'refunds') fetchRefunds(); }, [tab, fetchRefunds]);
 
-    const CATEGORIES = ['ACCOUNT', 'KYC', 'TRANSACTION', 'CASH_IN', 'CASH_OUT', 'MERCHANT', 'AGENCY', 'FRAUD', 'REFUND', 'TECHNICAL', 'LIMIT', 'OTHER'];
+    const CATEGORIES = ['ACCOUNT', 'KYC', 'TRANSACTION', 'CASH_IN', 'CASH_OUT', 'MERCHANT', 'AGENCY', 'TONTINE', 'FRAUD', 'REFUND', 'TECHNICAL', 'LIMIT', 'OTHER'];
     const STATUSES = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'WAITING_CUSTOMER', 'WAITING_INTERNAL', 'ESCALATED', 'REOPENED', 'RESOLVED', 'CLOSED'];
 
     const sla = (t: any) => {
