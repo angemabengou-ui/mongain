@@ -7,6 +7,7 @@ export default function KycMod({ token }: { token: string }) {
     const [pending, setPending] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [search, setSearch] = useState('');
 
     const fetchPending = async () => {
         setLoading(true);
@@ -67,6 +68,12 @@ export default function KycMod({ token }: { token: string }) {
         }
     };
 
+    const filteredPending = pending.filter((p: any) => {
+        if (!search) return true;
+        const s = search.toLowerCase();
+        return p.name?.toLowerCase().includes(s) || p.phone?.includes(s);
+    });
+
     return (
         <div className="card" style={{ maxWidth: '900px', margin: '0 auto' }}>
             <h2 style={{ fontSize: '24px', marginBottom: '20px', color: 'var(--accent)' }}>Base KYC & Identité</h2>
@@ -84,17 +91,26 @@ export default function KycMod({ token }: { token: string }) {
                 {tab === 'PENDING' ? 'Les dossiers ci-dessous requièrent une validation manuelle.' : 'Liste des clients dont l\'identité a été formellement validée par le siège.'}
             </p>
 
+            <input
+                placeholder="🔍 Rechercher un nom ou un téléphone…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ width: '100%', maxWidth: 360, marginBottom: '20px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-primary)', fontSize: 13 }}
+            />
+
             {error && <div style={{ color: 'var(--danger)', marginBottom: '10px' }}>{error}</div>}
 
             {loading ? (
                 <div style={{ color: 'var(--text-muted)' }}>Chargement...</div>
-            ) : pending.length === 0 ? (
+            ) : filteredPending.length === 0 ? (
                 <div className="card" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-                    {tab === 'PENDING' ? 'Aucun dossier KYC en attente ! 🎉' : 'Aucune identité certifiée pour le moment.'}
+                    {pending.length === 0
+                        ? (tab === 'PENDING' ? 'Aucun dossier KYC en attente ! 🎉' : 'Aucune identité certifiée pour le moment.')
+                        : 'Aucun dossier ne correspond à la recherche.'}
                 </div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                    {pending.map((p) => (
+                    {filteredPending.map((p) => (
                         <div key={p.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', padding: '20px', marginBottom: '10px' }}>
                             <div>
                                 <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>{p.name}</h3>

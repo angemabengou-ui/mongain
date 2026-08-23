@@ -7,6 +7,7 @@ import ChangePassword from './ChangePassword';
 import { API_URL } from './config';
 import Dashboard from './Dashboard';
 import ErrorLogs from './ErrorLogs';
+import GlobalSearch from './components/GlobalSearch';
 import KycMod from './KycMod';
 import Ledger from './Ledger';
 import Login from './Login';
@@ -47,6 +48,9 @@ export default function App() {
   // Reste sur la page active après un rafraîchissement (F5) au lieu de revenir au tableau de bord.
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('admin_active_tab') || defaultTabForRole(role));
   const [expandedGroup, setExpandedGroup] = useState<string | null>(() => localStorage.getItem('admin_expanded_group') || 'control-center');
+  // Résultat sélectionné depuis la recherche globale : { tab: écran cible, id: enregistrement
+  // à ouvrir directement } — consommé par Users/Vaults/Tontines via leur prop `initialSelected*`.
+  const [searchTarget, setSearchTarget] = useState<{ tab: string; id: string } | null>(null);
 
   useEffect(() => {
     localStorage.setItem('admin_active_tab', activeTab);
@@ -374,6 +378,9 @@ export default function App() {
           </div>
 
           <div className="topbar-right">
+            {(isSuperAdmin || isSupportRole) && (
+              <GlobalSearch token={token} onNavigate={(tab, id) => { setActiveTab(tab); setSearchTarget({ tab, id }); }} />
+            )}
             <div className="topbar-user">
               <div className="avatar">{userName.charAt(0).toUpperCase()}</div>
               <div>
@@ -388,13 +395,13 @@ export default function App() {
           {activeTab === 'branch-dash' && isBranchOps && <BranchDashboard token={token} staffId={staffId} />}
           {activeTab === 'teller-terminal' && isBranchOps && <TellerTerminal token={token} userName={userName} />}
 
-          {(isSuperAdmin || isSupportRole) && activeTab === 'users' && <Users token={token} staffRole={role} />}
+          {(isSuperAdmin || isSupportRole) && activeTab === 'users' && <Users token={token} staffRole={role} initialSelectedUserId={searchTarget?.tab === 'users' ? searchTarget.id : undefined} />}
           {(isSuperAdmin || isSupportRole) && activeTab === 'reclamations' && <SupportCenter token={token} role={role} />}
           {/* Caisses Communes / Tontines : accessibles à SUPPORT_MAKER côté nav et backend
               (VAULT_VIEW_ROLES / TONTINE_VIEW_ROLES) — rendu hors du bloc isSuperAdmin,
               qui exclut ce rôle, sans quoi le lien restait mort (page vide) pour lui. */}
-          {(isSuperAdmin || isSupportRole) && activeTab === 'vaults' && <Vaults token={token} />}
-          {(isSuperAdmin || isSupportRole) && activeTab === 'tontines' && <Tontines token={token} />}
+          {(isSuperAdmin || isSupportRole) && activeTab === 'vaults' && <Vaults token={token} initialSelectedId={searchTarget?.tab === 'vaults' ? searchTarget.id : undefined} />}
+          {(isSuperAdmin || isSupportRole) && activeTab === 'tontines' && <Tontines token={token} initialSelectedId={searchTarget?.tab === 'tontines' ? searchTarget.id : undefined} />}
 
           {isSuperAdmin && (
             <>

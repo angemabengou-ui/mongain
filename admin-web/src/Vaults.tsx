@@ -26,14 +26,19 @@ function StatusPill({ status }: { status: string }) {
     return <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 10, background: s.bg, color: s.color, whiteSpace: 'nowrap' }}>{s.label}</span>;
 }
 
-export default function Vaults({ token }: { token: string }) {
+export default function Vaults({ token, initialSelectedId }: { token: string; initialSelectedId?: string }) {
     const [vaults, setVaults] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [search, setSearch] = useState('');
 
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [detail, setDetail] = useState<any>(null);
     const [detailLoading, setDetailLoading] = useState(false);
+
+    // Arrivée depuis la recherche globale (barre du haut) : ouvre directement la caisse
+    // visée sans forcer l'admin à la retrouver dans la liste.
+    useEffect(() => { if (initialSelectedId) setSelectedId(initialSelectedId); }, [initialSelectedId]);
 
     const fetchList = async () => {
         setLoading(true);
@@ -160,11 +165,24 @@ export default function Vaults({ token }: { token: string }) {
         );
     }
 
+    const filteredVaults = vaults.filter(v => {
+        if (!search) return true;
+        const s = search.toLowerCase();
+        return v.name?.toLowerCase().includes(s) || v.admin?.name?.toLowerCase().includes(s) || v.admin?.phone?.includes(s);
+    });
+
     return (
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
             <div style={{ marginBottom: 24 }}>
                 <PageHeader title="Caisses Communes" subtitle="Vue d'ensemble des coffres collectifs multi-signatures — lecture seule, pour comprendre une situation avant de répondre à un litige." />
             </div>
+
+            <input
+                placeholder="🔍 Rechercher une caisse ou un président…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ width: '100%', maxWidth: 360, marginBottom: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-primary)', fontSize: 13 }}
+            />
 
             {error && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--danger)', background: 'var(--danger-bg)', padding: '10px 16px', borderRadius: 8, marginBottom: 20 }}>
@@ -183,9 +201,9 @@ export default function Vaults({ token }: { token: string }) {
                     <tbody>
                         {loading ? (
                             <tr><td colSpan={6} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Chargement...</td></tr>
-                        ) : vaults.length === 0 ? (
-                            <tr><td colSpan={6} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Aucune caisse commune créée pour l'instant.</td></tr>
-                        ) : vaults.map(v => (
+                        ) : filteredVaults.length === 0 ? (
+                            <tr><td colSpan={6} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>{vaults.length === 0 ? "Aucune caisse commune créée pour l'instant." : 'Aucune caisse ne correspond à la recherche.'}</td></tr>
+                        ) : filteredVaults.map(v => (
                             <tr key={v.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedId(v.id)}>
                                 <td style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
                                     <Shield size={14} color="var(--accent)" /> {v.name}

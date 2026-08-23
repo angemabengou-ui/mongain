@@ -30,15 +30,20 @@ function StatusPill({ status, labels }: { status: string; labels: Record<string,
     return <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 10, background: c.bg, color: c.color, whiteSpace: 'nowrap' }}>{labels[status] || status}</span>;
 }
 
-export default function Tontines({ token }: { token: string }) {
+export default function Tontines({ token, initialSelectedId }: { token: string; initialSelectedId?: string }) {
     const [groups, setGroups] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [search, setSearch] = useState('');
 
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [detail, setDetail] = useState<any>(null);
     const [transactions, setTransactions] = useState<any[]>([]);
     const [detailLoading, setDetailLoading] = useState(false);
+
+    // Arrivée depuis la recherche globale (barre du haut) : ouvre directement la tontine
+    // visée sans forcer l'admin à la retrouver dans la liste.
+    useEffect(() => { if (initialSelectedId) setSelectedId(initialSelectedId); }, [initialSelectedId]);
 
     const fetchList = async () => {
         setLoading(true);
@@ -150,6 +155,12 @@ export default function Tontines({ token }: { token: string }) {
         );
     }
 
+    const filteredGroups = groups.filter(g => {
+        if (!search) return true;
+        const s = search.toLowerCase();
+        return g.name?.toLowerCase().includes(s) || g.creator?.name?.toLowerCase().includes(s) || g.creator?.phone?.includes(s);
+    });
+
     return (
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
             <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -158,6 +169,13 @@ export default function Tontines({ token }: { token: string }) {
                     <RefreshCw size={14} /> Rafraîchir
                 </button>
             </div>
+
+            <input
+                placeholder="🔍 Rechercher une tontine ou un créateur…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ width: '100%', maxWidth: 360, marginBottom: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-primary)', fontSize: 13 }}
+            />
 
             {error && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--danger)', background: 'var(--danger-bg)', padding: '10px 16px', borderRadius: 8, marginBottom: 20 }}>
@@ -176,9 +194,9 @@ export default function Tontines({ token }: { token: string }) {
                     <tbody>
                         {loading ? (
                             <tr><td colSpan={7} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Chargement...</td></tr>
-                        ) : groups.length === 0 ? (
-                            <tr><td colSpan={7} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Aucune tontine créée pour l'instant.</td></tr>
-                        ) : groups.map(g => (
+                        ) : filteredGroups.length === 0 ? (
+                            <tr><td colSpan={7} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>{groups.length === 0 ? "Aucune tontine créée pour l'instant." : 'Aucune tontine ne correspond à la recherche.'}</td></tr>
+                        ) : filteredGroups.map(g => (
                             <tr key={g.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedId(g.id)}>
                                 <td style={{ fontWeight: 600 }}>{g.name}</td>
                                 <td style={{ color: 'var(--text-secondary)' }}>{g.creator?.name}</td>

@@ -3259,6 +3259,47 @@ router.get('/tontines/:id', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
+// ==========================================
+// RECHERCHE GLOBALE (barre du haut du portail)
+// ==========================================
+// Avant ça, retrouver un client/caisse/tontine précis obligeait à d'abord deviner le
+// bon écran, puis à parcourir sa liste manuellement — Vaults/Tontines n'avaient même
+// pas de filtre local. Un seul champ, interrogeant les 3 domaines en parallèle,
+// plafonné à 5 résultats chacun : de quoi sauter directement à la fiche visée.
+const GLOBAL_SEARCH_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER'];
+
+router.get('/search', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!staff || !GLOBAL_SEARCH_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+
+        const q = ((req.query.q as string) || '').trim();
+        if (q.length < 2) return res.json({ users: [], vaults: [], tontines: [] });
+
+        const [users, vaults, tontines] = await Promise.all([
+            prisma.user.findMany({
+                where: { OR: [{ name: { contains: q, mode: 'insensitive' } }, { phone: { contains: q } }] },
+                select: { id: true, name: true, phone: true, role: true },
+                take: 5
+            }),
+            prisma.vault.findMany({
+                where: { name: { contains: q, mode: 'insensitive' } },
+                select: { id: true, name: true, admin: { select: { name: true } } },
+                take: 5
+            }),
+            prisma.tontineGroup.findMany({
+                where: { name: { contains: q, mode: 'insensitive' } },
+                select: { id: true, name: true, creator: { select: { name: true } } },
+                take: 5
+            })
+        ]);
+
+        res.json({ users, vaults, tontines });
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
 export default router;
 
 

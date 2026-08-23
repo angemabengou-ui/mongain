@@ -10,7 +10,7 @@ const KYC_STATUS_LABELS: Record<string, string> = {
     REJECTED: 'Rejeté',
 };
 
-export default function UsersManagement({ token, staffRole, lockedRole }: { token: string; staffRole?: string; lockedRole?: 'AGENT' }) {
+export default function UsersManagement({ token, staffRole, lockedRole, initialSelectedUserId }: { token: string; staffRole?: string; lockedRole?: 'AGENT'; initialSelectedUserId?: string }) {
     const [users, setUsers] = useState<any[]>([]);
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(false);
@@ -33,6 +33,10 @@ export default function UsersManagement({ token, staffRole, lockedRole }: { toke
 
     // Slide-over CRM 360
     const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+
+    // Arrivée depuis la recherche globale (barre du haut) : ouvre directement la fiche
+    // client visée sans forcer l'admin à la retrouver dans la liste paginée.
+    useEffect(() => { if (initialSelectedUserId) setSelectedUserId(initialSelectedUserId); }, [initialSelectedUserId]);
 
     // Create Pro (Merchant) state — les Agents ne se créent plus ici : un vrai agent
     // doit être rattaché à une agence via Organisation Interne > Gestion du Personnel
