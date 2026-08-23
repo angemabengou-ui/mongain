@@ -71,4 +71,23 @@ describe('BranchDashboard', () => {
         );
         expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('Session ouverte'));
     });
+
+    it("indique que le Siège fonctionne comme une agence normale depuis la séparation de la Trésorerie Centrale", async () => {
+        // Depuis cette séparation, le wallet du Siège n'est plus la Réserve globale — un
+        // gros solde ici serait juste son solde d'agence propre, pas un milliard fantôme.
+        const hqData = { ...branchData, name: 'Siège Central', isHQ: true, wallet: { balance: 300000 } };
+        fetchMock.mockResolvedValueOnce({ ok: true, json: async () => hqData });
+        const onNavigateToTreasury = vi.fn();
+
+        render(<BranchDashboard token={token} staffId="staff-1" onNavigateToTreasury={onNavigateToTreasury} />);
+
+        await screen.findByText(/Tableau de Bord Agence — Siège/);
+        expect(screen.getByText(/fonctionne comme une agence normale/)).toBeInTheDocument();
+        expect(screen.getByText('E-Liquidité (Réserves Trésorerie)')).toBeInTheDocument();
+        expect(screen.getByText('300 000 FCFA')).toBeInTheDocument();
+
+        const user = userEvent.setup();
+        await user.click(screen.getByRole('button', { name: /Voir la Trésorerie Centrale/ }));
+        expect(onNavigateToTreasury).toHaveBeenCalled();
+    });
 });

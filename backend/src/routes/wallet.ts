@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { getCentralTreasury } from '../services/centralTreasury';
 import { initiatePvitPayment, initiatePvitTransfer, isPvitConfigured, toPvitCustomerAccountNumber } from '../services/pvit';
 import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
@@ -945,9 +946,7 @@ router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
         if (!user || user.role !== 'USER') throw new Error('Seuls les clients peuvent utiliser ce service.');
         if (!user.wallet || user.wallet.balance < amount) throw new Error('Solde insuffisant pour ce paiement.');
 
-        // Le SiÃ¨ge est la RÃ©serve Centrale â€” plus un compte User abstrait sÃ©parÃ©.
-        const reserve = await prisma.branch.findFirst({ where: { isHQ: true }, include: { wallet: true } });
-        if (!reserve || !reserve.wallet) throw new Error('Le service est temporairement indisponible (compte central manquant).');
+        const reserve = await getCentralTreasury();
 
         let serviceToken = '';
         if (type === 'ELECTRICITY') {

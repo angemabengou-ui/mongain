@@ -145,6 +145,23 @@ model Wallet {
   sentTransactions     Transaction[] @relation("SenderWallet")
   receivedTransactions Transaction[] @relation("ReceiverWallet")
   branch               Branch?
+  centralTreasury      CentralTreasury?
+}
+
+// Trésorerie Centrale — séparée du Siège (Branch isHQ=true) : avant, le wallet du
+// Siège servait À LA FOIS de Réserve Centrale électronique (source de tout Mint et
+// de toute Allocation vers les agences) ET de solde d'agence opérationnelle si des
+// caissiers travaillaient physiquement au Siège — impossible à distinguer dans le
+// rapprochement comptable, et un Super Admin rattaché au Siège voyait la masse
+// monétaire globale affichée comme "sa" liquidité d'agence. Table volontairement
+// minimale (singleton en pratique, un seul enregistrement) : la logique de bascule
+// depuis l'ancien wallet Siège vit dans getCentralTreasury() (services/treasury.ts).
+model CentralTreasury {
+  id        String   @id @default(uuid())
+  name      String   @default("Trésorerie Centrale Mongain")
+  walletId  String   @unique
+  wallet    Wallet   @relation(fields: [walletId], references: [id])
+  createdAt DateTime @default(now())
 }
 
 model Transaction {

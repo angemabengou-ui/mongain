@@ -30,7 +30,9 @@ vi.mock('../StaffAccessRights', () => ({ default: () => <div>StaffAccessRights M
 vi.mock('../StaffAssignBranch', () => ({ default: () => <div>StaffAssignBranch Mock</div> }));
 vi.mock('../StaffCreate', () => ({ default: () => <div>StaffCreate Mock</div> }));
 vi.mock('../SupportCenter', () => ({ default: () => <div>SupportCenter Mock</div> }));
+vi.mock('../SystemAccounts', () => ({ default: () => <div>SystemAccounts Mock</div> }));
 vi.mock('../TellerTerminal', () => ({ default: () => <div>TellerTerminal Mock</div> }));
+vi.mock('../Tontines', () => ({ default: () => <div>Tontines Mock</div> }));
 vi.mock('../Treasury', () => ({ default: () => <div>Treasury Mock</div> }));
 vi.mock('../Users', () => ({ default: () => <div>Users Mock</div> }));
 vi.mock('../Vaults', () => ({ default: () => <div>Vaults Mock</div> }));
@@ -78,14 +80,18 @@ describe('App', () => {
         localStorage.setItem('admin_role', 'SUPER_ADMIN');
         localStorage.setItem('admin_name', 'Alice Admin');
         setupFetch();
+        const user = userEvent.setup();
 
         render(<App />);
 
         await screen.findByText('Dashboard Mock');
         expect(screen.getByText('TABLEAU DE BORD')).toBeInTheDocument();
-        // TRÉSORERIE n'a qu'une seule destination : rendu en lien direct (libellé de
-        // l'écran, pas du groupe) plutôt qu'en groupe repliable à un seul item.
+        // TRÉSORERIE a 2 destinations (Réserve du Siège + Comptes Système) : groupe
+        // repliable, replié par défaut — il faut l'ouvrir pour voir ses items.
+        expect(screen.getByText('TRÉSORERIE')).toBeInTheDocument();
+        await user.click(screen.getByText('TRÉSORERIE'));
         expect(screen.getByText('Réserve & Liquidités du Siège')).toBeInTheDocument();
+        expect(screen.getByText('Comptes Système')).toBeInTheDocument();
         expect(screen.getByText('Déconnexion')).toBeInTheDocument();
     });
 

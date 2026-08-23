@@ -1,8 +1,8 @@
-import { Archive, DoorClosed, LockKeyhole, Store, Users } from 'lucide-react';
+import { Archive, ArrowRight, Building2, DoorClosed, LockKeyhole, Store, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { API_URL } from './config';
 
-export default function BranchDashboard({ token, staffId }: { token: string; staffId: string }) {
+export default function BranchDashboard({ token, staffId, onNavigateToTreasury }: { token: string; staffId: string; onNavigateToTreasury?: () => void }) {
     const [branch, setBranch] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -83,12 +83,26 @@ export default function BranchDashboard({ token, staffId }: { token: string; sta
     // caissier A si celui-ci avait une caisse ouverte au même moment, et ne pouvait pas ouvrir
     // la sienne (l'app pensait qu'une session était déjà active pour lui).
     const myActiveSession = branch?.sessions?.find((s: any) => s.status === 'OPEN' && s.teller?.id === staffId);
+    // Depuis la séparation Trésorerie Centrale / Siège (voir services/centralTreasury.ts),
+    // le wallet du Siège n'est plus la Réserve Centrale — c'est redevenu une agence normale,
+    // avec son propre petit e-wallet opérationnel. On garde juste une note "(Siège)" pour le
+    // repère visuel, plus la revendication trompeuse "ce solde = la masse monétaire globale".
+    const isHQ = !!branch?.isHQ;
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', maxWidth: 1200, margin: '0 auto', paddingBottom: 50 }}>
             <div>
-                <h2 style={{ fontSize: '28px', marginBottom: '8px' }}>Tableau de Bord Agence ({branch.name})</h2>
-                <p style={{ color: 'var(--text-secondary)' }}>Espace isolé et sécurisé. Liquidité physique en agence : {branch.balance.toLocaleString('fr-FR')} FCFA.</p>
+                <h2 style={{ fontSize: '28px', marginBottom: '8px' }}>{isHQ ? `Tableau de Bord Agence — Siège (${branch.name})` : `Tableau de Bord Agence (${branch.name})`}</h2>
+                <p style={{ color: 'var(--text-secondary)' }}>
+                    {isHQ
+                        ? "Le Siège fonctionne comme une agence normale : les chiffres ci-dessous sont son solde opérationnel propre, pas la Réserve globale."
+                        : `Espace isolé et sécurisé. Liquidité physique en agence : ${branch.balance.toLocaleString('fr-FR')} FCFA.`}
+                </p>
+                {isHQ && onNavigateToTreasury && (
+                    <button onClick={onNavigateToTreasury} style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--accent-bg)', color: 'var(--accent)', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                        <Building2 size={15} /> Voir la Trésorerie Centrale <ArrowRight size={14} />
+                    </button>
+                )}
             </div>
 
             <div className="stats-grid">

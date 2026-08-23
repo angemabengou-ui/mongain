@@ -17,6 +17,7 @@ import StaffAccessRights from './StaffAccessRights';
 import StaffAssignBranch from './StaffAssignBranch';
 import StaffCreate from './StaffCreate';
 import SupportCenter from './SupportCenter';
+import SystemAccounts from './SystemAccounts';
 import TellerTerminal from './TellerTerminal';
 import Tontines from './Tontines';
 import Treasury from './Treasury';
@@ -54,6 +55,9 @@ export default function App() {
   // Résultat sélectionné depuis la recherche globale : { tab: écran cible, id: enregistrement
   // à ouvrir directement } — consommé par Users/Vaults/Tontines via leur prop `initialSelected*`.
   const [searchTarget, setSearchTarget] = useState<{ tab: string; id: string } | null>(null);
+  // Compte système visé depuis "Comptes Système > Créer un ajustement" — consommé par
+  // Treasury via `prefillAdjustTarget` pour ouvrir directement le formulaire Ajustement.
+  const [adjustTarget, setAdjustTarget] = useState<{ walletId: string; name: string } | null>(null);
 
   useEffect(() => {
     localStorage.setItem('admin_active_tab', activeTab);
@@ -152,7 +156,10 @@ export default function App() {
     },
     {
       id: 'tresorerie', label: 'TRÉSORERIE', icon: <Banknote size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
-      items: [{ id: 'treasury', label: 'Réserve & Liquidités du Siège' }]
+      items: [
+        { id: 'treasury', label: 'Réserve & Liquidités du Siège' },
+        { id: 'system-accounts', label: 'Comptes Système' }
+      ]
     },
     {
       id: 'risque', label: 'RISQUE & CONFORMITÉ', icon: <ShieldAlert size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
@@ -395,7 +402,7 @@ export default function App() {
         </header>
 
         <main className="content-area">
-          {activeTab === 'branch-dash' && isBranchOps && <BranchDashboard token={token} staffId={staffId} />}
+          {activeTab === 'branch-dash' && isBranchOps && <BranchDashboard token={token} staffId={staffId} onNavigateToTreasury={isSuperAdmin ? () => setActiveTab('treasury') : undefined} />}
           {activeTab === 'teller-terminal' && isBranchOps && <TellerTerminal token={token} userName={userName} />}
 
           {(isSuperAdmin || isSupportRole) && activeTab === 'users' && <Users token={token} staffRole={role} initialSelectedUserId={searchTarget?.tab === 'users' ? searchTarget.id : undefined} />}
@@ -417,7 +424,8 @@ export default function App() {
               {activeTab === 'agents-legacy' && <Users token={token} staffRole={role} lockedRole="AGENT" />}
               {activeTab === 'kyc' && <KycMod token={token} />}
               {activeTab === 'ledger' && <Ledger token={token} />}
-              {activeTab === 'treasury' && <Treasury token={token} />}
+              {activeTab === 'treasury' && <Treasury token={token} prefillAdjustTarget={adjustTarget} />}
+              {activeTab === 'system-accounts' && <SystemAccounts token={token} onAdjust={(walletId, name) => { setAdjustTarget({ walletId, name }); setActiveTab('treasury'); }} />}
               {activeTab === 'audit' && <AuditLogs token={token} />}
               {activeTab === 'error-logs' && <ErrorLogs token={token} />}
               {activeTab === 'settings' && <Settings token={token} />}

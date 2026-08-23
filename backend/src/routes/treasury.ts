@@ -3,21 +3,9 @@ import express from 'express';
 import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { getCentralTreasury } from '../services/centralTreasury';
 
 const router = express.Router();
-
-// Le Siège EST la Réserve Centrale — ce n'est plus un compte User abstrait
-// (+24199999999) séparé de toute agence. La monnaie créée (ISSUANCE) charge le
-// portefeuille du Siège, et c'est le Siège qui distribue (ALLOCATION) vers les agences.
-async function getHQBranch(tx: any) {
-    let hq = await tx.branch.findFirst({ where: { isHQ: true }, include: { wallet: true } });
-    if (!hq) throw new Error("Aucune agence Siège configurée. Créez-en une (Centre des Agences) et marquez-la comme Siège.");
-    if (!hq.wallet) {
-        const wallet = await tx.wallet.create({ data: { balance: 0 } });
-        hq = await tx.branch.update({ where: { id: hq.id }, data: { walletId: wallet.id }, include: { wallet: true } });
-    }
-    return hq;
-}
 
 /**
  * MONGain V6 : CORE TREASURY ENGINE
@@ -34,20 +22,33 @@ router.get('/overview', authMiddleware, async (req: AuthRequest, res) => {
             return res.status(403).json({ error: 'Accès refusé.' });
         }
 
-        const [branches, pendingReqs] = await Promise.all([
+        const [branches, pendingReqs, centralTreasury, systemWallets] = await Promise.all([
             prisma.branch.findMany({ include: { wallet: true } }),
-            prisma.treasuryRequest.count({ where: { status: 'PENDING' } })
+            prisma.treasuryRequest.count({ where: { status: 'PENDING' } }),
+            getCentralTreasury(),
+            // Comptes techniques (Passerelle PVit, Corporate, Coffre Tontine, ...) : ce sont
+            // des contreparties comptables internes, pas de l'argent détenu par un client —
+            // sans cette exclusion, ils gonflaient silencieusement "Portefeuilles Clients"
+            // (ex: la Passerelle Externe est pré-provisionnée à ~1 milliard FCFA à sa
+            // création, indissociable d'un vrai solde client dans le calcul précédent).
+            prisma.wallet.findMany({ where: { user: { role: 'ADMIN' } }, select: { id: true, balance: true } })
         ]);
 
-        const hq = branches.find(b => b.isHQ);
-        const reserveBalance = hq?.wallet?.balance || 0;
-        // Le Siège fait partie de `branches` — exclu explicitement de "agences" pour ne
-        // pas compter la réserve centrale comme de la liquidité électronique distribuée.
-        const totalAgencyElectronic = branches.filter(b => !b.isHQ).reduce((acc, b) => acc + (b.wallet?.balance || 0), 0);
-        const totalPhysicalVault = branches.filter(b => !b.isHQ).reduce((acc, b) => acc + (b.balance || 0), 0);
+        const reserveBalance = centralTreasury.wallet.balance;
+        // Le Siège n'est plus qu'une agence normale depuis la séparation de la Trésorerie
+        // Centrale : sa liquidité (électronique et physique) compte désormais comme celle
+        // de n'importe quelle autre agence, plus d'exclusion spéciale.
+        const totalAgencyElectronic = branches.reduce((acc, b) => acc + (b.wallet?.balance || 0), 0);
+        const totalPhysicalVault = branches.reduce((acc, b) => acc + (b.balance || 0), 0);
 
-        // Sum of all wallets excluding Reserve (Siège) and Branch wallets
-        const exclusions = branches.map(b => b.walletId).filter(Boolean);
+        const systemAccountsBalance = systemWallets.reduce((acc, w) => acc + (w.balance || 0), 0);
+
+        // Sum of all wallets excluding Central Treasury, Branch wallets and system accounts
+        const exclusions = [
+            ...branches.map(b => b.walletId).filter(Boolean),
+            centralTreasury.walletId,
+            ...systemWallets.map(w => w.id)
+        ];
 
         const clientWalletsAgg = await prisma.wallet.aggregate({
             where: { id: { notIn: exclusions as string[] } },
@@ -55,7 +56,7 @@ router.get('/overview', authMiddleware, async (req: AuthRequest, res) => {
         });
         const clientWalletsBalance = clientWalletsAgg._sum.balance || 0;
 
-        const totalMoneySupply = reserveBalance + totalAgencyElectronic + clientWalletsBalance;
+        const totalMoneySupply = reserveBalance + totalAgencyElectronic + clientWalletsBalance + systemAccountsBalance;
 
         res.json({
             moneySupply: totalMoneySupply,
@@ -63,6 +64,7 @@ router.get('/overview', authMiddleware, async (req: AuthRequest, res) => {
             totalAgencyElectronic,
             totalPhysicalVault,
             clientWalletsBalance,
+            systemAccountsBalance,
             pendingRequestsCount: pendingReqs,
             escrowBalance: 0 // Mock feature for Escrow until implemented
         });
@@ -130,18 +132,15 @@ router.post('/requests', authMiddleware, async (req: AuthRequest, res) => {
             }
         }
 
-        // Contrôles spécifiques au type
-        const hqForValidation = await getHQBranch(prisma);
-
-        if ((type === 'ALLOCATION' || type === 'RETURN') && targetBranchId === hqForValidation.id) {
-            return res.status(400).json({ error: 'Le Siège est la Réserve Centrale elle-même : impossible de le cibler comme agence pour une Allocation ou un Retour.' });
-        }
-
+        // Contrôles spécifiques au type — depuis la séparation de la Trésorerie Centrale,
+        // le Siège n'est qu'une agence normale et peut légitimement être ciblé par une
+        // Allocation/un Retour comme n'importe quelle autre (plus d'auto-ciblage possible :
+        // la Trésorerie Centrale n'a plus d'id d'agence).
         if (type === 'ALLOCATION') {
             if (!targetBranchId && !targetWalletId) return res.status(400).json({ error: 'Une cible (Agence ou Portefeuille) est requise pour une Allocation.' });
 
-            // Vérifier les fonds du siège
-            if (hqForValidation.wallet.balance < amount) {
+            const centralTreasury = await getCentralTreasury();
+            if (centralTreasury.wallet.balance < amount) {
                 return res.status(400).json({ error: "Fonds centraux insuffisants pour cette allocation." });
             }
         }
@@ -238,13 +237,9 @@ router.post('/requests/:id/approve', authMiddleware, async (req: AuthRequest, re
             // EXÉCUTION LOGIQUE
             // ==================
 
-            const reserve = await getHQBranch(tx);
-
-            // Le Siège ne peut pas être sa propre cible (self-transfer) — garde de sécurité
-            // en plus de la validation à la création de la requête.
-            if (request.targetBranchId === reserve.id) {
-                throw new Error('Le Siège est la Réserve Centrale elle-même : impossible de le cibler comme agence.');
-            }
+            // Depuis la séparation, la Trésorerie Centrale n'est plus une Branch : plus
+            // besoin de garde anti-auto-ciblage ici, le Siège est une agence normale.
+            const reserve = await getCentralTreasury(tx);
 
             if (request.type === 'ISSUANCE') {
                 // Création pure vers la réserve Centrale

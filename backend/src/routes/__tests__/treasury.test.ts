@@ -15,6 +15,7 @@ jest.mock('../../prisma', () => ({
     prisma: {
         staff: { findUnique: jest.fn() },
         branch: { findMany: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
+        centralTreasury: { findFirst: jest.fn(), create: jest.fn() },
         treasuryRequest: {
             count: jest.fn(),
             findMany: jest.fn(),
@@ -24,7 +25,7 @@ jest.mock('../../prisma', () => ({
             update: jest.fn()
         },
         systemSettings: { findFirst: jest.fn() },
-        wallet: { aggregate: jest.fn(), update: jest.fn(), create: jest.fn(), findUnique: jest.fn() },
+        wallet: { aggregate: jest.fn(), update: jest.fn(), create: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
         transaction: { create: jest.fn() },
         auditLog: { create: jest.fn() },
         reconciliationCase: { findMany: jest.fn(), update: jest.fn() },
@@ -41,7 +42,15 @@ const CHECKER = { id: 'staff_1', role: 'COMPLIANCE_CHECKER', isActive: true, bra
 const RISK = { id: 'staff_1', role: 'RISK', isActive: true, branchId: null };
 const BRANCH_MANAGER = { id: 'staff_1', role: 'BRANCH_MANAGER', isActive: true, branchId: 'branch_own' };
 
-const HQ_BRANCH = { id: 'hq_1', isHQ: true, walletId: 'w_hq', wallet: { id: 'w_hq', balance: 10000000 } };
+// Depuis la séparation Trésorerie Centrale / Siège : la Réserve n'est plus une Branch,
+// getCentralTreasury() la trouve via prisma.centralTreasury.findFirst().
+const CENTRAL_TREASURY = { id: 'ct_1', walletId: 'w_hq', wallet: { id: 'w_hq', balance: 10000000 } };
+
+beforeEach(() => {
+    // wallet.findMany est utilisé pour les comptes système (rôle ADMIN) dans /overview —
+    // valeur par défaut vide pour ne pas casser les tests qui ne testent pas ce détail.
+    (prisma.wallet.findMany as jest.Mock).mockResolvedValue([]);
+});
 
 describe('Treasury Routes', () => {
     beforeEach(() => {
@@ -63,11 +72,14 @@ describe('Treasury Routes', () => {
 
         it('devrait retourner un aperçu global de la trésorerie', async () => {
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
+            // Le Siège n'est plus exclu : c'est une agence normale depuis la séparation.
             (prisma.branch.findMany as jest.Mock).mockResolvedValue([
-                { isHQ: true, wallet: { balance: 1000 } },
-                { isHQ: false, wallet: { balance: 500 }, balance: 200, walletId: 'w_b1' }
+                { wallet: { balance: 500 }, balance: 200, walletId: 'w_b1' }
             ]);
             (prisma.treasuryRequest.count as jest.Mock).mockResolvedValue(3);
+            (prisma.centralTreasury.findFirst as jest.Mock).mockResolvedValue({ id: 'ct_1', walletId: 'w_hq', wallet: { id: 'w_hq', balance: 1000 } });
+            // Compte système (ex: Passerelle Externe) : exclu de clientWalletsBalance, compté à part.
+            (prisma.wallet.findMany as jest.Mock).mockResolvedValue([{ id: 'w_gateway', balance: 999999999 }]);
             (prisma.wallet.aggregate as jest.Mock).mockResolvedValue({ _sum: { balance: 700 } });
 
             const res = await request(app).get('/treasury/overview');
@@ -77,8 +89,15 @@ describe('Treasury Routes', () => {
             expect(res.body.totalAgencyElectronic).toBe(500);
             expect(res.body.totalPhysicalVault).toBe(200);
             expect(res.body.clientWalletsBalance).toBe(700);
-            expect(res.body.moneySupply).toBe(1000 + 500 + 700);
+            expect(res.body.systemAccountsBalance).toBe(999999999);
+            expect(res.body.moneySupply).toBe(1000 + 500 + 700 + 999999999);
             expect(res.body.pendingRequestsCount).toBe(3);
+            // Le wallet de la Trésorerie Centrale et les wallets système doivent être exclus
+            // du calcul "Portefeuilles Clients", pas seulement les wallets d'agences.
+            expect(prisma.wallet.aggregate).toHaveBeenCalledWith({
+                where: { id: { notIn: ['w_b1', 'w_hq', 'w_gateway'] } },
+                _sum: { balance: true }
+            });
         });
 
         it('devrait retourner 500 en cas d\'erreur serveur', async () => {
@@ -167,58 +186,26 @@ describe('Treasury Routes', () => {
             expect(res.body.error).toContain('plafonnée');
         });
 
-        it('devrait retourner 500 si aucune agence Siège n\'est configurée', async () => {
+        it('devrait permettre de cibler le Siège comme une agence normale pour une ALLOCATION', async () => {
+            // Depuis la séparation Trésorerie Centrale / Siège, le Siège (même flaggé
+            // isHQ=true) n'est plus la Réserve elle-même : il peut recevoir une Allocation
+            // comme n'importe quelle autre agence ("le siège peut aussi avoir son agence").
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
             (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ circuitBreaker: false });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue(null);
-
-            const res = await request(app)
-                .post('/treasury/requests')
-                .send({ type: 'ISSUANCE', amount: 1000, reason: 'Création monnaie' });
-
-            expect(res.status).toBe(500);
-            expect(res.body.error).toContain('Aucune agence Siège');
-        });
-
-        it('devrait créer un portefeuille pour le Siège s\'il n\'en a pas encore', async () => {
-            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
-            (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ circuitBreaker: false });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue({ id: 'hq_1', isHQ: true, wallet: null });
-            (prisma.wallet.create as jest.Mock).mockResolvedValue({ id: 'w_new', balance: 0 });
-            (prisma.branch.update as jest.Mock).mockResolvedValue({ id: 'hq_1', isHQ: true, wallet: { id: 'w_new', balance: 0 } });
-            (prisma.treasuryRequest.create as jest.Mock).mockResolvedValue({ id: 'req1' });
+            (prisma.centralTreasury.findFirst as jest.Mock).mockResolvedValue(CENTRAL_TREASURY);
+            (prisma.treasuryRequest.create as jest.Mock).mockResolvedValue({ id: 'req_hq' });
             (prisma.auditLog.create as jest.Mock).mockResolvedValue({});
 
             const res = await request(app)
                 .post('/treasury/requests')
-                .send({ type: 'ISSUANCE', amount: 1000, reason: 'Création monnaie' });
+                .send({ type: 'ALLOCATION', amount: 1000, reason: 'Allocation vers le Siège', targetBranchId: 'hq_1' });
 
             expect(res.status).toBe(200);
-            expect(prisma.wallet.create).toHaveBeenCalledWith({ data: { balance: 0 } });
-            expect(prisma.branch.update).toHaveBeenCalledWith({
-                where: { id: 'hq_1' },
-                data: { walletId: 'w_new' },
-                include: { wallet: true }
-            });
-        });
-
-        it('devrait refuser de cibler le Siège lui-même pour une ALLOCATION', async () => {
-            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
-            (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ circuitBreaker: false });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue(HQ_BRANCH);
-
-            const res = await request(app)
-                .post('/treasury/requests')
-                .send({ type: 'ALLOCATION', amount: 1000, reason: 'Allocation test', targetBranchId: 'hq_1' });
-
-            expect(res.status).toBe(400);
-            expect(res.body.error).toContain('Réserve Centrale');
         });
 
         it('devrait retourner 400 si ALLOCATION sans cible', async () => {
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
             (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ circuitBreaker: false });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue(HQ_BRANCH);
 
             const res = await request(app)
                 .post('/treasury/requests')
@@ -231,7 +218,7 @@ describe('Treasury Routes', () => {
         it('devrait retourner 400 si les fonds centraux sont insuffisants pour une ALLOCATION', async () => {
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
             (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ circuitBreaker: false });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue({ id: 'hq_1', isHQ: true, wallet: { id: 'w_hq', balance: 100 } });
+            (prisma.centralTreasury.findFirst as jest.Mock).mockResolvedValue({ id: 'ct_1', walletId: 'w_hq', wallet: { id: 'w_hq', balance: 100 } });
 
             const res = await request(app)
                 .post('/treasury/requests')
@@ -244,7 +231,6 @@ describe('Treasury Routes', () => {
         it('devrait retourner 403 si un BRANCH_MANAGER tente un RETURN pour une autre agence', async () => {
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(BRANCH_MANAGER);
             (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ circuitBreaker: false });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue(HQ_BRANCH);
 
             const res = await request(app)
                 .post('/treasury/requests')
@@ -257,7 +243,6 @@ describe('Treasury Routes', () => {
         it('devrait retourner 400 si RETURN sans agence d\'origine', async () => {
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
             (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ circuitBreaker: false });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue(HQ_BRANCH);
 
             const res = await request(app)
                 .post('/treasury/requests')
@@ -270,7 +255,6 @@ describe('Treasury Routes', () => {
         it('devrait créer une requête ISSUANCE avec succès', async () => {
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
             (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ circuitBreaker: false, maxMintAmount: 1000000000 });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue(HQ_BRANCH);
             (prisma.treasuryRequest.create as jest.Mock).mockResolvedValue({ id: 'req1', type: 'ISSUANCE', amount: 1000 });
             (prisma.auditLog.create as jest.Mock).mockResolvedValue({});
 
@@ -287,7 +271,7 @@ describe('Treasury Routes', () => {
         it('devrait créer une requête ALLOCATION avec succès quand les fonds sont suffisants', async () => {
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
             (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ circuitBreaker: false });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue(HQ_BRANCH);
+            (prisma.centralTreasury.findFirst as jest.Mock).mockResolvedValue(CENTRAL_TREASURY);
             (prisma.treasuryRequest.create as jest.Mock).mockResolvedValue({ id: 'req2', type: 'ALLOCATION', amount: 1000 });
             (prisma.auditLog.create as jest.Mock).mockResolvedValue({});
 
@@ -403,7 +387,7 @@ describe('Treasury Routes', () => {
             });
             (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ circuitBreaker: false });
             (prisma.treasuryRequest.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue(HQ_BRANCH);
+            (prisma.centralTreasury.findFirst as jest.Mock).mockResolvedValue(CENTRAL_TREASURY);
             (prisma.wallet.update as jest.Mock).mockResolvedValue({});
             (prisma.transaction.create as jest.Mock).mockResolvedValue({});
             (prisma.auditLog.create as jest.Mock).mockResolvedValue({});
@@ -418,20 +402,28 @@ describe('Treasury Routes', () => {
             });
         });
 
-        it('devrait refuser une exécution ISSUANCE ciblant le Siège lui-même', async () => {
+        it('devrait exécuter un ADJUSTMENT vers une agence flaggée isHQ comme une agence normale', async () => {
+            // Depuis la séparation, le Siège n'est plus la Réserve elle-même : plus de garde
+            // anti-auto-ciblage, un ADJUSTMENT vers cette agence s'exécute normalement.
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(CHECKER);
             (prisma.treasuryRequest.findUnique as jest.Mock).mockResolvedValue({
                 id: 'req1', makerId: 'other_maker', status: 'PENDING', amount: 1000, targetBranchId: 'hq_1',
-                targetBranch: { id: 'hq_1', walletId: 'w_hq' }, reference: 'ADJ-1', type: 'ADJUSTMENT'
+                targetBranch: { id: 'hq_1', walletId: 'w_hq_branch' }, reference: 'ADJ-1', type: 'ADJUSTMENT'
             });
             (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ circuitBreaker: false });
             (prisma.treasuryRequest.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue(HQ_BRANCH);
+            (prisma.centralTreasury.findFirst as jest.Mock).mockResolvedValue(CENTRAL_TREASURY);
+            (prisma.wallet.update as jest.Mock).mockResolvedValue({});
+            (prisma.transaction.create as jest.Mock).mockResolvedValue({});
+            (prisma.auditLog.create as jest.Mock).mockResolvedValue({});
 
             const res = await request(app).post('/treasury/requests/req1/approve');
 
-            expect(res.status).toBe(500);
-            expect(res.body.error).toContain('Réserve Centrale');
+            expect(res.status).toBe(200);
+            expect(prisma.wallet.update).toHaveBeenCalledWith({
+                where: { id: 'w_hq_branch' },
+                data: { balance: { increment: 1000 } }
+            });
         });
 
         it('devrait exécuter une requête ALLOCATION vers une agence avec succès', async () => {
@@ -442,7 +434,7 @@ describe('Treasury Routes', () => {
             });
             (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ circuitBreaker: false });
             (prisma.treasuryRequest.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue(HQ_BRANCH);
+            (prisma.centralTreasury.findFirst as jest.Mock).mockResolvedValue(CENTRAL_TREASURY);
             (prisma.wallet.update as jest.Mock).mockResolvedValue({});
             (prisma.transaction.create as jest.Mock).mockResolvedValue({});
             (prisma.auditLog.create as jest.Mock).mockResolvedValue({});
@@ -468,7 +460,7 @@ describe('Treasury Routes', () => {
             });
             (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ circuitBreaker: false });
             (prisma.treasuryRequest.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue({ id: 'hq_1', isHQ: true, walletId: 'w_hq', wallet: { id: 'w_hq', balance: 100 } });
+            (prisma.centralTreasury.findFirst as jest.Mock).mockResolvedValue({ id: 'ct_1', walletId: 'w_hq', wallet: { id: 'w_hq', balance: 100 } });
 
             const res = await request(app).post('/treasury/requests/req1/approve');
 
@@ -484,7 +476,7 @@ describe('Treasury Routes', () => {
             });
             (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ circuitBreaker: false });
             (prisma.treasuryRequest.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue(HQ_BRANCH);
+            (prisma.centralTreasury.findFirst as jest.Mock).mockResolvedValue(CENTRAL_TREASURY);
             (prisma.wallet.findUnique as jest.Mock).mockResolvedValue({ id: 'w_b2', balance: 1000 });
             (prisma.wallet.update as jest.Mock).mockResolvedValue({});
             (prisma.transaction.create as jest.Mock).mockResolvedValue({});
@@ -507,7 +499,7 @@ describe('Treasury Routes', () => {
             });
             (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ circuitBreaker: false });
             (prisma.treasuryRequest.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue(HQ_BRANCH);
+            (prisma.centralTreasury.findFirst as jest.Mock).mockResolvedValue(CENTRAL_TREASURY);
             (prisma.wallet.findUnique as jest.Mock).mockResolvedValue({ id: 'w_b2', balance: 50 });
 
             const res = await request(app).post('/treasury/requests/req1/approve');
@@ -524,7 +516,7 @@ describe('Treasury Routes', () => {
             });
             (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ circuitBreaker: false });
             (prisma.treasuryRequest.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue(HQ_BRANCH);
+            (prisma.centralTreasury.findFirst as jest.Mock).mockResolvedValue(CENTRAL_TREASURY);
             (prisma.wallet.update as jest.Mock).mockResolvedValue({});
             (prisma.transaction.create as jest.Mock).mockResolvedValue({});
             (prisma.auditLog.create as jest.Mock).mockResolvedValue({});

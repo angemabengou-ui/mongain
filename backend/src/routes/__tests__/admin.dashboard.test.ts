@@ -16,6 +16,7 @@ jest.mock('../../prisma', () => ({
         user: { count: jest.fn(), findUnique: jest.fn() },
         wallet: { aggregate: jest.fn() },
         branch: { findFirst: jest.fn() },
+        centralTreasury: { findFirst: jest.fn(), create: jest.fn() },
         transaction: { findMany: jest.fn(), aggregate: jest.fn() },
     },
 }));
@@ -57,7 +58,7 @@ describe('Admin Dashboard Routes', () => {
                 .mockResolvedValueOnce(5);  // merchantsCount
             (prisma.user.findUnique as jest.Mock).mockResolvedValue({ wallet: { balance: 777 } });
             (prisma.wallet.aggregate as jest.Mock).mockResolvedValue({ _sum: { balance: 500000 } });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue({ wallet: { balance: 200000 } });
+            (prisma.centralTreasury.findFirst as jest.Mock).mockResolvedValue({ id: 'ct_1', walletId: 'w_hq', wallet: { balance: 200000 } });
             (prisma.transaction.findMany as jest.Mock).mockResolvedValue([
                 { amount: 1000, receiverWallet: { user: { role: 'AGENT' } } },
                 { amount: 2000, receiverWallet: { user: { role: 'MERCHANT' } } },
@@ -88,7 +89,7 @@ describe('Admin Dashboard Routes', () => {
             (prisma.user.count as jest.Mock).mockResolvedValue(0);
             (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
             (prisma.wallet.aggregate as jest.Mock).mockResolvedValue({ _sum: { balance: null } });
-            (prisma.branch.findFirst as jest.Mock).mockResolvedValue(null);
+            (prisma.centralTreasury.findFirst as jest.Mock).mockResolvedValue({ id: 'ct_1', walletId: 'w_hq', wallet: { balance: 0 } });
             (prisma.transaction.findMany as jest.Mock).mockResolvedValue([]);
             (prisma.transaction.aggregate as jest.Mock).mockResolvedValue({ _sum: { amount: null } });
 

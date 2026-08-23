@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, BarChart3, Building2, RefreshCw, Shield, StopCircle, Wallet } from 'lucide-react';
+import { Activity, AlertTriangle, BarChart3, Building2, RefreshCw, Server, Shield, StopCircle, Wallet } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import KpiCard from './components/KpiCard';
 import PageHeader from './components/PageHeader';
@@ -19,7 +19,7 @@ function StatusBadge({ status }: { status: string }) {
     return <span style={{ padding: '4px 10px', borderRadius: 20, background: s.bg, color: s.color, fontSize: 11, fontWeight: 800 }}>{s.label}</span>;
 }
 
-export default function Treasury({ token }: { token: string }) {
+export default function Treasury({ token, prefillAdjustTarget }: { token: string; prefillAdjustTarget?: { walletId: string; name: string } | null }) {
     type TreasuryTab = 'overview' | 'agencies' | 'reconciliation' | 'requests' | 'create';
     const [tab, setTab] = useState<TreasuryTab>('overview');
     const [loading, setLoading] = useState(true);
@@ -32,6 +32,21 @@ export default function Treasury({ token }: { token: string }) {
     const [form, setForm] = useState({ type: 'ISSUANCE', amount: '', reason: '', comment: '', targetBranchId: '', targetWalletId: '' });
     const [creating, setCreating] = useState(false);
     const [branches, setBranches] = useState<any[]>([]);
+    // Nom du compte système ciblé, pour affichage (le formulaire n'envoie que targetWalletId
+    // au backend — ce nom n'est là que pour que l'admin sache ce qu'il cible avant de soumettre).
+    const [adjustTargetName, setAdjustTargetName] = useState('');
+
+    // Arrivée depuis "Comptes Système > Créer un ajustement" : bascule directement sur le
+    // formulaire, type ADJUSTMENT déjà sélectionné, avec le compte système visé en cible —
+    // sans ça, il n'existait aucun moyen d'ajuster un compte système depuis l'UI (seul
+    // targetWalletId existait déjà côté backend, jamais exposé dans ce formulaire).
+    useEffect(() => {
+        if (prefillAdjustTarget) {
+            setForm(f => ({ ...f, type: 'ADJUSTMENT', targetBranchId: '', targetWalletId: prefillAdjustTarget.walletId }));
+            setAdjustTargetName(prefillAdjustTarget.name);
+            setTab('create');
+        }
+    }, [prefillAdjustTarget]);
 
     const fetchOverview = async () => {
         try {
@@ -171,14 +186,15 @@ export default function Treasury({ token }: { token: string }) {
                 <>
                     {tab === 'overview' && overview && (
                         <div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 24 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
                                 <KpiCard label="Masse Monétaire Totale" value={fmt(overview.moneySupply)} subtitle="Masse monétaire électronique totale en circulation (M0)" icon={<Activity size={20} />} color="var(--accent)" />
-                                <KpiCard label="Réserve Centrale" value={fmt(overview.reserveBalance)} subtitle="Comptes du siège central (Vault global)" icon={<Shield size={20} />} color="var(--success)" />
-                                <KpiCard label="Portefeuilles Clients" value={fmt(overview.clientWalletsBalance)} subtitle="Solde net détenu par les utilisateurs finaux" icon={<Wallet size={20} />} color="var(--warning)" />
+                                <KpiCard label="Trésorerie Centrale" value={fmt(overview.reserveBalance)} subtitle="Séparée du Siège (qui fonctionne comme une agence normale)" icon={<Shield size={20} />} color="var(--success)" />
+                                <KpiCard label="Portefeuilles Clients" value={fmt(overview.clientWalletsBalance)} subtitle="Solde net détenu par les vrais clients (comptes système exclus)" icon={<Wallet size={20} />} color="var(--warning)" />
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                                <KpiCard label="Liquidité Agences (E-Wallet)" value={fmt(overview.totalAgencyElectronic)} subtitle="Fonds alloués électroniquement aux agences" icon={<Building2 size={20} />} color="#3b82f6" />
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+                                <KpiCard label="Liquidité Agences (E-Wallet)" value={fmt(overview.totalAgencyElectronic)} subtitle="Fonds alloués électroniquement aux agences (Siège inclus)" icon={<Building2 size={20} />} color="#3b82f6" />
                                 <KpiCard label="Liquidité Physique (Coffre)" value={fmt(overview.totalPhysicalVault)} subtitle="Total du cash remonté par les agences" icon={<StopCircle size={20} />} color="#8b5cf6" />
+                                <KpiCard label="Comptes Système" value={fmt(overview.systemAccountsBalance)} subtitle="Passerelle, Corporate, Coffre Tontine — voir Comptes Système" icon={<Server size={20} />} color="#ec4899" />
                             </div>
 
                             <div className="card" style={{ marginTop: 24, padding: 30 }}>
@@ -186,7 +202,8 @@ export default function Treasury({ token }: { token: string }) {
                                     // Calculé plutôt qu'affiché en dur : l'ancien badge "✓ SYSTÈME ÉQUILIBRÉ" et
                                     // "0 FCFA" étaient des littéraux, affichés inconditionnellement même si les
                                     // composants ne sommaient plus à la masse monétaire totale.
-                                    const discrepancy = (overview.moneySupply || 0) - ((overview.reserveBalance || 0) + (overview.totalAgencyElectronic || 0) + (overview.clientWalletsBalance || 0));
+                                    const componentsSum = (overview.reserveBalance || 0) + (overview.totalAgencyElectronic || 0) + (overview.clientWalletsBalance || 0) + (overview.systemAccountsBalance || 0);
+                                    const discrepancy = (overview.moneySupply || 0) - componentsSum;
                                     const isBalanced = Math.abs(discrepancy) < 1;
                                     return (
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
@@ -201,7 +218,7 @@ export default function Treasury({ token }: { token: string }) {
                                         <span style={{ fontWeight: 800, fontSize: 16 }}>{fmt(overview.moneySupply)}</span>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', border: '1px solid var(--border)', borderRadius: 10 }}>
-                                        <span style={{ color: 'var(--text-muted)' }}>- Réserve Centrale</span>
+                                        <span style={{ color: 'var(--text-muted)' }}>- Trésorerie Centrale</span>
                                         <span style={{ fontWeight: 600, color: 'var(--success)' }}>{fmt(overview.reserveBalance)}</span>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', border: '1px solid var(--border)', borderRadius: 10 }}>
@@ -212,10 +229,14 @@ export default function Treasury({ token }: { token: string }) {
                                         <span style={{ color: 'var(--text-muted)' }}>- Portefeuilles Clients (End Users)</span>
                                         <span style={{ fontWeight: 600, color: 'var(--warning)' }}>{fmt(overview.clientWalletsBalance)}</span>
                                     </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', border: '1px solid var(--border)', borderRadius: 10 }}>
+                                        <span style={{ color: 'var(--text-muted)' }}>- Comptes Système (Passerelle, Corporate, Tontine...)</span>
+                                        <span style={{ fontWeight: 600, color: '#ec4899' }}>{fmt(overview.systemAccountsBalance)}</span>
+                                    </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', borderRadius: 10, marginTop: 12 }}>
                                         <span style={{ fontWeight: 800 }}>ÉCART NON JUSTIFIÉ</span>
-                                        <span style={{ fontWeight: 900, color: Math.abs((overview.moneySupply || 0) - ((overview.reserveBalance || 0) + (overview.totalAgencyElectronic || 0) + (overview.clientWalletsBalance || 0))) < 1 ? 'var(--success)' : 'var(--danger)', fontSize: 18 }}>
-                                            {fmt((overview.moneySupply || 0) - ((overview.reserveBalance || 0) + (overview.totalAgencyElectronic || 0) + (overview.clientWalletsBalance || 0)))}
+                                        <span style={{ fontWeight: 900, color: Math.abs((overview.moneySupply || 0) - ((overview.reserveBalance || 0) + (overview.totalAgencyElectronic || 0) + (overview.clientWalletsBalance || 0) + (overview.systemAccountsBalance || 0))) < 1 ? 'var(--success)' : 'var(--danger)', fontSize: 18 }}>
+                                            {fmt((overview.moneySupply || 0) - ((overview.reserveBalance || 0) + (overview.totalAgencyElectronic || 0) + (overview.clientWalletsBalance || 0) + (overview.systemAccountsBalance || 0)))}
                                         </span>
                                     </div>
                                 </div>
@@ -383,14 +404,27 @@ export default function Treasury({ token }: { token: string }) {
                                     <input required type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} placeholder="Ex: 5000000" style={{ width: '100%', padding: '16px', borderRadius: 12, border: '2px solid var(--border)', fontSize: 24, fontWeight: 900, color: 'var(--text-primary)' }} />
                                 </div>
 
-                                {(form.type === 'ALLOCATION' || form.type === 'RETURN' || form.type === 'ADJUSTMENT') && (
+                                {form.type === 'ADJUSTMENT' && adjustTargetName && form.targetWalletId && (
+                                    <div style={{ padding: 16, border: '2px solid var(--accent)', borderRadius: 12, background: 'var(--accent-bg)' }}>
+                                        <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)', display: 'block', marginBottom: 8 }}>Compte Système Ciblé</label>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontWeight: 700 }}>{adjustTargetName}</span>
+                                            <button type="button" onClick={() => { setForm({ ...form, targetWalletId: '' }); setAdjustTargetName(''); }} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 12, fontWeight: 700, textDecoration: 'underline' }}>
+                                                Changer pour une agence
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {(form.type === 'ALLOCATION' || form.type === 'RETURN' || (form.type === 'ADJUSTMENT' && !form.targetWalletId)) && (
                                     <div style={{ padding: 16, border: '2px dashed var(--border)', borderRadius: 12 }}>
                                         <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>Agence Ciblée {form.type !== 'ADJUSTMENT' && '*'}</label>
                                         <select required={form.type !== 'ADJUSTMENT'} value={form.targetBranchId} onChange={e => setForm({ ...form, targetBranchId: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14 }}>
-                                            <option value="">-- {form.type === 'ADJUSTMENT' ? 'Laisser vide pour la Réserve Centrale' : 'Sélectionner une agence'} --</option>
-                                            {/* Le Siège EST la Réserve Centrale : il ne peut pas être sa propre cible
-                                                d'Allocation/Retour (le backend rejette déjà cette combinaison). */}
-                                            {branches.filter(b => !b.isHQ).map(b => (
+                                            <option value="">-- {form.type === 'ADJUSTMENT' ? 'Laisser vide pour la Trésorerie Centrale' : 'Sélectionner une agence'} --</option>
+                                            {/* Le Siège n'est plus la Trésorerie Centrale elle-même depuis sa séparation
+                                                (voir services/centralTreasury.ts) : c'est une agence normale, allouable
+                                                comme les autres. */}
+                                            {branches.map(b => (
                                                 <option key={b.id} value={b.id}>{b.name} (Solde: {fmt(b.wallet?.balance)})</option>
                                             ))}
                                         </select>

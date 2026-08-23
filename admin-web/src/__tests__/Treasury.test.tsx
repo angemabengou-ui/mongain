@@ -6,14 +6,17 @@ import Treasury from '../Treasury';
 const token = 'test-token';
 
 const overviewData = {
-    // Composants cohérents avec moneySupply (400 + 150 + 350 = 900) : le rapprochement
+    // Composants cohérents avec moneySupply (400 + 150 + 275 + 75 = 900) : le rapprochement
     // comptable calcule désormais réellement l'écart au lieu d'afficher "0 FCFA" en dur, des
-    // données de test qui ne sommaient pas produisaient un faux écart de 50 dans l'UI.
+    // données de test qui ne sommaient pas produisaient un faux écart dans l'UI.
+    // totalPhysicalVault (50) volontairement distinct de systemAccountsBalance (75) pour ne
+    // pas rendre deux "X FCFA" identiques dans des cartes KPI différentes.
     moneySupply: 900,
     reserveBalance: 400,
-    clientWalletsBalance: 350,
+    clientWalletsBalance: 275,
     totalAgencyElectronic: 150,
     totalPhysicalVault: 50,
+    systemAccountsBalance: 75,
 };
 
 const requestsData = [
@@ -87,11 +90,13 @@ describe('Treasury', () => {
 
         render(<Treasury token={token} />);
 
-        await screen.findByText('Trésorerie Centrale');
-        expect(screen.getByText('Masse Monétaire Totale')).toBeInTheDocument();
+        await screen.findByText('Masse Monétaire Totale');
         // moneySupply (900) est affiché à la fois dans la carte KPI et dans le rapprochement comptable
         await waitFor(() => expect(screen.getAllByText('900 FCFA')).toHaveLength(2));
-        expect(screen.getByText('50 FCFA')).toBeInTheDocument(); // Liquidité Physique (Coffre) — valeur unique
+        expect(screen.getByText('50 FCFA')).toBeInTheDocument(); // Liquidité Physique (Coffre)
+        expect(screen.getByText('Comptes Système')).toBeInTheDocument();
+        // systemAccountsBalance (75) apparaît dans la carte KPI et dans le rapprochement comptable
+        await waitFor(() => expect(screen.getAllByText('75 FCFA')).toHaveLength(2));
     });
 
     it('affiche la liquidité des agences', async () => {
@@ -155,5 +160,18 @@ describe('Treasury', () => {
         await user.click(screen.getByRole('button', { name: /Soumettre au Validation Center/i }));
 
         await waitFor(() => expect(window.alert).toHaveBeenCalledWith('Demande créée avec succès.'));
+    });
+
+    it('ouvre directement le formulaire Ajustement pré-rempli quand prefillAdjustTarget est fourni', async () => {
+        vi.stubGlobal('fetch', buildFetchMock());
+
+        render(<Treasury token={token} prefillAdjustTarget={{ walletId: 'w_gateway', name: 'PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)' }} />);
+
+        await screen.findByText('Nouvelle Requête de Trésorerie');
+        expect(screen.getByText('Compte Système Ciblé')).toBeInTheDocument();
+        expect(screen.getByText('PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)')).toBeInTheDocument();
+        // Le formulaire ne doit pas aussi montrer le sélecteur d'agence tant qu'un compte
+        // système est ciblé — les deux cibles sont mutuellement exclusives.
+        expect(screen.queryByText('Agence Ciblée')).not.toBeInTheDocument();
     });
 });
