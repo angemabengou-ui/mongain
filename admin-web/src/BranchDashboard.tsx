@@ -2,7 +2,7 @@ import { Archive, DoorClosed, LockKeyhole, Store, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { API_URL } from './config';
 
-export default function BranchDashboard({ token }: { token: string }) {
+export default function BranchDashboard({ token, staffId }: { token: string; staffId: string }) {
     const [branch, setBranch] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -78,7 +78,11 @@ export default function BranchDashboard({ token }: { token: string }) {
     if (loading) return <div>Chargement sécurisé de l'agence...</div>;
     if (error) return <div style={{ color: 'red' }}>Erreur critique : {error}</div>;
 
-    const myActiveSession = branch?.sessions?.find((s: any) => s.status === 'OPEN');
+    // `/api/agency/info` renvoie les sessions récentes de TOUTE l'agence, pas seulement les
+    // miennes — sans filtrer par `staffId`, un caissier B voyait la session (et les totaux) du
+    // caissier A si celui-ci avait une caisse ouverte au même moment, et ne pouvait pas ouvrir
+    // la sienne (l'app pensait qu'une session était déjà active pour lui).
+    const myActiveSession = branch?.sessions?.find((s: any) => s.status === 'OPEN' && s.teller?.id === staffId);
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', maxWidth: 1200, margin: '0 auto', paddingBottom: 50 }}>
@@ -203,8 +207,8 @@ export default function BranchDashboard({ token }: { token: string }) {
                             <div key={a.id} style={{ padding: '10px 0', borderBottom: '1px outset var(--border)' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
                                     <span style={{ fontWeight: 600 }}>{a.reference}</span>
-                                    <span style={{ color: a.status === 'APPROVED' ? 'var(--success)' : a.status === 'PENDING' ? 'var(--warning)' : 'var(--danger)', fontWeight: 'bold' }}>
-                                        {a.status === 'APPROVED' ? 'Approuvée' : a.status === 'PENDING' ? 'En attente' : a.status === 'REJECTED' ? 'Rejetée' : a.status}
+                                    <span style={{ color: (a.status === 'APPROVED' || a.status === 'EXECUTED') ? 'var(--success)' : a.status === 'PENDING' ? 'var(--warning)' : 'var(--danger)', fontWeight: 'bold' }}>
+                                        {a.status === 'APPROVED' ? 'Approuvée' : a.status === 'EXECUTED' ? 'Exécutée' : a.status === 'PENDING' ? 'En attente' : a.status === 'REJECTED' ? 'Rejetée' : a.status}
                                     </span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-secondary)' }}>

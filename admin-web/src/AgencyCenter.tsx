@@ -59,6 +59,7 @@ export default function AgencyCenter({ token, role }: { token: string; role: str
     const [tellers, setTellers] = useState<any[]>([]);
     const [vault, setVault] = useState<any>(null);
     const [cashOps, setCashOps] = useState<any[]>([]);
+    const [cashOpsTotal, setCashOpsTotal] = useState(0);
     const [reconciliation, setReconciliation] = useState<any>(null);
     const [alerts, setAlerts] = useState<any[]>([]);
     const [unassigned, setUnassigned] = useState<any[]>([]);
@@ -91,6 +92,9 @@ export default function AgencyCenter({ token, role }: { token: string; role: str
             // API returns paginated {branches, total} OR flat array for BM
             if (Array.isArray(data)) { setBranches(data); setTotal(data.length); }
             else { setBranches(data.branches || []); setTotal(data.total || 0); }
+            // Sans ce reset, une erreur affichée une fois (ex: réseau) restait affichée
+            // indéfiniment après un rechargement réussi ou un changement d'onglet/filtre.
+            setError('');
         } catch (e: any) { setError(e.message); } finally { setLoading(false); }
     };
 
@@ -100,6 +104,19 @@ export default function AgencyCenter({ token, role }: { token: string; role: str
     const open360 = async (b: any) => {
         setSelected(b);
         setTab360('overview');
+        // Sans ce reset, les données de l'agence précédente restent affichées sous le nom de
+        // la nouvelle jusqu'à ce que son propre fetch aboutisse (le useEffect [tab360, selected,
+        // ...] ne charge QUE l'onglet actif — les 6 autres restent avec leurs anciennes valeurs
+        // si on y navigue ensuite sans repasser par "overview").
+        setOverview(null);
+        setStaffList([]);
+        setTellers([]);
+        setVault(null);
+        setCashOps([]);
+        setReconciliation(null);
+        setAlerts([]);
+        setUnassigned([]);
+        setOpPage(1);
         loadOverview(b.id);
     };
 
@@ -134,7 +151,7 @@ export default function AgencyCenter({ token, role }: { token: string; role: str
         if (opDateTo) params.set('dateTo', opDateTo);
         if (opSearch) params.set('search', opSearch);
         const r = await fetch(`${API_URL}/api/admin/branches/${id}/cash-operations?${params}`, { headers: { Authorization: `Bearer ${token}` } });
-        if (r.ok) { const d = await r.json(); setCashOps(d.operations || []); }
+        if (r.ok) { const d = await r.json(); setCashOps(d.operations || []); setCashOpsTotal(d.total || 0); }
     };
 
     const loadReconciliation = async (id: string) => {
@@ -169,7 +186,14 @@ export default function AgencyCenter({ token, role }: { token: string; role: str
             });
             if (!r.ok) { const d = await r.json(); throw new Error(d.error); }
             await fetchBranches();
-            if (selected?.id === id) loadOverview(id);
+            if (selected?.id === id) {
+                // Le bandeau 360 (badge de statut + boutons Activer/Suspendre) lit `selected`,
+                // pas `overview` : sans cette mise à jour, il restait figé sur l'ancien statut
+                // (ex: "Brouillon" + bouton "Activer" encore affiché) alors que le bloc Aperçu
+                // juste en dessous, lui, affichait déjà le nouveau statut via `loadOverview`.
+                setSelected((prev: any) => prev && { ...prev, status });
+                loadOverview(id);
+            }
         } catch (e: any) { alert(e.message); }
     };
 
@@ -436,8 +460,8 @@ export default function AgencyCenter({ token, role }: { token: string; role: str
                         </table>
                         <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'center' }}>
                             <button disabled={opPage <= 1} onClick={() => setOpPage(p => p - 1)} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'none', cursor: 'pointer' }}><ChevronLeft size={16} /></button>
-                            <span style={{ padding: '6px 12px', fontWeight: 600 }}>Page {opPage}</span>
-                            <button onClick={() => setOpPage(p => p + 1)} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'none', cursor: 'pointer' }}><ChevronRight size={16} /></button>
+                            <span style={{ padding: '6px 12px', fontWeight: 600 }}>Page {opPage} / {Math.max(1, Math.ceil(cashOpsTotal / 20))}</span>
+                            <button disabled={opPage * 20 >= cashOpsTotal} onClick={() => setOpPage(p => p + 1)} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'none', cursor: 'pointer' }}><ChevronRight size={16} /></button>
                         </div>
                     </div>
                 )}
@@ -534,9 +558,9 @@ export default function AgencyCenter({ token, role }: { token: string; role: str
             <div className="card" style={{ padding: '14px 20px', marginBottom: 20, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                 <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
                     <Search size={16} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par nom, code, ville, responsable..." style={{ width: '100%', padding: '8px 8px 8px 34px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14 }} />
+                    <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Rechercher par nom, code, ville, responsable..." style={{ width: '100%', padding: '8px 8px 8px 34px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14 }} />
                 </div>
-                <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14 }}>
+                <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1); }} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14 }}>
                     <option value="">Tous statuts</option>
                     <option value="ACTIVE">Active</option>
                     <option value="SUSPENDED">Suspendue</option>
@@ -544,7 +568,7 @@ export default function AgencyCenter({ token, role }: { token: string; role: str
                     <option value="CONFIGURED">Configurée</option>
                     <option value="CLOSED">Fermée</option>
                 </select>
-                <input placeholder="Ville..." value={filterCity} onChange={e => setFilterCity(e.target.value)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, width: 130 }} />
+                <input placeholder="Ville..." value={filterCity} onChange={e => { setFilterCity(e.target.value); setPage(1); }} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, width: 130 }} />
                 <button onClick={() => { setPage(1); fetchBranches(); }} style={{ padding: '8px 14px', background: 'var(--btn-dark-bg)', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
                     <Filter size={14} />
                 </button>

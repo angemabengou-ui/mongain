@@ -29,6 +29,7 @@ export default function App() {
   const [token, setToken] = useState(sessionStorage.getItem('admin_token'));
   const [role, setRole] = useState(localStorage.getItem('admin_role') || 'ADMIN');
   const [userName, setUserName] = useState(localStorage.getItem('admin_name') || 'Admin');
+  const [staffId, setStaffId] = useState(localStorage.getItem('admin_staff_id') || '');
   const [phone, setPhone] = useState(localStorage.getItem('admin_phone') || '');
   const [mustChangePassword, setMustChangePassword] = useState(localStorage.getItem('admin_must_change_pw') === '1');
 
@@ -60,6 +61,7 @@ export default function App() {
     localStorage.removeItem('admin_role');
     localStorage.removeItem('admin_name');
     localStorage.removeItem('admin_phone');
+    localStorage.removeItem('admin_staff_id');
     localStorage.removeItem('admin_must_change_pw');
     localStorage.removeItem('admin_active_tab');
     localStorage.removeItem('admin_expanded_group');
@@ -80,6 +82,13 @@ export default function App() {
           if (data && typeof data.mustChangePassword === 'boolean') {
             setMustChangePassword(data.mustChangePassword);
             localStorage.setItem('admin_must_change_pw', data.mustChangePassword ? '1' : '0');
+          }
+          // Nécessaire pour que BranchDashboard identifie SA PROPRE session de caisse parmi
+          // celles de l'agence (voir agency.ts /info, qui renvoie les sessions récentes de
+          // tous les caissiers) plutôt que de prendre la première trouvée avec status OPEN.
+          if (data && data.id) {
+            setStaffId(data.id);
+            localStorage.setItem('admin_staff_id', data.id);
           }
         })
         .catch(console.error);
@@ -353,7 +362,7 @@ export default function App() {
         </header>
 
         <main className="content-area">
-          {activeTab === 'branch-dash' && isBranchOps && <BranchDashboard token={token} />}
+          {activeTab === 'branch-dash' && isBranchOps && <BranchDashboard token={token} staffId={staffId} />}
           {activeTab === 'teller-terminal' && isBranchOps && <TellerTerminal token={token} userName={userName} />}
 
           {(isSuperAdmin || isSupportRole) && activeTab === 'users' && <Users token={token} staffRole={role} />}

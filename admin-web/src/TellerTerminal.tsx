@@ -123,7 +123,7 @@ export default function TellerTerminal({ token, userName }: { token: string; use
             const d = await r.json();
             if (!r.ok) throw new Error(d.error);
 
-            setOpResult({ amount: parseFloat(amount), fee: d.fee || 0, reference: d.transaction?.reference || 'T-' + Date.now(), type: opType });
+            setOpResult({ amount: parseFloat(amount), fee: d.transaction?.fee || 0, reference: d.transaction?.reference || 'T-' + Date.now(), type: opType });
             setStep(3);
             fetchSession(); // Update session totals
         } catch (e: any) { alert(e.message); setStep(1); } finally { setOpLoading(false); }

@@ -146,7 +146,7 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
         if (activeTab === 'audit' && !auditData) loadAudit();
     }, [activeTab]);
 
-    const loadTx = async () => { const r = await api(`/users/${userId}/transactions?type=${txFilter.type}&status=${txFilter.status}&page=${txFilter.page}`); if (r.ok) setTxData(await r.json()); };
+    const loadTx = async (page = txFilter.page) => { const r = await api(`/users/${userId}/transactions?type=${txFilter.type}&status=${txFilter.status}&page=${page}`); if (r.ok) setTxData(await r.json()); };
     const loadCash = async () => { const r = await api(`/users/${userId}/cash-ops`); if (r.ok) setCashData(await r.json()); };
     const loadSec = async () => { const r = await api(`/users/${userId}/security`); if (r.ok) setSecData(await r.json()); };
     const loadLimits = async () => { const r = await api(`/users/${userId}/limits-view`); if (r.ok) setLimitsData(await r.json()); };
@@ -659,7 +659,15 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
                         })}</tbody>
                     </table>
                 )}
-                {txData && <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-muted)' }}>{txData.total} transaction(s) — Page {txData.page}/{txData.pages}</div>}
+                {/* "Page X/Y" était un texte pur, sans aucun moyen de changer de page : les
+                pages 2+ étaient invisibles dès qu'un client avait plus d'une page de transactions. */}
+                {txData && (
+                    <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, color: 'var(--text-muted)' }}>
+                        <span>{txData.total} transaction(s) — Page {txData.page}/{txData.pages}</span>
+                        <button disabled={txFilter.page <= 1} onClick={() => { const p = txFilter.page - 1; setTxFilter(f => ({ ...f, page: p })); loadTx(p); }} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'none', cursor: txFilter.page <= 1 ? 'default' : 'pointer' }}>◀</button>
+                        <button disabled={txFilter.page >= txData.pages} onClick={() => { const p = txFilter.page + 1; setTxFilter(f => ({ ...f, page: p })); loadTx(p); }} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'none', cursor: txFilter.page >= txData.pages ? 'default' : 'pointer' }}>▶</button>
+                    </div>
+                )}
             </>)}
 
             {/* Refund Request Modal */}
@@ -1089,28 +1097,35 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
         )}
     </>);
 
+    // Appelées comme de simples fonctions (Overview(), pas <Overview />) : ce sont des closures
+    // sur l'état du composant parent, sans hooks à elles (vérifié), donc rien n'empêche de les
+    // inliner directement. Les appeler en JSX (<Overview />) leur donnait une nouvelle identité
+    // de type à CHAQUE rendu du parent (la fonction est redéfinie à chaque passage) : React
+    // démontait/remontait tout le sous-arbre à chaque frappe dans un champ, faisant perdre le
+    // focus après chaque caractère (plafond VIP, description de flag, note de support, motif de
+    // remboursement...).
     const renderTab = () => {
         switch (activeTab) {
-            case 'overview': return <Overview />;
-            case 'identity': return <Identity />;
-            case 'kyc': return <Kyc />;
-            case 'wallet': return <WalletTab />;
-            case 'limits': return <LimitsTab />;
-            case 'transactions': return <Transactions />;
-            case 'cash-ops': return <CashOps />;
-            case 'security': return <SecurityTab />;
-            case 'risk': return <Risk />;
-            case 'complaints': return <Complaints />;
-            case 'admin-actions': return <AdminActions />;
-            case 'audit': return <Audit />;
+            case 'overview': return Overview();
+            case 'identity': return Identity();
+            case 'kyc': return Kyc();
+            case 'wallet': return WalletTab();
+            case 'limits': return LimitsTab();
+            case 'transactions': return Transactions();
+            case 'cash-ops': return CashOps();
+            case 'security': return SecurityTab();
+            case 'risk': return Risk();
+            case 'complaints': return Complaints();
+            case 'admin-actions': return AdminActions();
+            case 'audit': return Audit();
             default: return null;
         }
     };
 
     return (
         <div style={{ maxWidth: 1400, margin: '0 auto', paddingBottom: 60 }}>
-            <Header />
-            <TabNav />
+            {Header()}
+            {TabNav()}
             {renderTab()}
         </div>
     );

@@ -258,6 +258,15 @@ export default function PlatformConfig({ token }: { token: string }) {
 
     const handleFieldChange = (key: string, value: any) => setDrafts((prev: any) => ({ ...prev, [key]: value }));
 
+    // Champs de taux : affichés en % (valeur * 100) mais stockés en décimal en base (0.015 pour
+    // 1.5%). `drafts` doit TOUJOURS contenir la forme décimale, comme les valeurs jamais
+    // touchées chargées depuis l'API — sinon dès la première frappe `drafts[k]` contenait le
+    // pourcentage brut tapé (ex: "2"), réaffiché comme `2 * 100 = 200`, et `handleSaveGroup`
+    // divisait en plus par 100 TOUTES les clés du groupe (y compris celles jamais éditées,
+    // déjà en décimal), les écrasant à 1/100e de leur valeur réelle à la moindre sauvegarde.
+    const handlePercentFieldChange = (key: string, value: string) =>
+        setDrafts((prev: any) => ({ ...prev, [key]: value === '' ? 0 : parseFloat(value) / 100 }));
+
     const submitRequest = async (actionDesc: string, targetPayload: any, customReason?: string) => {
         setError(''); setMessage('');
         const finalReason = customReason || reason || window.prompt('Motif obligatoire pour la Piste d\'Audit :');
@@ -294,9 +303,18 @@ export default function PlatformConfig({ token }: { token: string }) {
         const payload: any = {};
         keys.forEach(k => {
             let val = k in overrides ? overrides[k] : drafts[k];
-            if (MASKED_SECRET_KEYS.includes(k) && !val) return;
+            // `!val` seul ne suffit pas : un champ jamais touché contient encore le placeholder
+            // masqué renvoyé par GET (ex: "••••••••ABCD"), une chaîne non-vide — le serveur le
+            // rejette déjà silencieusement à l'approbation (settings.ts), mais laissé ici il
+            // apparaît à tort comme un "changement proposé" dans la boîte de confirmation et la
+            // file d'approbation, trompant le Checker sur ce qui est réellement modifié.
+            if (MASKED_SECRET_KEYS.includes(k) && (!val || val.startsWith('••••••••'))) return;
             if (k.toLowerCase().includes('tax') || k.toLowerCase().includes('fee') || k.toLowerCase().includes('reward')) {
-                payload[k] = parseFloat(val) / 100;
+                // `drafts[k]` contient déjà la forme décimale correcte, qu'il s'agisse d'une
+                // valeur jamais éditée (chargée telle quelle depuis l'API) ou éditée via
+                // handlePercentFieldChange (qui reconvertit le % tapé en décimal à la volée) —
+                // ne PAS diviser par 100 ici, ce qui écraserait toute clé du groupe.
+                payload[k] = parseFloat(val);
             } else if (k.toLowerCase().includes('limit') || k.toLowerCase().includes('threshold') || k.toLowerCase().includes('hours') || k.toLowerCase().includes('count')) {
                 payload[k] = parseFloat(val);
             } else {
@@ -427,17 +445,17 @@ export default function PlatformConfig({ token }: { token: string }) {
                                         <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)' }}>
                                             <h4 style={{ margin: '0 0 12px', color: 'var(--accent)' }}>Retrait Agence (guichet)</h4>
                                             <div><label>Seuil de Retrait Gratuit (FCFA)</label><input className="input" type="number" value={drafts.agencyWithdrawThreshold || 0} onChange={e => handleFieldChange('agencyWithdrawThreshold', e.target.value)} /></div>
-                                            <div style={{ marginTop: 12 }}><label>Taux au-delà du seuil, sur le dépassement (%)</label><input className="input" type="number" step="0.01" value={(drafts.agencyTaxWithdraw || 0) * 100} onChange={e => handleFieldChange('agencyTaxWithdraw', e.target.value)} /></div>
+                                            <div style={{ marginTop: 12 }}><label>Taux au-delà du seuil, sur le dépassement (%)</label><input className="input" type="number" step="0.01" value={(drafts.agencyTaxWithdraw || 0) * 100} onChange={e => handlePercentFieldChange('agencyTaxWithdraw', e.target.value)} /></div>
                                         </div>
                                         <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)' }}>
                                             <h4 style={{ margin: '0 0 12px', color: '#f59e0b' }}>Retrait Marchand</h4>
-                                            <div><label>Taux fixe, sans seuil (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxWithdraw || 0) * 100} onChange={e => handleFieldChange('taxWithdraw', e.target.value)} /></div>
-                                            <div style={{ marginTop: 12 }}><label>Commission reversée au marchand (%)</label><input className="input" type="number" step="0.01" value={(drafts.rewardMerchant || 0) * 100} onChange={e => handleFieldChange('rewardMerchant', e.target.value)} /></div>
+                                            <div><label>Taux fixe, sans seuil (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxWithdraw || 0) * 100} onChange={e => handlePercentFieldChange('taxWithdraw', e.target.value)} /></div>
+                                            <div style={{ marginTop: 12 }}><label>Commission reversée au marchand (%)</label><input className="input" type="number" step="0.01" value={(drafts.rewardMerchant || 0) * 100} onChange={e => handlePercentFieldChange('rewardMerchant', e.target.value)} /></div>
                                         </div>
                                         <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)' }}>
                                             <h4 style={{ margin: '0 0 12px', color: 'var(--success)' }}>Dépôt (Cash-In) & P2P</h4>
-                                            <div><label>Taux de Dépôt (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxCashIn || 0) * 100} onChange={e => handleFieldChange('taxCashIn', e.target.value)} /></div>
-                                            <div style={{ marginTop: 12 }}><label>Taux P2P (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxP2P || 0) * 100} onChange={e => handleFieldChange('taxP2P', e.target.value)} /></div>
+                                            <div><label>Taux de Dépôt (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxCashIn || 0) * 100} onChange={e => handlePercentFieldChange('taxCashIn', e.target.value)} /></div>
+                                            <div style={{ marginTop: 12 }}><label>Taux P2P (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxP2P || 0) * 100} onChange={e => handlePercentFieldChange('taxP2P', e.target.value)} /></div>
                                         </div>
                                     </div>
                                     <button className="btn" style={{ marginTop: 24, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_FEES', ['taxWithdraw', 'agencyWithdrawThreshold', 'agencyTaxWithdraw', 'rewardMerchant', 'taxCashIn', 'taxP2P'])}>Déposer Changement (Maker)</button>

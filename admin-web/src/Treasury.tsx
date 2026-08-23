@@ -182,10 +182,19 @@ export default function Treasury({ token }: { token: string }) {
                             </div>
 
                             <div className="card" style={{ marginTop: 24, padding: 30 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-                                    <h3 style={{ margin: 0, fontWeight: 800, fontSize: 20 }}>Rapprochement Comptable</h3>
-                                    <span style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: '4px 12px', borderRadius: 20, fontWeight: 800, fontSize: 13 }}>✓ SYSTÈME ÉQUILIBRÉ</span>
-                                </div>
+                                {(() => {
+                                    // Calculé plutôt qu'affiché en dur : l'ancien badge "✓ SYSTÈME ÉQUILIBRÉ" et
+                                    // "0 FCFA" étaient des littéraux, affichés inconditionnellement même si les
+                                    // composants ne sommaient plus à la masse monétaire totale.
+                                    const discrepancy = (overview.moneySupply || 0) - ((overview.reserveBalance || 0) + (overview.totalAgencyElectronic || 0) + (overview.clientWalletsBalance || 0));
+                                    const isBalanced = Math.abs(discrepancy) < 1;
+                                    return (
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+                                            <h3 style={{ margin: 0, fontWeight: 800, fontSize: 20 }}>Rapprochement Comptable</h3>
+                                            <span style={{ background: isBalanced ? 'var(--success-bg)' : 'var(--danger-bg)', color: isBalanced ? 'var(--success)' : 'var(--danger)', padding: '4px 12px', borderRadius: 20, fontWeight: 800, fontSize: 13 }}>{isBalanced ? '✓ SYSTÈME ÉQUILIBRÉ' : '⚠ ÉCART DÉTECTÉ'}</span>
+                                        </div>
+                                    );
+                                })()}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'var(--bg-secondary)', borderRadius: 10 }}>
                                         <span style={{ fontWeight: 600 }}>Total Masse Monétaire Calculée (Ledger)</span>
@@ -205,7 +214,9 @@ export default function Treasury({ token }: { token: string }) {
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', border: '1px solid var(--border)', background: 'var(--bg-secondary)', borderRadius: 10, marginTop: 12 }}>
                                         <span style={{ fontWeight: 800 }}>ÉCART NON JUSTIFIÉ</span>
-                                        <span style={{ fontWeight: 900, color: 'var(--success)', fontSize: 18 }}>0 FCFA</span>
+                                        <span style={{ fontWeight: 900, color: Math.abs((overview.moneySupply || 0) - ((overview.reserveBalance || 0) + (overview.totalAgencyElectronic || 0) + (overview.clientWalletsBalance || 0))) < 1 ? 'var(--success)' : 'var(--danger)', fontSize: 18 }}>
+                                            {fmt((overview.moneySupply || 0) - ((overview.reserveBalance || 0) + (overview.totalAgencyElectronic || 0) + (overview.clientWalletsBalance || 0)))}
+                                        </span>
                                     </div>
                                 </div>
                             </div>

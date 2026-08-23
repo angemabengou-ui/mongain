@@ -17,6 +17,9 @@ export default function KycMod({ token }: { token: string }) {
             if (res.ok) {
                 const data = await res.json();
                 setPending(data);
+                // Sans ce reset, une erreur affichée une fois restait affichée indéfiniment
+                // après un rechargement réussi (changement d'onglet PENDING/APPROVED par ex).
+                setError('');
             } else {
                 setError('Erreur lors du chargement des KYC');
             }

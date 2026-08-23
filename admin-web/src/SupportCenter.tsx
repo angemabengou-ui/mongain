@@ -129,8 +129,11 @@ export default function SupportCenter({ token, role }: SupportCenterProps) {
             setNoteContent('');
             setError('');
             // Le backend peut faire transiter le ticket vers WAITING_CUSTOMER/IN_PROGRESS
-            // automatiquement — refléter ce changement pour ne pas afficher un statut figé.
+            // automatiquement — refléter ce changement dans le panneau ET dans la liste
+            // (sans ce second update, la liste affichait l'ancien statut jusqu'au prochain
+            // rechargement complet, divergent du panneau à droite).
             setSelectedTicket((t: any) => t ? { ...t, status: d.status, assigneeId: d.assigneeId } : t);
+            setTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, status: d.status, assigneeId: d.assigneeId } : t));
         } catch (e: any) {
             setError(e.message);
         }
