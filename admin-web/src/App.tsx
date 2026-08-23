@@ -195,7 +195,7 @@ export default function App() {
   const ROLE_LABELS: Record<string, string> = {
     SUPER_ADMIN: 'Super Administrateur', ADMIN: 'Administrateur', RISK: 'Analyste Risque',
     COMPLIANCE_CHECKER: 'Conformité', SUPPORT_MAKER: 'Support Client', BRANCH_MANAGER: 'Responsable d\'Agence',
-    TELLER: 'Caissier', MERCHANT: 'Marchand'
+    TELLER: 'Caissier'
   };
 
   const BRANCH_GROUPS: NavGroup[] = [
@@ -210,7 +210,7 @@ export default function App() {
 
   // Utilisé par le fil d'Ariane pour afficher un intitulé lisible plutôt que l'id technique de l'onglet.
   const TAB_LABELS: Record<string, string> = {
-    'merchant-dash': 'Ventes & Encaissements', 'reclamations': 'Support & Réclamations',
+    'reclamations': 'Support & Réclamations',
     ...Object.fromEntries(SUPER_ADMIN_GROUPS.flatMap(g => g.items.map(i => [i.id, i.label]))),
     ...Object.fromEntries(BRANCH_GROUPS.flatMap(g => g.items.map(i => [i.id, i.label])))
   };
