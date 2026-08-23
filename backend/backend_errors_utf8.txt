@@ -1,3 +1,0 @@
-﻿src/routes/tontine.ts(138,71): error TS2322: Type 'string | string[]' is not assignable to type 'string | undefined'.
-  Type 'string[]' is not assignable to type 'string'.
-src/routes/tontine.ts(148,31): error TS2339: Property 'participants' does not exist on type '{ id: string; name: string; contribution: number; frequency: string; startDate: Date; status: string; createdAt: Date; updatedAt: Date; }'.
