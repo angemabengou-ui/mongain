@@ -8,6 +8,7 @@ import { Platform } from 'react-native';
 export const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://mongain-backend.onrender.com';
 
 const TOKEN_KEY = 'mongain_token';
+const REFRESH_TOKEN_KEY = 'mongain_refresh_token';
 
 import * as SecureStore from 'expo-secure-store';
 
@@ -35,13 +36,85 @@ export const deleteToken = async () => {
     }
 };
 
+// ─── Stockage du refresh token ──────────────────────────────────────
+// Session longue durée : l'access token (ci-dessus) est volontairement court, le
+// refresh token sert à en obtenir un nouveau en silence (voir tryRefreshSession)
+// sans jamais redemander le PIN à l'utilisateur, tant qu'il revient dans les temps.
+export const saveRefreshToken = async (token: string | null | undefined) => {
+    // Tolère l'absence de refreshToken (backend pas encore à jour avec cette fonctionnalité,
+    // ou déployé séparément du client) : SecureStore.setItemAsync plante avec "Invalid value
+    // provided to SecureStore" si on lui passe autre chose qu'une string, ce qui bloquait
+    // entièrement la connexion/l'OTP au lieu de simplement se passer du refresh silencieux.
+    if (!token) return;
+    if (Platform.OS === 'web') {
+        localStorage.setItem(REFRESH_TOKEN_KEY, token);
+    } else {
+        await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, token);
+    }
+};
+
+export const getRefreshToken = async (): Promise<string | null> => {
+    if (Platform.OS === 'web') {
+        return localStorage.getItem(REFRESH_TOKEN_KEY);
+    }
+    return await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+};
+
+export const deleteRefreshToken = async () => {
+    if (Platform.OS === 'web') {
+        localStorage.removeItem(REFRESH_TOKEN_KEY);
+    } else {
+        await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
+    }
+};
+
 // ─── Auto-logout callback ──────────────────────────────────────────
 // Enregistrer ici une fonction de logout depuis AuthContext
 let _onUnauthorized: (() => void) | null = null;
 export const setUnauthorizedHandler = (fn: () => void) => { _onUnauthorized = fn; };
 
+// ─── Renouvellement silencieux de session ───────────────────────────
+// Appelé une seule fois par vague de 401 concurrents (ex: la home charge solde +
+// transactions + stats marchand en parallèle) grâce à _refreshPromise : tous les
+// appels échoués attendent la même tentative de renouvellement au lieu de faire
+// chacun leur propre requête /auth/refresh (ce qui ferait échouer les rotations
+// suivantes, une seule pouvant réussir par ancien refresh token).
+let _refreshPromise: Promise<boolean> | null = null;
+
+const tryRefreshSession = async (): Promise<boolean> => {
+    if (!_refreshPromise) {
+        _refreshPromise = (async () => {
+            try {
+                const refreshToken = await getRefreshToken();
+                if (!refreshToken) return false;
+
+                const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refreshToken }),
+                });
+                if (!res.ok) return false;
+
+                const data = await res.json();
+                if (!data.token || !data.refreshToken) return false;
+
+                await saveToken(data.token);
+                await saveRefreshToken(data.refreshToken);
+                return true;
+            } catch {
+                return false;
+            }
+        })();
+    }
+    try {
+        return await _refreshPromise;
+    } finally {
+        _refreshPromise = null;
+    }
+};
+
 // ─── Client HTTP de base ───────────────────────────────────────────
-const request = async (method: string, path: string, body?: object, auth = false) => {
+const request = async (method: string, path: string, body?: object, auth = false, _isRetry = false): Promise<any> => {
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Bypass-Tunnel-Reminder': 'true',
@@ -60,7 +133,16 @@ const request = async (method: string, path: string, body?: object, auth = false
             body: body ? JSON.stringify(body) : undefined,
         });
 
-        // Auto-logout si token expiré ou invalide
+        // Token expiré : on tente un renouvellement silencieux une seule fois avant
+        // de déclencher la déconnexion complète (voir tryRefreshSession ci-dessus).
+        if (res.status === 401 && !_isRetry) {
+            const refreshed = await tryRefreshSession();
+            if (refreshed) {
+                return request(method, path, body, auth, true);
+            }
+        }
+
+        // Auto-logout si le renouvellement a échoué (ou n'était pas applicable)
         if (res.status === 401 && _onUnauthorized) {
             _onUnauthorized();
             throw new Error('Session expirée. Veuillez vous reconnecter.');
@@ -120,13 +202,17 @@ export const apiRequestOtp = (phone: string) =>
     request('POST', '/api/auth/request-otp', { phone }) as Promise<{ message: string }>;
 
 export const apiRegister = (name: string, username: string, phone: string, pin: string, otpCode: string) =>
-    request('POST', '/api/auth/register', { name, username, phone, pin, otpCode }) as Promise<{ token: string; user: User }>;
+    request('POST', '/api/auth/register', { name, username, phone, pin, otpCode }) as Promise<{ token: string; refreshToken: string; user: User }>;
 
 export const apiLogin = (phone: string, pin: string) =>
     request('POST', '/api/auth/login', { phone, pin }) as Promise<{ token?: string; user?: User; requireOtp?: boolean; message?: string }>;
 
 export const apiVerifyLoginOtp = (phone: string, otpCode: string) =>
-    request('POST', '/api/auth/verify-login-otp', { phone, otpCode }) as Promise<{ token: string; user: User }>;
+    request('POST', '/api/auth/verify-login-otp', { phone, otpCode }) as Promise<{ token: string; refreshToken: string; user: User }>;
+
+// Révoque le refresh token côté serveur — best-effort, appelé au logout explicite.
+export const apiLogoutServer = () =>
+    request('POST', '/api/auth/logout', undefined, true) as Promise<{ message: string }>;
 
 export const apiVerifyAppLockPin = (pin: string) =>
     request('POST', '/api/auth/verify-pin', { pin }) as Promise<{ success: boolean; error?: string }>;

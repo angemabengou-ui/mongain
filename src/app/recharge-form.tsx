@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
     prefix: { fontSize: 17, fontWeight: '800', marginRight: 12, paddingRight: 12, borderRightWidth: 1, borderRightColor: '#e2e8f0' },
     input: { flex: 1, fontSize: 18, fontWeight: '700', height: '100%', letterSpacing: 1 },
 
-    btn: { height: 60, borderRadius: 16, justifyContent: 'center', alignItems: 'center', shadowColor: '#1DC5E9', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 15, elevation: 8, marginTop: 16 },
+    btn: { height: 60, borderRadius: 16, justifyContent: 'center', alignItems: 'center', shadowColor: '#2563EB', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 15, elevation: 8, marginTop: 16 },
     btnText: { color: '#ffffff', fontSize: 17, fontWeight: '800' },
 
     securityBadge: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 24, padding: 12 },

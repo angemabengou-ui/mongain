@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -127,9 +127,18 @@ export default function VaultDetailScreen() {
 
     useFocusEffect(useCallback(() => { load(); }, [load]));
 
+    // Refs synchrones anti double-tap (voir transfer-confirm.tsx pour le détail) : deux appuis
+    // rapides peuvent tous deux lire `depositLoading`/`withdrawLoading` avant que le premier
+    // `setLoading(true)` n'ait été commité par React — le backend n'étant pas idempotent sur
+    // ces deux actions, un double-tap pouvait produire un double dépôt/double demande.
+    const depositSubmittingRef = useRef(false);
+    const withdrawSubmittingRef = useRef(false);
+
     const handleDeposit = async () => {
+        if (depositSubmittingRef.current) return;
         const amt = depositAmount.replace(/\s/g, '').replace(',', '.');
         if (!amt || Number(amt) <= 0) return;
+        depositSubmittingRef.current = true;
         setDepositLoading(true);
         try {
             await apiDepositVault(id, amt);
@@ -138,6 +147,7 @@ export default function VaultDetailScreen() {
         } catch (e: any) {
             Alert.alert('Échec du dépôt', e.message || 'Une erreur est survenue.');
         } finally {
+            depositSubmittingRef.current = false;
             setDepositLoading(false);
         }
     };
@@ -145,6 +155,7 @@ export default function VaultDetailScreen() {
     const treasurers = (vault?.members || []).filter((m: any) => m.isTreasurer);
 
     const handleWithdrawRequest = async () => {
+        if (withdrawSubmittingRef.current) return;
         const amt = withdrawAmount.replace(/\s/g, '').replace(',', '.');
         if (!amt || Number(amt) <= 0) return;
         if (!withdrawReason.trim() || withdrawReason.trim().length < 3) {
@@ -159,6 +170,7 @@ export default function VaultDetailScreen() {
             Alert.alert('Destinataire introuvable', 'Saisissez un numéro Mongain valide pour l\'envoi direct.');
             return;
         }
+        withdrawSubmittingRef.current = true;
         setWithdrawLoading(true);
         try {
             await apiWithdrawRequestVault(id, {
@@ -177,6 +189,7 @@ export default function VaultDetailScreen() {
         } catch (e: any) {
             Alert.alert('Échec de la demande', e.message || 'Une erreur est survenue.');
         } finally {
+            withdrawSubmittingRef.current = false;
             setWithdrawLoading(false);
         }
     };
@@ -429,10 +442,19 @@ export default function VaultDetailScreen() {
                         <>
                             <Text style={[styles.sectionTitle, { color: COLORS.textPrimary }]}>En attente d'approbation</Text>
                             {pendingTx.map((tx: any) => {
-                                const required = Math.max(1, Math.min(vault.requiredApprovals, (vault.members || []).filter((m: any) => m.isValidator).length || 1));
+                                // Lire l'instantané figé par le serveur à la création de la demande
+                                // (requiredApprovalsSnapshot/requiredValidatorIdsSnapshot,
+                                // routes/vault.ts) plutôt que recalculer depuis les membres
+                                // ACTUELS de la caisse — sinon un changement de composition après
+                                // coup (départ d'un commissaire, ajustement du seuil) affiche un
+                                // quorum "atteint" ici alors que le serveur, qui applique le même
+                                // instantané, refuse toujours d'exécuter le retrait (ou l'inverse).
+                                const required = tx.requiredApprovalsSnapshot ?? Math.max(1, Math.min(vault.requiredApprovals, (vault.members || []).filter((m: any) => m.isValidator).length || 1));
                                 const iApproved = tx.approvals.some((a: any) => a.userId === user?.id);
                                 const approvedIds = tx.approvals.map((a: any) => a.userId);
-                                const missingRequired = (vault.members || []).filter((m: any) => m.isRequiredValidator && !approvedIds.includes(m.userId));
+                                const missingRequired = tx.requiredValidatorIdsSnapshot
+                                    ? (vault.members || []).filter((m: any) => tx.requiredValidatorIdsSnapshot.includes(m.userId) && !approvedIds.includes(m.userId))
+                                    : (vault.members || []).filter((m: any) => m.isRequiredValidator && !approvedIds.includes(m.userId));
                                 return (
                                     <View key={tx.id} style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
                                         <View style={styles.cardRow}>

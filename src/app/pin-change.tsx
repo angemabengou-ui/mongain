@@ -6,6 +6,7 @@ import {
     Alert,
     KeyboardAvoidingView,
     Platform,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -56,7 +57,7 @@ export default function PinChangeScreen() {
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
 
                 {/* Header */}
                 <View style={styles.header}>
@@ -67,8 +68,14 @@ export default function PinChangeScreen() {
                     <View style={{ width: 40 }} />
                 </View>
 
-                {/* Form */}
-                <View style={styles.formContainer}>
+                {/* Form — ScrollView : avec 3 champs + clavier ouvert, le bouton "Mettre à
+                jour" pouvait sortir de l'écran, coincé derrière la barre de navigation Android
+                sans aucun moyen d'y accéder. */}
+                <ScrollView
+                    contentContainerStyle={[styles.formContainer, { paddingBottom: Math.max(insets.bottom, 20) + 24 }]}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                >
                     <Text style={styles.label}>Ancien code PIN</Text>
                     <View style={styles.inputContainer}>
                         <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 12 }} />
@@ -125,8 +132,7 @@ export default function PinChangeScreen() {
                             <Text style={styles.saveButtonText}>Mettre à jour le PIN</Text>
                         )}
                     </TouchableOpacity>
-                </View>
-                {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
+                </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
@@ -141,7 +147,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     },
     backButton: { padding: 8, marginLeft: -8 },
     headerTitle: { color: COLORS.textPrimary, fontSize: 18, fontWeight: '600' },
-    formContainer: { padding: 24, flex: 1 },
+    formContainer: { padding: 24, flexGrow: 1 },
     label: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary, marginBottom: 8 },
     inputContainer: {
         flexDirection: 'row', alignItems: 'center',

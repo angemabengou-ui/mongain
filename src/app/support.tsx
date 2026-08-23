@@ -1,14 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { apiCreateReclamation } from '../services/api';
 
 export default function SupportScreen() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const COLORS = useAppTheme();
     const styles = getStyles(COLORS);
     const { user } = useAuth();
@@ -46,54 +47,64 @@ export default function SupportScreen() {
                 <View style={{ width: 40 }} />
             </View>
 
-            <View style={styles.container}>
-                <View style={styles.iconContainer}>
-                    <Ionicons name="chatbubbles" size={60} color={COLORS.primary} />
-                </View>
+            {/* KeyboardAvoidingView + ScrollView : sans eux, avec le champ "Détails
+            explicatifs" (multiline) et le clavier ouvert, le bouton "Envoyer la
+            réclamation" pouvait sortir de l'écran, coincé derrière la barre de navigation
+            Android sans aucun moyen d'y accéder. */}
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+                <ScrollView
+                    contentContainerStyle={[styles.container, { paddingBottom: Math.max(insets.bottom, 20) + 24 }]}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                >
+                    <View style={styles.iconContainer}>
+                        <Ionicons name="chatbubbles" size={60} color={COLORS.primary} />
+                    </View>
 
-                <Text style={styles.greeting}>Bonjour {user?.name?.split(' ')[0] || ''},</Text>
-                <Text style={styles.subtext}>
-                    Besoin d'aide avec une transaction bloquée ou une erreur système ? Décrivez votre problème ci-dessous, notre équipe réagit sous 24h.
-                </Text>
+                    <Text style={styles.greeting}>Bonjour {user?.name?.split(' ')[0] || ''},</Text>
+                    <Text style={styles.subtext}>
+                        Besoin d'aide avec une transaction bloquée ou une erreur système ? Décrivez votre problème ci-dessous, notre équipe réagit sous 24h.
+                    </Text>
 
-                <View style={styles.inputCard}>
-                    <Text style={styles.inputLabel}>Sujet de votre demande</Text>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Ex: Transfert non reçu..."
-                        placeholderTextColor={COLORS.textSecondary + '70'}
-                        value={title}
-                        onChangeText={setTitle}
-                    />
+                    <View style={styles.inputCard}>
+                        <Text style={styles.inputLabel}>Sujet de votre demande</Text>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Ex: Transfert non reçu..."
+                            placeholderTextColor={COLORS.textSecondary + '70'}
+                            value={title}
+                            onChangeText={setTitle}
+                        />
 
-                    <Text style={styles.inputLabel}>Détails explicatifs</Text>
-                    <TextInput
-                        style={[styles.input, styles.textArea]}
-                        placeholder="Décrivez précisément votre réclamation (montant, date, numéro concerné)..."
-                        placeholderTextColor={COLORS.textSecondary + '70'}
-                        value={description}
-                        onChangeText={setDescription}
-                        multiline
-                        textAlignVertical="top"
-                    />
+                        <Text style={styles.inputLabel}>Détails explicatifs</Text>
+                        <TextInput
+                            style={[styles.input, styles.textArea]}
+                            placeholder="Décrivez précisément votre réclamation (montant, date, numéro concerné)..."
+                            placeholderTextColor={COLORS.textSecondary + '70'}
+                            value={description}
+                            onChangeText={setDescription}
+                            multiline
+                            textAlignVertical="top"
+                        />
 
-                    <TouchableOpacity
-                        style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
-                        activeOpacity={0.8}
-                        onPress={submitReclamation}
-                        disabled={loading}
-                    >
-                        {loading ? (
-                            <ActivityIndicator color={COLORS.surface} />
-                        ) : (
-                            <>
-                                <Text style={styles.submitBtnText}>Envoyer la réclamation</Text>
-                                <Ionicons name="paper-plane" size={20} color={COLORS.surface} />
-                            </>
-                        )}
-                    </TouchableOpacity>
-                </View>
-            </View>
+                        <TouchableOpacity
+                            style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
+                            activeOpacity={0.8}
+                            onPress={submitReclamation}
+                            disabled={loading}
+                        >
+                            {loading ? (
+                                <ActivityIndicator color={COLORS.surface} />
+                            ) : (
+                                <>
+                                    <Text style={styles.submitBtnText}>Envoyer la réclamation</Text>
+                                    <Ionicons name="paper-plane" size={20} color={COLORS.surface} />
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                </ScrollView>
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 }
@@ -121,7 +132,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         color: COLORS.textPrimary,
     },
     container: {
-        flex: 1,
+        flexGrow: 1,
         paddingTop: 30,
         paddingHorizontal: 24,
     },

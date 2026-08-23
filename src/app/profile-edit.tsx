@@ -84,7 +84,7 @@ export default function ProfileEditScreen() {
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
 
                 {/* Header */}
                 <View style={styles.header}>
@@ -95,8 +95,14 @@ export default function ProfileEditScreen() {
                     <View style={{ width: 40 }} />
                 </View>
 
-                {/* Form */}
-                <View style={styles.formContainer}>
+                {/* Form — dans un ScrollView : sans lui, le bouton "Enregistrer" et la section
+                KYC (photos CNI + selfie) pouvaient se retrouver hors écran, coincés derrière
+                la barre de navigation Android ou le clavier, sans aucun moyen de les atteindre. */}
+                <ScrollView
+                    contentContainerStyle={[styles.formContainer, { paddingBottom: Math.max(insets.bottom, 20) + 24 }]}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                >
                     <Text style={styles.label}>Nom complet</Text>
                     <View style={styles.inputContainer}>
                         <Ionicons name="person-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 12 }} />
@@ -201,8 +207,7 @@ export default function ProfileEditScreen() {
                             <Text style={styles.saveButtonText}>Enregistrer</Text>
                         )}
                     </TouchableOpacity>
-                </View>
-                {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
+                </ScrollView>
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
@@ -217,7 +222,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     },
     backButton: { padding: 8, marginLeft: -8 },
     headerTitle: { color: COLORS.textPrimary, fontSize: 18, fontWeight: '600' },
-    formContainer: { padding: 24, flex: 1 },
+    formContainer: { padding: 24, flexGrow: 1 },
     label: { fontSize: 16, fontWeight: '600', color: COLORS.textPrimary, marginBottom: 8 },
     inputContainer: {
         flexDirection: 'row', alignItems: 'center',

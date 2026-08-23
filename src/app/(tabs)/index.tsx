@@ -42,6 +42,7 @@ export default function DashboardScreen() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [merchantStats, setMerchantStats] = useState<{ todaySalesAmount: number; todayCommission: number; allTimeCommission: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -65,6 +66,7 @@ export default function DashboardScreen() {
       setCurrency(walletData.currency);
 
       setTransactions(txData.slice(0, 3)); // 3 dernières
+      setLoadError(false);
 
       // Ventes ET commissions réelles via l'agrégat serveur dédié — l'ancien calcul
       // recomposait juste le CA du jour côté client depuis la liste générique de
@@ -74,8 +76,11 @@ export default function DashboardScreen() {
         setMerchantStats(stats);
       }
     } catch (e) {
-      // Si le token est invalide, logout
+      // Un échec réseau (hors ligne au lancement, ex.) laissait `balance` à `null`
+      // indéfiniment, sans aucun message — l'écran affichait juste "FCFA" sous "Solde
+      // Principal", sans indiquer qu'il fallait réessayer (contrairement à withdraw.tsx).
       console.error(e);
+      setLoadError(true);
     } finally {
       setLoading(false);
       SplashScreen.hideAsync();
@@ -150,6 +155,11 @@ export default function DashboardScreen() {
                   />
                 </TouchableOpacity>
               </View>
+              {!loading && loadError && (
+                <Text style={{ fontSize: 12, color: '#F59E0B', marginTop: 4 }}>
+                  Solde non actualisé — tirez vers le bas pour réessayer.
+                </Text>
+              )}
             </View>
 
             {/* Quick Access QR Button */}

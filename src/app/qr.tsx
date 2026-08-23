@@ -16,8 +16,12 @@ import { useAuth } from '../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
+// Palette volontairement statique et sombre (pas de useAppTheme) : c'est un écran caméra
+// (viseur QR), le fond doit rester sombre pour le contraste quel que soit le thème système
+// du téléphone — comme la caméra d'Instagram/WhatsApp. Seule la teinte primaire suit
+// l'identité de marque.
 const COLORS = {
-    primary: '#1DC5E9',
+    primary: '#60A5FA',
     background: '#1a1d2e',
     surface: '#ffffff',
     textPrimary: '#ffffff',
@@ -108,7 +112,11 @@ export default function QrScreen() {
                 // 2. If User scans a MERCHANT -> Payment OR Withdrawal depending on the QR!
                 if (targetRole === 'MERCHANT') {
                     if (isWithdrawalIntent) {
-                        router.replace({ pathname: '/client-withdraw-desk', params: { agentPhone: targetPhone, agentName: targetName } });
+                        // `agentRole` : sans lui, l'écran de retrait appliquait toujours la
+                        // formule Agent (seuil + taux marginal) même face à un Marchand, qui a
+                        // sa propre formule (taux plein dès le premier franc, sans seuil) —
+                        // affichant "GRATUIT" alors que le serveur facture réellement.
+                        router.replace({ pathname: '/client-withdraw-desk', params: { agentPhone: targetPhone, agentName: targetName, agentRole: targetRole } });
                     } else {
                         router.push({ pathname: '/transfer-confirm', params: { receiverPhone: targetPhone, receiverName: targetName, isMerchant: 'true' } });
                     }
@@ -118,7 +126,7 @@ export default function QrScreen() {
                 // 3. If User scans an AGENT -> Withdraw at the Agent's Desk
                 if (targetRole === 'AGENT') {
                     // Client initiates a withdrawal by sending digital cash to the Agent
-                    router.replace({ pathname: '/client-withdraw-desk', params: { agentPhone: targetPhone, agentName: targetName } });
+                    router.replace({ pathname: '/client-withdraw-desk', params: { agentPhone: targetPhone, agentName: targetName, agentRole: targetRole } });
                     return;
                 }
 

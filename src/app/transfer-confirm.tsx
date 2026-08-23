@@ -17,24 +17,19 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { apiGetMyVouchers, apiSpendVoucher, apiTransfer } from '../services/api';
 import { enableBiometricPin, isBiometricPinEnabled, verifyBiometricsOrPin } from '../services/biometrics';
 
-const COLORS = {
-    primary: '#1DC5E9',
-    surface: '#ffffff',
-    background: '#f8f9fe',
-    textPrimary: '#1a1d2e',
-    textSecondary: '#6b7280',
-    error: '#E11D48',
-    success: '#059669',
-    border: '#e5e7eb',
-};
-
 export default function TransferConfirmScreen() {
     const insets = useSafeAreaInsets();
-    const { settings } = useAuth();
+    // Cet écran définissait auparavant sa propre palette statique (ancien cyan #1DC5E9 en
+    // dur), au lieu du thème partagé — il ne respectait donc jamais le mode sombre du
+    // téléphone, contrairement au reste de l'app.
+    const COLORS = useAppTheme();
+    const styles = getStyles(COLORS);
+    const { settings, user } = useAuth();
     const router = useRouter();
     const { receiverPhone, receiverName, isMerchant } = useLocalSearchParams<{ receiverPhone: string; receiverName: string; isMerchant: string }>();
     const isPayment = isMerchant === 'true';
@@ -44,7 +39,7 @@ export default function TransferConfirmScreen() {
     const [showPin, setShowPin] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [success, setSuccess] = useState<{ receiverName: string; remainingBalance: number; amount: number } | null>(null);
+    const [success, setSuccess] = useState<{ receiverName: string; remainingBalance: number; amount: number; isVoucher?: boolean; reference?: string } | null>(null);
     const [bioEnabled, setBioEnabled] = useState(false);
     // Ref (pas seulement le state `loading`) : deux appuis rapides peuvent tous les deux lire
     // `loading` avant que le premier `setLoading(true)` n'ait été commité par React — la ref
@@ -90,6 +85,10 @@ export default function TransferConfirmScreen() {
                 receiverName: result.data?.receiverName || receiverName,
                 remainingBalance: result.data?.remainingBalance || 0,
                 amount: amountNum,
+                // Vraie référence serveur — le PDF utilisait auparavant un Math.random()
+                // régénéré à chaque partage, introuvable côté support et différent d'un
+                // partage à l'autre pour le MÊME transfert.
+                reference: result.data?.transaction?.reference,
             });
         } catch (e: any) {
             setError(e.message);
@@ -121,6 +120,10 @@ export default function TransferConfirmScreen() {
                 receiverName: result.data?.receiverName || receiverName,
                 remainingBalance: result.data?.remainingBalance || 0,
                 amount: amountNum,
+                // Vraie référence serveur — le PDF utilisait auparavant un Math.random()
+                // régénéré à chaque partage, introuvable côté support et différent d'un
+                // partage à l'autre pour le MÊME transfert.
+                reference: result.data?.transaction?.reference,
             });
 
             // Propose d'activer le déverrouillage biométrique pour les prochains transferts,
@@ -166,8 +169,15 @@ export default function TransferConfirmScreen() {
             const result = await apiSpendVoucher(voucherId, receiverPhone, pin);
             setSuccess({
                 receiverName: result.data?.destinationName || receiverName || receiverPhone,
+                // Un bon débite la caisse commune, pas le wallet personnel du porteur : afficher
+                // "0 FCFA" comme solde restant laissait croire à tort que son wallet venait
+                // d'être vidé. `isVoucher` masque ce bloc plutôt que d'afficher une fausse valeur.
                 remainingBalance: 0,
                 amount: amount,
+                isVoucher: true,
+                // Un bon n'a pas de Transaction dédiée — son identifiant propre est le
+                // meilleur repère disponible (mieux qu'une chaîne aléatoire inventée).
+                reference: result.data?.voucher?.id ? `BON-${result.data.voucher.id.slice(0, 8).toUpperCase()}` : undefined,
             });
         } catch (e: any) {
             setError(e.message);
@@ -218,7 +228,7 @@ export default function TransferConfirmScreen() {
                       </div>
                       <div class="row">
                         <span class="label">Référence</span>
-                        <span class="value">MNG-${Math.random().toString(36).substring(2, 10).toUpperCase()}</span>
+                        <span class="value">${success?.reference || 'MNG-' + Math.random().toString(36).substring(2, 10).toUpperCase()}</span>
                       </div>
                       <div class="footer">
                         Généré sécuritairement par l'application Mongain.<br/>
@@ -256,10 +266,12 @@ export default function TransferConfirmScreen() {
                     </Text>
                     {'\n'}à <Text style={{ fontWeight: '800', color: COLORS.textPrimary }}>{success.receiverName}</Text>
                 </Text>
-                <View style={styles.remainingCard}>
-                    <Text style={styles.remainingLabel}>Solde restant</Text>
-                    <Text style={styles.remainingAmount}>{success.remainingBalance.toLocaleString('fr-FR')} FCFA</Text>
-                </View>
+                {!success.isVoucher && (
+                    <View style={styles.remainingCard}>
+                        <Text style={styles.remainingLabel}>Solde restant</Text>
+                        <Text style={styles.remainingAmount}>{success.remainingBalance.toLocaleString('fr-FR')} FCFA</Text>
+                    </View>
+                )}
 
                 <TouchableOpacity style={[styles.doneBtn, { backgroundColor: '#334155', marginBottom: 12, flexDirection: 'row' }]} onPress={handleShareReceipt}>
                     <Ionicons name="share-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
@@ -329,13 +341,13 @@ export default function TransferConfirmScreen() {
                         const cleanedAmount = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
                         if (!(cleanedAmount > 0)) return null;
 
-                        // Le backend (backend/src/routes/wallet.ts, POST /transfer) applique
-                        // taxP2P systématiquement, quel que soit le rôle de l'expéditeur —
-                        // aucune exemption AGENT/ADMIN n'existe côté serveur. Afficher "Gratuit"
-                        // ici induisait l'utilisateur en erreur sur le montant réellement débité.
-                        // Le backend applique taxP2P systématiquement. On vérifie via ?? au lieu de || 
-                        // pour éviter qu'un taux de 0% (falsy) ne retombe à 1%.
-                        const taxRate = settings?.taxP2P ?? 0.01;
+                        // Le backend (backend/src/routes/wallet.ts:435, POST /transfer) EXEMPTE
+                        // spécifiquement les expéditeurs AGENT (`fee = sender.role === 'AGENT' ?
+                        // 0 : amount * taxP2P`) — un dépôt guichet gratuit. Appliquer taxP2P sans
+                        // condition ici affichait des frais et un total à débiter faux pour un
+                        // agent. On vérifie via ?? au lieu de || pour éviter qu'un taux de 0%
+                        // (falsy) ne retombe à la valeur de repli.
+                        const taxRate = user?.role === 'AGENT' ? 0 : (settings?.taxP2P ?? 0.01);
                         const p2pFee = Math.ceil(cleanedAmount * taxRate);
                         const totalDebit = cleanedAmount + p2pFee;
 
@@ -438,7 +450,7 @@ export default function TransferConfirmScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: COLORS.background },
     header: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

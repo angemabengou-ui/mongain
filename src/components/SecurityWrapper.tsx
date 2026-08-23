@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
     unlockBtn: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         height: 60, width: '100%', borderRadius: 16, gap: 12,
-        shadowColor: '#1DC5E9', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 15, elevation: 8,
+        shadowColor: '#2563EB', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 15, elevation: 8,
     },
     unlockText: { fontSize: 18, color: '#fff', fontWeight: '700' }
 });

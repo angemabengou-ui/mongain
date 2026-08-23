@@ -5,20 +5,15 @@ import * as Sharing from 'expo-sharing';
 import { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-const COLORS = {
-    primary: '#1DC5E9',
-    surface: '#ffffff',
-    background: '#1a1d2e',
-    textPrimary: '#1a1d2e',
-    textSecondary: '#6b7280',
-    success: '#059669',
-    error: '#E11D48',
-    devider: '#e2e8f0',
-};
+import { useAppTheme } from '../constants/theme';
 
 export default function ReceiptScreen() {
     const router = useRouter();
+    // Cet écran définissait auparavant sa propre palette statique (ancien cyan #1DC5E9 en
+    // dur), au lieu du thème partagé — il ne respectait donc jamais le mode sombre du
+    // téléphone, contrairement au reste de l'app.
+    const COLORS = useAppTheme();
+    const styles = getStyles(COLORS);
     // Les paramètres passés via router.push()
     const { id, type, amount, currency, status, reference, counterpart, counterpartPhone, createdAt } = useLocalSearchParams();
 
@@ -63,7 +58,7 @@ export default function ReceiptScreen() {
                         body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 40px; color: #1a1d2e; }
                         .receipt-box { background: white; border-radius: 16px; padding: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); max-width: 600px; margin: 0 auto; }
                         .header { text-align: center; margin-bottom: 30px; }
-                        .logo { font-size: 32px; font-weight: 800; color: #1DC5E9; margin-bottom: 5px; }
+                        .logo { font-size: 32px; font-weight: 800; color: #2563EB; margin-bottom: 5px; }
                         .title { font-size: 20px; color: #6b7280; margin-bottom: 15px; }
                         .amount { font-size: 40px; font-weight: bold; margin-bottom: 5px; color: ${isIncoming || isDeposit ? '#059669' : '#E11D48'}; }
                         .status { display: inline-block; background-color: #d1fae5; color: #059669; padding: 8px 16px; border-radius: 20px; font-weight: bold; font-size: 14px; }
@@ -169,12 +164,12 @@ export default function ReceiptScreen() {
                     <View style={styles.detailsContainer}>
                         {!isDeposit && !isWithdraw && (
                             <>
-                                <DetailRow label={isIncoming ? 'De' : 'À'} value={counterpart as string} icon="person-outline" />
-                                <DetailRow label="Numéro" value={counterpartPhone as string} icon="call-outline" />
+                                <DetailRow label={isIncoming ? 'De' : 'À'} value={counterpart as string} icon="person-outline" styles={styles} colors={COLORS} />
+                                <DetailRow label="Numéro" value={counterpartPhone as string} icon="call-outline" styles={styles} colors={COLORS} />
                             </>
                         )}
-                        <DetailRow label="Date" value={dateFormatted} icon="calendar-outline" />
-                        <DetailRow label="ID Transaction" value={reference as string || (id as string).split('-')[0]} icon="document-text-outline" copyable />
+                        <DetailRow label="Date" value={dateFormatted} icon="calendar-outline" styles={styles} colors={COLORS} />
+                        <DetailRow label="ID Transaction" value={reference as string || (id as string).split('-')[0]} icon="document-text-outline" copyable styles={styles} colors={COLORS} />
                     </View>
 
                     <View style={styles.watermarkContainer}>
@@ -194,22 +189,24 @@ export default function ReceiptScreen() {
     );
 }
 
-function DetailRow({ label, value, icon, copyable }: { label: string; value: string; icon: any; copyable?: boolean }) {
+// Composant top-level (pas nested dans ReceiptScreen) : styles/couleurs reçus en props,
+// pas de closure sur les valeurs du hook useAppTheme() de l'écran parent.
+function DetailRow({ label, value, icon, copyable, styles, colors }: { label: string; value: string; icon: any; copyable?: boolean; styles: ReturnType<typeof getStyles>; colors: ReturnType<typeof useAppTheme> }) {
     return (
         <View style={styles.detailRow}>
             <View style={styles.detailRowLeft}>
-                <Ionicons name={icon} size={18} color={COLORS.textSecondary} style={styles.detailIcon} />
+                <Ionicons name={icon} size={18} color={colors.textSecondary} style={styles.detailIcon} />
                 <Text style={styles.detailLabel}>{label}</Text>
             </View>
             <View style={styles.detailRowRight}>
                 <Text style={styles.detailValue} selectable={copyable}>{value}</Text>
-                {copyable && <Ionicons name="copy-outline" size={16} color={COLORS.primary} style={{ marginLeft: 6 }} />}
+                {copyable && <Ionicons name="copy-outline" size={16} color={colors.primary} style={{ marginLeft: 6 }} />}
             </View>
         </View>
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: COLORS.background },
     header: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -235,7 +232,7 @@ const styles = StyleSheet.create({
 
     dashLine: {
         width: '100%', height: 1, backgroundColor: 'transparent',
-        borderStyle: 'dashed', borderWidth: 1, borderColor: COLORS.devider, borderRadius: 1,
+        borderStyle: 'dashed', borderWidth: 1, borderColor: COLORS.border, borderRadius: 1,
         marginBottom: 24,
     },
     detailsContainer: { width: '100%', gap: 16 },

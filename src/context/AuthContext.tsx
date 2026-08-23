@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { io, Socket } from 'socket.io-client';
-import { apiGetMe, apiGetSystemSettings, apiLogin, apiRegister, apiUpdatePushToken, apiVerifyLoginOtp, BASE_URL, deleteToken, getToken, saveToken, setUnauthorizedHandler, User } from '../services/api';
+import { apiGetMe, apiGetSystemSettings, apiLogin, apiLogoutServer, apiRegister, apiUpdatePushToken, apiVerifyLoginOtp, BASE_URL, deleteRefreshToken, deleteToken, getToken, saveRefreshToken, saveToken, setUnauthorizedHandler, User } from '../services/api';
 
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
@@ -25,7 +25,7 @@ async function registerForPushNotificationsAsync() {
             name: 'default',
             importance: Notifications.AndroidImportance.MAX,
             vibrationPattern: [0, 250, 250, 250],
-            lightColor: '#1DC5E9',
+            lightColor: '#2563EB',
         });
     }
 
@@ -117,7 +117,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [user?.phone]); // On re-connecte si le tel change
 
     const logout = async () => {
+        // Best-effort : révoque le refresh token côté serveur, mais la session locale
+        // doit être effacée dans tous les cas (hors ligne, serveur indisponible...).
+        try {
+            await apiLogoutServer();
+        } catch {
+            // Ignoré : l'essentiel est de nettoyer la session locale ci-dessous.
+        }
         await deleteToken();
+        await deleteRefreshToken();
         setToken(null);
         setUser(null);
     };
@@ -183,16 +191,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     const verifyLoginOtp = async (phone: string, otpCode: string) => {
-        const { token: newToken, user: newUser } = await apiVerifyLoginOtp(phone, otpCode);
+        const { token: newToken, refreshToken, user: newUser } = await apiVerifyLoginOtp(phone, otpCode);
         await saveToken(newToken);
+        await saveRefreshToken(refreshToken);
         setToken(newToken);
         setUser(newUser);
         await fetchSettings();
     };
 
     const register = async (name: string, username: string, phone: string, pin: string, otpCode: string) => {
-        const { token: newToken, user: newUser } = await apiRegister(name, username, phone, pin, otpCode);
+        const { token: newToken, refreshToken, user: newUser } = await apiRegister(name, username, phone, pin, otpCode);
         await saveToken(newToken);
+        await saveRefreshToken(refreshToken);
         setToken(newToken);
         setUser(newUser);
         await fetchSettings();

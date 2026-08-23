@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, BackHandler, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
@@ -51,6 +51,20 @@ export default function WithdrawScreen() {
         return () => clearInterval(interval);
     }, [showCode, expiresAt]);
 
+    // L'écran "Code Secret Généré" n'est qu'un rendu conditionnel sur cette même route, pas
+    // un vrai <Modal>/une entrée de navigation séparée — sans cette interception, le bouton
+    // Retour matériel Android quittait directement tout l'écran withdraw (au lieu de d'abord
+    // fermer cette vue, comme le bouton "Fermer"), et le code — pourtant toujours valide côté
+    // serveur pendant plusieurs minutes — devenait irrécupérable depuis l'app.
+    useEffect(() => {
+        if (!showCode) return;
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+            setShowCode(false);
+            return true;
+        });
+        return () => sub.remove();
+    }, [showCode]);
+
     const confirmGenerateCode = async () => {
         const amount = parseFloat(codeAmount.replace(/\s/g, '').replace(',', '.'));
         if (isNaN(amount) || amount <= 0) {
@@ -60,8 +74,14 @@ export default function WithdrawScreen() {
         setGenerating(true);
         try {
             const res = await apiGenerateWithdrawCode(amount);
+            const expiresAtMs = new Date(res.expiresAt).getTime();
             setToken(res.code.slice(0, 3) + ' ' + res.code.slice(3, 6));
-            setExpiresAt(new Date(res.expiresAt).getTime());
+            setExpiresAt(expiresAtMs);
+            // Calculé tout de suite plutôt que laissé à 0 (valeur initiale du state) en
+            // attendant le useEffect [showCode, expiresAt] : sans ça, le tout premier rendu
+            // après un code fraîchement généré affichait "— — —" / "CODE EXPIRÉ" pendant une
+            // frame, avant que l'effet ne corrige la valeur au tick suivant.
+            setRemainingSeconds(Math.max(0, Math.round((expiresAtMs - Date.now()) / 1000)));
             setShowAmountModal(false);
             setCodeAmount('');
             setShowCode(true);

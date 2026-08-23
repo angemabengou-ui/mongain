@@ -35,16 +35,20 @@ export default function TransferScreen() {
     // Lookup automatique quand le numéro a au moins 8 chiffres
     useEffect(() => {
         const cleaned = phone.replace(/\s/g, '');
+        // Effacé de façon SYNCHRONE dès que le numéro change (pas seulement à l'intérieur du
+        // setTimeout ci-dessous) : sinon la carte destinataire ET le bouton "Continuer" restent
+        // actifs sur l'ANCIEN destinataire pendant les 600ms du debounce — assez pour valider un
+        // numéro A, corriger un chiffre, puis appuyer sur Continuer avant que le nouveau lookup
+        // ne parte, ouvrant transfer-confirm avec le destinataire A alors que le champ affiche B.
+        setRecipient(null);
+        setLookupError('');
+
         if (cleaned.length < 8) {
-            setRecipient(null);
-            setLookupError('');
             return;
         }
 
         const timer = setTimeout(async () => {
             setIsLooking(true);
-            setLookupError('');
-            setRecipient(null);
             try {
                 const fullPhone = cleaned.startsWith('+') ? cleaned : `+241${cleaned}`;
                 const found = await apiLookupUser(fullPhone);

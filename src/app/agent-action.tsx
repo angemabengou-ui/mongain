@@ -80,7 +80,10 @@ export default function AgentActionDeskScreen() {
                     amount: numAmount,
                     currency: 'FCFA',
                     status: 'COMPLETED',
-                    reference: 'DEPOSIT-AGENCY-' + Date.now().toString().substring(8),
+                    // Vraie référence serveur (déjà utilisée juste au-dessus pour `id`) —
+                    // auparavant toujours fabriquée ici même quand la vraie était disponible,
+                    // introuvable ensuite côté support en cas de litige.
+                    reference: data.data?.transaction?.reference || 'DEPOSIT-AGENCY-' + Date.now().toString().substring(8),
                     counterpart: clientName as string,
                     counterpartPhone: clientPhone as string,
                     createdAt: data.data?.transaction?.createdAt || new Date().toISOString(),

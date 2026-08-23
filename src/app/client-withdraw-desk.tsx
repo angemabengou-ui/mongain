@@ -25,7 +25,8 @@ export default function ClientWithdrawDeskScreen() {
     const { user, settings } = useAuth();
     const COLORS = useAppTheme();
 
-    const { agentPhone, agentName } = useLocalSearchParams();
+    const { agentPhone, agentName, agentRole } = useLocalSearchParams();
+    const isMerchant = agentRole === 'MERCHANT';
     const [amount, setAmount] = useState('');
     const [pin, setPin] = useState('');
     const [loading, setLoading] = useState(false);
@@ -36,16 +37,22 @@ export default function ClientWithdrawDeskScreen() {
 
     useEffect(() => { isBiometricPinEnabled().then(setBioEnabled); }, []);
 
-    // Ce guichet ne concerne que les retraits chez un Agent (jamais un Marchand — voir
-    // qr.tsx), donc seule la taxe agence s'applique.
+    // Ce guichet gère les retraits chez un Agent ET chez un Marchand (qr.tsx route les deux
+    // ici avec les mêmes noms de params) — le backend (wallet.ts client-initiated-withdraw)
+    // applique une formule de frais DIFFÉRENTE selon le rôle réel de la contrepartie : un
+    // Marchand n'a ni seuil gratuit ni palier, le taux plein s'applique dès le premier franc.
+    // Utiliser toujours la formule Agent ici annonçait "GRATUIT" pour un retrait Marchand
+    // alors que le serveur facturait réellement des frais.
     const threshold = settings?.agencyWithdrawThreshold ?? 500000;
-    const taxRate = settings?.agencyTaxWithdraw ?? 0.01;
+    const taxRate = isMerchant ? (settings?.taxWithdraw ?? 0.013) : (settings?.agencyTaxWithdraw ?? 0.01);
     // keyboardType="numeric" n'empêche pas un espace ou une virgule de finir dans la
     // valeur (collage, certains claviers IME) — sans ce nettoyage, parseFloat("50 000")
     // vaut 50 et le retrait envoyé au serveur pouvait être 1000x plus petit que prévu.
     const cleanAmount = (v: string) => parseFloat(v.replace(/\s/g, '').replace(',', '.'));
     const numAmountPreview = cleanAmount(amount) || 0;
-    const fee = numAmountPreview > threshold ? Math.ceil((numAmountPreview - threshold) * taxRate) : 0;
+    const fee = isMerchant
+        ? Math.ceil(numAmountPreview * taxRate)
+        : (numAmountPreview > threshold ? Math.ceil((numAmountPreview - threshold) * taxRate) : 0);
 
     const submitWithdraw = async (usedPin: string) => {
         if (submittingRef.current) return;
@@ -181,9 +188,11 @@ export default function ClientWithdrawDeskScreen() {
                         </View>
 
                         <Text style={[styles.feeText, { color: fee > 0 ? '#F59E0B' : COLORS.textSecondary }]}>
-                            {fee > 0
-                                ? `Frais de retrait : ${fee.toLocaleString('fr-FR')} FCFA (au-delà de ${threshold.toLocaleString('fr-FR')} FCFA)`
-                                : 'Frais de retrait : GRATUIT'}
+                            {isMerchant
+                                ? `Frais de retrait : ${fee.toLocaleString('fr-FR')} FCFA (${(taxRate * 100).toLocaleString('fr-FR')}%)`
+                                : fee > 0
+                                    ? `Frais de retrait : ${fee.toLocaleString('fr-FR')} FCFA (au-delà de ${threshold.toLocaleString('fr-FR')} FCFA)`
+                                    : 'Frais de retrait : GRATUIT'}
                         </Text>
 
                         <View style={[styles.inputBox, { borderColor: COLORS.border, backgroundColor: COLORS.surface, height: 56, marginTop: 10, marginBottom: 0 }]}>
