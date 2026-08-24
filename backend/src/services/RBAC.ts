@@ -63,6 +63,7 @@ export type Permission = typeof ALL_PERMISSIONS[number];
 
 export const ROLE_DEFAULT_PERMISSIONS: Record<string, Permission[]> = {
     SUPER_ADMIN: [...ALL_PERMISSIONS], // Accès total
+    ADMIN: [...ALL_PERMISSIONS],       // Tolérance pour les anciens comptes non migrés
 
     BRANCH_MANAGER: [
         'perm_customer_view',
