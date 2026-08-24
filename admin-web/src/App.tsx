@@ -1,13 +1,13 @@
-import { Activity, Banknote, ChevronDown, ChevronRight, LayoutDashboard, LogOut, MessageSquare, Repeat, Settings as SettingsIcon, Shield, ShieldAlert, ShieldCheck, Store, Users as UsersIcon } from 'lucide-react';
+import { Activity, Banknote, ChevronDown, ChevronRight, LayoutDashboard, LogOut, MessageSquare, Settings as SettingsIcon, Shield, ShieldAlert, ShieldCheck, Store, Users as UsersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Accounts from './Accounts';
 import AuditLogs from './AuditLogs';
 import BranchDashboard from './BranchDashboard';
 import ChangePassword from './ChangePassword';
+import GlobalSearch from './components/GlobalSearch';
 import { API_URL } from './config';
 import Dashboard from './Dashboard';
 import ErrorLogs from './ErrorLogs';
-import GlobalSearch from './components/GlobalSearch';
 import KycMod from './KycMod';
 import Ledger from './Ledger';
 import Login from './Login';
@@ -20,11 +20,17 @@ import Treasury from './Treasury';
 import Users from './Users';
 import Vaults from './Vaults';
 
+// Un groupe ou un item est visible si l'une des permissions listées est possédée par l'utilisateur (OR logic).
+// Si le tableau est omis ou vide, l'accès est libre (ou géré par l'ancien système de hook global).
+type NavGroup = {
+  id: string,
+  label: string,
+  icon: any,
+  reqPerms?: string[],
+  items: { id: string, label: string, route?: string, reqPerms?: string[] }[]
+};
+
 export default function App() {
-  // VUL-05 : Le token JWT est migré vers sessionStorage au lieu de localStorage.
-  // sessionStorage : scopé par onglet/session — disparait à la fermeture du tab,
-  // et inaccessible aux scripts d'autres origines (XSS cross-origin réduit).
-  // Les données non-sensibles (rôle, préférences UI) restent en localStorage.
   const [token, setToken] = useState(sessionStorage.getItem('admin_token'));
   const [role, setRole] = useState(localStorage.getItem('admin_role') || 'ADMIN');
   const [userName, setUserName] = useState(localStorage.getItem('admin_name') || 'Admin');
@@ -32,27 +38,18 @@ export default function App() {
   const [phone, setPhone] = useState(localStorage.getItem('admin_phone') || '');
   const [mustChangePassword, setMustChangePassword] = useState(localStorage.getItem('admin_must_change_pw') === '1');
 
-  // 'ADMIN' n'est plus un rôle Staff joignable (voir Login.tsx allowedRoles / backend
-  // STAFF_ROLES) — c'était un vestige de l'ancien modèle où User.role='ADMIN' faisait
-  // office de super-admin, avant le modèle Staff dédié au portail Corporate.
-  const isBranchOps = ['TELLER', 'BRANCH_MANAGER', 'SUPER_ADMIN'].includes(role);
-  const isSuperAdmin = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(role);
-  // SUPPORT_MAKER : accès Support/Réclamations & Customer 360 uniquement (voir SUPPORT_ROLES / CRM_FULL_ACCESS côté backend admin.ts)
-  const isSupportRole = role === 'SUPPORT_MAKER';
+  // NOUVEAU RBAC : Stocker les permissions granulaires.
+  const [permissions, setPermissions] = useState<Set<string>>(new Set());
+  const [permsLoaded, setPermsLoaded] = useState(false);
 
   const defaultTabForRole = (r: string) =>
     r === 'SUPPORT_MAKER' ? 'reclamations'
-      : ['TELLER', 'BRANCH_MANAGER'].includes(r) ? 'branch-dash'
+      : ['TELLER', 'BRANCH_MANAGER'].includes(r) ? 'teller-terminal'
         : 'dashboard';
 
-  // Reste sur la page active après un rafraîchissement (F5) au lieu de revenir au tableau de bord.
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('admin_active_tab') || defaultTabForRole(role));
   const [expandedGroup, setExpandedGroup] = useState<string | null>(() => localStorage.getItem('admin_expanded_group') || 'control-center');
-  // Résultat sélectionné depuis la recherche globale : { tab: écran cible, id: enregistrement
-  // à ouvrir directement } — consommé par Users/Vaults/Tontines via leur prop `initialSelected*`.
   const [searchTarget, setSearchTarget] = useState<{ tab: string; id: string } | null>(null);
-  // Compte système visé depuis "Comptes Système > Créer un ajustement" — consommé par
-  // Treasury via `prefillAdjustTarget` pour ouvrir directement le formulaire Ajustement.
   const [adjustTarget, setAdjustTarget] = useState<{ walletId: string; name: string } | null>(null);
 
   useEffect(() => {
@@ -66,40 +63,42 @@ export default function App() {
 
   const logout = () => {
     sessionStorage.removeItem('admin_token');
-    localStorage.removeItem('admin_role');
-    localStorage.removeItem('admin_name');
-    localStorage.removeItem('admin_phone');
-    localStorage.removeItem('admin_staff_id');
-    localStorage.removeItem('admin_must_change_pw');
-    localStorage.removeItem('admin_active_tab');
-    localStorage.removeItem('admin_expanded_group');
+    localStorage.clear(); // Clean up safely
     setToken(null);
   };
 
   useEffect(() => {
     if (token) {
-      // /api/auth/me ne cherche que dans la table User (B2C) : pour un token Staff
-      // (portail corporate), il renvoie systématiquement 404, jamais 401/403, donc
-      // la révocation de session n'était jamais détectée par cet appel.
-      fetch(API_URL + '/api/corp/me', { headers: { Authorization: `Bearer ${token}` } })
-        .then(res => {
-          if (res.status === 401 || res.status === 403 || res.status === 404) { logout(); return; }
-          return res.json();
+      // Exécuter l'authentification standard (corp/me) + la matrice RBAC (/rbac/me) en parallèle
+      Promise.all([
+        fetch(API_URL + '/api/corp/me', { headers: { Authorization: `Bearer ${token}` } }).then(async r => {
+          if (!r.ok) throw new Error('Revoked corp/me');
+          return r.json();
+        }),
+        fetch(API_URL + '/api/admin/rbac/me', { headers: { Authorization: `Bearer ${token}` } }).then(async r => {
+          if (!r.ok) throw new Error('Revoked rbac/me');
+          return r.json();
         })
-        .then(data => {
-          if (data && typeof data.mustChangePassword === 'boolean') {
-            setMustChangePassword(data.mustChangePassword);
-            localStorage.setItem('admin_must_change_pw', data.mustChangePassword ? '1' : '0');
+      ])
+        .then(([corpData, rbacData]) => {
+          if (corpData && typeof corpData.mustChangePassword === 'boolean') {
+            setMustChangePassword(corpData.mustChangePassword);
+            localStorage.setItem('admin_must_change_pw', corpData.mustChangePassword ? '1' : '0');
           }
-          // Nécessaire pour que BranchDashboard identifie SA PROPRE session de caisse parmi
-          // celles de l'agence (voir agency.ts /info, qui renvoie les sessions récentes de
-          // tous les caissiers) plutôt que de prendre la première trouvée avec status OPEN.
-          if (data && data.id) {
-            setStaffId(data.id);
-            localStorage.setItem('admin_staff_id', data.id);
+          if (corpData && corpData.id) {
+            setStaffId(corpData.id);
+            localStorage.setItem('admin_staff_id', corpData.id);
           }
+          // Injection des permissions dans le State
+          if (rbacData && rbacData.permissions) {
+            setPermissions(new Set(rbacData.permissions));
+          }
+          setPermsLoaded(true);
         })
-        .catch(console.error);
+        .catch(err => {
+          console.error(err);
+          logout();
+        });
     }
   }, [token]);
 
@@ -119,63 +118,78 @@ export default function App() {
 
   if (mustChangePassword) return <ChangePassword token={token} onLogout={logout} />;
 
-  // Navigation Map — "COMPTES" (Accounts.tsx) regroupe en un seul point d'entrée tout ce
-  // qui gérait auparavant un type de compte séparément (Clients/Agents/Marchands via
-  // Users.tsx, Personnel via StaffCreate/StaffAssignBranch/StaffAccessRights, Agences via
-  // AgencyCenter, Comptes Système). "Transactions" et "Finance" pointaient tous deux vers
-  // le Grand Livre (Ledger), d'où un seul point d'entrée aussi pour ce groupe.
-  type NavGroup = { id: string, label: string, icon: any, roles: string[], items: { id: string, label: string, route?: string, roleExclude?: string[] }[] }; const SUPER_ADMIN_GROUPS: NavGroup[] = [
+  if (!permsLoaded) return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-primary)', color: 'var(--text-muted)' }}>Initialisation de vos droits d'accès...</div>;
+
+  // Fonction utilitaire pour vérifier si l'utilisateur possède au moins UNE des permissions requises
+  const hasPerm = (reqPerms?: string[]) => {
+    if (!reqPerms || reqPerms.length === 0) return true; // Libre accès si pas de req spécifiée
+    return reqPerms.some(p => permissions.has(p));
+  };
+
+  // NOUVELLE CARTE DE NAVIGATION (Couplée au RBAC)
+  const SIDEBAR_GROUPS: NavGroup[] = [
     {
-      id: 'control-center', label: 'TABLEAU DE BORD', icon: <LayoutDashboard size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
+      id: 'control-center', label: 'TABLEAU DE BORD', icon: <LayoutDashboard size={18} />,
+      reqPerms: ['perm_analytics_view'],
       items: [
-        { id: 'dashboard', label: 'Vue Globale' },
-        { id: 'macro-stats', label: 'Analytique Globale' }
+        { id: 'dashboard', label: 'Vue Globale', reqPerms: ['perm_analytics_view'] },
+        { id: 'macro-stats', label: 'Analytique Globale', reqPerms: ['perm_analytics_view'] }
       ]
     },
     {
-      // Point d'entrée unique pour tout ce qui est "un compte" (clients, agents,
-      // marchands, personnel, agences, comptes système) — avant, il fallait deviner
-      // dans lequel de 3 groupes de menu séparés chercher. Voir Accounts.tsx.
-      id: 'comptes', label: 'COMPTES', icon: <UsersIcon size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
-      items: [{ id: 'accounts', label: 'Gestion des Comptes' }]
+      id: 'comptes', label: 'COMPTES', icon: <UsersIcon size={18} />,
+      reqPerms: ['perm_customer_view', 'perm_staff_view'], // Accessible si vue Clients OU vue Staff autorisée
+      items: [{ id: 'accounts', label: 'Base Profils', reqPerms: ['perm_customer_view', 'perm_staff_view'] }]
     },
     {
-      id: 'clients-comptes', label: 'PRODUITS COLLECTIFS', icon: <Shield size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
-      // Caisses Communes / Tontines sont des produits détenus par les clients, pas des
-      // comptes en tant que tels — restent distincts de "COMPTES" ci-dessus, qui
-      // regroupe les PARTIES (qui a un compte), pas les produits qu'elles détiennent.
+      id: 'clients-comptes', label: 'PRODUITS COLLECTIFS', icon: <Shield size={18} />,
+      reqPerms: ['perm_customer_360_basic', 'perm_customer_view'],
       items: [
-        { id: 'vaults', label: 'Caisses Communes' },
-        { id: 'tontines', label: 'Tontines' }
+        { id: 'vaults', label: 'Caisses Communes', reqPerms: ['perm_customer_360_basic'] },
+        { id: 'tontines', label: 'Tontines', reqPerms: ['perm_customer_360_basic'] }
       ]
     },
     {
-      id: 'transactions', label: 'TRANSACTIONS & FINANCE', icon: <Activity size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
-      items: [{ id: 'ledger', label: 'Grand Livre (Ledger)' }]
-    },
-    {
-      id: 'tresorerie', label: 'TRÉSORERIE', icon: <Banknote size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
-      items: [{ id: 'treasury', label: 'Réserve & Liquidités du Siège' }]
-    },
-    {
-      id: 'risque', label: 'RISQUE & CONFORMITÉ', icon: <ShieldAlert size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
+      id: 'ops-agence', label: 'GUICHET & AGENCE', icon: <Store size={18} />,
+      reqPerms: ['perm_branch_view', 'perm_cash_session_open', 'perm_cash_in', 'perm_cash_out'],
       items: [
-        { id: 'kyc', label: 'Dossiers KYC / AML' }
+        { id: 'branch-dash', label: 'Supervision Agence', reqPerms: ['perm_branch_view'] },
+        { id: 'teller-terminal', label: 'Opérations Guichet (Caisse)', reqPerms: ['perm_cash_session_open', 'perm_cash_in', 'perm_cash_out'] }
       ]
     },
     {
-      id: 'litiges', label: 'LITIGES', icon: <MessageSquare size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
-      items: [{ id: 'reclamations', label: 'Support & Réclamations' }]
+      id: 'transactions', label: 'TRANSACTIONS & FINANCE', icon: <Activity size={18} />,
+      reqPerms: ['perm_transaction_view'],
+      items: [{ id: 'ledger', label: 'Grand Livre (Ledger)', reqPerms: ['perm_transaction_view'] }]
     },
     {
-      id: 'platform', label: 'PARAMÈTRES SYSTÈME', icon: <SettingsIcon size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
-      items: [{ id: 'settings', label: 'Configuration & API' }]
+      id: 'tresorerie', label: 'TRÉSORERIE', icon: <Banknote size={18} />,
+      reqPerms: ['perm_treasury_view', 'perm_treasury_mint'],
+      items: [{ id: 'treasury', label: 'Réserve & Injection Liquidité', reqPerms: ['perm_treasury_view', 'perm_treasury_mint'] }]
     },
     {
-      id: 'securite', label: 'SÉCURITÉ', icon: <ShieldCheck size={18} />, roles: ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'],
+      id: 'risque', label: 'RISQUE & CONFORMITÉ', icon: <ShieldAlert size={18} />,
+      reqPerms: ['perm_customer_kyc_view', 'perm_customer_kyc_validate', 'perm_customer_flag'],
       items: [
-        { id: 'audit', label: 'Centre d\'Audit' },
-        { id: 'error-logs', label: 'Erreurs Système' }
+        { id: 'kyc', label: 'Dossiers KYC / AML', reqPerms: ['perm_customer_kyc_view', 'perm_customer_kyc_validate'] }
+      ]
+    },
+    {
+      id: 'litiges', label: 'LITIGES & SUPPORT', icon: <MessageSquare size={18} />,
+      reqPerms: ['perm_ticket_view', 'perm_support_note'],
+      items: [{ id: 'reclamations', label: 'Support & Réclamations', reqPerms: ['perm_ticket_view'] }]
+    },
+    {
+      id: 'platform', label: 'PARAMÈTRES SYSTÈME', icon: <SettingsIcon size={18} />,
+      reqPerms: ['perm_system_settings_view'],
+      items: [{ id: 'settings', label: 'Configuration & API', reqPerms: ['perm_system_settings_view'] }]
+    },
+    {
+      id: 'securite', label: 'SÉCURITÉ', icon: <ShieldCheck size={18} />,
+      reqPerms: ['perm_audit_log_view'],
+      items: [
+        { id: 'audit', label: 'Centre d\'Audit', reqPerms: ['perm_audit_log_view'] },
+        { id: 'error-logs', label: 'Erreurs P0 & Exceptions', reqPerms: ['perm_audit_log_view'] }
       ]
     }
   ];
@@ -186,21 +200,9 @@ export default function App() {
     TELLER: 'Caissier'
   };
 
-  const BRANCH_GROUPS: NavGroup[] = [
-    {
-      id: 'ops-agence', label: 'GUICHET & AGENCE', icon: <Store size={18} />, roles: ['TELLER', 'BRANCH_MANAGER', 'SUPER_ADMIN'],
-      items: [
-        { id: 'branch-dash', label: 'Tableau de Bord Agence', roleExclude: ['TELLER'] },
-        { id: 'teller-terminal', label: 'Opérations Guichet' }
-      ].filter(i => !i.roleExclude?.includes(role))
-    }
-  ];
-
-  // Utilisé par le fil d'Ariane pour afficher un intitulé lisible plutôt que l'id technique de l'onglet.
   const TAB_LABELS: Record<string, string> = {
-    'reclamations': 'Support & Réclamations',
-    ...Object.fromEntries(SUPER_ADMIN_GROUPS.flatMap(g => g.items.map(i => [i.id, i.label]))),
-    ...Object.fromEntries(BRANCH_GROUPS.flatMap(g => g.items.map(i => [i.id, i.label])))
+    'users': 'Portraits Client (360)',
+    ...Object.fromEntries(SIDEBAR_GROUPS.flatMap(g => g.items.map(i => [i.id, i.label])))
   };
 
   const toggleGroup = (id: string) => {
@@ -211,41 +213,38 @@ export default function App() {
     setActiveTab(route || tabId);
   };
 
+  // Fonction pour filtrer récursivement les groupes/items que l'Auteur a le droit de voir
+  const getAuthorizedSidebar = () => {
+    return SIDEBAR_GROUPS.map(group => {
+      if (!hasPerm(group.reqPerms)) return null;
+      const validItems = group.items.filter(item => hasPerm(item.reqPerms));
+      if (validItems.length === 0) return null;
+      return { ...group, items: validItems };
+    }).filter(g => g !== null) as NavGroup[];
+  };
+
+  const authorizedGroups = getAuthorizedSidebar();
+
   return (
     <div className="app-container">
-      <div className="sidebar" style={{ width: 300, padding: 0, gap: 0, display: 'flex', flexDirection: 'column' }}>
+      <div className="sidebar" style={{ width: 320, padding: 0, gap: 0, display: 'flex', flexDirection: 'column' }}>
         <div className="sidebar-logo" style={{ padding: '32px 24px' }}>
           <div className="logo-icon">M.</div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <span>Mongain</span>
-            <span style={{ fontSize: 11, color: 'var(--sidebar-text)', fontWeight: 500, letterSpacing: 0.5 }}>PORTAIL D'ADMINISTRATION</span>
+            <span style={{ fontSize: 11, color: 'var(--sidebar-text)', fontWeight: 500, letterSpacing: 0.5 }}>PORTAIL ÉQUIPE & OPÉRATIONS</span>
           </div>
         </div>
 
         <div className="nav-links" style={{ flex: 1, overflowY: 'auto', padding: '0 16px 32px' }}>
 
-          {isSupportRole && (
-            <>
-              <div className={`nav-item ${activeTab === 'reclamations' ? 'active' : ''}`} onClick={() => handleNav('reclamations')} style={{ marginBottom: 4 }}>
-                <MessageSquare size={18} /> Support & Réclamations
-              </div>
-              <div className={`nav-item ${activeTab === 'users' ? 'active' : ''}`} onClick={() => handleNav('users')} style={{ marginBottom: 4 }}>
-                <UsersIcon size={18} /> Base Clients (C-360)
-              </div>
-              <div className={`nav-item ${activeTab === 'vaults' ? 'active' : ''}`} onClick={() => handleNav('vaults')} style={{ marginBottom: 4 }}>
-                <ShieldCheck size={18} /> Caisses Communes
-              </div>
-              <div className={`nav-item ${activeTab === 'tontines' ? 'active' : ''}`} onClick={() => handleNav('tontines')} style={{ marginBottom: 8 }}>
-                <Repeat size={18} /> Tontines
-              </div>
-            </>
+          {/* C-360 et Recherche Rapide : Menu Fixe Accessible si Support ou Permis */}
+          {hasPerm(['perm_customer_360_basic']) && (
+            <div className="nav-divider" style={{ margin: '10px 0 20px', borderTop: '1px solid rgba(255,255,255,0.05)' }}></div>
           )}
 
-          {/* MAIN SUPER ADMIN CONTROLS */}
-          {isSuperAdmin && SUPER_ADMIN_GROUPS.filter(g => g.roles.includes(role)).map(group => (
+          {authorizedGroups.map(group => (
             group.items.length === 1 ? (
-              // Groupe à destination unique : lien direct plutôt qu'un déplier/replier
-              // qui n'aurait servi qu'à cacher un seul écran derrière un clic de plus.
               <div
                 key={group.id}
                 className={`nav-item ${(activeTab === group.items[0].id || activeTab === group.items[0].route) ? 'active' : ''}`}
@@ -291,66 +290,11 @@ export default function App() {
             )
           ))}
 
-          {/* BRANCH OPS CONTROLS */}
-          {isBranchOps && (
-            <>
-              {isSuperAdmin && <div className="nav-divider" style={{ margin: '24px 0' }}></div>}
-              {BRANCH_GROUPS.filter(g => g.roles.includes(role)).map(group => (
-                group.items.length === 1 ? (
-                  // Ex: un TELLER ne voit que "Opérations Guichet" (branch-dash exclu par
-                  // roleExclude) — pas la peine d'imposer un groupe repliable pour un seul lien.
-                  <div
-                    key={group.id}
-                    className={`nav-item ${(activeTab === group.items[0].id || activeTab === group.items[0].route) ? 'active' : ''}`}
-                    onClick={() => handleNav(group.items[0].id, group.items[0].route)}
-                    style={{ marginBottom: 4 }}
-                  >
-                    {group.icon} {group.items[0].label}
-                  </div>
-                ) : (
-                  <div key={group.id} style={{ marginBottom: 4 }}>
-                    <div
-                      onClick={() => toggleGroup(group.id)}
-                      style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '12px 14px', borderRadius: 8, cursor: 'pointer',
-                        color: expandedGroup === group.id ? 'var(--sidebar-text-active)' : 'var(--sidebar-text)',
-                        fontWeight: 600, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5,
-                        background: expandedGroup === group.id ? 'var(--sidebar-hover)' : 'transparent'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ color: expandedGroup === group.id ? 'var(--success)' : 'inherit' }}>{group.icon}</span>
-                        {group.label}
-                      </div>
-                      {expandedGroup === group.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                    </div>
-
-                    {expandedGroup === group.id && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '4px 0 4px 28px' }}>
-                        {group.items.map(item => (
-                          <div
-                            key={item.id}
-                            className={`nav-item ${(activeTab === item.id || activeTab === item.route) ? 'active' : ''}`}
-                            onClick={() => handleNav(item.id, item.route)}
-                            style={{ padding: '8px 12px', fontSize: 13 }}
-                          >
-                            {item.label}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              ))}
-            </>
-          )}
-
         </div>
 
-        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--sidebar-border)' }}>
-          <div className="nav-item" onClick={logout} style={{ color: '#E58D85', margin: 0 }}>
-            <LogOut size={20} /> Déconnexion
+        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--sidebar-border)', background: 'rgba(0,0,0,0.2)' }}>
+          <div className="nav-item" onClick={logout} style={{ color: '#E58D85', margin: 0, justifyContent: 'center', background: 'transparent' }}>
+            <LogOut size={16} /> Déconnexion Manuelle
           </div>
         </div>
       </div>
@@ -358,7 +302,7 @@ export default function App() {
       <div className="main-wrapper">
         <header className="topbar">
           <div className="breadcrumb">
-            <span style={{ color: 'var(--text-muted)' }}>{isBranchOps && !isSuperAdmin ? 'Opérations' : 'Tableau de Bord'}</span>
+            <span style={{ color: 'var(--text-muted)' }}>Workspace</span>
             <span style={{ color: 'var(--border)', margin: '0 8px' }}>/</span>
             <span style={{ color: 'var(--text-primary)', fontWeight: 600, textTransform: 'uppercase', fontSize: 13, letterSpacing: 0.5 }}>
               {TAB_LABELS[activeTab] || activeTab.replace(/-/g, ' ')}
@@ -366,13 +310,13 @@ export default function App() {
           </div>
 
           <div className="topbar-right">
-            {(isSuperAdmin || isSupportRole) && (
+            {hasPerm(['perm_customer_360_basic', 'perm_customer_view']) && (
               <GlobalSearch token={token} onNavigate={(tab, id) => { setActiveTab(tab); setSearchTarget({ tab, id }); }} />
             )}
             <div className="topbar-user">
               <div className="avatar">{userName.charAt(0).toUpperCase()}</div>
               <div>
-                <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{userName}</div>
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14 }}>{userName}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }} title={phone}>{ROLE_LABELS[role] || role}</div>
               </div>
             </div>
@@ -380,34 +324,37 @@ export default function App() {
         </header>
 
         <main className="content-area">
-          {activeTab === 'branch-dash' && isBranchOps && <BranchDashboard token={token} staffId={staffId} onNavigateToTreasury={isSuperAdmin ? () => setActiveTab('treasury') : undefined} />}
-          {activeTab === 'teller-terminal' && isBranchOps && <TellerTerminal token={token} userName={userName} />}
+          {/* PROTECTED ROUTES RENDERING (View gates based on explicitly validated permissions) */}
+          {activeTab === 'dashboard' && hasPerm(['perm_analytics_view']) && <Dashboard />}
+          {activeTab === 'macro-stats' && hasPerm(['perm_analytics_view']) && <MacroStats token={token} />}
+          {activeTab === 'accounts' && hasPerm(['perm_customer_view', 'perm_staff_view']) && <Accounts token={token} role={role} onAdjustSystemAccount={(walletId, name) => { setAdjustTarget({ walletId, name }); setActiveTab('treasury'); }} />}
 
-          {(isSuperAdmin || isSupportRole) && activeTab === 'users' && <Users token={token} staffRole={role} initialSelectedUserId={searchTarget?.tab === 'users' ? searchTarget.id : undefined} />}
-          {(isSuperAdmin || isSupportRole) && activeTab === 'reclamations' && <SupportCenter token={token} role={role} />}
-          {/* Caisses Communes / Tontines : accessibles à SUPPORT_MAKER côté nav et backend
-              (VAULT_VIEW_ROLES / TONTINE_VIEW_ROLES) — rendu hors du bloc isSuperAdmin,
-              qui exclut ce rôle, sans quoi le lien restait mort (page vide) pour lui. */}
-          {(isSuperAdmin || isSupportRole) && activeTab === 'vaults' && <Vaults token={token} initialSelectedId={searchTarget?.tab === 'vaults' ? searchTarget.id : undefined} />}
-          {(isSuperAdmin || isSupportRole) && activeTab === 'tontines' && <Tontines token={token} initialSelectedId={searchTarget?.tab === 'tontines' ? searchTarget.id : undefined} />}
+          {/* Les sous-pages Customer 360 se branchent ici. users est activé par accounts ou global search */}
+          {activeTab === 'users' && hasPerm(['perm_customer_360_basic', 'perm_customer_view']) && <Users token={token} staffRole={role} initialSelectedUserId={searchTarget?.tab === 'users' ? searchTarget.id : undefined} />}
+          {activeTab === 'vaults' && hasPerm(['perm_customer_360_basic']) && <Vaults token={token} initialSelectedId={searchTarget?.tab === 'vaults' ? searchTarget.id : undefined} />}
+          {activeTab === 'tontines' && hasPerm(['perm_customer_360_basic']) && <Tontines token={token} initialSelectedId={searchTarget?.tab === 'tontines' ? searchTarget.id : undefined} />}
 
-          {isSuperAdmin && (
-            <>
-              {activeTab === 'dashboard' && <Dashboard />}
-              {activeTab === 'macro-stats' && <MacroStats token={token} />}
-              {activeTab === 'accounts' && <Accounts token={token} role={role} onAdjustSystemAccount={(walletId, name) => { setAdjustTarget({ walletId, name }); setActiveTab('treasury'); }} />}
-              {activeTab === 'kyc' && <KycMod token={token} />}
-              {activeTab === 'ledger' && <Ledger token={token} />}
-              {activeTab === 'treasury' && <Treasury token={token} prefillAdjustTarget={adjustTarget} />}
-              {activeTab === 'audit' && <AuditLogs token={token} />}
-              {activeTab === 'error-logs' && <ErrorLogs token={token} />}
-              {activeTab === 'settings' && <Settings token={token} />}
-            </>
-          )}
+          {activeTab === 'reclamations' && hasPerm(['perm_ticket_view']) && <SupportCenter token={token} role={role} />}
+          {activeTab === 'branch-dash' && hasPerm(['perm_branch_view']) && <BranchDashboard token={token} staffId={staffId} onNavigateToTreasury={hasPerm(['perm_treasury_view']) ? () => setActiveTab('treasury') : undefined} />}
+          {activeTab === 'teller-terminal' && hasPerm(['perm_cash_session_open', 'perm_cash_in', 'perm_cash_out']) && <TellerTerminal token={token} userName={userName} />}
+
+          {activeTab === 'kyc' && hasPerm(['perm_customer_kyc_view', 'perm_customer_kyc_validate']) && <KycMod token={token} />}
+          {activeTab === 'ledger' && hasPerm(['perm_transaction_view']) && <Ledger token={token} />}
+          {activeTab === 'treasury' && hasPerm(['perm_treasury_view', 'perm_treasury_mint']) && <Treasury token={token} prefillAdjustTarget={adjustTarget} />}
+          {activeTab === 'audit' && hasPerm(['perm_audit_log_view']) && <AuditLogs token={token} />}
+          {activeTab === 'error-logs' && hasPerm(['perm_audit_log_view']) && <ErrorLogs token={token} />}
+          {activeTab === 'settings' && hasPerm(['perm_system_settings_view']) && <Settings token={token} />}
+
+          {/* FALLBACK IF NOT AUTHORIZED TO VIEW TAB */}
+          {![
+            'dashboard', 'macro-stats', 'accounts', 'users', 'vaults', 'tontines',
+            'reclamations', 'branch-dash', 'teller-terminal', 'kyc', 'ledger',
+            'treasury', 'audit', 'error-logs', 'settings'
+          ].includes(activeTab) && (
+              <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Configuration demandée non disponible avec vos droits d'accès.</div>
+            )}
         </main>
       </div>
     </div>
   );
 }
-
-
