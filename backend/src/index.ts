@@ -13,6 +13,7 @@ import authRoutes from './routes/auth';
 import corpRoutes from './routes/corp';
 import merchantRoutes from './routes/merchant';
 import notificationRoutes from './routes/notifications';
+import rbacRoutes from './routes/rbac';
 import servicesRoutes from './routes/services';
 import settingsRoutes from './routes/settings';
 import tontineRoutes from './routes/tontine';
