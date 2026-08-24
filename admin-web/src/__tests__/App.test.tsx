@@ -36,7 +36,7 @@ vi.mock('../Users', () => ({ default: () => <div>Users Mock</div> }));
 vi.mock('../Vaults', () => ({ default: () => <div>Vaults Mock</div> }));
 
 function setupFetch(impl?: (url: string, opts?: any) => Promise<any>) {
-    const fn = vi.fn(impl || ((url) => {
+    const fn = vi.fn(impl || (() => {
         const isTeller = localStorage.getItem('admin_role') === 'TELLER';
         const perms = isTeller ? ['perm_cash_session_open', 'perm_cash_in', 'perm_cash_out'] : ['perm_analytics_view', 'perm_staff_view', 'perm_branch_manage'];
         return Promise.resolve({ ok: true, status: 200, json: async () => ({ mustChangePassword: false, permissions: perms }) });
