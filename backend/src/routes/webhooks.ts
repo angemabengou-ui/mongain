@@ -99,13 +99,27 @@ router.post('/pvit-status', async (req, res) => {
                             });
                         }
                     } else if (transaction.type === 'CASH_OUT') {
-                        // Remboursement de l'argent car le retrait a échoué
+                        // Remboursement de l'argent car le retrait a échoué. La Passerelle avait
+                        // été créditée de `amount` à l'initiation (wallet.ts, POST /push) en
+                        // contrepartie du débit client — sans cette reprise symétrique, l'échec
+                        // remboursait le client SANS jamais reprendre ce crédit passerelle : le
+                        // montant existait alors deux fois (chez le client ET dans la Passerelle),
+                        // de l'argent électronique créé à partir de rien à chaque retrait Mobile
+                        // Money échoué.
+                        const gatewayDebit = await tx.wallet.updateMany({
+                            where: { id: transaction.receiverWalletId, balance: { gte: transaction.amount } },
+                            data: { balance: { decrement: transaction.amount } }
+                        });
+                        if (gatewayDebit.count === 0) {
+                            throw new Error(`Reprise du crédit Passerelle impossible pour ${transaction.reference} (solde insuffisant) — remboursement client annulé, à réessayer.`);
+                        }
+
                         const wallet = await tx.wallet.update({
                             where: { id: transaction.senderWalletId! },
                             data: { balance: { increment: transaction.amount } },
                             include: { user: true }
                         });
-                        // Remarques de fraude/sécurité : les frais ne sont pas remboursés 
+                        // Remarques de fraude/sécurité : les frais ne sont pas remboursés
                         // pour l'instant (complexité).
                         if (wallet.user) {
                             await tx.notification.create({

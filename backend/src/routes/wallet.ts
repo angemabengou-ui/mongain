@@ -815,6 +815,12 @@ router.post('/recharge', authMiddleware, async (req: AuthRequest, res) => {
                 senderWalletId: gateway.wallet.id,
                 receiverWalletId: user.wallet.id,
                 status: 'PENDING',
+                // `type` manquant ici faisait retomber sur le défaut Prisma ("TRANSFER") :
+                // le webhook PVit (routes/webhooks.ts) ne crédite le wallet que pour
+                // `type === 'CASH_IN'`, donc un SUCCESS confirmé par PVit marquait quand
+                // même la transaction COMPLETED sans jamais créditer le client — de
+                // l'argent réellement prélevé (Airtel/Moov) mais jamais reçu côté Mongain.
+                type: 'CASH_IN',
                 reference: ref
             }
         });
@@ -1112,11 +1118,16 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
             });
         }
 
+        let senderWalletId = '';
+        let corporateWalletId: string | null = null;
+        let transactionId = '';
+
         await prisma.$transaction(async (tx) => {
             const user = await tx.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
             if (!user || user.wallet!.balance < totalRequired) {
                 throw new Error(`Solde insuffisant pour le montant et les ${fee} FCFA de frais de retrait.`);
             }
+            senderWalletId = user.wallet!.id;
 
             // Anti-blanchiment
             await LimitEngine.verifyAndIncrementConsumption(tx, user.id, user.wallet!.id, amount, settings);
@@ -1143,6 +1154,7 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
             // même transaction (crédit du solde, puis à nouveau pour la ligne Transaction de
             // traçabilité des frais juste en dessous) alors que rien ne change entre les deux.
             const corporate = fee > 0 ? await getOrCreateCorporateWallet(tx) : null;
+            if (corporate) corporateWalletId = corporate.wallet.id;
 
             if (fee > 0 && corporate) {
                 await tx.wallet.update({
@@ -1161,6 +1173,7 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
                     reference,
                 }
             });
+            transactionId = transaction.id;
 
             if (fee > 0 && corporate) {
                 await tx.transaction.create({
@@ -1176,7 +1189,40 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
         });
 
         // 3. Demande Ã  PVit d'exÃ©cuter le virement (Transfert)
-        const response = await initiatePvitTransfer(settings, { amount, reference, customerAccountNumber, network });
+        try {
+            await initiatePvitTransfer(settings, { amount, reference, customerAccountNumber, network });
+        } catch (pvitError: any) {
+            // PVit a refusé/n'a jamais reçu la demande — différent d'un statut FAILED transmis
+            // plus tard par webhook (routes/webhooks.ts) : ici, aucun webhook ne viendra
+            // jamais, puisque PVit n'a rien accepté à confirmer. Sans cette reprise, le
+            // pré-débit ci-dessus restait définitif alors que le client voit une erreur lui
+            // disant que le retrait a échoué — de l'argent perdu sans aucun chemin de recours.
+            await prisma.$transaction(async (tx) => {
+                const claim = await tx.transaction.updateMany({
+                    where: { id: transactionId, status: 'PENDING' },
+                    data: { status: 'FAILED' }
+                });
+                // count===0 : un webhook est arrivé entre-temps et a déjà traité ce cas
+                // (rarissime vu que PVit n'a rien accepté, mais on ne reprend jamais deux fois).
+                if (claim.count === 0) return;
+
+                await tx.wallet.update({
+                    where: { id: gateway!.wallet!.id },
+                    data: { balance: { decrement: amount } }
+                });
+                if (corporateWalletId && fee > 0) {
+                    await tx.wallet.update({
+                        where: { id: corporateWalletId },
+                        data: { balance: { decrement: fee } }
+                    });
+                }
+                await tx.wallet.update({
+                    where: { id: senderWalletId },
+                    data: { balance: { increment: totalRequired } }
+                });
+            });
+            throw pvitError;
+        }
 
         return res.json({
             message: 'Votre demande de retrait est initiÃ©e. Vous allez le recevoir dans quelques instants.',

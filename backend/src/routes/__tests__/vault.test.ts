@@ -36,7 +36,8 @@ jest.mock('../../prisma', () => ({
         vaultTransaction: {
             create: jest.fn(),
             findUnique: jest.fn(),
-            update: jest.fn()
+            update: jest.fn(),
+            updateMany: jest.fn()
         },
         vaultApproval: {
             create: jest.fn()
@@ -710,20 +711,57 @@ describe('Vault Routes', () => {
             (prisma.vaultMember.findMany as jest.Mock).mockResolvedValue([
                 { userId: 'test_user_id', isValidator: true, isRequiredValidator: false }
             ]);
+            (prisma.vaultTransaction.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
             (prisma.vault.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
             (prisma.wallet.findUnique as jest.Mock).mockResolvedValue({ id: 'w_dest', balance: 0 });
             (prisma.wallet.update as jest.Mock).mockResolvedValue({});
             (prisma.notification.create as jest.Mock).mockResolvedValue({});
-            (prisma.vaultTransaction.update as jest.Mock).mockResolvedValue({ id: 'tx1', status: 'COMPLETED' });
 
             const res = await request(app).post('/vault/v1/approve/tx1');
 
             expect(res.status).toBe(200);
             expect(res.body.data.executed).toBe(true);
+            // Réclamation atomique du statut AVANT le débit — empêche un second validateur
+            // concurrent d'exécuter le même retrait une deuxième fois.
+            expect(prisma.vaultTransaction.updateMany).toHaveBeenCalledWith({
+                where: { id: 'tx1', status: 'PENDING' },
+                data: { status: 'COMPLETED' }
+            });
             expect(prisma.wallet.update).toHaveBeenCalledWith({
                 where: { id: 'w_dest' },
                 data: { balance: { increment: 100 } }
             });
+        });
+
+        it('devrait refuser l\'exécution si un autre validateur a déjà réclamé ce retrait (course concurrente)', async () => {
+            (prisma.vaultMember.findUnique as jest.Mock).mockResolvedValue({ isValidator: true });
+            (prisma.vaultTransaction.findUnique as jest.Mock).mockResolvedValue({
+                id: 'tx1',
+                status: 'PENDING',
+                approvals: [],
+                vaultId: 'v1',
+                amount: 100,
+                requestedById: 'requester1',
+                destinationType: 'TRANSFER',
+                destinationId: 'dest1',
+                vault: { requiredApprovals: 1, name: 'Caisse A' }
+            });
+            (prisma.vaultApproval.create as jest.Mock).mockResolvedValue({});
+            (prisma.vaultMember.findMany as jest.Mock).mockResolvedValue([
+                { userId: 'test_user_id', isValidator: true, isRequiredValidator: false }
+            ]);
+            // Un validateur concurrent a déjà fait basculer le statut entre notre lecture et
+            // notre tentative de réclamation.
+            (prisma.vaultTransaction.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+
+            const res = await request(app).post('/vault/v1/approve/tx1');
+
+            expect(res.status).toBe(400);
+            expect(res.body.message).toContain('autre validateur');
+            // Aucun mouvement de fonds ne doit avoir été tenté : la réclamation a échoué
+            // avant le débit de la caisse.
+            expect(prisma.vault.updateMany).not.toHaveBeenCalled();
+            expect(prisma.wallet.update).not.toHaveBeenCalled();
         });
 
         it('devrait créer un bon de retrait (voucher) pour une destination VOUCHER', async () => {
@@ -742,10 +780,10 @@ describe('Vault Routes', () => {
             (prisma.vaultMember.findMany as jest.Mock).mockResolvedValue([
                 { userId: 'test_user_id', isValidator: true, isRequiredValidator: false }
             ]);
+            (prisma.vaultTransaction.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
             (prisma.vault.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
             (prisma.vaultVoucher.create as jest.Mock).mockResolvedValue({ id: 'voucher1' });
             (prisma.notification.create as jest.Mock).mockResolvedValue({});
-            (prisma.vaultTransaction.update as jest.Mock).mockResolvedValue({ id: 'tx1', status: 'COMPLETED' });
 
             const res = await request(app).post('/vault/v1/approve/tx1');
 
@@ -771,6 +809,7 @@ describe('Vault Routes', () => {
             (prisma.vaultMember.findMany as jest.Mock).mockResolvedValue([
                 { userId: 'test_user_id', isValidator: true, isRequiredValidator: false }
             ]);
+            (prisma.vaultTransaction.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
             (prisma.vault.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
 
             const res = await request(app).post('/vault/v1/approve/tx1');
@@ -796,6 +835,7 @@ describe('Vault Routes', () => {
             (prisma.vaultMember.findMany as jest.Mock).mockResolvedValue([
                 { userId: 'test_user_id', isValidator: true, isRequiredValidator: false }
             ]);
+            (prisma.vaultTransaction.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
             (prisma.vault.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
             (prisma.wallet.findUnique as jest.Mock).mockResolvedValue(null);
 

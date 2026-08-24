@@ -26,7 +26,7 @@ app.use('/webhooks', webhooksRoutes);
 
 const buildTxMock = () => ({
     transaction: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
-    wallet: { update: jest.fn(), findUnique: jest.fn() },
+    wallet: { update: jest.fn(), findUnique: jest.fn(), updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     notification: { create: jest.fn() },
 });
 
@@ -169,9 +169,9 @@ describe('Webhooks Routes', () => {
             }));
         });
 
-        it('devrait rembourser le client pour un CASH_OUT échoué et notifier', async () => {
+        it('devrait rembourser le client ET reprendre le crédit Passerelle pour un CASH_OUT échoué', async () => {
             (prisma.transaction.findUnique as jest.Mock).mockResolvedValue({
-                id: 'tx1', status: 'PENDING', type: 'CASH_OUT', senderWalletId: 'w_sender', amount: 7000,
+                id: 'tx1', status: 'PENDING', type: 'CASH_OUT', senderWalletId: 'w_sender', receiverWalletId: 'w_gateway', amount: 7000,
             });
             txMock.wallet.update.mockResolvedValue({ id: 'w_sender', user: { id: 'user_4' } });
 
@@ -181,6 +181,13 @@ describe('Webhooks Routes', () => {
                 .send({ transactionId: 'tid1', merchantReferenceId: 'REF-4', status: 'FAILED', code: '01' });
 
             expect(res.status).toBe(200);
+            // La Passerelle avait été créditée à l'initiation (wallet.ts POST /push) : sans
+            // cette reprise, le montant existerait deux fois (client remboursé + Passerelle
+            // jamais débitée) — de l'argent électronique créé à partir de rien.
+            expect(txMock.wallet.updateMany).toHaveBeenCalledWith({
+                where: { id: 'w_gateway', balance: { gte: 7000 } },
+                data: { balance: { decrement: 7000 } },
+            });
             expect(txMock.wallet.update).toHaveBeenCalledWith(expect.objectContaining({
                 where: { id: 'w_sender' },
                 data: { balance: { increment: 7000 } },
@@ -188,6 +195,24 @@ describe('Webhooks Routes', () => {
             expect(txMock.notification.create).toHaveBeenCalledWith(expect.objectContaining({
                 data: expect.objectContaining({ userId: 'user_4', title: 'Retrait échoué' }),
             }));
+        });
+
+        it('ne devrait PAS rembourser le client si la reprise du crédit Passerelle échoue (solde insuffisant)', async () => {
+            (prisma.transaction.findUnique as jest.Mock).mockResolvedValue({
+                id: 'tx1', status: 'PENDING', type: 'CASH_OUT', senderWalletId: 'w_sender', receiverWalletId: 'w_gateway', amount: 7000,
+            });
+            txMock.wallet.updateMany.mockResolvedValue({ count: 0 });
+
+            const res = await request(app)
+                .post('/webhooks/pvit-status')
+                .query({ key: 'secret123' })
+                .send({ transactionId: 'tid1', merchantReferenceId: 'REF-4', status: 'FAILED', code: '01' });
+
+            // La route accuse quand même réception (contrat PVit), mais la transaction interne
+            // a échoué : le remboursement client ne doit jamais avoir été appliqué.
+            expect(res.status).toBe(200);
+            expect(txMock.wallet.update).not.toHaveBeenCalled();
+            expect(logError).toHaveBeenCalled();
         });
 
         it('devrait quand même accuser réception et journaliser en cas d\'exception interne', async () => {

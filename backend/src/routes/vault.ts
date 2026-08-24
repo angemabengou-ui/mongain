@@ -533,9 +533,22 @@ router.post('/:id/approve/:txId', authMiddleware, async (req: AuthRequest, res) 
             const missingRequiredValidators = requiredValidatorIds.filter(id => !approvedUserIds.includes(id));
 
             if (currentApprovalsCount >= requiredApprovals && missingRequiredValidators.length === 0) {
-                // Débit Caisse — garde atomique (balance: gte) : deux demandes de retrait
-                // approuvées au même moment pouvaient toutes deux passer ce point et faire
-                // passer le solde de la caisse en négatif.
+                // Réclamation atomique AVANT tout mouvement de fonds (même pattern que
+                // Treasury et le CRON Tontine) : sans elle, deux validateurs donnant la
+                // dernière approbation requise en même temps lisent chacun le même instantané
+                // non verrouillé de `vaultTx.approvals`, concluent chacun indépendamment que
+                // le quorum est atteint, et exécutaient CHACUN le retrait — double débit de
+                // la caisse et double crédit du destinataire tant que le solde suffisait à
+                // couvrir les deux passages (la garde `balance: gte` juste en dessous
+                // empêche seulement de passer sous zéro, pas la double exécution).
+                const claim = await tx.vaultTransaction.updateMany({
+                    where: { id: txId, status: 'PENDING' },
+                    data: { status: 'COMPLETED' }
+                });
+                if (claim.count === 0) throw new Error("Ce retrait vient d'être traité par un autre validateur.");
+
+                // Débit Caisse — garde atomique (balance: gte) : empêche le solde de la
+                // caisse de passer en négatif si le solde ne couvre plus ce retrait.
                 const debited = await tx.vault.updateMany({
                     where: { id: vaultTx.vaultId, balance: { gte: vaultTx.amount } },
                     data: { balance: { decrement: vaultTx.amount } }
@@ -602,11 +615,10 @@ router.post('/:id/approve/:txId', authMiddleware, async (req: AuthRequest, res) 
                     });
                 }
 
-                // Update Transaction
-                const updatedTx = await tx.vaultTransaction.update({
-                    where: { id: txId },
-                    data: { status: 'COMPLETED' }
-                });
+                // Statut déjà passé à COMPLETED par la réclamation atomique ci-dessus — pas
+                // besoin d'un second UPDATE, la ligne renvoyée en réponse est reconstruite
+                // localement plutôt que relue.
+                const updatedTx = { ...vaultTx, status: 'COMPLETED' as const };
 
                 // Le Secrétaire qui a initié la demande n'a autrement aucun moyen d'être
                 // averti que son retrait est passé, hormis rouvrir la caisse manuellement.
