@@ -1,4 +1,3 @@
-import { friendlyErrorMessage } from '../utils/errors';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import express from 'express';
@@ -7,6 +6,7 @@ import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { getCentralTreasury } from '../services/centralTreasury';
 import { sendSms } from '../services/sms';
+import { friendlyErrorMessage } from '../utils/errors';
 
 const router = express.Router();
 
@@ -1134,7 +1134,7 @@ router.get('/staff', authMiddleware, async (req: AuthRequest, res) => {
                 // status==='PENDING' pour distinguer sa file d'attente, donc c'était
                 // systématiquement vide côté client (toujours undefined !== 'PENDING'), et
                 // le matricule s'affichait toujours "N/A" quelle que soit la vraie valeur.
-                select: { id: true, email: true, name: true, role: true, isActive: true, status: true, matricule: true, branchId: true, branch: true, createdAt: true },
+                select: { id: true, email: true, name: true, role: true, isActive: true, status: true, matricule: true, branchId: true, branch: true, createdAt: true, permissionsCustomized: true },
                 orderBy: { [sortField]: sortOrder },
                 skip, take: limit
             }),
@@ -2934,7 +2934,8 @@ router.post('/api-integrations', authMiddleware, async (req: AuthRequest, res) =
                 integrationId: integration.id,
                 action: 'GENERATE',
                 actorId: staff.id,
-                ipAddress: req.ip ? String(req.ip) : null }
+                ipAddress: req.ip ? String(req.ip) : null
+            }
         });
 
         await prisma.auditLog.create({

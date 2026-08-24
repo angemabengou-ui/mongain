@@ -9,7 +9,7 @@
  */
 import { PrismaClient } from '@prisma/client';
 import { Router } from 'express';
-import { authCorp } from '../middleware/auth';
+import { authMiddleware } from '../middleware/auth';
 import { ALL_PERMISSIONS, getEffectivePermissions, PERMISSION_GROUPS, ROLE_DEFAULT_PERMISSIONS } from '../services/RBAC';
 
 const router = Router();
@@ -23,7 +23,7 @@ function superAdminOnly(req: any, res: any, next: any) {
     next();
 }
 
-// ── Loading staff avec son rôle depuis req.userId ─────────────────────────
+// ── Charge le profil staff depuis req.userId (positionné par authMiddleware) ──
 async function loadStaffMiddleware(req: any, _res: any, next: any) {
     try {
         const staff = await prisma.staff.findUnique({
@@ -41,7 +41,7 @@ async function loadStaffMiddleware(req: any, _res: any, next: any) {
  * GET /api/admin/rbac/me
  * Retourne les permissions de l'employé connecté (utilisé par le frontend pour adapter l'UI).
  */
-router.get('/rbac/me', authCorp, loadStaffMiddleware, async (req: any, res: any) => {
+router.get('/rbac/me', authMiddleware, loadStaffMiddleware, async (req: any, res: any) => {
     try {
         if (!req.staff) return res.status(404).json({ error: 'Profil introuvable.' });
         const effective = Array.from(getEffectivePermissions(req.staff));
@@ -55,7 +55,7 @@ router.get('/rbac/me', authCorp, loadStaffMiddleware, async (req: any, res: any)
  * GET /api/admin/staff/:staffId/permissions
  * Retourne les permissions effectives d'un employé + la liste des groupes pour affichage UI.
  */
-router.get('/staff/:staffId/permissions', authCorp, loadStaffMiddleware, superAdminOnly, async (req: any, res: any) => {
+router.get('/staff/:staffId/permissions', authMiddleware, loadStaffMiddleware, superAdminOnly, async (req: any, res: any) => {
     try {
         const staff = await prisma.staff.findUnique({
             where: { id: req.params.staffId },
@@ -86,7 +86,7 @@ router.get('/staff/:staffId/permissions', authCorp, loadStaffMiddleware, superAd
  * Définit des permissions personnalisées pour un employé.
  * Body: { permissions: string[] }
  */
-router.put('/staff/:staffId/permissions', authCorp, loadStaffMiddleware, superAdminOnly, async (req: any, res: any) => {
+router.put('/staff/:staffId/permissions', authMiddleware, loadStaffMiddleware, superAdminOnly, async (req: any, res: any) => {
     try {
         const { permissions } = req.body;
         if (!Array.isArray(permissions)) return res.status(400).json({ error: '`permissions` doit être un tableau.' });
@@ -110,7 +110,7 @@ router.put('/staff/:staffId/permissions', authCorp, loadStaffMiddleware, superAd
  * DELETE /api/admin/staff/:staffId/permissions
  * Réinitialise les permissions aux défauts du rôle.
  */
-router.delete('/staff/:staffId/permissions', authCorp, loadStaffMiddleware, superAdminOnly, async (req: any, res: any) => {
+router.delete('/staff/:staffId/permissions', authMiddleware, loadStaffMiddleware, superAdminOnly, async (req: any, res: any) => {
     try {
         const staff = await (prisma.staff as any).update({
             where: { id: req.params.staffId },
