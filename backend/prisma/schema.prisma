@@ -501,6 +501,12 @@ model Staff {
   name     String
   role     String // SUPER_ADMIN, RISK, COMPLIANCE_CHECKER, SUPPORT_MAKER, BRANCH_MANAGER, TELLER
 
+  // RBAC: liste granulaire des permissions accordées à cet employé.
+  // Si null → les droits sont hérités du rôle par défaut (voir RBAC.ts).
+  // Si renseigné → les droits du rôle sont ignorés, on utilise cette liste personnalisée.
+  permissions            Json?    // string[] — ex: ["perm_customer_kyc_view", "perm_cash_session_open"]
+  permissionsCustomized  Boolean  @default(false) // true si un SUPER_ADMIN a configuré des droits personnalisés
+
   // Bank-Grade Corporate Identity
   matricule      String? @unique
   cni            String?

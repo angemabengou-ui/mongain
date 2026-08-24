@@ -81,6 +81,7 @@ import webhookRoutes from './routes/webhooks';
 // ==========================================
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin', rbacRoutes); // RBAC: /api/admin/staff/:id/permissions & /api/admin/rbac/me
 app.use('/api/settings', settingsRoutes);
 app.use('/api/treasury', treasuryRoutes);
 app.use('/api/notifications', notificationRoutes);

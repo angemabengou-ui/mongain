@@ -6,8 +6,8 @@ import {
     Ticket, TrendingUp, Unlock, User, Wallet, XCircle
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { API_URL } from './config';
 import ImageLightbox from './components/ImageLightbox';
+import { API_URL } from './config';
 
 const fmt = (n: number) => n?.toLocaleString('fr-FR') + ' FCFA';
 const fmtDate = (d: string) => d ? new Date(d).toLocaleString('fr-FR') : '—';
@@ -115,7 +115,18 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
     const [supportRecId, setSupportRecId] = useState('');
     const [ticketStatusForm, setTicketStatusForm] = useState<{ recId: string; status: string; comment: string } | null>(null);
 
+    // Données financières sensibles (solde wallet, email, etc.) — réservées au back-office.
     const isSensitive = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER'].includes(staffRole || '');
+
+    // Photos KYC (CNI/selfie) — tout le personnel opérationnel doit pouvoir vérifier
+    // l'identité d'un client qui se présente physiquement en agence au guichet.
+    // Avant cette correction, TELLER et BRANCH_MANAGER ne pouvaient pas ouvrir les images.
+    const canViewKyc = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER',
+        'BRANCH_MANAGER', 'TELLER'].includes(staffRole || '');
+
+    // Validation KYC (approuver/rejeter) — back-office seulement.
+    const canValidateKyc = ['SUPER_ADMIN', 'COMPLIANCE_CHECKER', 'BRANCH_MANAGER'].includes(staffRole || '');
+
     const isRisk = ['SUPER_ADMIN', 'RISK'].includes(staffRole || '');
 
     const api = async (path: string, method = 'GET', body?: any) => {
@@ -445,7 +456,7 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
                 {[
                     ['Compte (MONG-ID RIB)', user?.accountNumber ? user.accountNumber.replace(/(.{5})(.{5})(.{11})(.{2})/, '$1 $2 $3 $4') : 'Non généré'],
-                    ['ID Technique', user?.id?.substring(0,8)],
+                    ['ID Technique', user?.id?.substring(0, 8)],
                     ['Nom complet', user?.name],
                     ['Téléphone', user?.phone],
                     ['Pseudo', user?.username || '—'],
@@ -474,7 +485,7 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
                 ['Statut KYC', user?.kycStatus],
             ].map(([l, v]) => <div key={l as string}><span style={labelStyle}>{l}</span><strong>{v}</strong></div>)}
         </div>
-        {isSensitive && user?.idCardFront && (
+        {canViewKyc && user?.idCardFront && (
             <div style={{ marginBottom: 24 }}>
                 {sectionTitle('Documents soumis')}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
@@ -491,7 +502,7 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
                 </div>
             </div>
         )}
-        {isSensitive && user?.kycStatus === 'PENDING' && (
+        {canValidateKyc && user?.kycStatus === 'PENDING' && (
             <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>
                 {sectionTitle('Décision KYC')}
                 <div style={{ marginBottom: 12 }}>
