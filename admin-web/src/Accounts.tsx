@@ -50,7 +50,7 @@ export default function Accounts({ token, role, onAdjustSystemAccount }: { token
 
             {tab === 'clients' && <Users token={token} staffRole={role} />}
             {tab === 'agents' && <Users token={token} staffRole={role} lockedRole="AGENT" />}
-            {tab === 'branches' && <AgencyCenter token={token} role={role} />}
+            {tab === 'branches' && <AgencyCenter token={token} role={role || ''} />}
             {tab === 'system' && <SystemAccounts token={token} onAdjust={onAdjustSystemAccount} />}
 
             {tab === 'staff' && (
