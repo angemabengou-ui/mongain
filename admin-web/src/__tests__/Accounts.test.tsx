@@ -19,10 +19,12 @@ vi.mock('../StaffCreate', () => ({ default: () => <div>StaffCreate Mock</div> })
 vi.mock('../StaffAccessRights', () => ({ default: () => <div>StaffAccessRights Mock</div> }));
 
 describe('Accounts (hub)', () => {
-    it('affiche les Clients & Marchands par défaut', () => {
+    it('affiche les Clients & Marchands par défaut, sans dupliquer de titre de page', () => {
+        // Chaque onglet embarque déjà son propre PageHeader (ex: "Comptes Clients &
+        // Marchands (C-360)" dans Users.tsx) — le hub n'en ajoute pas un second par-dessus.
         render(<Accounts token="tok" role="SUPER_ADMIN" />);
 
-        expect(screen.getByText('Gestion des Comptes')).toBeInTheDocument();
+        expect(screen.queryByText('Gestion des Comptes')).not.toBeInTheDocument();
         expect(screen.getByText('Users Mock')).toBeInTheDocument();
     });
 

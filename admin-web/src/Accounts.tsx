@@ -1,7 +1,6 @@
 import { Briefcase, Building2, Server, ShieldCheck, Users as UsersIcon } from 'lucide-react';
 import { useState } from 'react';
 import AgencyCenter from './AgencyCenter';
-import PageHeader from './components/PageHeader';
 import TabBar from './components/TabBar';
 import StaffAccessRights from './StaffAccessRights';
 import StaffAssignBranch from './StaffAssignBranch';
@@ -42,10 +41,10 @@ export default function Accounts({ token, role, onAdjustSystemAccount }: { token
 
     return (
         <div>
-            <div style={{ marginBottom: 20 }}>
-                <PageHeader title="Gestion des Comptes" subtitle="Tous les comptes de la plateforme en un seul endroit — clients, agents, marchands, personnel, agences et comptes système." />
-            </div>
-
+            {/* Pas de PageHeader ici : chaque onglet embarque déjà le sien (ex: Users.tsx
+                "Comptes Clients & Marchands (C-360)") — en ajouter un ici ne faisait que
+                superposer deux gros titres et rendre l'écran touffu. La barre du haut
+                (fil d'Ariane) suffit à situer "où on est" ; cette TabBar dit "quoi". */}
             <TabBar<AccountsTab> tabs={tabs} active={tab} onChange={setTab} />
 
             {tab === 'clients' && <Users token={token} staffRole={role} />}
