@@ -1,12 +1,17 @@
-import { AlertTriangle, CheckCircle, Download, LogIn, LogOut, RefreshCw, Search, Upload, User, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Download, LogIn, LogOut, RefreshCw, Search, Upload, User, XCircle, ZoomIn } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { API_URL } from './config';
+import ImageLightbox from './components/ImageLightbox';
 
 const fmt = (n: number) => n.toLocaleString('fr-GA') + ' FCFA';
 
 export default function TellerTerminal({ token, userName }: { token: string; userName: string }) {
     const [session, setSession] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    // Vérification d'identité en agence : jusqu'ici, l'identification client (lookup par
+    // téléphone) ne remontait ni ne montrait aucune photo — impossible pour le caissier de
+    // comparer la personne en face de lui à la pièce d'identité au dossier.
+    const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
 
     // Forms & Modals
     const [openForm, setOpenForm] = useState({ initialCash: '' });
@@ -248,7 +253,7 @@ export default function TellerTerminal({ token, userName }: { token: string; use
                                         <div style={{ display: 'flex', gap: 10 }}>
                                             <input placeholder="Numéro de téléphone (+241...)" value={phone} onChange={e => setPhone(e.target.value)} disabled={!!clientInfo} style={{ flex: 1, padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 15 }} />
                                             {!clientInfo ? (
-                                                <button onClick={fetchClient} disabled={clientLoading} style={{ padding: '0 20px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer' }}>
+                                                <button onClick={fetchClient} disabled={clientLoading} aria-label="Identifier le client" style={{ padding: '0 20px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer' }}>
                                                     {clientLoading ? <RefreshCw size={18} className="spin" /> : <Search size={18} />}
                                                 </button>
                                             ) : (
@@ -259,11 +264,28 @@ export default function TellerTerminal({ token, userName }: { token: string; use
                                         </div>
                                         {clientInfo && (
                                             <div style={{ marginTop: 12, padding: 14, borderRadius: 10, background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', gap: 12, border: '1px solid var(--border)' }}>
-                                                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><User size={20} color="var(--text-secondary)" /></div>
-                                                <div>
+                                                {clientInfo.selfie ? (
+                                                    <img
+                                                        src={clientInfo.selfie} alt={`Selfie — ${clientInfo.name}`}
+                                                        onClick={() => setLightbox({ src: clientInfo.selfie, alt: `Selfie — ${clientInfo.name}` })}
+                                                        style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', cursor: 'zoom-in', border: '1px solid var(--border)' }}
+                                                    />
+                                                ) : (
+                                                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><User size={20} color="var(--text-secondary)" /></div>
+                                                )}
+                                                <div style={{ flex: 1 }}>
                                                     <div style={{ fontWeight: 700, fontSize: 15 }}>{clientInfo.name}</div>
                                                     <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{clientInfo.phone} • Rôle: {clientInfo.role}</div>
                                                 </div>
+                                                {(clientInfo.idCardFront || clientInfo.idCardBack) && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setLightbox({ src: clientInfo.idCardFront || clientInfo.idCardBack, alt: `Pièce d'identité — ${clientInfo.name}` })}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}
+                                                    >
+                                                        <ZoomIn size={14} /> Voir la CNI
+                                                    </button>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -387,6 +409,8 @@ export default function TellerTerminal({ token, userName }: { token: string; use
                     </div>
                 </div>
             )}
+
+            {lightbox && <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />}
         </div>
     );
 }

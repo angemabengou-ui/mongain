@@ -1,6 +1,7 @@
 import { Check, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { API_URL } from './config';
+import ImageLightbox from './components/ImageLightbox';
 
 export default function KycMod({ token }: { token: string }) {
     const [tab, setTab] = useState<'PENDING' | 'APPROVED'>('PENDING');
@@ -8,6 +9,7 @@ export default function KycMod({ token }: { token: string }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [search, setSearch] = useState('');
+    const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
 
     const fetchPending = async () => {
         setLoading(true);
@@ -120,7 +122,11 @@ export default function KycMod({ token }: { token: string }) {
                                     <div style={{ position: 'relative' }}>
                                         <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '5px' }}>CNI Recto</p>
                                         {p.idCardFront ? (
-                                            <img src={p.idCardFront} alt="CNI Recto" style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }} />
+                                            <img
+                                                src={p.idCardFront} alt={`CNI Recto — ${p.name}`}
+                                                onClick={() => setLightbox({ src: p.idCardFront, alt: `CNI Recto — ${p.name}` })}
+                                                style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)', cursor: 'zoom-in' }}
+                                            />
                                         ) : (
                                             <div style={{ width: '120px', height: '80px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Manquant</div>
                                         )}
@@ -128,7 +134,11 @@ export default function KycMod({ token }: { token: string }) {
                                     <div style={{ position: 'relative' }}>
                                         <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '5px' }}>CNI Verso</p>
                                         {p.idCardBack ? (
-                                            <img src={p.idCardBack} alt="CNI Verso" style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }} />
+                                            <img
+                                                src={p.idCardBack} alt={`CNI Verso — ${p.name}`}
+                                                onClick={() => setLightbox({ src: p.idCardBack, alt: `CNI Verso — ${p.name}` })}
+                                                style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)', cursor: 'zoom-in' }}
+                                            />
                                         ) : (
                                             <div style={{ width: '120px', height: '80px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Manquant</div>
                                         )}
@@ -136,7 +146,11 @@ export default function KycMod({ token }: { token: string }) {
                                     <div style={{ position: 'relative' }}>
                                         <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '5px' }}>Selfie</p>
                                         {p.selfie ? (
-                                            <img src={p.selfie} alt="Selfie" style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)' }} />
+                                            <img
+                                                src={p.selfie} alt={`Selfie — ${p.name}`}
+                                                onClick={() => setLightbox({ src: p.selfie, alt: `Selfie — ${p.name}` })}
+                                                style={{ width: '120px', height: '80px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--border)', cursor: 'zoom-in' }}
+                                            />
                                         ) : (
                                             <div style={{ width: '120px', height: '80px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>Manquant</div>
                                         )}
@@ -164,6 +178,8 @@ export default function KycMod({ token }: { token: string }) {
                     ))}
                 </div>
             )}
+
+            {lightbox && <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />}
         </div>
     );
 }

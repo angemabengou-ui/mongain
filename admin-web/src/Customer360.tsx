@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { API_URL } from './config';
+import ImageLightbox from './components/ImageLightbox';
 
 const fmt = (n: number) => n?.toLocaleString('fr-FR') + ' FCFA';
 const fmtDate = (d: string) => d ? new Date(d).toLocaleString('fr-FR') : '—';
@@ -78,6 +79,9 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
 
     // KYC reject reason
     const [kycRejectReason, setKycRejectReason] = useState('');
+    // Zoom plein écran d'une photo KYC (CNI/selfie) — vignette 150px trop petite pour
+    // vérifier sérieusement une pièce d'identité avant d'approuver/rejeter un dossier.
+    const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
 
     // Limit request form
     const [limitForm, setLimitForm] = useState({
@@ -477,7 +481,11 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
                     {[['Recto CNI', user?.idCardFront], ['Verso CNI', user?.idCardBack], ['Selfie', user?.selfie]].map(([label, url]) => url ? (
                         <div key={label as string} style={{ textAlign: 'center' }}>
                             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>{label}</div>
-                            <img src={url as string} alt={label as string} style={{ width: '100%', borderRadius: 8, border: '1px solid var(--border)', maxHeight: 150, objectFit: 'cover' }} />
+                            <img
+                                src={url as string} alt={`${label} — ${user?.name}`}
+                                onClick={() => setLightbox({ src: url as string, alt: `${label} — ${user?.name}` })}
+                                style={{ width: '100%', borderRadius: 8, border: '1px solid var(--border)', maxHeight: 150, objectFit: 'cover', cursor: 'zoom-in' }}
+                            />
                         </div>
                     ) : null)}
                 </div>
@@ -1127,6 +1135,7 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
             {Header()}
             {TabNav()}
             {renderTab()}
+            {lightbox && <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />}
         </div>
     );
 }

@@ -29,7 +29,7 @@ function buildFetchMock(overrides: {
             return Promise.resolve({ ok: true, json: async () => ({ session: openSession }) });
         }
         if (url.includes('/api/admin/teller/lookup/')) {
-            return Promise.resolve(overrides.lookupResponse ?? { ok: true, json: async () => ({ name: 'Client Test', phone: '077000000', role: 'USER' }) });
+            return Promise.resolve(overrides.lookupResponse ?? { ok: true, json: async () => ({ name: 'Client Test', phone: '077000000', role: 'USER', selfie: 'https://cdn/selfie.jpg', idCardFront: 'https://cdn/front.jpg' }) });
         }
         if (url.endsWith('/api/agency/cash-in') && method === 'POST') {
             return Promise.resolve(overrides.cashInResponse ?? { ok: true, json: async () => ({ fee: 100, transaction: { reference: 'TX-001' } }) });
@@ -114,6 +114,26 @@ describe('TellerTerminal', () => {
 
         await screen.findByText('Opération Réussie');
         expect(screen.getByText(/TX-001/)).toBeInTheDocument();
+    });
+
+    it("permet au caissier de zoomer sur le selfie et la CNI pour vérifier l'identité en agence", async () => {
+        vi.stubGlobal('fetch', buildFetchMock());
+        const user = userEvent.setup();
+
+        render(<TellerTerminal token={token} userName="Marc" />);
+        await screen.findByText('Session Caisse Active');
+
+        await user.click(screen.getByRole('button', { name: /CASH-IN/i }));
+        await user.type(screen.getByPlaceholderText('Numéro de téléphone (+241...)'), '077000000');
+        await user.click(screen.getByRole('button', { name: 'Identifier le client' }));
+
+        // Le selfie et le bouton CNI apparaissent une fois l'identification faite, avant
+        // même de passer à l'écran de confirmation.
+        const selfie = await screen.findByAltText('Selfie — Client Test');
+        expect(screen.getByRole('button', { name: /Voir la CNI/i })).toBeInTheDocument();
+
+        await user.click(selfie);
+        expect(screen.getAllByAltText('Selfie — Client Test')).toHaveLength(2);
     });
 
     it("affiche une erreur et revient à l'étape 1 si le cash-out échoue (fonds insuffisants)", async () => {

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import KycMod from '../KycMod';
 
 const pendingDossier = { id: 'u1', name: 'Marie Client', phone: '077111111', createdAt: '2026-08-20T10:00:00Z', idCardFront: null, idCardBack: null, selfie: null };
+const dossierWithPhotos = { ...pendingDossier, idCardFront: 'https://cdn/front.jpg', idCardBack: 'https://cdn/back.jpg', selfie: 'https://cdn/selfie.jpg' };
 
 describe('KycMod', () => {
     beforeEach(() => {
@@ -72,5 +73,21 @@ describe('KycMod', () => {
 
         await waitFor(() => expect(window.confirm).toHaveBeenCalled());
         expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("ouvre la photo en plein écran au clic, pour pouvoir vérifier la pièce d'identité", async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([dossierWithPhotos]) }));
+        render(<KycMod token="tok" />);
+
+        const thumbnail = await screen.findByAltText('CNI Recto — Marie Client');
+        // Une seule image tant que le zoom n'est pas ouvert : juste la vignette.
+        expect(screen.getAllByAltText('CNI Recto — Marie Client')).toHaveLength(1);
+
+        fireEvent.click(thumbnail);
+        // Le zoom plein écran ajoute une seconde image (la vignette reste affichée dessous).
+        expect(screen.getAllByAltText('CNI Recto — Marie Client')).toHaveLength(2);
+
+        fireEvent.click(screen.getByLabelText('Fermer'));
+        expect(screen.getAllByAltText('CNI Recto — Marie Client')).toHaveLength(1);
     });
 });

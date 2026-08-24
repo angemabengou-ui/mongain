@@ -173,14 +173,21 @@ describe('Admin Customers/Teller Routes', () => {
             expect(res.status).toBe(404);
         });
 
-        it('devrait retourner le client trouvé', async () => {
+        it('devrait retourner le client trouvé, avec ses photos KYC pour vérification en agence', async () => {
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue({ id: 'x', role: 'TELLER' });
-            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1', name: 'Jean', phone: '066123456', kycStatus: 'APPROVED', role: 'USER' });
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+                id: 'u1', name: 'Jean', phone: '066123456', kycStatus: 'APPROVED', role: 'USER',
+                idCardFront: 'https://cdn/front.jpg', idCardBack: 'https://cdn/back.jpg', selfie: 'https://cdn/selfie.jpg',
+            });
 
             const res = await request(app).get('/admin/teller/lookup/066123456');
 
             expect(res.status).toBe(200);
             expect(res.body.id).toBe('u1');
+            expect(res.body.selfie).toBe('https://cdn/selfie.jpg');
+            expect(prisma.user.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+                select: expect.objectContaining({ idCardFront: true, idCardBack: true, selfie: true }),
+            }));
         });
     });
 });

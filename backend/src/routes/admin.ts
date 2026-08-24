@@ -1070,9 +1070,13 @@ router.get('/teller/lookup/:phone', authMiddleware, async (req: AuthRequest, res
             return res.status(403).json({ error: 'Accès Guichet refusé.' });
         }
 
+        // Photos KYC incluses : un client se présentant physiquement en agence doit pouvoir
+        // être comparé à sa pièce d'identité au dossier — avant, ce lookup ne renvoyait que
+        // nom/téléphone/statut, sans aucun moyen pour le caissier de vérifier visuellement
+        // l'identité de la personne en face de lui.
         const user = await prisma.user.findUnique({
             where: { phone: req.params.phone as string },
-            select: { id: true, name: true, phone: true, kycStatus: true, role: true }
+            select: { id: true, name: true, phone: true, kycStatus: true, role: true, idCardFront: true, idCardBack: true, selfie: true }
         });
 
         if (!user) return res.status(404).json({ error: 'Client introuvable.' });
