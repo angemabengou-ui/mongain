@@ -1,6 +1,7 @@
 import { Activity, Banknote, ChevronDown, ChevronRight, LayoutDashboard, LogOut, MessageSquare, Settings as SettingsIcon, Shield, ShieldAlert, ShieldCheck, Store, Users as UsersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Accounts from './Accounts';
+import AgencyCenter from './AgencyCenter';
 import AuditLogs from './AuditLogs';
 import BranchDashboard from './BranchDashboard';
 import ChangePassword from './ChangePassword';
@@ -151,10 +152,11 @@ export default function App() {
     },
     {
       id: 'ops-agence', label: 'GUICHET & AGENCE', icon: <Store size={18} />,
-      reqPerms: ['perm_branch_view', 'perm_cash_session_open', 'perm_cash_in', 'perm_cash_out'],
+      reqPerms: ['perm_branch_view', 'perm_branch_manage', 'perm_cash_session_open', 'perm_cash_in', 'perm_cash_out'],
       items: [
         { id: 'branch-dash', label: 'Supervision Agence', reqPerms: ['perm_branch_view'] },
-        { id: 'teller-terminal', label: 'Opérations Guichet (Caisse)', reqPerms: ['perm_cash_session_open', 'perm_cash_in', 'perm_cash_out'] }
+        { id: 'teller-terminal', label: 'Opérations Guichet (Caisse)', reqPerms: ['perm_cash_session_open', 'perm_cash_in', 'perm_cash_out'] },
+        { id: 'agency-center', label: 'Réseau d\'Agences', reqPerms: ['perm_branch_manage'] }
       ]
     },
     {
@@ -327,20 +329,21 @@ export default function App() {
           {/* PROTECTED ROUTES RENDERING (View gates based on explicitly validated permissions) */}
           {activeTab === 'dashboard' && hasPerm(['perm_analytics_view']) && <Dashboard />}
           {activeTab === 'macro-stats' && hasPerm(['perm_analytics_view']) && <MacroStats token={token} />}
-          {activeTab === 'accounts' && hasPerm(['perm_customer_view', 'perm_staff_view']) && <Accounts token={token} role={role} onAdjustSystemAccount={(walletId, name) => { setAdjustTarget({ walletId, name }); setActiveTab('treasury'); }} />}
+          {activeTab === 'accounts' && hasPerm(['perm_customer_view', 'perm_staff_view']) && <Accounts token={token} role={role} hasPerm={hasPerm} onAdjustSystemAccount={(walletId, name) => { setAdjustTarget({ walletId, name }); setActiveTab('treasury'); }} />}
 
           {/* Les sous-pages Customer 360 se branchent ici. users est activé par accounts ou global search */}
           {activeTab === 'users' && hasPerm(['perm_customer_360_basic', 'perm_customer_view']) && <Users token={token} staffRole={role} initialSelectedUserId={searchTarget?.tab === 'users' ? searchTarget.id : undefined} />}
           {activeTab === 'vaults' && hasPerm(['perm_customer_360_basic']) && <Vaults token={token} initialSelectedId={searchTarget?.tab === 'vaults' ? searchTarget.id : undefined} />}
           {activeTab === 'tontines' && hasPerm(['perm_customer_360_basic']) && <Tontines token={token} initialSelectedId={searchTarget?.tab === 'tontines' ? searchTarget.id : undefined} />}
 
-          {activeTab === 'reclamations' && hasPerm(['perm_ticket_view']) && <SupportCenter token={token} role={role} />}
+          {activeTab === 'reclamations' && hasPerm(['perm_ticket_view']) && <SupportCenter token={token} hasPerm={hasPerm} />}
           {activeTab === 'branch-dash' && hasPerm(['perm_branch_view']) && <BranchDashboard token={token} staffId={staffId} onNavigateToTreasury={hasPerm(['perm_treasury_view']) ? () => setActiveTab('treasury') : undefined} />}
+          {activeTab === 'agency-center' && hasPerm(['perm_branch_manage']) && <AgencyCenter token={token} hasPerm={hasPerm} />}
           {activeTab === 'teller-terminal' && hasPerm(['perm_cash_session_open', 'perm_cash_in', 'perm_cash_out']) && <TellerTerminal token={token} userName={userName} />}
 
           {activeTab === 'kyc' && hasPerm(['perm_customer_kyc_view', 'perm_customer_kyc_validate']) && <KycMod token={token} />}
-          {activeTab === 'ledger' && hasPerm(['perm_transaction_view']) && <Ledger token={token} />}
-          {activeTab === 'treasury' && hasPerm(['perm_treasury_view', 'perm_treasury_mint']) && <Treasury token={token} prefillAdjustTarget={adjustTarget} />}
+          {activeTab === 'ledger' && hasPerm(['perm_transaction_view']) && <Ledger token={token} hasPerm={hasPerm} />}
+          {activeTab === 'treasury' && hasPerm(['perm_treasury_view', 'perm_treasury_mint']) && <Treasury token={token} prefillAdjustTarget={adjustTarget} hasPerm={hasPerm} />}
           {activeTab === 'audit' && hasPerm(['perm_audit_log_view']) && <AuditLogs token={token} />}
           {activeTab === 'error-logs' && hasPerm(['perm_audit_log_view']) && <ErrorLogs token={token} />}
           {activeTab === 'settings' && hasPerm(['perm_system_settings_view']) && <Settings token={token} />}
@@ -348,7 +351,7 @@ export default function App() {
           {/* FALLBACK IF NOT AUTHORIZED TO VIEW TAB */}
           {![
             'dashboard', 'macro-stats', 'accounts', 'users', 'vaults', 'tontines',
-            'reclamations', 'branch-dash', 'teller-terminal', 'kyc', 'ledger',
+            'reclamations', 'branch-dash', 'agency-center', 'teller-terminal', 'kyc', 'ledger',
             'treasury', 'audit', 'error-logs', 'settings'
           ].includes(activeTab) && (
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Configuration demandée non disponible avec vos droits d'accès.</div>

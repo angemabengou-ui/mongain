@@ -191,6 +191,12 @@ router.post('/qr-cash-out', authMiddleware, async (req: AuthRequest, res) => {
         // la mÃªme agence pouvaient tous deux passer le contrÃ´le et faire passer le solde en
         // nÃ©gatif (mÃªme classe de bug que celle corrigÃ©e dans CashOperationService).
         await prisma.$transaction(async (tx) => {
+            // 🛑 PESSIMISTIC LOCKING : Verrouillage strict anti-course
+            const lockIds = [client.wallet!.id, branch.wallet!.id].sort();
+            for (const id of lockIds) {
+                await tx.$executeRaw`SELECT id FROM "Wallet" WHERE id = ${id} FOR UPDATE;`;
+            }
+
             // Plafond Anti-Blanchiment : mÃªme contrÃ´le que /transfer et /pay-bill (services.ts)
             // â€” sans Ã§a, un client Tier 0 pouvait contourner sa limite journaliÃ¨re/mensuelle
             // en retirant via QR guichet plutÃ´t que par un transfert P2P classique.
@@ -452,6 +458,12 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
             if (!receiver || !receiver.wallet) throw new Error("Le destinataire n'existe pas.");
             if (receiver.id === sender.id) throw new Error("Vous ne pouvez pas vous envoyer de l'argent Ã  vous-mÃªme.");
 
+            // 🛑 PESSIMISTIC LOCKING : Empêche le Double-Spend. On trie pour éviter les deadlocks croisés.
+            const lockIds = [sender.wallet.id, receiver.wallet.id].sort();
+            for (const id of lockIds) {
+                await tx.$executeRaw`SELECT id FROM "Wallet" WHERE id = ${id} FOR UPDATE;`;
+            }
+
             const corporate = await getOrCreateCorporateWallet(tx);
 
             const updatedSenderWallet = await tx.wallet.update({
@@ -610,6 +622,12 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
             });
             if (!agent || !agent.wallet) throw new Error("Agent introuvable.");
             if (agent.role !== 'AGENT' && agent.role !== 'MERCHANT') throw new Error("OpÃ©ration impossible. Ce QR n'appartient ni Ã  un Agent ni Ã  un CommerÃ§ant.");
+
+            // 🛑 PESSIMISTIC LOCKING
+            const lockIds = [sender.wallet.id, agent.wallet.id].sort();
+            for (const id of lockIds) {
+                await tx.$executeRaw`SELECT id FROM "Wallet" WHERE id = ${id} FOR UPDATE;`;
+            }
 
             // getSystemSettings() (mis en cache) au lieu d'un tx.systemSettings.findFirst() —
             // même correctif que ci-dessus : un round-trip Neon de moins dans cette transaction.

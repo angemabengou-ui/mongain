@@ -37,7 +37,7 @@ function StatusBadge({ status }: { status: string }) {
 // ============================================================
 // MAIN COMPONENT
 // ============================================================
-export default function AgencyCenter({ token, role }: { token: string; role: string }) {
+export default function AgencyCenter({ token, hasPerm }: { token: string; hasPerm: (perms: string[]) => boolean }) {
     const [branches, setBranches] = useState<any[]>([]);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
@@ -76,7 +76,7 @@ export default function AgencyCenter({ token, role }: { token: string; role: str
     const [opSearch, setOpSearch] = useState('');
     const [opPage, setOpPage] = useState(1);
 
-    const isAdmin = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(role);
+    const isAdmin = hasPerm(['perm_branch_manage']);
 
     // ─── Fetch agency list ────────────────────────────────────
     const fetchBranches = async () => {

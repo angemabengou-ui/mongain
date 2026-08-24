@@ -1,9 +1,10 @@
-import { friendlyErrorMessage } from '../utils/errors';
 import express from 'express';
 import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { getCentralTreasury } from '../services/centralTreasury';
+import { hasPermission } from '../services/RBAC';
+import { friendlyErrorMessage } from '../utils/errors';
 
 const router = express.Router();
 
@@ -17,9 +18,9 @@ const router = express.Router();
 // 0. Récupérer l'Overview Global de Trésorerie
 router.get('/overview', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!admin || !['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(admin.role)) {
-            return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, permissions: true, permissionsCustomized: true } });
+        if (!admin || !hasPermission(admin, 'perm_treasury_view')) {
+            return res.status(403).json({ error: 'Accès refusé. Permission perm_treasury_view manquante.' });
         }
 
         const [branches, pendingReqs, centralTreasury, systemWallets] = await Promise.all([
@@ -77,9 +78,9 @@ router.get('/requests', authMiddleware, async (req: AuthRequest, res) => {
         // Même whitelist que POST /requests ci-dessous — sans elle, tout staff actif (y
         // compris TELLER) lisait la liquidité et le calendrier d'approvisionnement de
         // toutes les agences, une information directement exploitable pour un vol physique.
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!admin || admin.isActive === false || !['SUPER_ADMIN', 'COMPLIANCE_CHECKER', 'RISK', 'BRANCH_MANAGER'].includes(admin.role)) {
-            return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, isActive: true, permissions: true, permissionsCustomized: true } });
+        if (!admin || admin.isActive === false || !hasPermission(admin, 'perm_treasury_view')) {
+            return res.status(403).json({ error: 'Accès refusé. Permission perm_treasury_view manquante.' });
         }
 
         const requests = await prisma.treasuryRequest.findMany({
@@ -100,10 +101,9 @@ router.get('/requests', authMiddleware, async (req: AuthRequest, res) => {
 // 2. Créer une Demande (ISSUANCE, ALLOCATION, RETURN) [MAKER]
 router.post('/requests', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const maker = await prisma.staff.findUnique({ where: { id: req.userId } });
-        // Pour bloquer, on vérifie que c'est un agent siège qui a des droits
-        if (!maker || !['SUPER_ADMIN', 'COMPLIANCE_CHECKER', 'RISK', 'BRANCH_MANAGER'].includes(maker.role)) {
-            return res.status(403).json({ error: 'Droits insuffisants pour initier une requête.' });
+        const maker = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, branchId: true, permissions: true, permissionsCustomized: true } });
+        if (!maker) {
+            return res.status(403).json({ error: 'Compte introuvable.' });
         }
 
         const schema = z.object({
@@ -119,6 +119,14 @@ router.post('/requests', authMiddleware, async (req: AuthRequest, res) => {
         if (!parsed.success) return res.status(400).json({ error: 'Données invalides', details: parsed.error });
 
         const { type, amount, reason, comment, targetBranchId, targetWalletId } = parsed.data;
+
+        // RBAC Dynamique en fonction du TYPE d'action demandée
+        if (type === 'ISSUANCE' && !hasPermission(maker, 'perm_treasury_mint')) {
+            return res.status(403).json({ error: 'Création monétaire interdite. Permission perm_treasury_mint requise.' });
+        }
+        if ((type === 'ALLOCATION' || type === 'RETURN' || type === 'ADJUSTMENT' || type === 'REVERSAL') && !hasPermission(maker, 'perm_treasury_allocate')) {
+            return res.status(403).json({ error: 'Gestion des flux interdite. Permission perm_treasury_allocate requise.' });
+        }
 
         // Treasury Policies check
         const settings = await prisma.systemSettings.findFirst();
@@ -182,9 +190,9 @@ router.post('/requests', authMiddleware, async (req: AuthRequest, res) => {
 // 3. Approuver et Exécuter (CHECKER) [IDEMPOTENT & ATOMIQUE]
 router.post('/requests/:id/approve', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const checker = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!checker || !['SUPER_ADMIN', 'COMPLIANCE_CHECKER'].includes(checker.role)) {
-            return res.status(403).json({ error: 'Vous n\'avez pas les droits d\'approbation.' });
+        const checker = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, permissions: true, permissionsCustomized: true } });
+        if (!checker || !hasPermission(checker, 'perm_treasury_approve')) {
+            return res.status(403).json({ error: 'Vous n\'avez pas les droits d\'approbation (perm_treasury_approve).' });
         }
 
         const requestId = req.params.id as string;
@@ -240,6 +248,18 @@ router.post('/requests/:id/approve', authMiddleware, async (req: AuthRequest, re
             // Depuis la séparation, la Trésorerie Centrale n'est plus une Branch : plus
             // besoin de garde anti-auto-ciblage ici, le Siège est une agence normale.
             const reserve = await getCentralTreasury(tx);
+
+            // 🛑 PESSIMISTIC LOCKING GLOBAL ET DÉTERMINISTE
+            // On collecte tous les portefeuilles impliqués dans l'opération, on filtre les doublons,
+            // on trie les IDs pour éviter tout deadlock, puis on les verrouille.
+            const lockIds = [reserve.wallet!.id];
+            if (request.targetBranch && request.targetBranch.walletId) lockIds.push(request.targetBranch.walletId);
+            if (request.targetWalletId) lockIds.push(request.targetWalletId);
+
+            const uniqueSortedLockIds = Array.from(new Set(lockIds)).sort();
+            for (const id of uniqueSortedLockIds) {
+                await tx.$executeRaw`SELECT id FROM "Wallet" WHERE id = ${id} FOR UPDATE;`;
+            }
 
             if (request.type === 'ISSUANCE') {
                 // Création pure vers la réserve Centrale
@@ -419,9 +439,9 @@ router.post('/requests/:id/approve', authMiddleware, async (req: AuthRequest, re
 // 4. Rejeter (CHECKER) [IMMUABLE]
 router.post('/requests/:id/reject', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const checker = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!checker || !['SUPER_ADMIN', 'COMPLIANCE_CHECKER'].includes(checker.role)) {
-            return res.status(403).json({ error: 'Vous n\'avez pas les droits.' });
+        const checker = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, permissions: true, permissionsCustomized: true } });
+        if (!checker || !hasPermission(checker, 'perm_treasury_approve')) {
+            return res.status(403).json({ error: 'Vous n\'avez pas les droits de rejet (perm_treasury_approve).' });
         }
 
         const requestId = req.params.id as string;
@@ -451,8 +471,8 @@ router.post('/requests/:id/reject', authMiddleware, async (req: AuthRequest, res
 // 5. Voir la liquidité des agences
 router.get('/agencies-liquidity', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const checker = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!checker || !['SUPER_ADMIN', 'RISK'].includes(checker.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const checker = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, permissions: true, permissionsCustomized: true } });
+        if (!checker || !hasPermission(checker, 'perm_analytics_view')) return res.status(403).json({ error: 'Accès refusé. (perm_analytics_view requis)' });
 
         const settings = await prisma.systemSettings.findFirst();
         const branches = await prisma.branch.findMany({ include: { wallet: true, sessions: true } });
@@ -479,8 +499,8 @@ router.get('/agencies-liquidity', authMiddleware, async (req: AuthRequest, res) 
 // 6. Voir le registre des Mismatches (Reconciliation)
 router.get('/reconciliation', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const checker = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!checker || !['SUPER_ADMIN', 'RISK'].includes(checker.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const checker = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, permissions: true, permissionsCustomized: true } });
+        if (!checker || !hasPermission(checker, 'perm_audit_log_view')) return res.status(403).json({ error: 'Accès refusé. (perm_audit_log_view requis)' });
 
         const cases = await prisma.reconciliationCase.findMany({
             include: { branch: { select: { name: true, code: true } } },
@@ -493,8 +513,8 @@ router.get('/reconciliation', authMiddleware, async (req: AuthRequest, res) => {
 // 7. Résoudre ou mettre à jour un cas de Réconciliation
 router.post('/reconciliation/:id/resolve', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const checker = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!checker || !['SUPER_ADMIN', 'RISK'].includes(checker.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const checker = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, permissions: true, permissionsCustomized: true } });
+        if (!checker || !hasPermission(checker, 'perm_audit_log_view')) return res.status(403).json({ error: 'Accès refusé. (perm_audit_log_view requis)' });
 
         const { resolution, newStatus } = req.body;
         const recId = req.params.id as string;

@@ -11,7 +11,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 const statusLabel = (status: string) => STATUS_LABELS[status] || status;
 
-export default function Ledger({ token }: { token: string }) {
+export default function Ledger({ token, hasPerm }: { token: string; hasPerm: (perms: string[]) => boolean }) {
     const [transactions, setTransactions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -164,7 +164,7 @@ export default function Ledger({ token }: { token: string }) {
                 </div>
             </div>
 
-            <div style={{ marginBottom: '24px', position: 'relative' }}>
+            <div style={{ marginBottom: '24px', position: 'relative', maxWidth: '600px' }}>
                 <Search size={20} color="var(--text-secondary)" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
                 <input
                     type="text"
@@ -248,7 +248,7 @@ export default function Ledger({ token }: { token: string }) {
                                             </span>
                                         </td>
                                         <td style={{ padding: '16px', textAlign: 'right' }}>
-                                            {tx.status === 'COMPLETED' && !isMint && !isFee && !isDeposit && (
+                                            {tx.status === 'COMPLETED' && !isMint && !isFee && !isDeposit && hasPerm(['perm_refund_request']) && (
                                                 <button
                                                     onClick={() => handleRefund(tx)}
                                                     style={{

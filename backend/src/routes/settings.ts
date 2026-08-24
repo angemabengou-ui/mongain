@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { hasPermission } from '../services/RBAC';
 
 const router = Router();
 
@@ -140,8 +141,8 @@ router.post('/request', authMiddleware, async (req: AuthRequest, res) => {
         // quel staff actif (TELLER, SUPPORT_MAKER) pouvait soumettre une demande sur les
         // paramètres les plus critiques de la plateforme (webhooks, frais, circuit breaker),
         // qu'un Checker légitime n'avait ensuite qu'à approuver sans connaître l'origine.
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !staff.isActive || !['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(staff.role)) {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, isActive: true, permissions: true, permissionsCustomized: true } });
+        if (!staff || !staff.isActive || !hasPermission(staff, 'perm_system_settings_edit')) {
             return res.status(403).json({ error: 'Accès non autorisé.' });
         }
 
@@ -179,8 +180,8 @@ router.post('/request', authMiddleware, async (req: AuthRequest, res) => {
 // POST /api/settings/approve/:id (Checker System)
 router.post('/approve/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(staff.role)) {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, permissions: true, permissionsCustomized: true } });
+        if (!staff || !hasPermission(staff, 'perm_system_settings_approve')) {
             return res.status(403).json({ error: 'Seule la Haute Direction (Checker) peut approuver ces règles.' });
         }
 
@@ -270,8 +271,8 @@ router.post('/approve/:id', authMiddleware, async (req: AuthRequest, res) => {
 // GET /api/settings/requests
 router.get('/requests', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(staff.role)) {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, permissions: true, permissionsCustomized: true } });
+        if (!staff || !hasPermission(staff, 'perm_system_settings_view')) {
             return res.status(403).json({ error: 'Accès non autorisé.' });
         }
 
@@ -288,8 +289,8 @@ router.get('/requests', authMiddleware, async (req: AuthRequest, res) => {
 // DELETE /api/settings/requests/:id
 router.delete('/requests/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(staff.role)) {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, permissions: true, permissionsCustomized: true } });
+        if (!staff || !hasPermission(staff, 'perm_system_settings_approve')) {
             return res.status(403).json({ error: 'Seule la Haute Direction peut rejeter une requête.' });
         }
 
@@ -310,8 +311,8 @@ router.delete('/requests/:id', authMiddleware, async (req: AuthRequest, res) => 
 // GET /api/settings/history (Prompt 07)
 router.get('/history', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(staff.role)) {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, permissions: true, permissionsCustomized: true } });
+        if (!staff || !hasPermission(staff, 'perm_system_settings_view')) {
             return res.status(403).json({ error: 'Accès non autorisé.' });
         }
 

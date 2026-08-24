@@ -24,6 +24,7 @@ export default function AgentActionDeskScreen() {
     const router = useRouter();
     const { user } = useAuth();
     const COLORS = useAppTheme();
+    const styles = getStyles(COLORS);
 
     const { clientPhone, clientName, action } = useLocalSearchParams();
     const [amount, setAmount] = useState('');
@@ -127,82 +128,88 @@ export default function AgentActionDeskScreen() {
     if (!user) return null;
 
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
-            <View style={styles.header}>
-                <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                    <Ionicons name="close" size={28} color="#fff" />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Guichet Agent</Text>
-                <View style={{ width: 44 }} />
-            </View>
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+                <View style={styles.header}>
+                    <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+                        <Ionicons name="arrow-back" size={26} color="#fff" />
+                    </TouchableOpacity>
+                    <Text style={styles.headerTitle}>Guichet Agent</Text>
+                    <View style={{ width: 44 }} />
+                </View>
 
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: '#f8f9fa', borderTopLeftRadius: 30, borderTopRightRadius: 30 }}>
-                <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-                    <View style={styles.card}>
-                        <View style={[styles.iconContainer, { backgroundColor: isDeposit ? '#e0f2fe' : '#fee2e2' }]}>
-                            <Ionicons name={isDeposit ? 'arrow-down-circle' : 'arrow-up-circle'} size={48} color={isDeposit ? '#0284c7' : '#e11d48'} />
+                <View style={styles.headerSpacer}>
+                    <View style={styles.topIconContainer}>
+                        <Ionicons name={isDeposit ? 'arrow-down' : 'arrow-up'} size={40} color={COLORS.primary} />
+                    </View>
+                    <Text style={styles.headerSubtitle}>
+                        {isDeposit ? 'Dépôt Espèces' : 'Retrait Espèces'}
+                    </Text>
+                    <Text style={styles.headerDesc}>
+                        {isDeposit
+                            ? 'Vous créditez le portefeuille numérique de ce client contre du cash.'
+                            : 'Vous débitez le portefeuille numérique de ce client pour lui remettre du cash.'}
+                    </Text>
+                </View>
+
+                <ScrollView contentContainerStyle={[styles.card, { paddingBottom: Math.max(insets.bottom, 20) + 40 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} bounces={false}>
+
+                    <View style={styles.userBox}>
+                        <View style={styles.avatar}>
+                            <Text style={styles.avatarText}>
+                                {(clientName as string || 'C').substring(0, 2).toUpperCase()}
+                            </Text>
                         </View>
-
-                        <Text style={styles.title}>{isDeposit ? 'Dépôt Espèces' : 'Retrait Espèces'}</Text>
-                        <Text style={styles.subtitle}>
-                            {isDeposit ? `Vous créditez le portefeuille numérique de ce client contre du cash.` : `Vous débitez le portefeuille numérique de ce client pour lui remettre du cash.`}
-                        </Text>
-
-                        <View style={styles.userBox}>
-                            <View style={[styles.avatar, { backgroundColor: isDeposit ? '#0284c7' : '#e11d48' }]}>
-                                <Text style={styles.avatarText}>
-                                    {(clientName as string || 'C').substring(0, 2).toUpperCase()}
-                                </Text>
-                            </View>
-                            <View>
-                                <Text style={styles.userName}>{clientName}</Text>
-                                <Text style={styles.userPhone}>{clientPhone}</Text>
-                            </View>
-                        </View>
-
-                        <View style={[styles.inputBox, { borderColor: COLORS.border, backgroundColor: COLORS.surface }]}>
-                            <Text style={[styles.currencyLabel, { color: COLORS.text }]}>FCFA</Text>
-                            <TextInput
-                                style={[styles.input, { color: COLORS.text }]}
-                                placeholder="0"
-                                placeholderTextColor={COLORS.textSecondary}
-                                keyboardType="numeric"
-                                value={amount}
-                                onChangeText={setAmount}
-                                autoFocus
-                            />
-                        </View>
-
-                        <View style={[styles.inputBox, { borderColor: COLORS.border, backgroundColor: COLORS.surface, height: 56, marginBottom: 0 }]}>
-                            <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 10 }} />
-                            <TextInput
-                                style={[styles.input, { fontSize: 20, textAlign: 'left', color: COLORS.text }]}
-                                placeholder="Code PIN"
-                                placeholderTextColor={COLORS.textSecondary}
-                                keyboardType="number-pad"
-                                secureTextEntry
-                                maxLength={4}
-                                value={pin}
-                                onChangeText={setPin}
-                            />
+                        <View>
+                            <Text style={styles.userName}>{clientName}</Text>
+                            <Text style={styles.userPhone}>{clientPhone}</Text>
                         </View>
                     </View>
 
-                    <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <Text style={styles.label}>Montant à {isDeposit ? 'déposer' : 'retirer'}</Text>
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.currencyLabel}>FCFA</Text>
+                        <TextInput
+                            style={styles.amountInput}
+                            placeholder="0"
+                            placeholderTextColor={COLORS.textSecondary}
+                            keyboardType="numeric"
+                            value={amount}
+                            onChangeText={setAmount}
+                            autoFocus
+                        />
+                    </View>
+
+                    <Text style={styles.label}>Votre Code PIN Agent</Text>
+                    <View style={styles.inputContainer}>
+                        <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 12 }} />
+                        <TextInput
+                            style={styles.pinInput}
+                            placeholder="Code PIN à 4 chiffres"
+                            placeholderTextColor={COLORS.textSecondary}
+                            keyboardType="number-pad"
+                            secureTextEntry
+                            maxLength={4}
+                            value={pin}
+                            onChangeText={setPin}
+                        />
+                    </View>
+
+                    <View style={styles.buttonRow}>
                         {bioEnabled && (
                             <TouchableOpacity
-                                style={[styles.confirmBtn, { flex: 1, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.primary }]}
+                                style={[styles.bioBtn, (!amount || numAmountPreview <= 0 || loading) && styles.disabledButton]}
                                 onPress={handleBiometricAction}
                                 disabled={!amount || numAmountPreview <= 0 || loading}
                             >
-                                <Ionicons name="finger-print" size={22} color={COLORS.primary} />
+                                <Ionicons name="finger-print" size={26} color={COLORS.primary} />
                             </TouchableOpacity>
                         )}
                         <TouchableOpacity
                             style={[
-                                styles.confirmBtn,
-                                { flex: bioEnabled ? 3 : 1, backgroundColor: COLORS.primary },
-                                (!amount || numAmountPreview <= 0 || pin.length !== 4 || loading) && styles.confirmBtnDisabled,
+                                styles.saveButton,
+                                bioEnabled && { flex: 3 },
+                                (!amount || numAmountPreview <= 0 || pin.length !== 4 || loading) && styles.disabledButton,
                             ]}
                             onPress={handleManualAction}
                             disabled={!amount || numAmountPreview <= 0 || pin.length !== 4 || loading}
@@ -211,39 +218,72 @@ export default function AgentActionDeskScreen() {
                                 <ActivityIndicator color="#fff" />
                             ) : (
                                 <>
-                                    <Ionicons name="checkmark-circle" size={24} color="#fff" style={{ marginRight: 8 }} />
-                                    <Text style={styles.confirmBtnText}>Valider et Transférer</Text>
+                                    <Ionicons name="checkmark-circle" size={22} color="#fff" style={{ marginRight: 8 }} />
+                                    <Text style={styles.saveButtonText}>Valider et Transférer</Text>
                                 </>
                             )}
                         </TouchableOpacity>
                     </View>
 
                 </ScrollView>
-                {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
 }
 
-const styles = StyleSheet.create({
-    safeArea: { flex: 1 },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 20 },
-    backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
-    content: { flexGrow: 1, backgroundColor: '#f8f9fa', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 20, paddingBottom: 150 },
-    card: { backgroundColor: '#fff', borderRadius: 20, padding: 25, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 5, marginBottom: 30, marginTop: 10 },
-    iconContainer: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-    title: { fontSize: 24, fontWeight: '800', color: '#111827', marginBottom: 10, textAlign: 'center' },
-    subtitle: { fontSize: 13, color: '#6B7280', textAlign: 'center', marginBottom: 25, lineHeight: 20, paddingHorizontal: 10 },
-    userBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', padding: 15, borderRadius: 15, width: '100%', marginBottom: 25 },
-    avatar: { width: 45, height: 45, borderRadius: 22.5, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-    avatarText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-    userName: { fontSize: 16, fontWeight: 'bold', color: '#111827' },
-    userPhone: { fontSize: 14, color: '#6B7280', marginTop: 2 },
-    inputBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderRadius: 15, paddingHorizontal: 20, height: 70, width: '100%', marginBottom: 15 },
-    currencyLabel: { fontSize: 20, fontWeight: 'bold', marginRight: 15 },
-    input: { flex: 1, fontSize: 32, fontWeight: 'bold', textAlign: 'right', color: '#111827' },
-    confirmBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 18, borderRadius: 16, shadowColor: '#10B981', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 15, elevation: 8 },
-    confirmBtnDisabled: { opacity: 0.5, shadowOpacity: 0, elevation: 0 },
-    confirmBtnText: { color: '#fff', fontSize: 18, fontWeight: 'bold' }
+const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: COLORS.primary },
+    flex: { flex: 1 },
+    header: {
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16, backgroundColor: COLORS.primary,
+    },
+    backBtn: { padding: 8, marginLeft: -8 },
+    headerTitle: { color: '#ffffff', fontSize: 20, fontWeight: '700' },
+    headerSpacer: {
+        alignItems: 'center', justifyContent: 'center',
+        paddingVertical: 12, backgroundColor: COLORS.primary, marginBottom: 24, paddingHorizontal: 20
+    },
+    topIconContainer: {
+        width: 72, height: 72, borderRadius: 36, backgroundColor: '#ffffff',
+        justifyContent: 'center', alignItems: 'center', marginBottom: 16,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8
+    },
+    headerSubtitle: { color: '#ffffff', fontSize: 22, fontWeight: '800', marginBottom: 8 },
+    headerDesc: { color: 'rgba(255,255,255,0.85)', fontSize: 14, textAlign: 'center', lineHeight: 20 },
+
+    card: {
+        flexGrow: 1, backgroundColor: COLORS.background,
+        borderTopLeftRadius: 36, borderTopRightRadius: 36,
+        padding: 28, paddingTop: 32
+    },
+    userBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, padding: 16, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: COLORS.border },
+    avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
+    avatarText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+    userName: { fontSize: 16, fontWeight: 'bold', color: COLORS.textPrimary },
+    userPhone: { fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },
+
+    label: { fontSize: 14, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 8, marginTop: 4 },
+    inputContainer: {
+        flexDirection: 'row', alignItems: 'center',
+        backgroundColor: COLORS.surface,
+        borderWidth: 1, borderColor: COLORS.border,
+        borderRadius: 16, paddingHorizontal: 16, height: 64, marginBottom: 20,
+    },
+    currencyLabel: { fontSize: 18, fontWeight: '800', marginRight: 15, color: COLORS.textPrimary },
+    amountInput: { flex: 1, fontSize: 32, fontWeight: '800', textAlign: 'right', color: COLORS.textPrimary },
+    pinInput: { flex: 1, fontSize: 18, letterSpacing: 4, color: COLORS.textPrimary, height: '100%' },
+
+    buttonRow: { flexDirection: 'row', gap: 12, marginTop: 12 },
+    bioBtn: {
+        flex: 1, backgroundColor: COLORS.surface, borderWidth: 1.5, borderColor: COLORS.primary,
+        borderRadius: 16, justifyContent: 'center', alignItems: 'center', height: 60
+    },
+    saveButton: {
+        flex: 1, flexDirection: 'row', backgroundColor: COLORS.primary, height: 60, borderRadius: 16,
+        justifyContent: 'center', alignItems: 'center',
+        shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 6,
+    },
+    disabledButton: { opacity: 0.5, elevation: 0, shadowOpacity: 0 },
+    saveButtonText: { color: '#fff', fontSize: 17, fontWeight: '800' }
 });

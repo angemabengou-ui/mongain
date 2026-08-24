@@ -56,7 +56,7 @@ describe('SupportCenter', () => {
     });
 
     it('affiche le tableau de bord avec les statistiques chargées', async () => {
-        render(<SupportCenter token="tok" role="SUPER_ADMIN" />);
+        render(<SupportCenter token="tok" hasPerm={() => true} />);
         expect(await screen.findByText('5')).toBeInTheDocument(); // Ouverts
         expect(screen.getByText('Support & Réclamations')).toBeInTheDocument();
         expect(mockedApiFetch).toHaveBeenCalledWith(
@@ -67,7 +67,7 @@ describe('SupportCenter', () => {
 
     it("charge et affiche les tickets dans l'onglet Boîte de Réception", async () => {
         const user = userEvent.setup();
-        render(<SupportCenter token="tok" role="SUPER_ADMIN" />);
+        render(<SupportCenter token="tok" hasPerm={() => true} />);
         await screen.findByText('5');
 
         await user.click(screen.getByRole('button', { name: /Boîte de Réception/i }));
@@ -78,7 +78,7 @@ describe('SupportCenter', () => {
 
     it('ouvre le détail du ticket au clic et affiche la description', async () => {
         const user = userEvent.setup();
-        render(<SupportCenter token="tok" role="SUPER_ADMIN" />);
+        render(<SupportCenter token="tok" hasPerm={() => true} />);
         await user.click(screen.getByRole('button', { name: /Boîte de Réception/i }));
         await screen.findByText('Jean Dupont');
 
@@ -94,7 +94,7 @@ describe('SupportCenter', () => {
             return {};
         });
         const user = userEvent.setup();
-        render(<SupportCenter token="tok" role="SUPER_ADMIN" />);
+        render(<SupportCenter token="tok" hasPerm={() => true} />);
         await user.click(screen.getByRole('button', { name: /Boîte de Réception/i }));
 
         expect(await screen.findByText('Erreur serveur (500).')).toBeInTheDocument();
@@ -102,7 +102,7 @@ describe('SupportCenter', () => {
 
     it('masque les actions de remboursement pour un rôle non-Finance', async () => {
         const user = userEvent.setup();
-        render(<SupportCenter token="tok" role="SUPPORT_MAKER" />);
+        render(<SupportCenter token="tok" hasPerm={() => false} />);
         await user.click(screen.getByRole('button', { name: /Remboursements/i }));
 
         expect(await screen.findByText('Paul Martin')).toBeInTheDocument();
@@ -112,7 +112,7 @@ describe('SupportCenter', () => {
 
     it('affiche les actions Approuver/Rejeter pour un rôle Finance (SUPER_ADMIN)', async () => {
         const user = userEvent.setup();
-        render(<SupportCenter token="tok" role="SUPER_ADMIN" />);
+        render(<SupportCenter token="tok" hasPerm={() => true} />);
         await user.click(screen.getByRole('button', { name: /Remboursements/i }));
 
         await screen.findByText('Paul Martin');
@@ -131,7 +131,7 @@ describe('SupportCenter', () => {
 
     it('affiche les dossiers de fraude dans leur onglet dédié', async () => {
         const user = userEvent.setup();
-        render(<SupportCenter token="tok" role="SUPER_ADMIN" />);
+        render(<SupportCenter token="tok" hasPerm={() => true} />);
         await user.click(screen.getByRole('button', { name: /Fraudes/i }));
 
         expect(await screen.findByText('Marie Curie')).toBeInTheDocument();
@@ -149,7 +149,7 @@ describe('SupportCenter', () => {
             return {};
         });
         const user = userEvent.setup();
-        render(<SupportCenter token="tok" role="SUPER_ADMIN" />);
+        render(<SupportCenter token="tok" hasPerm={() => true} />);
         await user.click(screen.getByRole('button', { name: /Boîte de Réception/i }));
         await user.click(await screen.findByText('Jean Dupont'));
         await screen.findByText('Le retrait a échoué mais le compte a été débité.');

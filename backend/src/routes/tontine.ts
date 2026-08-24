@@ -1,8 +1,9 @@
-import { friendlyErrorMessage } from '../utils/errors';
 import express, { Request, Response } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { hasPermission } from '../services/RBAC';
 import { executeTontineCycle, getTontineVaultWallet } from '../services/tontineService';
+import { friendlyErrorMessage } from '../utils/errors';
 
 const router = express.Router();
 
@@ -379,9 +380,9 @@ router.post('/join', authMiddleware, async (req: Request, res: Response) => {
 router.post('/debit/:groupId', authMiddleware, async (req: Request, res: Response) => {
     try {
         const staffId = (req as AuthRequest).userId!;
-        const staff = await prisma.staff.findUnique({ where: { id: staffId } });
+        const staff = await prisma.staff.findUnique({ where: { id: staffId }, select: { id: true, role: true, isActive: true, permissions: true, permissionsCustomized: true } });
 
-        if (!staff || !staff.isActive || !['SUPER_ADMIN', 'RISK'].includes(staff.role)) {
+        if (!staff || !staff.isActive || !hasPermission(staff, 'perm_system_settings_edit')) {
             return res.status(403).json({ success: false, message: "Accès refusé" });
         }
 

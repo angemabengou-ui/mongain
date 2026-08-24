@@ -7,9 +7,7 @@ import { apiFetch } from './utils/apiFetch';
 
 interface SupportCenterProps { token: string; role?: string; }
 
-// Doit rester synchronisé avec FINANCE_ROLES côté backend (backend/src/routes/admin.ts) :
-// seuls ces rôles peuvent approuver/rejeter/exécuter un remboursement.
-const FINANCE_ROLES = ['SUPER_ADMIN', 'RISK'];
+// Removed obsolete hardcoded FINANCE_ROLES const array.
 
 const STATUS_COLORS: Record<string, string> = {
     OPEN: 'var(--warning)', ASSIGNED: '#3b82f6', IN_PROGRESS: '#8b5cf6',
@@ -83,8 +81,10 @@ function Badge({ text, color }: { text: string; color: string }) {
     );
 }
 
-export default function SupportCenter({ token, role }: SupportCenterProps) {
-    const canApproveRefunds = role ? FINANCE_ROLES.includes(role) : false;
+interface SupportCenterProps { token: string; hasPerm: (perms: string[]) => boolean; }
+
+export default function SupportCenter({ token, hasPerm }: SupportCenterProps) {
+    const canApproveRefunds = hasPerm(['perm_refund_request']);
     const [tab, setTab] = useState<'dashboard' | 'inbox' | 'fraud' | 'refunds'>('dashboard');
     const [stats, setStats] = useState<any>(null);
     const [tickets, setTickets] = useState<any[]>([]);

@@ -56,26 +56,32 @@ export default function PinChangeScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.safeArea}>
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
 
-                {/* Header */}
+                {/* Header Top Section */}
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                        <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+                        <Ionicons name="arrow-back" size={26} color="#ffffff" />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Sécurité & PIN</Text>
                     <View style={{ width: 40 }} />
                 </View>
 
-                {/* Form — ScrollView : avec 3 champs + clavier ouvert, le bouton "Mettre à
-                jour" pouvait sortir de l'écran, coincé derrière la barre de navigation Android
-                sans aucun moyen d'y accéder. */}
+                <View style={styles.headerSpacer}>
+                    <Ionicons name="shield-checkmark" size={64} color="rgba(255,255,255,0.9)" />
+                    <Text style={styles.headerSubtitle}>Protégez votre portefeuille</Text>
+                </View>
+
+                {/* Main Card */}
                 <ScrollView
-                    contentContainerStyle={[styles.formContainer, { paddingBottom: Math.max(insets.bottom, 20) + 24 }]}
+                    contentContainerStyle={[styles.card, { paddingBottom: Math.max(insets.bottom, 20) + 40 }]}
                     keyboardShouldPersistTaps="handled"
                     showsVerticalScrollIndicator={false}
+                    bounces={false}
                 >
+                    <Text style={styles.title}>Mise à jour du code PIN</Text>
+
                     <Text style={styles.label}>Ancien code PIN</Text>
                     <View style={styles.inputContainer}>
                         <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 12 }} />
@@ -127,9 +133,9 @@ export default function PinChangeScreen() {
                         disabled={loading || !oldPin || !newPin || !confirmPin}
                     >
                         {loading ? (
-                            <ActivityIndicator color={COLORS.surface} />
+                            <ActivityIndicator color="#fff" />
                         ) : (
-                            <Text style={styles.saveButtonText}>Mettre à jour le PIN</Text>
+                            <Text style={styles.saveButtonText}>Valider la modification</Text>
                         )}
                     </TouchableOpacity>
                 </ScrollView>
@@ -139,27 +145,42 @@ export default function PinChangeScreen() {
 }
 
 const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: COLORS.background },
+    safeArea: { flex: 1, backgroundColor: COLORS.primary },
+    flex: { flex: 1 },
     header: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingHorizontal: 20, paddingVertical: 16, backgroundColor: COLORS.surface,
-        borderBottomWidth: 1, borderBottomColor: COLORS.border,
+        paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16, backgroundColor: COLORS.primary,
     },
     backButton: { padding: 8, marginLeft: -8 },
-    headerTitle: { color: COLORS.textPrimary, fontSize: 18, fontWeight: '600' },
-    formContainer: { padding: 24, flexGrow: 1 },
-    label: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary, marginBottom: 8 },
+    headerTitle: { color: '#ffffff', fontSize: 20, fontWeight: '700' },
+    headerSpacer: {
+        alignItems: 'center', justifyContent: 'center',
+        paddingVertical: 28, backgroundColor: COLORS.primary, marginBottom: 16
+    },
+    headerSubtitle: { color: 'rgba(255,255,255,0.8)', fontSize: 15, marginTop: 12, fontWeight: '500' },
+    card: {
+        flexGrow: 1, backgroundColor: COLORS.background,
+        borderTopLeftRadius: 36, borderTopRightRadius: 36,
+        padding: 28, paddingTop: 32
+    },
+    title: { fontSize: 24, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 28 },
+    label: { fontSize: 14, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 8, marginTop: 4 },
     inputContainer: {
         flexDirection: 'row', alignItems: 'center',
         backgroundColor: COLORS.surface,
         borderWidth: 1, borderColor: COLORS.border,
-        borderRadius: 12, paddingHorizontal: 16, height: 56, marginBottom: 24,
+        borderRadius: 16, paddingHorizontal: 16, height: 58, marginBottom: 20,
     },
-    input: { flex: 1, fontSize: 18, letterSpacing: 4, color: COLORS.textPrimary },
+    input: { flex: 1, fontSize: 18, letterSpacing: 4, color: COLORS.textPrimary, height: '100%' },
     saveButton: {
-        backgroundColor: COLORS.primary, height: 56, borderRadius: 16,
-        justifyContent: 'center', alignItems: 'center', marginTop: 12
+        backgroundColor: COLORS.primary, height: 58, borderRadius: 16,
+        justifyContent: 'center', alignItems: 'center', marginTop: 16,
+        shadowColor: COLORS.primary,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 16,
+        elevation: 6,
     },
-    disabledButton: { opacity: 0.5 },
-    saveButtonText: { color: COLORS.surface, fontSize: 18, fontWeight: '700' }
+    disabledButton: { opacity: 0.5, elevation: 0, shadowOpacity: 0 },
+    saveButtonText: { color: '#fff', fontSize: 18, fontWeight: '800' }
 });

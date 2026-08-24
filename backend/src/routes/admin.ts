@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { getCentralTreasury } from '../services/centralTreasury';
+import { hasPermission } from '../services/RBAC';
 import { sendSms } from '../services/sms';
 import { friendlyErrorMessage } from '../utils/errors';
 
@@ -30,8 +31,8 @@ const KYC_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'];
 
 router.get('/stats', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const user = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!user || !['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(user.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const user = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!user || !hasPermission(user, 'perm_system_settings_view')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const totalUsers = await prisma.user.count({ where: { role: 'USER', isActive: true } });
         const agentsCount = await prisma.user.count({ where: { role: 'AGENT', isActive: true } });
@@ -119,21 +120,21 @@ const AGENCY_OPS_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'BRANCH_M
 
 // Helper: r?sout le branchId autoris? (BM limit? au sien, HQ voit tout)
 const resolveAgencyScope = async (userId: string, requestedId?: string): Promise<{ branchId: string | null; error?: string }> => {
-    const staff = await prisma.staff.findUnique({ where: { id: userId } });
+    const staff = await prisma.staff.findUnique({ where: { id: userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
     if (!staff) return { branchId: null, error: 'Utilisateur introuvable.' };
     if (staff.role === 'BRANCH_MANAGER' && staff.branchId) {
         if (requestedId && requestedId !== staff.branchId) return { branchId: null, error: 'Accès restreint à votre agence.' };
         return { branchId: staff.branchId };
     }
-    if (AGENCY_ADMIN_ROLES.includes(staff.role)) return { branchId: requestedId || null };
+    if (hasPermission(staff, 'perm_branch_manage')) return { branchId: requestedId || null };
     return { branchId: null, error: 'Rôle non autorisé.' };
 };
 
 // -- 1. Liste agences (pagin?e + filtres) ---------------------
 router.get('/branches', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !AGENCY_OPS_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_branch_view')) return res.status(403).json({ error: 'Accès refusé.' });
 
         // BRANCH_MANAGER ne voit que son agence
         if (staff.role === 'BRANCH_MANAGER' && staff.branchId) {
@@ -177,8 +178,8 @@ router.get('/branches', authMiddleware, async (req: AuthRequest, res) => {
 // -- 2. Cr?er une agence --------------------------------------
 router.post('/branches', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !AGENCY_ADMIN_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_branch_manage')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const { name, code, address, city, region, phone, managerId, status, isHQ } = req.body;
         if (!name || !code) return res.status(400).json({ error: 'Nom et code requis.' });
@@ -207,8 +208,8 @@ router.post('/branches', authMiddleware, async (req: AuthRequest, res) => {
 // -- 3. Modifier/Suspendre l'agence ----------------------------
 router.patch('/branches/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !AGENCY_ADMIN_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_branch_manage')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const branchId = req.params.id as string;
         const { status, managerId, name, address, city, region, phone, code } = req.body;
@@ -300,8 +301,8 @@ router.get('/branches/:id/staff', authMiddleware, async (req: AuthRequest, res) 
 // -- 6. Assigner un staff ? une agence ------------------------
 router.post('/branches/:id/staff/:staffId/assign', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!admin || !AGENCY_ADMIN_ROLES.includes(admin.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!admin || !hasPermission(admin, 'perm_branch_manage')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const target = await prisma.staff.findUnique({ where: { id: req.params.staffId as string } });
         if (!target) return res.status(404).json({ error: 'Staff introuvable.' });
@@ -319,8 +320,8 @@ router.post('/branches/:id/staff/:staffId/assign', authMiddleware, async (req: A
 // -- 7. D?sassigner un staff d'une agence ---------------------
 router.delete('/branches/:id/staff/:staffId/unassign', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!admin || !AGENCY_ADMIN_ROLES.includes(admin.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!admin || !hasPermission(admin, 'perm_branch_manage')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const target = await prisma.staff.findUnique({ where: { id: req.params.staffId as string } });
         if (!target || target.branchId !== req.params.id) return res.status(400).json({ error: 'Staff non assigné à cette agence.' });
@@ -544,8 +545,8 @@ router.get('/branches/:id/alerts', authMiddleware, async (req: AuthRequest, res)
 // -- 15. Liste staff non assign? (pour dropdown assign) -------
 router.get('/staff/unassigned', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!admin || !AGENCY_ADMIN_ROLES.includes(admin.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!admin || !hasPermission(admin, 'perm_branch_manage')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const staff = await prisma.staff.findMany({
             where: { branchId: null, role: { in: ['TELLER', 'BRANCH_MANAGER'] }, status: 'ACTIVE' },
@@ -569,7 +570,7 @@ const hasSupportAccess = (role: string) => ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_C
 // 5. Cr?er une R?clamation (Par un Staff Maker/Customer 360)
 router.post('/users/:id/reclamation', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const user = await prisma.staff.findUnique({ where: { id: req.userId } });
+        const user = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
         if (!user || !hasSupportAccess(user.role)) return res.status(403).json({ error: 'Accès refusé.' });
 
         const customerId = req.params.id; // User ID
@@ -607,7 +608,7 @@ router.post('/users/:id/reclamation', authMiddleware, async (req: AuthRequest, r
 // GET /api/admin/users
 router.get('/users', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const user = await prisma.staff.findUnique({ where: { id: req.userId } });
+        const user = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
         if (!user || user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const role = req.query.role as string;
@@ -640,7 +641,7 @@ router.get('/users', authMiddleware, async (req: AuthRequest, res) => {
 // POST /api/admin/users/create-pro
 router.post('/users/create-pro', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const user = await prisma.staff.findUnique({ where: { id: req.userId } });
+        const user = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
         if (!user || user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const schema = z.object({
@@ -686,7 +687,7 @@ router.post('/users/create-pro', authMiddleware, async (req: AuthRequest, res) =
 // POST /api/admin/users/:id/toggle-status
 router.post('/users/:id/toggle-status', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
         if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const targetUser = await prisma.user.findUnique({ where: { id: String(req.params.id) as string } });
@@ -715,7 +716,7 @@ router.post('/users/:id/toggle-status', authMiddleware, async (req: AuthRequest,
 // PUT /api/admin/users/:id
 router.put('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
         if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const schema = z.object({
@@ -763,7 +764,7 @@ router.put('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
 // (dépôts/retraits guichet via l'app mobile) restent invisibles des rapports d'agence.
 router.put('/users/:id/branch', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
         if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const schema = z.object({ branchId: z.string().nullable() });
@@ -798,8 +799,8 @@ router.put('/users/:id/branch', authMiddleware, async (req: AuthRequest, res) =>
 // GET /api/admin/logs
 router.get('/logs', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!admin || !['SUPER_ADMIN', 'RISK'].includes(admin.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!admin || !hasPermission(admin, 'perm_audit_log_view')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const logs = await prisma.auditLog.findMany({
             orderBy: { createdAt: 'desc' },
@@ -815,8 +816,8 @@ router.get('/logs', authMiddleware, async (req: AuthRequest, res) => {
 // GET /api/admin/ledger
 router.get('/ledger', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!admin || !['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(admin.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!admin || !hasPermission(admin, 'perm_system_settings_view')) return res.status(403).json({ error: 'Accès refusé.' });
 
         // Les courbes 7j/14j et le Grand Livre (admin-web Dashboard.tsx, MacroStats.tsx,
         // Ledger.tsx) agrègent/filtrent TOUT côté client sur ce même jeu de résultats. À
@@ -844,7 +845,7 @@ router.get('/ledger', authMiddleware, async (req: AuthRequest, res) => {
 // DELETE /api/admin/users/:id
 router.delete('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
         if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
         const targetId = req.params.id as string;
@@ -890,8 +891,8 @@ router.delete('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
 // --- V4: Mod?ration KYC ---
 router.get('/users/kyc', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!admin || !KYC_ROLES.includes(admin.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!admin || !hasPermission(admin, 'perm_customer_kyc_validate')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const filter = req.query.status as string || 'PENDING';
         const pendingList = await (prisma.user as any).findMany({
@@ -913,7 +914,7 @@ const vipLimitSchema = z.object({
 
 router.put('/users/:id/vip-limit', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
         // Plafond VIP : action à fort impact financier, réservée strictement à SUPER_ADMIN.
         if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
 
@@ -955,8 +956,8 @@ const kycReviewSchema = z.object({
 
 router.put('/users/:id/kyc', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!admin || !KYC_ROLES.includes(admin.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!admin || !hasPermission(admin, 'perm_customer_kyc_validate')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const parsed = kycReviewSchema.safeParse(req.body);
         if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -1000,9 +1001,9 @@ router.put('/users/:id/kyc', authMiddleware, async (req: AuthRequest, res) => {
 
 router.post('/branches/:id/fund', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
         // Only SuperAdmin or Risk can inject physical Liquidity
-        if (!admin || !['SUPER_ADMIN', 'RISK'].includes(admin.role)) {
+        if (!admin || !hasPermission(admin, 'perm_audit_log_view')) {
             return res.status(403).json({ error: 'Autorisation "Injection de Liquidité" requise.' });
         }
 
@@ -1065,8 +1066,8 @@ router.post('/branches/:id/fund', authMiddleware, async (req: AuthRequest, res) 
 
 router.get('/teller/lookup/:phone', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !['TELLER', 'BRANCH_MANAGER', 'SUPER_ADMIN'].includes(staff.role)) {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_cash_out')) {
             return res.status(403).json({ error: 'Accès Guichet refusé.' });
         }
 
@@ -1094,8 +1095,8 @@ router.get('/teller/lookup/:phone', authMiddleware, async (req: AuthRequest, res
 
 router.get('/staff', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!admin || !['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(admin.role)) {
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!admin || !hasPermission(admin, 'perm_system_settings_view')) {
             return res.status(403).json({ error: 'Accès refusé.' });
         }
 
@@ -1149,8 +1150,8 @@ router.get('/staff', authMiddleware, async (req: AuthRequest, res) => {
 
 router.post('/staff', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!admin || !['SUPER_ADMIN', 'RISK'].includes(admin.role)) {
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!admin || !hasPermission(admin, 'perm_audit_log_view')) {
             return res.status(403).json({ error: 'Seule la direction peut habiliter du personnel.' });
         }
 
@@ -1208,8 +1209,8 @@ router.post('/staff', authMiddleware, async (req: AuthRequest, res) => {
 
 router.put('/staff/:id/approve', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!admin || !['SUPER_ADMIN', 'RISK'].includes(admin.role)) {
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!admin || !hasPermission(admin, 'perm_audit_log_view')) {
             return res.status(403).json({ error: 'Autorisation Maker-Checker requise pour valider un recrutement.' });
         }
 
@@ -1244,8 +1245,8 @@ const STAFF_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER
 
 router.put('/staff/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!admin || !['SUPER_ADMIN', 'RISK'].includes(admin.role)) {
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!admin || !hasPermission(admin, 'perm_audit_log_view')) {
             return res.status(403).json({ error: 'Droit institutionnel requis.' });
         }
 
@@ -1307,8 +1308,8 @@ router.put('/staff/:id', authMiddleware, async (req: AuthRequest, res) => {
 
 router.get('/customers', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !['SUPER_ADMIN', 'RISK', 'SUPPORT_MAKER', 'COMPLIANCE_CHECKER'].includes(staff.role)) {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) {
             return res.status(403).json({ error: 'Accès refusé.' });
         }
 
@@ -1370,8 +1371,8 @@ router.get('/customers', authMiddleware, async (req: AuthRequest, res) => {
 
 router.post('/users/:id/logout-all', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !['SUPER_ADMIN', 'RISK', 'SUPPORT_MAKER'].includes(staff.role)) {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_ticket_view')) {
             return res.status(403).json({ error: 'Action non autorisée.' });
         }
 
@@ -1395,8 +1396,8 @@ router.post('/users/:id/logout-all', authMiddleware, async (req: AuthRequest, re
 
 router.post('/users/:id/risk-flags', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'].includes(staff.role)) {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_system_settings_view')) {
             return res.status(403).json({ error: 'Seule la conformité et les risques peuvent affecter un Flag.' });
         }
 
@@ -1428,9 +1429,9 @@ router.post('/users/:id/risk-flags', authMiddleware, async (req: AuthRequest, re
 
 router.post('/users/:id/reset-pin-request', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
         // SUPPORT_MAKER is allowed to help clients reset their PINs
-        if (!staff || !['SUPER_ADMIN', 'SUPPORT_MAKER', 'RISK'].includes(staff.role)) {
+        if (!staff || !hasPermission(staff, 'perm_ticket_view')) {
             return res.status(403).json({ error: 'Droit institutionnel requis.' });
         }
 
@@ -1473,8 +1474,8 @@ router.get('/users/:id/limit-requests', authMiddleware, async (req: AuthRequest,
         // Historique de relèvement de plafond client : donnée de conformité, réservée aux
         // mêmes rôles que le reste du dossier Customer 360 sensible — un simple `if (!staff)`
         // laissait n'importe quel rôle (TELLER inclus) la consulter pour n'importe quel client.
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_FULL_ACCESS.includes(staff.role)) return res.status(403).json({ error: 'Interdit' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Interdit' });
 
         const requests = await prisma.settingsApproval.findMany({
             where: {
@@ -1505,8 +1506,8 @@ const FINANCE_ROLES = ['SUPER_ADMIN', 'RISK'];
 // -- Create Ticket -----------------------------------------------
 router.post('/reclamations', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !SUPPORT_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const { title, description, category, priority, userId, transactionId, branchId, tellerId } = req.body;
         if (!title || !description || !userId) return res.status(400).json({ error: 'title, description et userId sont obligatoires.' });
@@ -1540,8 +1541,8 @@ router.post('/reclamations', authMiddleware, async (req: AuthRequest, res) => {
 
 router.post('/fraud-cases', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !FRAUD_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Réservé équipe Risk/Compliance.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_flag')) return res.status(403).json({ error: 'Réservé équipe Risk/Compliance.' });
 
         const { userId, type, riskLevel, description, linkedTransactionIds, reclamationId } = req.body;
         if (!userId || !description) return res.status(400).json({ error: 'userId et description requis.' });
@@ -1567,8 +1568,8 @@ router.post('/fraud-cases', authMiddleware, async (req: AuthRequest, res) => {
 
 router.get('/fraud-cases', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !FRAUD_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès limité.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_flag')) return res.status(403).json({ error: 'Accès limité.' });
 
         const { status, riskLevel, page = '1', limit = '50' } = req.query;
         const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
@@ -1597,8 +1598,8 @@ router.get('/fraud-cases', authMiddleware, async (req: AuthRequest, res) => {
 
 router.get('/fraud-cases/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !FRAUD_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès limité.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_flag')) return res.status(403).json({ error: 'Accès limité.' });
 
         const fc = await prisma.fraudCase.findUnique({
             where: { id: String(req.params.id) as string },
@@ -1613,8 +1614,8 @@ router.get('/fraud-cases/:id', authMiddleware, async (req: AuthRequest, res) => 
 
 router.patch('/fraud-cases/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !FRAUD_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès limité.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_flag')) return res.status(403).json({ error: 'Accès limité.' });
 
         const { status, riskLevel, decision, analystId } = req.body;
         const data: any = {};
@@ -1638,8 +1639,8 @@ router.patch('/fraud-cases/:id', authMiddleware, async (req: AuthRequest, res) =
 
 router.post('/refund-requests', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !SUPPORT_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès non autorisé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) return res.status(403).json({ error: 'Accès non autorisé.' });
 
         const { transactionId, userId, amount, refundType, reason, description, reclamationId } = req.body;
         if (!transactionId || !userId || !amount || !reason) return res.status(400).json({ error: 'transactionId, userId, amount, reason sont obligatoires.' });
@@ -1664,8 +1665,8 @@ router.post('/refund-requests', authMiddleware, async (req: AuthRequest, res) =>
 
 router.get('/refund-requests', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !SUPPORT_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès non autorisé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) return res.status(403).json({ error: 'Accès non autorisé.' });
 
         const { status, page = '1', limit = '50' } = req.query;
         const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
@@ -1692,8 +1693,8 @@ router.get('/refund-requests', authMiddleware, async (req: AuthRequest, res) => 
 
 router.patch('/refund-requests/:id/approve', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !FINANCE_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Seul Finance/SuperAdmin peut approuver.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_refund_approve')) return res.status(403).json({ error: 'Seul Finance/SuperAdmin peut approuver.' });
 
         const refund = await prisma.refundRequest.findUnique({ where: { id: String(req.params.id) as string } });
         if (!refund) return res.status(404).json({ error: 'Demande introuvable.' });
@@ -1721,8 +1722,8 @@ router.patch('/refund-requests/:id/approve', authMiddleware, async (req: AuthReq
 
 router.post('/refund-requests/:id/execute', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !FINANCE_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Seul Finance/SuperAdmin peut exécuter un remboursement.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_refund_approve')) return res.status(403).json({ error: 'Seul Finance/SuperAdmin peut exécuter un remboursement.' });
 
         const settings = await prisma.systemSettings.findFirst();
         if (settings?.circuitBreaker) {
@@ -1800,11 +1801,11 @@ const CRM_BROAD_ACCESS = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_
 // -- GET /api/admin/users/:id/360 ----------------------------
 router.get('/users/:id/360', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_BROAD_ACCESS.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_view')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const customerId = req.params.id as string;
-        const isSensitive = CRM_FULL_ACCESS.includes(staff.role);
+        const isSensitive = hasPermission(staff, 'perm_customer_360_basic');
 
         const user = await prisma.user.findUnique({
             where: { id: customerId },
@@ -1893,8 +1894,8 @@ router.get('/users/:id/360', authMiddleware, async (req: AuthRequest, res) => {
 // -- POST /api/admin/users/:id/block -------------------------
 router.post('/users/:id/block', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_RISK_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé. (RISK ou SUPER_ADMIN requis)' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'Accès refusé. (RISK ou SUPER_ADMIN requis)' });
 
         const { reason } = req.body;
         if (!reason || reason.trim().length < 5) return res.status(400).json({ error: 'Motif obligatoire (min 5 caractères).' });
@@ -1937,8 +1938,8 @@ router.post('/users/:id/block', authMiddleware, async (req: AuthRequest, res) =>
 // -- POST /api/admin/users/:id/unblock -----------------------
 router.post('/users/:id/unblock', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_RISK_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const { reason } = req.body;
         if (!reason || reason.trim().length < 5) return res.status(400).json({ error: 'Motif de déblocage obligatoire.' });
@@ -1978,8 +1979,8 @@ router.post('/users/:id/unblock', authMiddleware, async (req: AuthRequest, res) 
 // -- POST /api/admin/users/:id/flag --------------------------
 router.post('/users/:id/flag', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_FULL_ACCESS.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const { type, description } = req.body;
         const validTypes = ['SUSPICIOUS_ACTIVITY', 'AML_ALERT', 'FRAUD_REPORT', 'IDENTITY_THEFT', 'ANTI_FRACTIONING', 'OTHER'];
@@ -2017,8 +2018,8 @@ router.post('/users/:id/flag', authMiddleware, async (req: AuthRequest, res) => 
 // -- GET /api/admin/users/:id/transactions -------------------
 router.get('/users/:id/transactions', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_FULL_ACCESS.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const customerId = req.params.id as string;
         const { type, status, page = '1', limit = '25' } = req.query;
@@ -2051,8 +2052,8 @@ router.get('/users/:id/transactions', authMiddleware, async (req: AuthRequest, r
 // -- GET /api/admin/users/:id/cash-ops -----------------------
 router.get('/users/:id/cash-ops', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_FULL_ACCESS.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const customerId = req.params.id as string;
         const user = await prisma.user.findUnique({ where: { id: customerId }, include: { wallet: true } });
@@ -2108,8 +2109,8 @@ router.get('/users/:id/cash-ops', authMiddleware, async (req: AuthRequest, res) 
 // -- GET /api/admin/users/:id/security -----------------------
 router.get('/users/:id/security', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_FULL_ACCESS.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const customerId = req.params.id as string;
         const user = await prisma.user.findUnique({
@@ -2145,8 +2146,8 @@ router.get('/users/:id/security', authMiddleware, async (req: AuthRequest, res) 
 // -- POST /api/admin/users/:id/unlock-account ----------------
 router.post('/users/:id/unlock-account', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_FULL_ACCESS.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const { reason } = req.body;
         if (!reason) return res.status(400).json({ error: 'Motif requis.' });
@@ -2178,8 +2179,8 @@ router.post('/users/:id/unlock-account', authMiddleware, async (req: AuthRequest
 // -- POST /api/admin/users/:id/revoke-sessions ---------------
 router.post('/users/:id/revoke-sessions', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_RISK_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé. (RISK ou SUPER_ADMIN requis)' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'Accès refusé. (RISK ou SUPER_ADMIN requis)' });
 
         const { reason } = req.body;
         if (!reason) return res.status(400).json({ error: 'Motif requis.' });
@@ -2220,8 +2221,8 @@ router.post('/users/:id/revoke-sessions', authMiddleware, async (req: AuthReques
 // -- GET /api/admin/users/:id/audit --------------------------
 router.get('/users/:id/audit', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_FULL_ACCESS.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const customerId = req.params.id as string;
         const { page = '1', limit = '30' } = req.query;
@@ -2247,11 +2248,11 @@ router.get('/users/:id/audit', authMiddleware, async (req: AuthRequest, res) => 
 // -- GET /api/admin/users/:id/reclamations -------------------
 router.get('/users/:id/reclamations', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_BROAD_ACCESS.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_view')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const customerId = req.params.id as string;
-        const isSensitive = CRM_FULL_ACCESS.includes(staff.role);
+        const isSensitive = hasPermission(staff, 'perm_customer_360_basic');
         const reclamations = await prisma.reclamation.findMany({
             where: { userId: customerId },
             orderBy: { createdAt: 'desc' },
@@ -2278,8 +2279,8 @@ router.get('/users/:id/reclamations', authMiddleware, async (req: AuthRequest, r
 // -- GET /api/admin/users/:id/limits-view --------------------
 router.get('/users/:id/limits-view', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_FULL_ACCESS.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const customerId = req.params.id as string;
         const [user, settings] = await Promise.all([
@@ -2319,8 +2320,8 @@ router.get('/users/:id/limits-view', authMiddleware, async (req: AuthRequest, re
 // -- POST /api/admin/users/:id/limit-request (Maker/Checker) -
 router.post('/users/:id/limit-request', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_FULL_ACCESS.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const customerId = req.params.id as string;
         const { limitType, requestedValue, reason, expiresAt } = req.body;
@@ -2374,8 +2375,8 @@ const FREEZE_REASONS = ['SUSPECTED_FRAUD', 'AML_REVIEW', 'SECURITY_ISSUE', 'LEGA
 // -- POST /api/admin/users/:id/freeze ------------------------
 router.post('/users/:id/freeze', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_RISK_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé. (RISK ou SUPER_ADMIN requis)' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'Accès refusé. (RISK ou SUPER_ADMIN requis)' });
 
         const { freezeReason, comment } = req.body;
         if (!freezeReason || !FREEZE_REASONS.includes(freezeReason)) {
@@ -2425,8 +2426,8 @@ router.post('/users/:id/freeze', authMiddleware, async (req: AuthRequest, res) =
 // -- POST /api/admin/users/:id/unfreeze ----------------------
 router.post('/users/:id/unfreeze', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_RISK_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const { justification } = req.body;
         if (!justification || justification.trim().length < 10) {
@@ -2470,8 +2471,8 @@ router.post('/users/:id/unfreeze', authMiddleware, async (req: AuthRequest, res)
 // R?GLE: Le PIN n'est JAMAIS retourn?. On invalide les tentatives et sessions.
 router.post('/users/:id/reset-pin', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_RISK_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé. (RISK ou SUPER_ADMIN requis)' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'Accès refusé. (RISK ou SUPER_ADMIN requis)' });
 
         const { reason } = req.body;
         if (!reason || reason.trim().length < 5) return res.status(400).json({ error: 'Motif obligatoire (min 5 caractères).' });
@@ -2514,8 +2515,8 @@ router.post('/users/:id/reset-pin', authMiddleware, async (req: AuthRequest, res
 // MAKER: Cr?e une demande de remboursement. CHECKER approuve via Settings.
 router.post('/users/:id/refund-request', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_FULL_ACCESS.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const { transactionId, amount, reason } = req.body;
         if (!transactionId || !amount || !reason) {
@@ -2581,8 +2582,8 @@ router.post('/users/:id/refund-request', authMiddleware, async (req: AuthRequest
 // Permet au support d'ajouter une note interne au profil d'un client.
 router.post('/users/:id/support-note', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_FULL_ACCESS.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const { content, reclamationId } = req.body;
         if (!content || content.trim().length < 3) return res.status(400).json({ error: 'Contenu de la note requis (min 3 caractères).' });
@@ -2628,8 +2629,8 @@ router.post('/users/:id/support-note', authMiddleware, async (req: AuthRequest, 
 // Permet au support de changer le statut d'un ticket de r?clamation.
 router.patch('/users/:id/reclamation/:recId/status', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !CRM_FULL_ACCESS.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const { status, comment } = req.body;
         const validStatuses = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
@@ -2675,8 +2676,8 @@ router.patch('/users/:id/reclamation/:recId/status', authMiddleware, async (req:
 
 router.get('/reclamations/stats', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !SUPPORT_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès non autorisé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) return res.status(403).json({ error: 'Accès non autorisé.' });
 
         const [
             open, inProgress, waitingCustomer, slaBreached, critical, refundPending, fraudCases
@@ -2698,8 +2699,8 @@ router.get('/reclamations/stats', authMiddleware, async (req: AuthRequest, res) 
 
 router.get('/reclamations', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !SUPPORT_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès non autorisé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) return res.status(403).json({ error: 'Accès non autorisé.' });
 
         const { status, priority, category, query, slaBreached, limit = '100' } = req.query;
         const where: any = {};
@@ -2744,8 +2745,8 @@ router.get('/reclamations', authMiddleware, async (req: AuthRequest, res) => {
 
 router.get('/reclamations/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !SUPPORT_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès non autorisé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) return res.status(403).json({ error: 'Accès non autorisé.' });
 
         const ticket = await prisma.reclamation.findUnique({
             where: { id: String(req.params.id) as string },
@@ -2782,8 +2783,8 @@ router.get('/reclamations/:id', authMiddleware, async (req: AuthRequest, res) =>
 
 router.post('/reclamations/:id/notes', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !SUPPORT_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès non autorisé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) return res.status(403).json({ error: 'Accès non autorisé.' });
 
         const { content, isInternal } = req.body;
         if (!content) return res.status(400).json({ error: 'Note vide interdite.' });
@@ -2832,8 +2833,8 @@ router.post('/reclamations/:id/notes', authMiddleware, async (req: AuthRequest, 
 
 router.patch('/reclamations/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !SUPPORT_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès non autorisé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) return res.status(403).json({ error: 'Accès non autorisé.' });
 
         const { status, priority, category, assigneeId } = req.body;
         const rec = await prisma.reclamation.findUnique({ where: { id: String(req.params.id) as string } });
@@ -3100,12 +3101,12 @@ router.post('/api-integrations/:id/rotate', authMiddleware, async (req: AuthRequ
 // ==========================================
 // JOURNAL TECHNIQUE DES ERREURS (ErrorLog)
 // ==========================================
-const ERROR_LOG_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'];
+// Removed ERROR_LOG_ROLES in favor of perm_audit_log_view
 
 router.get('/error-logs', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !ERROR_LOG_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_audit_log_view')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const page = Math.max(1, parseInt(req.query.page as string) || 1);
         const limit = Math.min(100, parseInt(req.query.limit as string) || 30);
@@ -3129,8 +3130,8 @@ router.get('/error-logs', authMiddleware, async (req: AuthRequest, res) => {
 
 router.put('/error-logs/:id/resolve', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !ERROR_LOG_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_audit_log_view')) return res.status(403).json({ error: 'Accès refusé.' });
 
         await prisma.errorLog.update({ where: { id: req.params.id as string }, data: { resolved: true } });
         return res.json({ success: true });
@@ -3148,12 +3149,12 @@ router.put('/error-logs/:id/resolve', authMiddleware, async (req: AuthRequest, r
 // de la lecture pour l'instant (RISK/COMPLIANCE_CHECKER/SUPPORT_MAKER
 // traitent les tickets, SUPER_ADMIN supervise) ; aucune action d'intervention
 // (réattribuer un rôle, forcer un retrait) n'est exposée ici.
-const VAULT_VIEW_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER'];
+// Removed VAULT_VIEW_ROLES in favor of perm_customer_360_basic
 
 router.get('/vaults', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !VAULT_VIEW_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const vaults = await prisma.vault.findMany({
             orderBy: { createdAt: 'desc' },
@@ -3171,8 +3172,8 @@ router.get('/vaults', authMiddleware, async (req: AuthRequest, res) => {
 
 router.get('/vaults/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !VAULT_VIEW_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const vault = await prisma.vault.findUnique({
             where: { id: req.params.id as string },
@@ -3208,12 +3209,12 @@ router.get('/vaults/:id', authMiddleware, async (req: AuthRequest, res) => {
 // (cagnotte non reçue, cotisation prélevée en double, ordre de versement contesté)
 // était invisible pour toute l'équipe — TontineGroup n'apparaissait dans aucun écran
 // admin. Lecture seule uniquement, aucune action d'intervention exposée ici.
-const TONTINE_VIEW_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER'];
+// Removed TONTINE_VIEW_ROLES in favor of perm_customer_360_basic
 
 router.get('/tontines', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !TONTINE_VIEW_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const groups = await prisma.tontineGroup.findMany({
             orderBy: { createdAt: 'desc' },
@@ -3231,8 +3232,8 @@ router.get('/tontines', authMiddleware, async (req: AuthRequest, res) => {
 
 router.get('/tontines/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !TONTINE_VIEW_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const group = await prisma.tontineGroup.findUnique({
             where: { id: req.params.id as string },
@@ -3272,12 +3273,12 @@ router.get('/tontines/:id', authMiddleware, async (req: AuthRequest, res) => {
 // bon écran, puis à parcourir sa liste manuellement — Vaults/Tontines n'avaient même
 // pas de filtre local. Un seul champ, interrogeant les 3 domaines en parallèle,
 // plafonné à 5 résultats chacun : de quoi sauter directement à la fiche visée.
-const GLOBAL_SEARCH_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER'];
+// Removed GLOBAL_SEARCH_ROLES in favor of perm_customer_360_basic
 
 router.get('/search', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !GLOBAL_SEARCH_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const q = ((req.query.q as string) || '').trim();
         if (q.length < 2) return res.json({ users: [], vaults: [], tontines: [] });
@@ -3317,12 +3318,12 @@ router.get('/search', authMiddleware, async (req: AuthRequest, res) => {
 // précis ni à auditer (qui a fait entrer/sortir quoi). Lecture seule ici ; toute
 // correction de solde passe par le circuit Maker/Checker existant de Trésorerie
 // (ADJUSTMENT/REVERSAL avec targetWalletId) — jamais un solde éditable directement.
-const SYSTEM_ACCOUNTS_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'];
+// Removed SYSTEM_ACCOUNTS_ROLES in favor of perm_treasury_view
 
 router.get('/system-accounts', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !SYSTEM_ACCOUNTS_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_treasury_view')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const [users, centralTreasury] = await Promise.all([
             prisma.user.findMany({
@@ -3360,8 +3361,8 @@ router.get('/system-accounts', authMiddleware, async (req: AuthRequest, res) => 
 
 router.get('/system-accounts/:walletId/transactions', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!staff || !SYSTEM_ACCOUNTS_ROLES.includes(staff.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_treasury_view')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const walletId = req.params.walletId as string;
         const transactions = await prisma.transaction.findMany({

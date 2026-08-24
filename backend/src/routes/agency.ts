@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { CashOperationService } from '../services/CashOperationService';
+import { hasPermission } from '../services/RBAC';
 import { friendlyErrorMessage } from '../utils/errors';
 import { generateReference } from '../utils/reference';
 
@@ -31,7 +32,7 @@ const agencyMiddleware = async (req: AuthRequest, res: any, next: any) => {
             (req as any).branchId = user.branchId;
         }
 
-        (req as any).role = user.role;
+        (req as any).staff = user;
         next();
     } catch (e: any) {
         console.error('Erreur agencyMiddleware:', e);
@@ -59,6 +60,11 @@ const requireBranchId = (req: AuthRequest, res: any, next: any) => {
 // 1. Démarrer une session (OVERLAP protection)
 router.post('/sessions/open', requireBranchId, async (req: AuthRequest, res) => {
     try {
+        const staff = (req as any).staff;
+        if (!hasPermission(staff, 'perm_cash_session_open')) {
+            return res.status(403).json({ error: 'Vous n\'avez pas les droits d\'ouverture de session.' });
+        }
+
         const branchId = (req as any).branchId;
         const initialCash = parseFloat(req.body.initialCash) || 0;
 
@@ -88,6 +94,11 @@ router.post('/sessions/open', requireBranchId, async (req: AuthRequest, res) => 
 // 2. Clôturer une session avec rapprochement
 router.post('/sessions/close', async (req: AuthRequest, res) => {
     try {
+        const staff = (req as any).staff;
+        if (!hasPermission(staff, 'perm_cash_session_close')) {
+            return res.status(403).json({ error: 'Vous n\'avez pas les droits de clôture de session.' });
+        }
+
         const finalCashDeclared = parseFloat(req.body.finalCash);
         if (isNaN(finalCashDeclared)) return res.status(400).json({ error: 'Final cash invalide.' });
 
@@ -143,11 +154,11 @@ router.post('/sessions/close', async (req: AuthRequest, res) => {
 // 3. Obtenir mes sessions ou celles de mon agence
 router.get('/sessions', requireBranchId, async (req: AuthRequest, res) => {
     try {
-        const role = (req as any).role;
+        const staff = (req as any).staff;
         const branchId = (req as any).branchId;
 
         let whereClause: any = { branchId };
-        if (role === 'TELLER') {
+        if (!hasPermission(staff, 'perm_branch_manage')) {
             whereClause.tellerId = req.userId; // Teller ne voit que les siennes
         }
 
@@ -188,6 +199,10 @@ router.get('/info', requireBranchId, async (req: AuthRequest, res) => {
 // 4. Cash-In (Dépôt) — via CashOperationService
 router.post('/cash-in', requireBranchId, async (req: AuthRequest, res) => {
     try {
+        const staff = (req as any).staff;
+        if (!hasPermission(staff, 'perm_cash_in')) {
+            return res.status(403).json({ error: 'Vous n\'êtes pas autorisé à faire des dépôts.' });
+        }
         const branchId = (req as any).branchId;
         const { userPhone, amount, idempotencyKey, clientPhone } = req.body;
         const phone = userPhone || clientPhone;
@@ -217,6 +232,10 @@ router.post('/cash-in', requireBranchId, async (req: AuthRequest, res) => {
 // 5. Cash-Out (Retrait Guichet) — via CashOperationService
 router.post('/cash-out', requireBranchId, async (req: AuthRequest, res) => {
     try {
+        const staff = (req as any).staff;
+        if (!hasPermission(staff, 'perm_cash_out')) {
+            return res.status(403).json({ error: 'Vous n\'êtes pas autorisé à valider des retraits.' });
+        }
         const branchId = (req as any).branchId;
         const { userPhone, amount, idempotencyKey, clientPhone } = req.body;
         const phone = userPhone || clientPhone;
@@ -244,6 +263,10 @@ router.post('/cash-out', requireBranchId, async (req: AuthRequest, res) => {
 // l'agent le saisit ici avec le téléphone du client pour valider et exécuter le retrait.
 router.post('/cash-out-code', requireBranchId, async (req: AuthRequest, res) => {
     try {
+        const staff = (req as any).staff;
+        if (!hasPermission(staff, 'perm_cash_out')) {
+            return res.status(403).json({ error: 'Vous n\'êtes pas autorisé à valider des retraits par code.' });
+        }
         const branchId = (req as any).branchId;
         const { clientPhone, code, idempotencyKey } = req.body;
         if (!clientPhone || !code) return res.status(400).json({ error: 'Téléphone client et code requis.' });
@@ -294,9 +317,9 @@ router.post('/cash-out-code', requireBranchId, async (req: AuthRequest, res) => 
 // 6. Demande de Financement (Treasury Request)
 router.post('/treasury-requests', requireBranchId, async (req: AuthRequest, res) => {
     try {
-        const role = (req as any).role;
+        const staff = (req as any).staff;
         const branchId = (req as any).branchId;
-        if (!['BRANCH_MANAGER', 'SUPER_ADMIN'].includes(role)) return res.status(403).json({ error: 'Seul le Manager peut demander un financement.' });
+        if (!hasPermission(staff, 'perm_branch_manage')) return res.status(403).json({ error: 'Seul le Manager (perm_branch_manage) peut demander un financement.' });
 
         const schema = z.object({ amount: z.number().positive(), reason: z.string().min(3) });
         const parsed = schema.safeParse(req.body);
@@ -320,9 +343,9 @@ router.post('/treasury-requests', requireBranchId, async (req: AuthRequest, res)
 // 7. Vue Rapprochement (Reconciliation de fin de journée)
 router.get('/reconciliation', requireBranchId, async (req: AuthRequest, res) => {
     try {
-        const role = (req as any).role;
+        const staff = (req as any).staff;
         const branchId = (req as any).branchId;
-        if (!['BRANCH_MANAGER', 'SUPER_ADMIN'].includes(role)) return res.status(403).json({ error: 'Seul le Manager peut réconcilier.' });
+        if (!hasPermission(staff, 'perm_branch_manage')) return res.status(403).json({ error: 'Seul le Manager (perm_branch_manage) peut consulter la réconciliation.' });
 
         // Sessions CLOSED, pas OPEN : une session encore ouverte n'a ni `finalCash` déclaré ni
         // `discrepancy` calculé (les deux ne sont posés qu'à la clôture, voir POST

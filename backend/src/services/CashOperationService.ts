@@ -1,6 +1,6 @@
 import { prisma } from '../prisma';
-import { getOrCreateCorporateWallet } from '../routes/wallet';
 import { getSystemSettings } from '../routes/settings';
+import { getOrCreateCorporateWallet } from '../routes/wallet';
 import { generateReference } from '../utils/reference';
 import { LimitEngine } from './LimitEngine';
 
@@ -54,6 +54,11 @@ export class CashOperationService {
             });
             if (!client || !client.wallet) throw new Error("Client introuvable.");
             if (client.accountStatus !== 'ACTIVE') throw new Error(`Le compte est ${client.accountStatus}. Autorisation refusée.`);
+
+            // 🛑 PESSIMISTIC LOCKING : Verrouillage strict de la ligne en base de données.
+            // PostgreSQL bloque toute autre transaction tentant de modifier ce Wallet jusqu'au COMMIT.
+            await tx.$executeRaw`SELECT id FROM "Wallet" WHERE id = ${client.wallet.id} FOR UPDATE;`;
+            await tx.$executeRaw`SELECT id FROM "Wallet" WHERE id = ${branch.wallet.id} FOR UPDATE;`;
 
             // 5. Mises à jour Financières
             const reference = generateReference('CIN');
@@ -173,6 +178,10 @@ export class CashOperationService {
             if (!client || !client.wallet) throw new Error("Client introuvable.");
             if (client.accountStatus !== 'ACTIVE') throw new Error(`Compte client ${client.accountStatus}.`);
             if (client.riskFlags.length > 0) throw new Error(`Ce compte possède ${client.riskFlags.length} flags de risque. Fraude suspectée, retrait bloqué.`);
+
+            // 🛑 PESSIMISTIC LOCKING : Verrouillage strict
+            await tx.$executeRaw`SELECT id FROM "Wallet" WHERE id = ${client.wallet.id} FOR UPDATE;`;
+            await tx.$executeRaw`SELECT id FROM "Wallet" WHERE id = ${branch.wallet.id} FOR UPDATE;`;
 
             // 5. Limit Engine Validation
             // getSystemSettings() (mis en cache) plutôt que tx.systemSettings.findFirst() :

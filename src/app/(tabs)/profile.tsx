@@ -61,106 +61,115 @@ export default function ProfileScreen() {
         <SafeAreaView style={styles.safeArea}>
             <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
-                {/* Header */}
-                <View style={styles.header}>
-                    <Text style={styles.headerTitle}>Mon Profil</Text>
+                {/* Hero Header Area */}
+                <View style={styles.heroHeader}>
+                    <View style={styles.headerTop}>
+                        <Text style={styles.headerTitle}>Mon Profil</Text>
+                        <TouchableOpacity style={styles.editBtn} onPress={() => router.push('/profile-edit')}>
+                            <Ionicons name="pencil" size={16} color="#fff" />
+                        </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.avatarSection}>
+                        <View style={styles.avatar}>
+                            <Text style={styles.avatarText}>{initials}</Text>
+                        </View>
+                        <Text style={styles.userName}>{user?.name ?? '...'}</Text>
+                        <Text style={styles.userPhone}>{user?.phone ?? '...'}</Text>
+                    </View>
                 </View>
 
-                {/* Avatar + nom */}
-                <View style={styles.avatarSection}>
-                    <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>{initials}</Text>
-                    </View>
-                    <Text style={styles.userName}>{user?.name ?? '...'}</Text>
-                    <Text style={styles.userPhone}>{user?.phone ?? '...'}</Text>
-
-                    {/* Identity P2P Barcode */}
-                    {user?.phone && (
-                        <View style={{ marginTop: 20, padding: 10, backgroundColor: '#fff', borderRadius: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10 }}>
+                {/* Identity P2P Barcode - Lifted over the hero curve */}
+                <View style={styles.qrContainer}>
+                    {user?.phone ? (
+                        <>
                             <QRCode
-                                // Le scanner (qr.tsx) n'accepte que le préfixe 'mongain://user' — le
-                                // préfixe 'mongain://transfer' précédent n'était reconnu par aucun
-                                // scanner de l'app, rendant ce QR totalement inutilisable.
                                 value={`mongain://user?phone=${encodeURIComponent(user.phone)}&name=${encodeURIComponent(user.name || '')}&role=${encodeURIComponent(user.role || 'USER')}`}
-                                size={120}
+                                size={110}
                                 color="#1a1d2e"
                                 backgroundColor="#ffffff"
                             />
-                            <Text style={{ textAlign: 'center', marginTop: 8, fontSize: 11, color: '#64748b', fontWeight: 'bold' }}>MON CODE QR PERSONNEL</Text>
-                        </View>
+                            <Text style={styles.qrLabel}>SCAN ME TO PAY</Text>
+                        </>
+                    ) : (
+                        <Text style={styles.qrLabel}>QR Indisponible</Text>
                     )}
                 </View>
 
-                {/* Carte solde */}
-                <View style={styles.balanceCard}>
-                    <View style={styles.balanceRow}>
-                        <Ionicons name="wallet-outline" size={22} color={COLORS.primary} />
-                        <Text style={styles.balanceLabel}>Solde du portefeuille</Text>
-                    </View>
-                    <Text style={styles.balanceAmount}>
-                        {balance.toLocaleString('fr-FR')} <Text style={styles.balanceCurrency}>{currency}</Text>
-                    </Text>
-                </View>
+                {/* Curved Container Start */}
+                <View style={styles.contentContainer}>
 
-                {/* --- Limits Progress Bar --- */}
-                {limits && !limits.skip && (
-                    <View style={{ marginHorizontal: 20, marginTop: 15, padding: 18, backgroundColor: COLORS.surface, borderRadius: 16, elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                            <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.textPrimary }}>Plafond Journalier</Text>
-                            <Text style={{ fontSize: 13, fontWeight: '600', color: COLORS.textSecondary }}>{(limits.dailySpend / limits.dailyLimit * 100).toFixed(0)}%</Text>
+                    {/* Carte solde */}
+                    <View style={styles.balanceCard}>
+                        <View style={styles.balanceRow}>
+                            <Ionicons name="wallet-outline" size={22} color={COLORS.primary} />
+                            <Text style={styles.balanceLabel}>Solde du portefeuille</Text>
                         </View>
-                        <View style={{ width: '100%', height: 8, backgroundColor: COLORS.border, borderRadius: 4, overflow: 'hidden' }}>
-                            <View style={{ width: `${Math.min(100, (limits.dailySpend / limits.dailyLimit) * 100)}%`, height: '100%', backgroundColor: limits.dailySpend > limits.dailyLimit * 0.8 ? '#ef4444' : '#10b981', borderRadius: 4 }} />
-                        </View>
-                        <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 8 }}>
-                            Dépensé : <Text style={{ fontWeight: 'bold', color: COLORS.textPrimary }}>{limits.dailySpend.toLocaleString('fr-FR')}</Text> / {limits.dailyLimit.toLocaleString('fr-FR')} FCFA
+                        <Text style={styles.balanceAmount}>
+                            {balance.toLocaleString('fr-FR')} <Text style={styles.balanceCurrency}>{currency}</Text>
                         </Text>
-                        {limits.kycLevel === 0 && (
-                            <TouchableOpacity onPress={() => router.push('/profile-edit')} style={{ marginTop: 12, backgroundColor: '#fef3c7', padding: 8, borderRadius: 8 }}>
-                                <Text style={{ color: '#d97706', fontSize: 12, fontWeight: '600', textAlign: 'center' }}>+ Débloquer la limite d'envoi jusqu'à 2M (KYC) 🚀</Text>
-                            </TouchableOpacity>
-                        )}
                     </View>
-                )}
 
-                {/* Options */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Compte</Text>
-                    <MenuItem icon="person-outline" label="Informations personnelles" onPress={() => router.push('/profile-edit')} styles={styles} colors={COLORS} />
-                    <MenuItem icon="shield-checkmark-outline" label="Sécurité & PIN" onPress={() => router.push('/pin-change')} styles={styles} colors={COLORS} />
-                    <MenuItem icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications' as any)} styles={styles} colors={COLORS} />
-                    {/* AppLock Toggle */}
-                    <View style={[styles.menuItem, { justifyContent: 'space-between' }]}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <View style={styles.menuIconWrap}>
-                                <Ionicons name="lock-closed-outline" size={20} color={COLORS.primary} />
+                    {/* --- Limits Progress Bar --- */}
+                    {limits && !limits.skip && (
+                        <View style={{ marginHorizontal: 20, marginTop: 15, padding: 18, backgroundColor: COLORS.surface, borderRadius: 16, elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 }}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.textPrimary }}>Plafond Journalier</Text>
+                                <Text style={{ fontSize: 13, fontWeight: '600', color: COLORS.textSecondary }}>{(limits.dailySpend / limits.dailyLimit * 100).toFixed(0)}%</Text>
                             </View>
-                            <View style={styles.menuTextWrap}>
-                                <Text style={styles.menuLabel}>Verrou Biométrique</Text>
-                                <Text style={styles.menuSublabel}>Exiger FaceID à l'ouverture</Text>
+                            <View style={{ width: '100%', height: 8, backgroundColor: COLORS.border, borderRadius: 4, overflow: 'hidden' }}>
+                                <View style={{ width: `${Math.min(100, (limits.dailySpend / limits.dailyLimit) * 100)}%`, height: '100%', backgroundColor: limits.dailySpend > limits.dailyLimit * 0.8 ? '#ef4444' : '#10b981', borderRadius: 4 }} />
                             </View>
+                            <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 8 }}>
+                                Dépensé : <Text style={{ fontWeight: 'bold', color: COLORS.textPrimary }}>{limits.dailySpend.toLocaleString('fr-FR')}</Text> / {limits.dailyLimit.toLocaleString('fr-FR')} FCFA
+                            </Text>
+                            {limits.kycLevel === 0 && (
+                                <TouchableOpacity onPress={() => router.push('/profile-edit')} style={{ marginTop: 12, backgroundColor: '#fef3c7', padding: 8, borderRadius: 8 }}>
+                                    <Text style={{ color: '#d97706', fontSize: 12, fontWeight: '600', textAlign: 'center' }}>+ Débloquer la limite d'envoi jusqu'à 2M (KYC) 🚀</Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
-                        <Switch
-                            value={appLockEnabled}
-                            onValueChange={toggleAppLock}
-                            trackColor={{ false: '#767577', true: '#208AEF' }}
-                            thumbColor={appLockEnabled ? '#fff' : '#f4f3f4'}
-                        />
+                    )}
+
+                    {/* Options */}
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Compte</Text>
+                        <MenuItem icon="person-outline" label="Informations personnelles" onPress={() => router.push('/profile-edit')} styles={styles} colors={COLORS} />
+                        <MenuItem icon="shield-checkmark-outline" label="Sécurité & PIN" onPress={() => router.push('/pin-change')} styles={styles} colors={COLORS} />
+                        <MenuItem icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications' as any)} styles={styles} colors={COLORS} />
+                        {/* AppLock Toggle */}
+                        <View style={[styles.menuItem, { justifyContent: 'space-between' }]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <View style={styles.menuIconWrap}>
+                                    <Ionicons name="lock-closed-outline" size={20} color={COLORS.primary} />
+                                </View>
+                                <View style={styles.menuTextWrap}>
+                                    <Text style={styles.menuLabel}>Verrou Biométrique</Text>
+                                    <Text style={styles.menuSublabel}>Exiger FaceID à l'ouverture</Text>
+                                </View>
+                            </View>
+                            <Switch
+                                value={appLockEnabled}
+                                onValueChange={toggleAppLock}
+                                trackColor={{ false: '#767577', true: '#208AEF' }}
+                                thumbColor={appLockEnabled ? '#fff' : '#f4f3f4'}
+                            />
+                        </View>
                     </View>
-                </View>
 
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Support</Text>
-                    <MenuItem icon="help-circle-outline" label="Centre d'aide" onPress={() => router.push('/support')} styles={styles} colors={COLORS} />
-                    <MenuItem icon="document-text-outline" label="Conditions d'utilisation" styles={styles} colors={COLORS} />
-                    <MenuItem icon="information-circle-outline" label="À propos de Mongain" sublabel="v1.0.0" styles={styles} colors={COLORS} />
-                </View>
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Support</Text>
+                        <MenuItem icon="help-circle-outline" label="Centre d'aide" onPress={() => router.push('/support')} styles={styles} colors={COLORS} />
+                        <MenuItem icon="document-text-outline" label="Conditions d'utilisation" styles={styles} colors={COLORS} />
+                        <MenuItem icon="information-circle-outline" label="À propos de Mongain" sublabel="v1.0.0" styles={styles} colors={COLORS} />
+                    </View>
 
-                {/* Déconnexion */}
-                <TouchableOpacity style={styles.logoutBtn} onPress={logout} activeOpacity={0.8}>
-                    <Ionicons name="log-out-outline" size={20} color={COLORS.error} />
-                    <Text style={styles.logoutText}>Se déconnecter</Text>
-                </TouchableOpacity>
+                    {/* Déconnexion */}
+                    <TouchableOpacity style={styles.logoutBtn} onPress={logout} activeOpacity={0.8}>
+                        <Ionicons name="log-out-outline" size={20} color={COLORS.error} />
+                        <Text style={styles.logoutText}>Se déconnecter</Text>
+                    </TouchableOpacity>
+                </View>
 
             </ScrollView>
         </SafeAreaView>
@@ -183,25 +192,53 @@ function MenuItem({ icon, label, sublabel, onPress, styles, colors }: any) {
 }
 
 const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: COLORS.background },
-    container: { paddingBottom: 40 },
-    header: {
-        paddingHorizontal: 20, paddingVertical: 20,
-        backgroundColor: COLORS.surface, elevation: 2,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4,
-    },
-    headerTitle: { fontSize: 24, fontWeight: '800', color: COLORS.textPrimary },
+    safeArea: { flex: 1, backgroundColor: COLORS.primary }, // Match hero header background
+    container: { flexGrow: 1, backgroundColor: COLORS.primary, paddingBottom: 0 },
 
-    avatarSection: { alignItems: 'center', paddingVertical: 32, paddingHorizontal: 20 },
-    avatar: {
-        width: 90, height: 90, borderRadius: 45,
-        backgroundColor: COLORS.primary + '20',
-        borderWidth: 3, borderColor: COLORS.primary,
-        justifyContent: 'center', alignItems: 'center', marginBottom: 16,
+    heroHeader: {
+        backgroundColor: COLORS.primary,
+        paddingTop: 40,
+        paddingBottom: 80, // Space for the floating QR Code
+        paddingHorizontal: 20,
     },
-    avatarText: { fontSize: 30, fontWeight: '800', color: COLORS.primary },
-    userName: { fontSize: 22, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 4 },
-    userPhone: { fontSize: 15, color: COLORS.textSecondary },
+    headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+    headerTitle: { fontSize: 26, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
+    editBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+
+    avatarSection: { alignItems: 'center', marginTop: 10 },
+    avatar: {
+        width: 86, height: 86, borderRadius: 43,
+        backgroundColor: '#fff',
+        justifyContent: 'center', alignItems: 'center', marginBottom: 12,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5,
+    },
+    avatarText: { fontSize: 32, fontWeight: '900', color: COLORS.primary },
+    userName: { fontSize: 24, fontWeight: '800', color: '#fff', marginBottom: 4 },
+    userPhone: { fontSize: 16, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
+
+    qrContainer: {
+        alignSelf: 'center',
+        marginTop: -65, // Lift over the edge
+        marginBottom: 20,
+        padding: 12,
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        elevation: 8,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 15,
+        alignItems: 'center',
+        zIndex: 10,
+    },
+    qrLabel: { textAlign: 'center', marginTop: 10, fontSize: 11, color: COLORS.textSecondary, fontWeight: '800', letterSpacing: 1 },
+
+    contentContainer: {
+        flex: 1,
+        backgroundColor: COLORS.background,
+        borderTopLeftRadius: 36,
+        borderTopRightRadius: 36,
+        paddingTop: 10,
+        paddingBottom: 40,
+        minHeight: 500,
+    },
 
     balanceCard: {
         marginHorizontal: 20, backgroundColor: COLORS.primary + '12',

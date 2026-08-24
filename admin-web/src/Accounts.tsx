@@ -18,7 +18,7 @@ import Users from './Users';
 type AccountsTab = 'clients' | 'agents' | 'staff' | 'branches' | 'system';
 type StaffSubTab = 'assign' | 'create' | 'rights';
 
-export default function Accounts({ token, role, onAdjustSystemAccount }: { token: string; role?: string; onAdjustSystemAccount?: (walletId: string, name: string) => void }) {
+export default function Accounts({ token, role, hasPerm, onAdjustSystemAccount }: { token: string; role?: string; hasPerm?: (perms: string[]) => boolean; onAdjustSystemAccount?: (walletId: string, name: string) => void }) {
     const [tab, setTab] = useState<AccountsTab>('clients');
     // "Affectation" (le roster consultable/filtrable) est le point d'entrée le plus
     // naturel pour gérer le personnel — "Créer" et "Droits" restent à un clic, mais
@@ -49,7 +49,7 @@ export default function Accounts({ token, role, onAdjustSystemAccount }: { token
 
             {tab === 'clients' && <Users token={token} staffRole={role} />}
             {tab === 'agents' && <Users token={token} staffRole={role} lockedRole="AGENT" />}
-            {tab === 'branches' && <AgencyCenter token={token} role={role || ''} />}
+            {tab === 'branches' && <AgencyCenter token={token} hasPerm={hasPerm || (() => true)} />}
             {tab === 'system' && <SystemAccounts token={token} onAdjust={onAdjustSystemAccount} />}
 
             {tab === 'staff' && (

@@ -1,20 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Dimensions,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+    ActivityIndicator, Animated, Dimensions, StyleSheet,
+    Text, TouchableOpacity, View
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+const SCAN_FRAME_SIZE = width * 0.65;
 
 // Palette volontairement statique et sombre (pas de useAppTheme) : c'est un écran caméra
 // (viseur QR), le fond doit rester sombre pour le contraste quel que soit le thème système
@@ -41,19 +38,31 @@ export default function QrScreen() {
     const router = useRouter();
     const { user } = useAuth();
     const params = useLocalSearchParams();
+    const insets = useSafeAreaInsets();
 
-    // mode can be enforced via URL parameter (e.g. ?mode=scanOnly)
     const scanOnly = params.mode === 'scanOnly';
     const intent = params.intent as string;
     const [mode, setMode] = useState<'scan' | 'receive'>(scanOnly ? 'scan' : 'scan');
 
-    // Camera permissions
     const [permission, requestPermission] = useCameraPermissions();
     const [scanned, setScanned] = useState(false);
 
+    // Scanner Line Animation
+    const scanLineAnim = useRef(new Animated.Value(0)).current;
+
     useEffect(() => {
-        if (!permission?.granted && mode === 'scan') {
-            requestPermission();
+        if (!permission?.granted && mode === 'scan') requestPermission();
+
+        if (mode === 'scan') {
+            scanLineAnim.setValue(0);
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(scanLineAnim, { toValue: SCAN_FRAME_SIZE - 4, duration: 1500, useNativeDriver: true }),
+                    Animated.timing(scanLineAnim, { toValue: 0, duration: 1500, useNativeDriver: true })
+                ])
+            ).start();
+        } else {
+            scanLineAnim.stopAnimation();
         }
     }, [mode, permission]);
 
@@ -143,7 +152,7 @@ export default function QrScreen() {
 
     if (!user) {
         return (
-            <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center' }]}>
+            <SafeAreaView style={[styles.absoluteFlex, { justifyContent: 'center', alignItems: 'center' }]}>
                 <ActivityIndicator color={COLORS.primary} size="large" />
             </SafeAreaView>
         );
@@ -152,37 +161,14 @@ export default function QrScreen() {
     const qrValue = generateQrData(user.phone, user.name, user.role as string || 'USER');
 
     return (
-        <SafeAreaView style={styles.safeArea}>
-            {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-                    <Ionicons name="close" size={28} color="#fff" />
-                </TouchableOpacity>
-                {scanOnly ? null : (
-                    <View style={styles.toggleContainer}>
-                        <TouchableOpacity
-                            style={[styles.toggleBtn, mode === 'scan' && styles.toggleBtnActive]}
-                            onPress={() => setMode('scan')}
-                        >
-                            <Text style={[styles.toggleText, mode === 'scan' && styles.toggleTextActive]}>Scanner</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.toggleBtn, mode === 'receive' && styles.toggleBtnActive]}
-                            onPress={() => setMode('receive')}
-                        >
-                            <Text style={[styles.toggleText, mode === 'receive' && styles.toggleTextActive]}>Recevoir</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
-                <View style={{ width: 28 }} />
-            </View>
+        <View style={styles.absoluteFlex}>
 
-            {/* Content Mode */}
-            <View style={styles.content}>
+            {/* The background is always dark for scan, but we want a fluid view. */}
+            <View style={styles.absoluteFlex}>
                 {mode === 'scan' ? (
-                    <View style={styles.scanContainer}>
+                    <View style={styles.absoluteFlex}>
                         {!permission ? (
-                            <ActivityIndicator color={COLORS.primary} size="large" />
+                            <View style={styles.centerAll}><ActivityIndicator color={COLORS.primary} size="large" /></View>
                         ) : !permission.granted ? (
                             <View style={styles.permissionMessage}>
                                 <Ionicons name="camera-outline" size={48} color="#fff" style={{ marginBottom: 16 }} />
@@ -193,41 +179,43 @@ export default function QrScreen() {
                                 </TouchableOpacity>
                             </View>
                         ) : (
-                            <View style={styles.cameraFrame}>
+                            <View style={styles.absoluteFlex}>
                                 <CameraView
                                     style={StyleSheet.absoluteFill}
                                     facing="back"
                                     onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-                                    barcodeScannerSettings={{
-                                        barcodeTypes: ['qr'],
-                                    }}
+                                    barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
                                 />
-                                <View style={styles.scannerOverlay}>
-                                    {scanError ? (
-                                        <View style={styles.errorBanner}>
-                                            <Ionicons name="close-circle" size={22} color="#fff" />
-                                            <Text style={styles.errorBannerText}>{scanError}</Text>
+
+                                {/* PURE CUTOUT MASK (No blurring the center) */}
+                                <View style={styles.maskContainer}>
+                                    <View style={styles.maskTopBottom} />
+                                    <View style={styles.maskCenterRow}>
+                                        <View style={styles.maskLeftRight} />
+                                        <View style={styles.cutoutFrame}>
+                                            <View style={[styles.corner, styles.topLeft]} />
+                                            <View style={[styles.corner, styles.topRight]} />
+                                            <View style={[styles.corner, styles.bottomLeft]} />
+                                            <View style={[styles.corner, styles.bottomRight]} />
+                                            <Animated.View style={[styles.scanLine, { transform: [{ translateY: scanLineAnim }] }]} />
                                         </View>
-                                    ) : null}
-                                    <View style={styles.scanCorners}>
-                                        <View style={[styles.corner, styles.topLeft]} />
-                                        <View style={[styles.corner, styles.topRight]} />
-                                        <View style={[styles.corner, styles.bottomLeft]} />
-                                        <View style={[styles.corner, styles.bottomRight]} />
+                                        <View style={styles.maskLeftRight} />
                                     </View>
-                                    <Text style={styles.scanInstruction}>
-                                        {scanned ? 'Traitement en cours...' :
-                                            intent === 'withdraw' ? 'Scanner pour retirer' :
-                                                intent === 'deposit' ? 'Scannez le Code du Client pour Déposer' :
-                                                    'Placez le code QR dans le cadre pour transférer'
-                                        }
-                                    </Text>
+                                    <View style={[styles.maskTopBottom, { justifyContent: 'flex-start', paddingTop: 40 }]}>
+                                        <Text style={styles.scanInstruction}>
+                                            {scanned ? 'Traitement en cours...' :
+                                                intent === 'withdraw' ? 'Scanner pour retirer' :
+                                                    intent === 'deposit' ? 'Scannez le Code du Client pour Déposer' :
+                                                        'Placez le code QR dans le cadre'
+                                            }
+                                        </Text>
+                                    </View>
                                 </View>
                             </View>
                         )}
                     </View>
                 ) : (
-                    <View style={styles.receiveContainer}>
+                    <View style={styles.receiveWrapper}>
                         <View style={styles.qrCard}>
                             <View style={styles.qrHeader}>
                                 <View style={styles.qrAvatar}>
@@ -242,78 +230,105 @@ export default function QrScreen() {
                             </View>
 
                             <View style={styles.qrCodeWrapper}>
-                                <QRCode
-                                    value={qrValue}
-                                    size={width * 0.55}
-                                    color="#1a1d2e"
-                                    backgroundColor="#ffffff"
-                                />
+                                <QRCode value={qrValue} size={width * 0.55} color="#1a1d2e" backgroundColor="#ffffff" />
                             </View>
 
-                            <Text style={styles.qrFooterText}>
-                                Présentez ce code QR pour recevoir un paiement Mongain
-                            </Text>
+                            <Text style={styles.qrFooterText}>Présentez ce code QR pour recevoir un paiement Mongain</Text>
                         </View>
                     </View>
                 )}
             </View>
-        </SafeAreaView>
+
+            {/* ERROR BANNER (Floating) */}
+            {scanError && (
+                <View style={[styles.errorBanner, { top: insets.top + 70 }]}>
+                    <Ionicons name="close-circle" size={22} color="#fff" />
+                    <Text style={styles.errorBannerText}>{scanError}</Text>
+                </View>
+            )}
+
+            {/* FLOATING HEADER */}
+            <SafeAreaView style={styles.floatingHeaderArea} pointerEvents="box-none">
+                <View style={styles.floatingHeader}>
+                    <TouchableOpacity style={styles.floatingBackBtn} onPress={() => router.back()}>
+                        <Ionicons name="close" size={26} color="#fff" />
+                    </TouchableOpacity>
+
+                    {!scanOnly && (
+                        <View style={styles.floatingTogglePill}>
+                            <TouchableOpacity
+                                style={[styles.toggleBtn, mode === 'scan' && styles.toggleBtnActive]}
+                                onPress={() => setMode('scan')}
+                            >
+                                <Text style={[styles.toggleText, mode === 'scan' && styles.toggleTextActive]}>Scanner</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.toggleBtn, mode === 'receive' && styles.toggleBtnActive]}
+                                onPress={() => setMode('receive')}
+                            >
+                                <Text style={[styles.toggleText, mode === 'receive' && styles.toggleTextActive]}>Recevoir</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
+
+                    <View style={{ width: 44 }} />
+                </View>
+            </SafeAreaView>
+
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: COLORS.background },
-    header: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24,
-    },
-    backBtn: { padding: 8, marginLeft: -8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20 },
-    toggleContainer: {
-        flexDirection: 'row', backgroundColor: 'rgba(255,255,255,0.1)',
-        padding: 4, borderRadius: 24,
-    },
-    toggleBtn: { paddingVertical: 8, paddingHorizontal: 20, borderRadius: 20 },
-    toggleBtnActive: { backgroundColor: '#ffffff' },
-    toggleText: { color: '#ffffff', fontWeight: '600', fontSize: 14 },
-    toggleTextActive: { color: '#000000' },
+    absoluteFlex: { flex: 1, backgroundColor: COLORS.background },
+    centerAll: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-    content: { flex: 1 },
+    // Floating Navigation Header
+    floatingHeaderArea: { position: 'absolute', top: 0, left: 0, right: 0 },
+    floatingHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10 },
+    floatingBackBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+    floatingTogglePill: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.5)', padding: 4, borderRadius: 30, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
 
-    // Scan Mode
-    scanContainer: { flex: 1, backgroundColor: '#000' },
-    cameraFrame: { flex: 1 },
-    scannerOverlay: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
-    scanCorners: { width: width * 0.65, height: width * 0.65, borderColor: COLORS.primary, borderWidth: 1, borderRadius: 16 },
+    toggleBtn: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 26 },
+    toggleBtnActive: { backgroundColor: '#ffffff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4 },
+    toggleText: { color: '#ffffff', fontWeight: '600', fontSize: 13 },
+    toggleTextActive: { color: '#000000', fontWeight: '700' },
+
+    // Transparent Cutout Logic
+    maskContainer: { ...StyleSheet.absoluteFillObject },
+    maskTopBottom: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', alignItems: 'center' },
+    maskCenterRow: { flexDirection: 'row', height: SCAN_FRAME_SIZE },
+    maskLeftRight: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)' },
+    cutoutFrame: { width: SCAN_FRAME_SIZE, height: SCAN_FRAME_SIZE, backgroundColor: 'transparent', position: 'relative' },
+
+    // Borders & Scanner Animation
+    scanLine: { position: 'absolute', left: 4, right: 4, top: 0, height: 3, backgroundColor: COLORS.primary, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.8, shadowRadius: 4, elevation: 5 },
     corner: { position: 'absolute', width: 40, height: 40, borderColor: COLORS.primary },
-    topLeft: { top: -2, left: -2, borderTopWidth: 4, borderLeftWidth: 4, borderTopLeftRadius: 16 },
-    topRight: { top: -2, right: -2, borderTopWidth: 4, borderRightWidth: 4, borderTopRightRadius: 16 },
-    bottomLeft: { bottom: -2, left: -2, borderBottomWidth: 4, borderLeftWidth: 4, borderBottomLeftRadius: 16 },
-    bottomRight: { bottom: -2, right: -2, borderBottomWidth: 4, borderRightWidth: 4, borderBottomRightRadius: 16 },
-    scanInstruction: { color: '#fff', fontSize: 15, fontWeight: '500', textAlign: 'center', marginTop: 32 },
-    errorBanner: {
-        position: 'absolute', top: 32, left: 20, right: 20,
-        backgroundColor: 'rgba(239, 68, 68, 0.92)', borderRadius: 12,
-        flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14,
-    },
-    errorBannerText: { color: '#fff', fontSize: 14, fontWeight: '600', flex: 1 },
-    permissionMessage: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-    permissionTitle: { color: '#fff', fontSize: 22, fontWeight: 'bold', marginBottom: 12 },
-    permissionSubtitle: { color: '#a0aec0', fontSize: 15, textAlign: 'center', marginBottom: 24, lineHeight: 22 },
-    permissionBtn: { backgroundColor: COLORS.primary, paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12 },
-    permissionBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+    topLeft: { top: -2, left: -2, borderTopWidth: 4, borderLeftWidth: 4, borderTopLeftRadius: 20 },
+    topRight: { top: -2, right: -2, borderTopWidth: 4, borderRightWidth: 4, borderTopRightRadius: 20 },
+    bottomLeft: { bottom: -2, left: -2, borderBottomWidth: 4, borderLeftWidth: 4, borderBottomLeftRadius: 20 },
+    bottomRight: { bottom: -2, right: -2, borderBottomWidth: 4, borderRightWidth: 4, borderBottomRightRadius: 20 },
+    scanInstruction: { color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center', opacity: 0.9 },
+
+    // Status & Error
+    errorBanner: { position: 'absolute', left: 20, right: 20, backgroundColor: 'rgba(239, 68, 68, 0.95)', borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16, zIndex: 100, shadowColor: '#ef4444', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 8 },
+    errorBannerText: { color: '#fff', fontSize: 14, fontWeight: '700', flex: 1 },
+
+    // Permissions
+    permissionMessage: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: COLORS.background },
+    permissionTitle: { color: '#fff', fontSize: 24, fontWeight: '800', marginBottom: 12 },
+    permissionSubtitle: { color: '#a0aec0', fontSize: 15, textAlign: 'center', marginBottom: 30, lineHeight: 22 },
+    permissionBtn: { backgroundColor: COLORS.primary, paddingHorizontal: 40, paddingVertical: 16, borderRadius: 20, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 6 },
+    permissionBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
 
     // Receive Mode
-    receiveContainer: { flex: 1, padding: 24, justifyContent: 'center' },
-    qrCard: {
-        backgroundColor: COLORS.surface, borderRadius: 24, padding: 24,
-        alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.15, shadowRadius: 24, elevation: 8,
-    },
-    qrHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 24, alignSelf: 'stretch' },
-    qrAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.primary + '20', justifyContent: 'center', alignItems: 'center' },
-    qrInitials: { fontSize: 18, fontWeight: '800', color: COLORS.primary },
-    qrName: { fontSize: 18, fontWeight: '700', color: COLORS.textPrimary },
-    qrPhone: { fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },
-    qrCodeWrapper: { padding: 16, backgroundColor: '#fff', borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: '#f1f5f9' },
-    qrFooterText: { color: COLORS.textSecondary, fontSize: 14, textAlign: 'center', lineHeight: 20 },
+    receiveWrapper: { flex: 1, padding: 24, justifyContent: 'center', backgroundColor: COLORS.background },
+    qrCard: { backgroundColor: COLORS.surface, borderRadius: 32, padding: 28, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.25, shadowRadius: 30, elevation: 15 },
+    qrHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 28, alignSelf: 'stretch', backgroundColor: '#f8f9fa', padding: 16, borderRadius: 20 },
+    qrAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center' },
+    qrInitials: { fontSize: 18, fontWeight: '800', color: '#fff' },
+    qrName: { fontSize: 18, fontWeight: '800', color: COLORS.textPrimary },
+    qrPhone: { fontSize: 14, fontWeight: '500', color: COLORS.textSecondary, marginTop: 2 },
+    qrCodeWrapper: { padding: 20, backgroundColor: '#fff', borderRadius: 24, marginBottom: 28, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 4 },
+    qrFooterText: { color: COLORS.textSecondary, fontSize: 14, fontWeight: '500', textAlign: 'center', lineHeight: 22 },
 });

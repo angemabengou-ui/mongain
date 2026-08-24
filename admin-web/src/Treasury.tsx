@@ -19,7 +19,7 @@ function StatusBadge({ status }: { status: string }) {
     return <span style={{ padding: '4px 10px', borderRadius: 20, background: s.bg, color: s.color, fontSize: 11, fontWeight: 800 }}>{s.label}</span>;
 }
 
-export default function Treasury({ token, prefillAdjustTarget }: { token: string; prefillAdjustTarget?: { walletId: string; name: string } | null }) {
+export default function Treasury({ token, hasPerm, prefillAdjustTarget }: { token: string; hasPerm: (perms: string[]) => boolean; prefillAdjustTarget?: { walletId: string; name: string } | null }) {
     type TreasuryTab = 'overview' | 'agencies' | 'reconciliation' | 'requests' | 'create';
     const [tab, setTab] = useState<TreasuryTab>('overview');
     const [loading, setLoading] = useState(true);
@@ -358,8 +358,14 @@ export default function Treasury({ token, prefillAdjustTarget }: { token: string
                                             <td style={{ padding: '14px 16px' }}>
                                                 {r.status === 'PENDING' ? (
                                                     <div style={{ display: 'flex', gap: 6 }}>
-                                                        <button onClick={() => handleApprove(r.id, r.reference)} style={{ padding: '6px 12px', background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success-bg)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Valider</button>
-                                                        <button onClick={() => handleReject(r.id, r.reference)} style={{ padding: '6px 12px', background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger-bg)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Rejeter</button>
+                                                        {hasPerm(['perm_treasury_approve']) ? (
+                                                            <>
+                                                                <button onClick={() => handleApprove(r.id, r.reference)} style={{ padding: '6px 12px', background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success-bg)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Valider</button>
+                                                                <button onClick={() => handleReject(r.id, r.reference)} style={{ padding: '6px 12px', background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger-bg)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Rejeter</button>
+                                                            </>
+                                                        ) : (
+                                                            <span style={{ color: 'var(--text-muted)' }}>En attente d'approbation...</span>
+                                                        )}
                                                     </div>
                                                 ) : <span style={{ color: 'var(--text-muted)' }}>Terminé</span>}
                                             </td>

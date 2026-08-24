@@ -77,7 +77,7 @@ function buildFetchMock() {
 
 describe('Treasury', () => {
     beforeEach(() => {
-        vi.spyOn(window, 'alert').mockImplementation(() => {});
+        vi.spyOn(window, 'alert').mockImplementation(() => { });
     });
 
     afterEach(() => {
@@ -88,7 +88,7 @@ describe('Treasury', () => {
     it('charge et affiche le tableau de bord (KPIs)', async () => {
         vi.stubGlobal('fetch', buildFetchMock());
 
-        render(<Treasury token={token} />);
+        render(<Treasury token={token} hasPerm={() => true} />);
 
         await screen.findByText('Masse Monétaire Totale');
         // moneySupply (900) est affiché à la fois dans la carte KPI et dans le rapprochement comptable
@@ -103,7 +103,7 @@ describe('Treasury', () => {
         vi.stubGlobal('fetch', buildFetchMock());
         const user = userEvent.setup();
 
-        render(<Treasury token={token} />);
+        render(<Treasury token={token} hasPerm={() => true} />);
         await screen.findByText('Trésorerie Centrale');
 
         await user.click(screen.getByRole('button', { name: /Liquidité Agences/i }));
@@ -117,7 +117,7 @@ describe('Treasury', () => {
         vi.spyOn(window, 'prompt').mockReturnValue('Erreur de comptage corrigée');
         const user = userEvent.setup();
 
-        render(<Treasury token={token} />);
+        render(<Treasury token={token} hasPerm={() => true} />);
         await screen.findByText('Trésorerie Centrale');
 
         await user.click(screen.getByRole('button', { name: /Rapprochements/i }));
@@ -133,7 +133,7 @@ describe('Treasury', () => {
         vi.spyOn(window, 'confirm').mockReturnValue(true);
         const user = userEvent.setup();
 
-        render(<Treasury token={token} />);
+        render(<Treasury token={token} hasPerm={() => true} />);
         await screen.findByText('Trésorerie Centrale');
 
         await user.click(screen.getByRole('button', { name: /Opérations & Approbations/i }));
@@ -149,7 +149,7 @@ describe('Treasury', () => {
         vi.spyOn(window, 'confirm').mockReturnValue(true);
         const user = userEvent.setup();
 
-        render(<Treasury token={token} />);
+        render(<Treasury token={token} hasPerm={() => true} />);
         await screen.findByText('Trésorerie Centrale');
 
         await user.click(screen.getByRole('button', { name: /Lancer Opération/i }));
@@ -165,7 +165,7 @@ describe('Treasury', () => {
     it('ouvre directement le formulaire Ajustement pré-rempli quand prefillAdjustTarget est fourni', async () => {
         vi.stubGlobal('fetch', buildFetchMock());
 
-        render(<Treasury token={token} prefillAdjustTarget={{ walletId: 'w_gateway', name: 'PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)' }} />);
+        render(<Treasury token={token} hasPerm={() => true} prefillAdjustTarget={{ walletId: 'w_gateway', name: 'PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)' }} />);
 
         await screen.findByText('Nouvelle Requête de Trésorerie');
         expect(screen.getByText('Compte Système Ciblé')).toBeInTheDocument();

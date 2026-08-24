@@ -192,8 +192,14 @@ export default function UsersManagement({ token, staffRole, lockedRole, initialS
                 </div>
             )}
 
-            <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
-                <div style={{ flex: '1 1 300px', display: 'flex', gap: '8px' }}>
+            <div style={{
+                display: 'flex',
+                gap: '16px',
+                marginBottom: '24px',
+                flexWrap: 'wrap',
+                alignItems: 'center'
+            }}>
+                <div style={{ display: 'flex', gap: '8px', flex: '1 1 300px', maxWidth: '500px' }}>
                     <input
                         type="text"
                         placeholder="Recherche : Nom, Tel, ID Client, Réf TX..."
@@ -202,26 +208,28 @@ export default function UsersManagement({ token, staffRole, lockedRole, initialS
                         onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                         style={{ flex: 1, padding: '10px 16px', borderRadius: '8px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
                     />
-                    <button onClick={handleSearch} className="btn-primary" style={{ width: 'auto', padding: '0 16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <Search size={18} /> <span className="hide-mobile">Recherche globale</span>
+                    <button onClick={handleSearch} className="btn-primary" style={{ width: 'auto', padding: '0 20px', display: 'flex', gap: '8px', alignItems: 'center', whiteSpace: 'nowrap' }}>
+                        <Search size={18} /> <span className="hide-mobile">Rechercher</span>
                     </button>
                 </div>
 
-                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ padding: '10px 16px', borderRadius: '8px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
-                    <option value="">Tous les Statuts</option>
-                    <option value="ACTIVE">Actif</option>
-                    <option value="SUSPENDED">Suspendu</option>
-                    <option value="FROZEN">Gelé (Freeze)</option>
-                    <option value="CLOSED">Clôturé</option>
-                </select>
+                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', flex: '1 1 auto' }}>
+                    <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ flex: '1 1 180px', maxWidth: '250px', padding: '10px 16px', borderRadius: '8px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', cursor: 'pointer' }}>
+                        <option value="">Tous les Statuts</option>
+                        <option value="ACTIVE">Actif</option>
+                        <option value="SUSPENDED">Suspendu</option>
+                        <option value="FROZEN">Gelé (Freeze)</option>
+                        <option value="CLOSED">Clôturé</option>
+                    </select>
 
-                <select value={kycFilter} onChange={(e) => setKycFilter(e.target.value)} style={{ padding: '10px 16px', borderRadius: '8px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
-                    <option value="">Tous les Niveaux KYC</option>
-                    <option value="UNVERIFIED">Non Vérifié (Tier 0)</option>
-                    <option value="PENDING">En Revue KYC</option>
-                    <option value="APPROVED">Vérifié (Tier 1/2)</option>
-                    <option value="REJECTED">Rejeté</option>
-                </select>
+                    <select value={kycFilter} onChange={(e) => setKycFilter(e.target.value)} style={{ flex: '1 1 180px', maxWidth: '250px', padding: '10px 16px', borderRadius: '8px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', cursor: 'pointer' }}>
+                        <option value="">Tous les Niveaux KYC</option>
+                        <option value="UNVERIFIED">Non Vérifié (Tier 0)</option>
+                        <option value="PENDING">En Revue KYC</option>
+                        <option value="APPROVED">Vérifié (Tier 1/2)</option>
+                        <option value="REJECTED">Rejeté</option>
+                    </select>
+                </div>
             </div>
 
             <div className="stat-card" style={{ padding: 0, overflow: 'hidden', overflowX: 'auto' }}>
@@ -370,7 +378,7 @@ export default function UsersManagement({ token, staffRole, lockedRole, initialS
                                 <label style={{ display: 'block', marginBottom: '4px', fontSize: '13px', fontWeight: 600 }}>Code PIN Initial (4 chiffres)</label>
                                 <input type="password" value={proPin} onChange={e => setProPin(e.target.value)} minLength={4} maxLength={4} required />
                             </div>
-                            
+
                             <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
                                 <button type="button" onClick={() => setShowCreatePro(false)} style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text-primary)' }}>Annuler</button>
                                 <button type="submit" disabled={createLoading} className="btn-primary" style={{ flex: 1, padding: '12px' }}>

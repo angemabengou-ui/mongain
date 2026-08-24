@@ -49,7 +49,7 @@ describe('AgencyCenter', () => {
     });
 
     it("affiche la liste des agences chargée depuis l'API", async () => {
-        render(<AgencyCenter token="tok" role="SUPER_ADMIN" />);
+        render(<AgencyCenter token="tok" hasPerm={() => true} />);
 
         expect(await screen.findByText('Agence Centrale')).toBeInTheDocument();
         expect(screen.getByText('Agence Port-Gentil')).toBeInTheDocument();
@@ -57,20 +57,20 @@ describe('AgencyCenter', () => {
     });
 
     it('affiche le bouton "Nouvelle Agence" pour un rôle admin', async () => {
-        render(<AgencyCenter token="tok" role="SUPER_ADMIN" />);
+        render(<AgencyCenter token="tok" hasPerm={() => true} />);
         await screen.findByText('Agence Centrale');
         expect(screen.getByRole('button', { name: /Nouvelle Agence/i })).toBeInTheDocument();
     });
 
     it('masque le bouton "Nouvelle Agence" pour un rôle non-admin', async () => {
-        render(<AgencyCenter token="tok" role="SUPPORT_MAKER" />);
+        render(<AgencyCenter token="tok" hasPerm={() => true} />);
         await screen.findByText('Agence Centrale');
         expect(screen.queryByRole('button', { name: /Nouvelle Agence/i })).not.toBeInTheDocument();
     });
 
     it("ouvre la vue 360° d'une agence et affiche ses KPIs", async () => {
         const user = userEvent.setup();
-        render(<AgencyCenter token="tok" role="SUPER_ADMIN" />);
+        render(<AgencyCenter token="tok" hasPerm={() => true} />);
         await screen.findByText('Agence Centrale');
 
         const rows = screen.getAllByRole('button', { name: /360°/i });
@@ -82,7 +82,7 @@ describe('AgencyCenter', () => {
 
     it('affiche une erreur si le chargement des agences échoue', async () => {
         (global.fetch as any) = vi.fn(async () => jsonResponse({ error: 'Accès refusé.' }, false, 403));
-        render(<AgencyCenter token="tok" role="SUPER_ADMIN" />);
+        render(<AgencyCenter token="tok" hasPerm={() => true} />);
 
         expect(await screen.findByText('Accès refusé.')).toBeInTheDocument();
     });
@@ -98,7 +98,7 @@ describe('AgencyCenter', () => {
         (global.fetch as any) = fetchMock;
 
         const user = userEvent.setup();
-        const { container } = render(<AgencyCenter token="tok" role="SUPER_ADMIN" />);
+        const { container } = render(<AgencyCenter token="tok" hasPerm={() => true} />);
         await screen.findByText('Agence Centrale');
 
         await user.click(screen.getByRole('button', { name: /Nouvelle Agence/i }));
@@ -124,7 +124,7 @@ describe('AgencyCenter', () => {
     });
 
     it("affiche une alerte si la création d'agence échoue", async () => {
-        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => { });
         const fetchMock = vi.fn(async (url: string, opts?: any) => {
             if (opts?.method === 'POST' && url.endsWith('/api/admin/branches')) {
                 return jsonResponse({ error: 'Code agence déjà utilisé.' }, false, 400);
@@ -135,7 +135,7 @@ describe('AgencyCenter', () => {
         (global.fetch as any) = fetchMock;
 
         const user = userEvent.setup();
-        const { container } = render(<AgencyCenter token="tok" role="SUPER_ADMIN" />);
+        const { container } = render(<AgencyCenter token="tok" hasPerm={() => true} />);
         await screen.findByText('Agence Centrale');
 
         await user.click(screen.getByRole('button', { name: /Nouvelle Agence/i }));
