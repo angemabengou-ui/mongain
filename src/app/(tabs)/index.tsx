@@ -56,7 +56,7 @@ export default function DashboardScreen() {
   // cet onglet (l'écran le plus visité de l'app) doublait un appel réseau identique à
   // chaque retour sur l'accueil, sans jamais changer entre deux ouvertures de session.
   const { user, logout, settings } = useAuth();
-  const appConfig = { seegEnabled: settings?.seegEnabled ?? true, tontineEnabled: settings?.tontineEnabled ?? true };
+  const appConfig = { seegEnabled: settings?.seegEnabled ?? true };
 
   const loadData = useCallback(async () => {
     try {
@@ -195,6 +195,25 @@ export default function DashboardScreen() {
               )}
             </View>
 
+            {/* Mon Épargne (Caisse Commune + Tontine) — avant, deux petites icônes
+                noyées dans "Services & Factures" au même niveau qu'Électricité/Crédit
+                Air, malgré leur importance réelle : ce sont des outils de gestion
+                d'argent en groupe, pas de simples paiements de factures. */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => router.push('/epargne-hub' as any)}
+              style={[styles.actionsCard, { marginTop: 16, padding: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface }]}
+            >
+              <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#10B98115', justifyContent: 'center', alignItems: 'center', marginRight: 14 }}>
+                <Ionicons name="wallet" size={26} color="#10B981" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.textPrimary }}>Mon Épargne</Text>
+                <Text style={{ fontSize: 12.5, color: COLORS.textSecondary, marginTop: 2 }}>Caisse commune et tontine, en un seul endroit</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={22} color={COLORS.textSecondary} />
+            </TouchableOpacity>
+
             {/* Tableau de Bord Marchand */}
             {user?.role === 'MERCHANT' && merchantStats && (
               <TouchableOpacity activeOpacity={0.8} onPress={() => router.push('/merchant-hub' as any)} style={[styles.actionsCard, { marginTop: 16, padding: 20, backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
@@ -239,10 +258,6 @@ export default function DashboardScreen() {
                 <ServiceItem icon="phone-portrait" label="Crédit Air" color="#D946EF" onPress={() => router.push('/services/airtime' as any)} styles={styles} />
 
                 <ServiceItem icon="tv" label="Abo TV" color="#3B82F6" onPress={() => router.push('/services/tv' as any)} styles={styles} />
-
-                <ServiceItem icon="lock-closed" label="Tontine" color="#10B981" disabled={!appConfig.tontineEnabled} onPress={() => router.push('/services/tontine' as any)} styles={styles} />
-
-                <ServiceItem icon="shield-checkmark" label="Caisses" color="#F59E0B" onPress={() => router.push('/services/vaults' as any)} styles={styles} />
               </View>
             </View>
 
