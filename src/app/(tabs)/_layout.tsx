@@ -3,15 +3,20 @@ import { BlurView } from 'expo-blur';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Platform, StyleSheet, useColorScheme } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
+import { TAB_BAR_HEIGHT_BASE, useTabBarHeight } from '../../hooks/useTabBarHeight';
 
 export default function TabLayout() {
-    const insets = useSafeAreaInsets();
     // Couleurs codées en dur précédemment : la tab bar restait blanche même en thème
     // sombre, alors que tout le reste de l'app suit useAppTheme().
     const COLORS = useAppTheme();
     const colorScheme = useColorScheme() ?? 'light';
+
+    // Hauteur totale (base + inset bas défensif) — voir useTabBarHeight.ts. Chaque écran
+    // d'onglet réutilise le même hook pour compenser dans son propre padding bas, la tab
+    // bar étant en position absolute et ne réservant donc pas sa place dans le flux.
+    const tabBarHeight = useTabBarHeight();
+    const bottomInset = tabBarHeight - TAB_BAR_HEIGHT_BASE;
 
     return (
         <Tabs
@@ -24,9 +29,9 @@ export default function TabLayout() {
                     backgroundColor: Platform.OS === 'ios' ? 'transparent' : `${COLORS.surface}E6`,
                     borderTopWidth: 0,
                     elevation: 0,
-                    paddingBottom: 8 + insets.bottom,
+                    paddingBottom: 8 + bottomInset,
                     paddingTop: 8,
-                    height: 65 + insets.bottom,
+                    height: tabBarHeight,
                 },
                 tabBarBackground: () => (
                     <BlurView

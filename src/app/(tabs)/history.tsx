@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
+import { useTabBarHeight } from '../../hooks/useTabBarHeight';
 import { Transaction, apiGetTransactions } from '../../services/api';
 
 function formatAmount(tx: Transaction) {
@@ -30,6 +31,7 @@ function formatDate(iso: string) {
 export default function HistoryScreen() {
     const COLORS = useAppTheme();
     const styles = getStyles(COLORS);
+    const tabBarHeight = useTabBarHeight();
     const [filter, setFilter] = useState<'all' | 'outgoing' | 'incoming'>('all');
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
@@ -138,7 +140,7 @@ export default function HistoryScreen() {
             <FlatList
                 data={filtered}
                 keyExtractor={item => item.id}
-                contentContainerStyle={styles.listContainer}
+                contentContainerStyle={[styles.listContainer, { paddingBottom: tabBarHeight + 20 }]}
                 showsVerticalScrollIndicator={false}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
                 ListHeaderComponent={() => {

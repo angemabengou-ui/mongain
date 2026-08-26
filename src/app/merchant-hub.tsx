@@ -249,7 +249,7 @@ export default function MerchantHubScreen() {
                         ))}
                     </View>
                 </ScrollView>
-                {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
+                <View style={{ height: Math.max(insets.bottom, 20) }} />
             </KeyboardAvoidingView>
         </SafeAreaView>
     );

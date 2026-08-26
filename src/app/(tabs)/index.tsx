@@ -8,15 +8,16 @@ import {
   Dimensions,
   Platform,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
+import { useTabBarHeight } from '../../hooks/useTabBarHeight';
 import { Transaction, apiGetBalance, apiGetMerchantStats, apiGetTransactions } from '../../services/api';
 
 const { width } = Dimensions.get('window');
@@ -35,6 +36,7 @@ function formatDate(iso: string) {
 export default function DashboardScreen() {
   const COLORS = useAppTheme();
   const styles = getStyles(COLORS);
+  const tabBarHeight = useTabBarHeight();
 
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [balance, setBalance] = useState<number | null>(null);
@@ -118,10 +120,13 @@ export default function DashboardScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    // edges exclut 'top' : headerBackground simule déjà l'espace du haut via un
+    // paddingTop fixe (styles.headerBackground) — laisser SafeAreaView gérer aussi le
+    // haut doublerait cet espace au lieu de le remplacer.
+    <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
       <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
         <ScrollView
-          contentContainerStyle={styles.container}
+          contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight + 20 }]}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
         >

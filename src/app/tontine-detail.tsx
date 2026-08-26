@@ -231,7 +231,7 @@ export default function TontineDetailScreen() {
                         <Text style={[styles.leaveBtnText, { color: COLORS.error }]}>Quitter ce club</Text>
                     </TouchableOpacity>
                 </ScrollView>
-                {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
+                <View style={{ height: Math.max(insets.bottom, 20) }} />
             </KeyboardAvoidingView>
         </SafeAreaView>
     );

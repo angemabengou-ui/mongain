@@ -10,11 +10,12 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
 import { apiGetVaults } from '../../services/api';
 
 export default function VaultsListScreen() {
+    const insets = useSafeAreaInsets();
     const COLORS = useAppTheme();
     const styles = getStyles(COLORS);
     const router = useRouter();
@@ -121,6 +122,7 @@ export default function VaultsListScreen() {
                         )}
                     </ScrollView>
                 )}
+                <View style={{ height: Math.max(insets.bottom, 20) }} />
             </View>
         </SafeAreaView>
     );
