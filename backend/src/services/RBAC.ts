@@ -39,6 +39,14 @@ export const ALL_PERMISSIONS = [
     // ── Agences ────────────────────────────────────────────────────────────
     'perm_branch_view',             // Voir les données de son agence
     'perm_branch_manage',           // Gérer les paramètres/liquidités d'une agence
+    // ── Caisse Commune & Tontine ───────────────────────────────────────────
+    'perm_vault_view',              // Voir les caisses communes (lecture admin)
+    'perm_vault_manage',            // Geler/dégeler, forcer une résolution, gérer les rôles/bons
+    'perm_tontine_view',            // Voir les tontines (lecture admin)
+    'perm_tontine_manage',          // Mettre en pause, forcer/relancer un cycle
+    // ── Marchands ──────────────────────────────────────────────────────────
+    'perm_merchant_view',           // Voir les comptes marchands (soldes, transactions, demandes)
+    'perm_merchant_manage',         // Approuver/rejeter une demande de retrait marchand
     // ── Trésorerie & Système ───────────────────────────────────────────────
     'perm_treasury_view',           // Voir la masse monétaire globale 
     'perm_treasury_mint',           // Émettre de la nouvelle monnaie (Mint)
@@ -87,6 +95,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, Permission[]> = {
         'perm_branch_manage',
         'perm_staff_view',
         'perm_analytics_view',
+        'perm_vault_view',
+        'perm_tontine_view',
     ],
 
     TELLER: [
@@ -117,6 +127,12 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, Permission[]> = {
         'perm_audit_log_view',
         'perm_analytics_view',
         'perm_treasury_view',
+        'perm_vault_view',
+        'perm_vault_manage',            // ✅ Même logique que perm_customer_freeze : RISK gère les cas litigieux
+        'perm_tontine_view',
+        'perm_tontine_manage',
+        'perm_merchant_view',
+        'perm_merchant_manage',
     ],
 
     COMPLIANCE_CHECKER: [
@@ -131,6 +147,9 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, Permission[]> = {
         'perm_treasury_approve',        // ✅ Le Checker vérifie la Trésorerie
         'perm_audit_log_view',
         'perm_analytics_view',
+        'perm_vault_view',
+        'perm_tontine_view',
+        'perm_merchant_view',
     ],
 
     SUPPORT_MAKER: [
@@ -143,6 +162,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, Permission[]> = {
         'perm_ticket_create',
         'perm_ticket_resolve',
         'perm_support_note',
+        'perm_vault_view',
+        'perm_tontine_view',
     ],
 };
 
@@ -203,6 +224,14 @@ export const PERMISSION_GROUPS: { label: string; perms: Permission[] }[] = [
     {
         label: 'Agences',
         perms: ['perm_branch_view', 'perm_branch_manage'],
+    },
+    {
+        label: 'Caisse Commune & Tontine',
+        perms: ['perm_vault_view', 'perm_vault_manage', 'perm_tontine_view', 'perm_tontine_manage'],
+    },
+    {
+        label: 'Marchands',
+        perms: ['perm_merchant_view', 'perm_merchant_manage'],
     },
     {
         label: 'Trésorerie & Système',

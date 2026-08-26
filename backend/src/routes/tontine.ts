@@ -96,6 +96,18 @@ router.get('/details/:groupId', authMiddleware, async (req: Request, res: Respon
                 participants: {
                     include: { user: { select: { name: true, phone: true } } },
                     orderBy: { payoutOrder: 'asc' }
+                },
+                // Grand livre structuré (TontineCycle/TontineContribution) : alimente
+                // l'historique de cycles et le statut de cotisation par membre côté app.
+                // Les groupes créés avant sa mise en place n'ont simplement aucun cycle ici.
+                cycles: {
+                    orderBy: { cycleNumber: 'desc' },
+                    take: 12,
+                    select: {
+                        id: true, cycleNumber: true, status: true, beneficiaryParticipantId: true,
+                        totalExpected: true, totalCollected: true, executedAt: true,
+                        contributions: { select: { participantId: true, status: true, amount: true } }
+                    }
                 }
             }
         });
@@ -382,7 +394,7 @@ router.post('/debit/:groupId', authMiddleware, async (req: Request, res: Respons
         const staffId = (req as AuthRequest).userId!;
         const staff = await prisma.staff.findUnique({ where: { id: staffId }, select: { id: true, role: true, isActive: true, permissions: true, permissionsCustomized: true } });
 
-        if (!staff || !staff.isActive || !hasPermission(staff, 'perm_system_settings_edit')) {
+        if (!staff || !staff.isActive || !hasPermission(staff, 'perm_tontine_manage')) {
             return res.status(403).json({ success: false, message: "Accès refusé" });
         }
 

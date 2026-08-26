@@ -8,6 +8,11 @@ import { Server } from 'socket.io';
 import { initCronJobs } from './cron';
 import { prisma } from './prisma';
 import adminRoutes from './routes/admin';
+import adminMerchantsRoutes from './routes/admin.merchants';
+import adminSearchRoutes from './routes/admin.search';
+import adminSystemAccountsRoutes from './routes/admin.systemAccounts';
+import adminTontinesRoutes from './routes/admin.tontines';
+import adminVaultsRoutes from './routes/admin.vaults';
 import agencyRoutes from './routes/agency';
 import authRoutes from './routes/auth';
 import corpRoutes from './routes/corp';
@@ -83,6 +88,13 @@ import webhookRoutes from './routes/webhooks';
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin', rbacRoutes); // RBAC: /api/admin/staff/:id/permissions & /api/admin/rbac/me
+// Extraits du monolithe admin.ts — vaults/tontines/search/system-accounts sont des sections
+// autonomes sans dépendance croisée avec branches/staff/users/KYC restés dans admin.ts.
+app.use('/api/admin', adminVaultsRoutes);
+app.use('/api/admin', adminTontinesRoutes);
+app.use('/api/admin', adminMerchantsRoutes);
+app.use('/api/admin', adminSearchRoutes);
+app.use('/api/admin', adminSystemAccountsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/treasury', treasuryRoutes);
 app.use('/api/notifications', notificationRoutes);

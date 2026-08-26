@@ -61,6 +61,13 @@ model User {
   customLimitExpiresAt DateTime?
 
   wallet                Wallet?
+  // Solde de commission d'un marchand (role=MERCHANT), séparé du wallet principal
+  // (ventes/paiements) — même convention qu'une Branch/CentralTreasury : un Wallet
+  // orphelin (userId null) référencé par une colonne @unique dédiée, pas un second
+  // Wallet.userId (contrainte @unique sur ce champ, un seul par utilisateur).
+  commissionWalletId    String?              @unique
+  commissionWallet      Wallet?              @relation("MerchantCommissionWallet", fields: [commissionWalletId], references: [id])
+  merchantPayoutRequests MerchantPayoutRequest[] @relation("MerchantPayoutRequests")
   reclamations          Reclamation[]
   notifications         Notification[]
   riskFlags             RiskFlag[]           // ( PROMPT 08 CRM )
@@ -146,6 +153,34 @@ model Wallet {
   receivedTransactions Transaction[] @relation("ReceiverWallet")
   branch               Branch?
   centralTreasury      CentralTreasury?
+  merchantCommissionOf User?             @relation("MerchantCommissionWallet")
+}
+
+// Solde de commission d'un marchand — séparé du Wallet principal (ventes/paiements).
+// Alimenté uniquement par wallet.ts (/client-initiated-withdraw, part `merchantReward`
+// d'un retrait client chez ce marchand). Pas directement utilisable par les flux
+// génériques de retrait/transfert : pour en disposer, le marchand passe par
+// MerchantPayoutRequest (sourceAccount=COMMISSION), qui le consolide dans son Wallet
+// principal une fois traité par le staff — voir admin.merchants.ts.
+model MerchantPayoutRequest {
+  id         String @id @default(uuid())
+  merchantId String
+  merchant   User   @relation("MerchantPayoutRequests", fields: [merchantId], references: [id])
+
+  sourceAccount String // SALES (Wallet principal), COMMISSION (commissionWallet)
+  amount        Float
+  note          String? // motif optionnel du marchand
+
+  status          String  @default("PENDING") // PENDING, EXECUTED, REJECTED
+  rejectionReason String?
+
+  processedById String?
+  processedBy   Staff?  @relation("MerchantPayoutProcessor", fields: [processedById], references: [id])
+
+  createdAt  DateTime  @default(now())
+  executedAt DateTime?
+
+  @@index([merchantId])
 }
 
 // Trésorerie Centrale — séparée du Siège (Branch isHQ=true) : avant, le wallet du
@@ -366,10 +401,16 @@ model TontineGroup {
   status         String    @default("ACTIVE") // ACTIVE, COMPLETED, CANCELLED
   currentCycle   Int       @default(1)
   lastPayoutDate DateTime? // Date du dernier paiement, pour rattrapage CRON si crash
+  // Mise en pause admin (litige, enquête) : le CRON saute executeTontineCycle tant que
+  // isPaused=true, sans altérer currentCycle/lastPayoutDate — la tontine reprend exactement
+  // où elle en était à la levée de la pause.
+  isPaused       Boolean   @default(false)
+  pausedReason   String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
   participants TontineParticipant[]
+  cycles       TontineCycle[]
 }
 
 model TontineParticipant {
@@ -387,6 +428,45 @@ model TontineParticipant {
   // executeTontineCycle : un participant déjà payé n'est plus jamais sélectionné comme
   // bénéficiaire, quelle que soit la valeur de payoutOrder au moment du cycle.
   hasReceivedPayout Boolean    @default(false)
+
+  contributions TontineContribution[]
+}
+
+// Grand livre structuré des cycles de tontine — avant, seules des Transaction avec une
+// reference conventionnelle (TONT_DBT_G{id}_C{cycle}_U{userId}) permettaient de reconstituer
+// l'historique, en parsant des chaînes plutôt qu'en interrogeant des relations. Un cycle
+// avance toujours (voir tontineService.ts), même sans bénéficiaire trouvé ou cagnotte vide —
+// status distingue donc "tout le monde a payé" de "au moins un échec".
+model TontineCycle {
+  id                       String       @id @default(uuid())
+  tontineGroupId           String
+  tontineGroup             TontineGroup @relation(fields: [tontineGroupId], references: [id], onDelete: Cascade)
+  cycleNumber              Int
+  status                   String       @default("COMPLETED") // COMPLETED, PARTIAL (au moins une cotisation en échec)
+  beneficiaryParticipantId String?
+  payoutTransactionId      String?
+  totalExpected            Float
+  totalCollected           Float
+  executedAt               DateTime     @default(now())
+
+  contributions TontineContribution[]
+
+  @@unique([tontineGroupId, cycleNumber])
+}
+
+model TontineContribution {
+  id            String             @id @default(uuid())
+  cycleId       String
+  cycle         TontineCycle       @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  participantId String
+  participant   TontineParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  transactionId String?
+  amount        Float
+  status        String             @default("PAID") // PAID, FAILED
+  createdAt     DateTime           @default(now())
+
+  @@unique([cycleId, participantId])
+  @@index([participantId])
 }
 
 // ==========================================
@@ -549,6 +629,7 @@ model Staff {
   fraudCasesAnalyzed       FraudCase[]        @relation("FraudAnalyst")
   refundRequestsMade       RefundRequest[]    @relation("RefundRequester")
   refundRequestsApproved   RefundRequest[]    @relation("RefundApprover")
+  merchantPayoutsProcessed MerchantPayoutRequest[] @relation("MerchantPayoutProcessor")
 }
 
 // ==========================================
@@ -689,6 +770,12 @@ model Vault {
   requiredApprovals Int      @default(1)
   createdAt         DateTime @default(now())
 
+  // Gel admin (litige, enquête) : bloque deposit/withdraw-request/approve/voucher-spend
+  // côté vault.ts tant que isFrozen=true, sans toucher au solde ni aux membres.
+  isFrozen     Boolean   @default(false)
+  frozenReason String?
+  frozenAt     DateTime?
+
   adminId     String
   admin       User     @relation("AdminVault", fields: [adminId], references: [id])
 
@@ -774,8 +861,9 @@ model VaultVoucher {
   vault           Vault    @relation(fields: [vaultId], references: [id], onDelete: Cascade)
   
   amount          Float
-  status          String   @default("ACTIVE") // ACTIVE, USED
-  
+  status          String   @default("ACTIVE") // ACTIVE, USED, VOID (annulé par un admin — litige/erreur)
+  voidReason      String?
+
   presidentId     String
   president       User     @relation("VaultVouchers", fields: [presidentId], references: [id])
 

@@ -6,14 +6,18 @@ import {
     Alert,
     KeyboardAvoidingView,
     Platform,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import BalanceCard from '../components/ui/BalanceCard';
+import InlineInviteForm from '../components/ui/InlineInviteForm';
+import ScreenHeader from '../components/ui/ScreenHeader';
+import SectionHeading from '../components/ui/SectionHeading';
 import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -22,6 +26,14 @@ import {
     apiLeaveTontine,
     apiReorderTontine,
 } from '../services/api';
+
+// Statut de cotisation pour le cycle en cours, dérivé du grand livre structuré
+// (TontineCycle/TontineContribution) — absent pour un groupe créé avant sa mise en
+// place, ou tant que le CRON n'a pas encore exécuté ce cycle.
+const CONTRIBUTION_BADGE: Record<string, { label: string; color: keyof ReturnType<typeof useAppTheme> }> = {
+    PAID: { label: 'Payé', color: 'success' },
+    FAILED: { label: 'Échoué', color: 'error' },
+};
 
 export default function TontineDetailScreen() {
     const insets = useSafeAreaInsets();
@@ -33,13 +45,13 @@ export default function TontineDetailScreen() {
 
     const [group, setGroup] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
     const [showInviteForm, setShowInviteForm] = useState(false);
-    const [invitePhone, setInvitePhone] = useState('');
-    const [inviteLoading, setInviteLoading] = useState(false);
 
-    const load = useCallback(async () => {
+    const load = useCallback(async (isRefresh = false) => {
         if (!id) return;
+        if (isRefresh) setRefreshing(true);
         try {
             const res = await apiGetTontineDetails(id);
             if (res.success) setGroup(res.data);
@@ -47,28 +59,19 @@ export default function TontineDetailScreen() {
             Alert.alert('Erreur', e.message || 'Impossible de charger le club.');
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     }, [id]);
 
     useFocusEffect(useCallback(() => { load(); }, [load]));
 
-    const handleInvite = async () => {
-        if (!invitePhone.trim()) return;
-        setInviteLoading(true);
+    const handleInvite = async (formattedPhone: string) => {
         try {
-            let formatted = invitePhone.trim();
-            if (!formatted.startsWith('+')) {
-                if (formatted.startsWith('0')) formatted = formatted.substring(1);
-                formatted = '+241' + formatted;
-            }
-            await apiInviteToTontine(id, formatted);
-            setInvitePhone('');
+            await apiInviteToTontine(id, formattedPhone);
             setShowInviteForm(false);
             load();
         } catch (e: any) {
             Alert.alert('Échec de l\'invitation', e.message || 'Une erreur est survenue.');
-        } finally {
-            setInviteLoading(false);
         }
     };
 
@@ -122,62 +125,46 @@ export default function TontineDetailScreen() {
     const activeParticipants = group.participants.filter((p: any) => p.status === 'ACTIVE').sort((a: any, b: any) => a.payoutOrder - b.payoutOrder);
     const isCreator = group.creatorId === user?.id;
     const cagnotte = group.contribution * activeParticipants.length;
+    const cycles = group.cycles || [];
+    const currentCycleLedger = cycles.find((c: any) => c.cycleNumber === group.currentCycle);
+    const contributionByParticipant: Record<string, string> = {};
+    (currentCycleLedger?.contributions || []).forEach((c: any) => { contributionByParticipant[c.participantId] = c.status; });
 
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
-            <View style={styles.header}>
-                <TouchableOpacity style={styles.headerBtn} onPress={() => router.back()}>
-                    <Ionicons name="arrow-back" size={24} color="#fff" />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle} numberOfLines={1}>{group.name}</Text>
-                <View style={{ width: 44 }} />
-            </View>
+            <ScreenHeader title={group.name} onBack={() => router.back()} />
 
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.content, { backgroundColor: COLORS.background }]}>
-                <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    keyboardShouldPersistTaps="handled"
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={COLORS.primary} />}
+                >
 
-                    <View style={[styles.balanceCard, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
-                        <Text style={[styles.balanceLabel, { color: COLORS.textSecondary }]}>Cagnotte par cycle</Text>
-                        <Text style={[styles.balanceAmount, { color: COLORS.textPrimary }]}>{cagnotte.toLocaleString('fr-FR')} FCFA</Text>
-                        <Text style={[styles.description, { color: COLORS.textSecondary }]}>
-                            {group.contribution.toLocaleString('fr-FR')} FCFA par personne · {group.frequency === 'MONTHLY' ? 'mensuel' : 'hebdomadaire'} · cycle {group.currentCycle}
-                        </Text>
-                    </View>
+                    <BalanceCard
+                        colors={COLORS}
+                        label="Cagnotte par cycle"
+                        amount={`${cagnotte.toLocaleString('fr-FR')} FCFA`}
+                        description={`${group.contribution.toLocaleString('fr-FR')} FCFA par personne · ${group.frequency === 'MONTHLY' ? 'mensuel' : 'hebdomadaire'} · cycle ${group.currentCycle}`}
+                    />
 
-                    <View style={styles.sectionRow}>
-                        <Text style={[styles.sectionTitle, { color: COLORS.textPrimary, marginBottom: 0 }]}>Ordre de passage ({activeParticipants.length})</Text>
-                        {isCreator && (
-                            <TouchableOpacity onPress={() => setShowInviteForm(!showInviteForm)}>
-                                <Ionicons name={showInviteForm ? 'chevron-up' : 'person-add-outline'} size={20} color={COLORS.primary} />
-                            </TouchableOpacity>
-                        )}
-                    </View>
+                    <SectionHeading
+                        colors={COLORS}
+                        title={`Ordre de passage (${activeParticipants.length})`}
+                        marginBottom={0}
+                        actionIcon={isCreator ? (showInviteForm ? 'chevron-up' : 'person-add-outline') : undefined}
+                        onAction={isCreator ? () => setShowInviteForm(!showInviteForm) : undefined}
+                    />
 
-                    {showInviteForm && (
-                        <View style={[styles.inlineForm, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
-                            <TextInput
-                                style={[styles.inlineInput, { color: COLORS.textPrimary }]}
-                                placeholder="Téléphone (ex : 074...)"
-                                placeholderTextColor={COLORS.textSecondary}
-                                keyboardType="phone-pad"
-                                value={invitePhone}
-                                onChangeText={setInvitePhone}
-                            />
-                            <TouchableOpacity
-                                style={[styles.inlineBtn, { backgroundColor: COLORS.primary }, (!invitePhone || inviteLoading) && styles.disabled]}
-                                onPress={handleInvite}
-                                disabled={!invitePhone || inviteLoading}
-                            >
-                                {inviteLoading ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="send" size={18} color="#fff" />}
-                            </TouchableOpacity>
-                        </View>
-                    )}
+                    {showInviteForm && <InlineInviteForm colors={COLORS} onInvite={handleInvite} style={{ marginTop: 12 }} />}
 
                     <View style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border, padding: 6 }]}>
                         {activeParticipants.map((p: any, idx: number) => {
                             const isMe = p.userId === user?.id;
                             const isCurrentTurn = p.payoutOrder === group.currentCycle;
                             const isPast = p.payoutOrder < group.currentCycle;
+                            const contributionStatus = contributionByParticipant[p.id];
+                            const badge = contributionStatus ? CONTRIBUTION_BADGE[contributionStatus] : null;
                             return (
                                 <View key={p.id} style={[styles.memberRow, { borderColor: COLORS.border }, isMe && { backgroundColor: COLORS.primary + '08' }]}>
                                     <View style={[styles.orderCircle, { backgroundColor: isCurrentTurn ? COLORS.primary : COLORS.border }, isPast && { opacity: 0.5 }]}>
@@ -187,6 +174,11 @@ export default function TontineDetailScreen() {
                                         <Text style={{ color: COLORS.textPrimary, fontWeight: '600' }}>{p.user.name}{isMe ? ' (Vous)' : ''}</Text>
                                         <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2 }}>{p.user.phone}</Text>
                                     </View>
+                                    {badge && (
+                                        <View style={[styles.contributionBadge, { backgroundColor: COLORS[badge.color] + '18' }]}>
+                                            <Text style={{ color: COLORS[badge.color], fontSize: 10.5, fontWeight: '700' }}>{badge.label}</Text>
+                                        </View>
+                                    )}
                                     {isCreator && (
                                         <View style={{ flexDirection: 'row', gap: 6 }}>
                                             {idx > 0 && (
@@ -206,6 +198,34 @@ export default function TontineDetailScreen() {
                         })}
                     </View>
 
+                    <SectionHeading colors={COLORS} title={`Historique des cycles (${cycles.length})`} marginTop={22} />
+                    {cycles.length === 0 ? (
+                        <View style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
+                            <Text style={{ color: COLORS.textSecondary, fontSize: 13, lineHeight: 19 }}>Aucun cycle exécuté pour l'instant.</Text>
+                        </View>
+                    ) : (
+                        <View style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border, padding: 6 }]}>
+                            {cycles.map((c: any) => {
+                                const beneficiary = group.participants.find((p: any) => p.id === c.beneficiaryParticipantId);
+                                return (
+                                    <View key={c.id} style={[styles.memberRow, { borderColor: COLORS.border }]}>
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={{ color: COLORS.textPrimary, fontWeight: '600' }}>Cycle #{c.cycleNumber}{beneficiary ? ` — ${beneficiary.user.name}` : ''}</Text>
+                                            <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2 }}>
+                                                {new Date(c.executedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })} · {c.totalCollected.toLocaleString('fr-FR')} FCFA collectés
+                                            </Text>
+                                        </View>
+                                        {c.status === 'PARTIAL' && (
+                                            <View style={[styles.contributionBadge, { backgroundColor: COLORS.warning + '18' }]}>
+                                                <Text style={{ color: COLORS.warning, fontSize: 10.5, fontWeight: '700' }}>Échecs</Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                );
+                            })}
+                        </View>
+                    )}
+
                     <TouchableOpacity style={styles.leaveBtn} onPress={handleLeave}>
                         <Ionicons name="exit-outline" size={18} color={COLORS.error} />
                         <Text style={[styles.leaveBtnText, { color: COLORS.error }]}>Quitter ce club</Text>
@@ -220,30 +240,15 @@ export default function TontineDetailScreen() {
 const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create({
     safeArea: { flex: 1 },
     centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 12 },
-    headerBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-    headerTitle: { fontSize: 17, fontWeight: '700', color: '#fff', flex: 1, textAlign: 'center', marginHorizontal: 8 },
     content: { flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
     scrollContent: { padding: 20, paddingBottom: 60 },
-
-    balanceCard: { borderRadius: 18, borderWidth: 1, padding: 20, marginBottom: 24 },
-    balanceLabel: { fontSize: 12.5, textTransform: 'uppercase', letterSpacing: 0.4 },
-    balanceAmount: { fontSize: 28, fontWeight: '900', marginTop: 6 },
-    description: { fontSize: 13.5, marginTop: 10, lineHeight: 19 },
-
-    sectionTitle: { fontSize: 15, fontWeight: '700', marginBottom: 10, marginTop: 4 },
-    sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
-
-    inlineForm: { flexDirection: 'row', gap: 10, borderRadius: 14, borderWidth: 1, padding: 8, alignItems: 'center', marginTop: 12 },
-    inlineInput: { flex: 1, height: 42, paddingHorizontal: 12, fontSize: 15 },
-    inlineBtn: { paddingHorizontal: 18, height: 42, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-    disabled: { opacity: 0.5 },
 
     card: { borderRadius: 16, borderWidth: 1, padding: 16, marginTop: 12 },
 
     memberRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 10, borderBottomWidth: 1, borderRadius: 10 },
     orderCircle: { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
     sortBtn: { width: 30, height: 30, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
+    contributionBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, marginRight: 6 },
 
     leaveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 32, paddingVertical: 14 },
     leaveBtnText: { fontSize: 14, fontWeight: '700' },

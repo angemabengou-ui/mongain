@@ -468,6 +468,46 @@ router.post('/requests/:id/reject', authMiddleware, async (req: AuthRequest, res
     }
 });
 
+// 4bis. Annuler sa propre demande PENDING [MAKER] — jusqu'ici une demande créée par erreur
+// (mauvais montant, mauvaise cible) n'avait aucune issue : ni approuvable proprement par
+// son propre auteur (anti-auto-approbation), ni retirable — elle restait PENDING à vie ou
+// devait être rejetée par un tiers pour une erreur qui n'était pas la sienne. CANCELLED
+// est un statut déjà prévu au schéma (commentaire de TreasuryRequest.status) mais jamais
+// écrit par aucune route jusqu'ici.
+router.post('/requests/:id/cancel', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true } });
+        if (!staff) return res.status(403).json({ error: 'Compte introuvable.' });
+
+        const requestId = req.params.id as string;
+        const { reason } = req.body;
+
+        const request = await prisma.treasuryRequest.findUnique({ where: { id: requestId } });
+        if (!request) return res.status(404).json({ error: 'Introuvable.' });
+        if (request.status !== 'PENDING') return res.status(400).json({ error: 'Action impossible sur une demande non-PENDING.' });
+
+        // Seul l'auteur peut retirer sa propre demande ; SUPER_ADMIN peut débloquer une
+        // demande orpheline (ex: maker parti) — même escape hatch que l'anti-auto-approbation.
+        if (request.makerId !== staff.id && staff.role !== 'SUPER_ADMIN') {
+            return res.status(403).json({ error: 'Seul l\'auteur de la demande (ou un SUPER_ADMIN) peut l\'annuler.' });
+        }
+
+        const claim = await prisma.treasuryRequest.updateMany({
+            where: { id: requestId, status: 'PENDING' },
+            data: { status: 'CANCELLED', rejectionReason: reason ? String(reason).trim() : null, executedAt: new Date() }
+        });
+        if (claim.count === 0) return res.status(400).json({ error: 'Cette demande vient d\'être traitée.' });
+
+        await prisma.auditLog.create({
+            data: { adminId: staff.id, action: 'CANCEL_TREASURY_REQ', details: `Annulation de ${request.reference} par son auteur.${reason ? ` Motif : ${reason}` : ''}` }
+        });
+
+        res.json({ success: true });
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
 // 5. Voir la liquidité des agences
 router.get('/agencies-liquidity', authMiddleware, async (req: AuthRequest, res) => {
     try {

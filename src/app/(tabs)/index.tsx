@@ -192,10 +192,16 @@ export default function DashboardScreen() {
 
             {/* Tableau de Bord Marchand */}
             {user?.role === 'MERCHANT' && merchantStats && (
-              <View style={[styles.actionsCard, { marginTop: 16, padding: 20, backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-                  <Ionicons name="stats-chart" size={24} color="#D97706" style={{ marginRight: 8 }} />
-                  <Text style={{ fontSize: 18, fontWeight: '800', color: '#92400E' }}>Caisse du Jour</Text>
+              <TouchableOpacity activeOpacity={0.8} onPress={() => router.push('/merchant-hub' as any)} style={[styles.actionsCard, { marginTop: 16, padding: 20, backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name="stats-chart" size={24} color="#D97706" style={{ marginRight: 8 }} />
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: '#92400E' }}>Caisse du Jour</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 12.5, fontWeight: '700', color: '#B45309', marginRight: 2 }}>Mon Commerce</Text>
+                    <Ionicons name="chevron-forward" size={16} color="#B45309" />
+                  </View>
                 </View>
                 <Text style={{ fontSize: 14, color: '#B45309', marginBottom: 4 }}>Chiffre d'affaires encaissé aujourd'hui</Text>
                 <Text style={{ fontSize: 28, fontWeight: '900', color: '#D97706', marginBottom: 16 }}>
@@ -216,7 +222,7 @@ export default function DashboardScreen() {
                     </Text>
                   </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             )}
 
             {/* Services & Factures (Mini-Programmes) */}

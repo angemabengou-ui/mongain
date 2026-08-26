@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { getCentralTreasury } from '../services/centralTreasury';
+import { getOrCreateMerchantCommissionWallet } from '../services/merchantService';
 import { initiatePvitPayment, initiatePvitTransfer, isPvitConfigured, toPvitCustomerAccountNumber } from '../services/pvit';
 import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
@@ -674,8 +675,21 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
 
             await tx.wallet.update({
                 where: { id: agent.wallet.id },
-                data: { balance: { increment: amount + merchantReward } },
+                data: { balance: { increment: amount } },
             });
+
+            // La commission part sur un solde séparé (commissionWallet), pas dans le même
+            // wallet que la vente — voir merchantService.ts. Créée à la volée au premier
+            // gain de commission d'un marchand.
+            let commissionWalletId: string | null = null;
+            if (agent.role === 'MERCHANT' && merchantReward > 0) {
+                const commissionWallet = await getOrCreateMerchantCommissionWallet(agent.id, tx);
+                commissionWalletId = commissionWallet.id;
+                await tx.wallet.update({
+                    where: { id: commissionWallet.id },
+                    data: { balance: { increment: merchantReward } },
+                });
+            }
 
             const corporateCut = fee - merchantReward;
             if (corporateCut > 0) {
@@ -717,12 +731,12 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
             // ne dÃ©place aucun fonds : elle rend juste la commission traÃ§able et sommable
             // dans le relevÃ© du marchand, qui ne pouvait jusqu'ici jamais la distinguer de la
             // vente elle-mÃªme.
-            if (merchantReward > 0) {
+            if (merchantReward > 0 && commissionWalletId) {
                 await tx.transaction.create({
                     data: {
                         amount: merchantReward,
                         senderWalletId: corporate.wallet.id,
-                        receiverWalletId: agent.wallet.id,
+                        receiverWalletId: commissionWalletId,
                         status: 'COMPLETED',
                         reference: 'REWARD-' + transaction.id.substring(0, 8),
                     }

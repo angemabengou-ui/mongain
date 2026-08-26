@@ -8,9 +8,11 @@ import walletRoutes from '../wallet';
 jest.mock('../../prisma', () => ({
     prisma: {
         user: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn(), create: jest.fn() },
-        wallet: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
+        wallet: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn(), create: jest.fn() },
         transaction: { create: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
+        notification: { create: jest.fn() },
         systemSettings: { findFirst: jest.fn() },
+        $executeRaw: jest.fn(),
         $transaction: jest.fn((callback) => callback(prisma))
     },
 }));
@@ -46,6 +48,8 @@ jest.mock('../settings', () => ({
 
 const bcrypt = require('bcryptjs');
 const pvit = require('../../services/pvit');
+const { getSystemSettings } = require('../settings');
+const CORPORATE_PHONE = process.env.CORPORATE_PHONE || '+2410000000';
 
 // Setup d'une mini-app Express avec nos routes
 const app = express();
@@ -207,6 +211,98 @@ describe('Wallet Routes', () => {
             expect(prisma.transaction.create).toHaveBeenCalledWith({
                 data: expect.objectContaining({ type: 'CASH_IN', status: 'PENDING', amount: 5000 }),
             });
+        });
+    });
+
+    // La commission marchand part désormais sur un solde séparé (commissionWallet) au lieu
+    // d'être fondue dans le même wallet que la vente — voir merchantService.ts et le
+    // commentaire dans wallet.ts /client-initiated-withdraw.
+    describe('POST /wallet/client-initiated-withdraw (commission marchand séparée)', () => {
+        const mockClientAndReceiver = (receiver: any, commissionWallet: any | null) => {
+            (prisma.user.findUnique as jest.Mock).mockImplementation(async (args: any) => {
+                if (args.select?.jwtVersion) return { id: 'user123', isActive: true, jwtVersion: 0 };
+                if (args.where?.id === 'user123' && !args.include) {
+                    return { id: 'user123', pin: 'hashed-pin', failedPinAttempts: 0, lockedUntil: null };
+                }
+                if (args.where?.id === 'user123' && args.include?.wallet) {
+                    return { id: 'user123', name: 'Client', wallet: { id: 'w_client', balance: 100000 } };
+                }
+                if (args.where?.phone === CORPORATE_PHONE) {
+                    return { id: 'corporate_id', wallet: { id: 'w_corporate', balance: 0 } };
+                }
+                if (args.where?.id === receiver.id && args.include?.commissionWallet) {
+                    return { id: receiver.id, commissionWallet };
+                }
+                return null;
+            });
+            (prisma.user.findFirst as jest.Mock).mockResolvedValue(receiver);
+            (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+            (prisma.wallet.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+            (prisma.wallet.update as jest.Mock).mockResolvedValue({});
+            (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: 'tx1' });
+        };
+
+        it('AGENT : ne crée ni ne touche aucun commissionWallet (comportement inchangé)', async () => {
+            (getSystemSettings as jest.Mock).mockResolvedValue({ taxWithdraw: 0, agencyWithdrawThreshold: 999999999, agencyTaxWithdraw: 0 });
+            mockClientAndReceiver(
+                { id: 'agent_1', role: 'AGENT', name: 'Agent A', phone: '077888888', branchId: null, wallet: { id: 'w_agent', balance: 0 } },
+                null
+            );
+
+            const res = await request(app)
+                .post('/wallet/client-initiated-withdraw')
+                .set('Authorization', 'Bearer dummy-token')
+                .send({ receiverPhone: '077888888', amount: 5000, pin: '1234' });
+
+            expect(res.status).toBe(200);
+            expect(prisma.wallet.update).toHaveBeenCalledWith({ where: { id: 'w_agent' }, data: { balance: { increment: 5000 } } });
+            expect(prisma.wallet.create).not.toHaveBeenCalled();
+            // Aucune ligne REWARD- : seule la transaction principale a été créée.
+            expect(prisma.transaction.create).toHaveBeenCalledTimes(1);
+        });
+
+        it('MERCHANT : crédite `amount` seul sur le wallet principal et `merchantReward` sur un commissionWallet créé à la volée', async () => {
+            (getSystemSettings as jest.Mock).mockResolvedValue({ taxWithdraw: 0.02, rewardMerchant: 0.01 });
+            mockClientAndReceiver(
+                { id: 'merchant_1', role: 'MERCHANT', name: 'Le Bon Coin', phone: '077999999', wallet: { id: 'w_merchant', balance: 0 } },
+                null // pas encore de commissionWallet -> création à la volée
+            );
+            (prisma.wallet.create as jest.Mock).mockResolvedValue({ id: 'w_commission', balance: 0 });
+
+            const res = await request(app)
+                .post('/wallet/client-initiated-withdraw')
+                .set('Authorization', 'Bearer dummy-token')
+                .send({ receiverPhone: '077999999', amount: 5000, pin: '1234' });
+
+            expect(res.status).toBe(200);
+            // fee = 5000*0.02 = 100 ; merchantReward = 5000*0.01 = 50 ; corporateCut = 50.
+            expect(prisma.wallet.update).toHaveBeenCalledWith({ where: { id: 'w_merchant' }, data: { balance: { increment: 5000 } } });
+            expect(prisma.wallet.create).toHaveBeenCalledWith({ data: { balance: 0 } });
+            expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: 'merchant_1' }, data: { commissionWalletId: 'w_commission' } });
+            expect(prisma.wallet.update).toHaveBeenCalledWith({ where: { id: 'w_commission' }, data: { balance: { increment: 50 } } });
+            expect(prisma.wallet.update).toHaveBeenCalledWith({ where: { id: 'w_corporate' }, data: { balance: { increment: 50 } } });
+            // La ligne REWARD- pointe vers le commissionWallet, pas vers le wallet principal du marchand.
+            expect(prisma.transaction.create).toHaveBeenCalledWith({
+                data: expect.objectContaining({ amount: 50, senderWalletId: 'w_corporate', receiverWalletId: 'w_commission', reference: expect.stringContaining('REWARD-') }),
+            });
+        });
+
+        it('MERCHANT : réutilise le commissionWallet existant sans le recréer', async () => {
+            (getSystemSettings as jest.Mock).mockResolvedValue({ taxWithdraw: 0.02, rewardMerchant: 0.01 });
+            mockClientAndReceiver(
+                { id: 'merchant_1', role: 'MERCHANT', name: 'Le Bon Coin', phone: '077999999', wallet: { id: 'w_merchant', balance: 0 } },
+                { id: 'w_commission_existing', balance: 500 }
+            );
+
+            const res = await request(app)
+                .post('/wallet/client-initiated-withdraw')
+                .set('Authorization', 'Bearer dummy-token')
+                .send({ receiverPhone: '077999999', amount: 5000, pin: '1234' });
+
+            expect(res.status).toBe(200);
+            expect(prisma.wallet.create).not.toHaveBeenCalled();
+            expect(prisma.user.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: { commissionWalletId: expect.anything() } }));
+            expect(prisma.wallet.update).toHaveBeenCalledWith({ where: { id: 'w_commission_existing' }, data: { balance: { increment: 50 } } });
         });
     });
 });

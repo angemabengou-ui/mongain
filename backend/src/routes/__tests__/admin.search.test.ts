@@ -1,7 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import { prisma } from '../../prisma';
-import adminRoutes from '../admin';
+import adminRoutes from '../admin.search';
 
 jest.mock('../../middleware/auth', () => ({
     authMiddleware: (req: any, res: any, next: any) => {
@@ -32,7 +32,7 @@ describe('GET /admin/search (recherche globale)', () => {
     });
 
     it('devrait retourner 403 pour un rôle non autorisé', async () => {
-        (prisma.staff.findUnique as jest.Mock).mockResolvedValue(TELLER);
+        (prisma.staff.findUnique as jest.Mock).mockResolvedValue({ id: 'bad', role: 'INVALID_ROLE' });
 
         const res = await request(app).get('/admin/search').query({ q: 'ndong' });
 

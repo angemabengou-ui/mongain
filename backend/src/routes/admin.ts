@@ -32,7 +32,7 @@ const KYC_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'];
 router.get('/stats', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const user = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!user || !hasPermission(user, 'perm_system_settings_view')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!user || !hasPermission(user, 'perm_analytics_view')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const totalUsers = await prisma.user.count({ where: { role: 'USER', isActive: true } });
         const agentsCount = await prisma.user.count({ where: { role: 'AGENT', isActive: true } });
@@ -1372,7 +1372,7 @@ router.get('/customers', authMiddleware, async (req: AuthRequest, res) => {
 router.post('/users/:id/logout-all', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_ticket_view')) {
+        if (!staff || !hasPermission(staff, 'perm_customer_suspend')) {
             return res.status(403).json({ error: 'Action non autorisée.' });
         }
 
@@ -1397,7 +1397,7 @@ router.post('/users/:id/logout-all', authMiddleware, async (req: AuthRequest, re
 router.post('/users/:id/risk-flags', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_system_settings_view')) {
+        if (!staff || !hasPermission(staff, 'perm_customer_flag')) {
             return res.status(403).json({ error: 'Seule la conformité et les risques peuvent affecter un Flag.' });
         }
 
@@ -3137,247 +3137,6 @@ router.put('/error-logs/:id/resolve', authMiddleware, async (req: AuthRequest, r
         return res.json({ success: true });
     } catch (e: any) {
         return res.status(500).json({ error: friendlyErrorMessage(e) });
-    }
-});
-
-// ==========================================
-// CAISSES COMMUNES (VAULTS) — VISIBILITÉ LECTURE SEULE
-// ==========================================
-// Jusqu'ici, une Caisse Commune bloquée ou contestée était un litige que
-// personne côté équipe ne pouvait voir, encore moins arbitrer — le modèle
-// Vault n'apparaissait dans aucun écran admin. Ces deux routes n'offrent que
-// de la lecture pour l'instant (RISK/COMPLIANCE_CHECKER/SUPPORT_MAKER
-// traitent les tickets, SUPER_ADMIN supervise) ; aucune action d'intervention
-// (réattribuer un rôle, forcer un retrait) n'est exposée ici.
-// Removed VAULT_VIEW_ROLES in favor of perm_customer_360_basic
-
-router.get('/vaults', authMiddleware, async (req: AuthRequest, res) => {
-    try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
-
-        const vaults = await prisma.vault.findMany({
-            orderBy: { createdAt: 'desc' },
-            include: {
-                admin: { select: { name: true, phone: true } },
-                _count: { select: { members: true, transactions: { where: { status: 'PENDING' } } } }
-            }
-        });
-
-        res.json({ vaults });
-    } catch (e: any) {
-        res.status(500).json({ error: friendlyErrorMessage(e) });
-    }
-});
-
-router.get('/vaults/:id', authMiddleware, async (req: AuthRequest, res) => {
-    try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
-
-        const vault = await prisma.vault.findUnique({
-            where: { id: req.params.id as string },
-            include: {
-                admin: { select: { name: true, phone: true } },
-                members: { include: { user: { select: { name: true, phone: true } } } },
-                transactions: {
-                    orderBy: { createdAt: 'desc' },
-                    take: 100,
-                    include: {
-                        requestedBy: { select: { name: true, phone: true } },
-                        approvals: { include: { user: { select: { name: true } } } }
-                    }
-                },
-                vouchers: {
-                    orderBy: { createdAt: 'desc' },
-                    include: { president: { select: { name: true, phone: true } } }
-                }
-            }
-        });
-        if (!vault) return res.status(404).json({ error: 'Caisse introuvable.' });
-
-        res.json({ vault });
-    } catch (e: any) {
-        res.status(500).json({ error: friendlyErrorMessage(e) });
-    }
-});
-
-// ==========================================
-// TONTINES — VISIBILITÉ LECTURE SEULE
-// ==========================================
-// Même constat que pour les Caisses Communes ci-dessus : un litige sur une tontine
-// (cagnotte non reçue, cotisation prélevée en double, ordre de versement contesté)
-// était invisible pour toute l'équipe — TontineGroup n'apparaissait dans aucun écran
-// admin. Lecture seule uniquement, aucune action d'intervention exposée ici.
-// Removed TONTINE_VIEW_ROLES in favor of perm_customer_360_basic
-
-router.get('/tontines', authMiddleware, async (req: AuthRequest, res) => {
-    try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
-
-        const groups = await prisma.tontineGroup.findMany({
-            orderBy: { createdAt: 'desc' },
-            include: {
-                creator: { select: { name: true, phone: true } },
-                _count: { select: { participants: true } }
-            }
-        });
-
-        res.json({ groups });
-    } catch (e: any) {
-        res.status(500).json({ error: friendlyErrorMessage(e) });
-    }
-});
-
-router.get('/tontines/:id', authMiddleware, async (req: AuthRequest, res) => {
-    try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
-
-        const group = await prisma.tontineGroup.findUnique({
-            where: { id: req.params.id as string },
-            include: {
-                creator: { select: { name: true, phone: true } },
-                participants: {
-                    orderBy: { payoutOrder: 'asc' },
-                    include: { user: { select: { name: true, phone: true } } }
-                }
-            }
-        });
-        if (!group) return res.status(404).json({ error: 'Tontine introuvable.' });
-
-        // Les cotisations/versements transitent par Transaction (aucun modèle dédié) —
-        // référencés TONT_DBT_G{id}_C{cycle}_U{userId} / TONT_PAY_G{id}_C{cycle}_U{userId}
-        // (voir tontineService.ts). Le `_G{id}_` cible ce groupe précis sans ambiguïté.
-        const transactions = await prisma.transaction.findMany({
-            where: { reference: { contains: `_G${group.id}_` } },
-            orderBy: { createdAt: 'desc' },
-            take: 200,
-            include: {
-                senderWallet: { include: { user: { select: { name: true, phone: true } } } },
-                receiverWallet: { include: { user: { select: { name: true, phone: true } } } }
-            }
-        });
-
-        res.json({ group, transactions });
-    } catch (e: any) {
-        res.status(500).json({ error: friendlyErrorMessage(e) });
-    }
-});
-
-// ==========================================
-// RECHERCHE GLOBALE (barre du haut du portail)
-// ==========================================
-// Avant ça, retrouver un client/caisse/tontine précis obligeait à d'abord deviner le
-// bon écran, puis à parcourir sa liste manuellement — Vaults/Tontines n'avaient même
-// pas de filtre local. Un seul champ, interrogeant les 3 domaines en parallèle,
-// plafonné à 5 résultats chacun : de quoi sauter directement à la fiche visée.
-// Removed GLOBAL_SEARCH_ROLES in favor of perm_customer_360_basic
-
-router.get('/search', authMiddleware, async (req: AuthRequest, res) => {
-    try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
-
-        const q = ((req.query.q as string) || '').trim();
-        if (q.length < 2) return res.json({ users: [], vaults: [], tontines: [] });
-
-        const [users, vaults, tontines] = await Promise.all([
-            prisma.user.findMany({
-                where: { OR: [{ name: { contains: q, mode: 'insensitive' } }, { phone: { contains: q } }] },
-                select: { id: true, name: true, phone: true, role: true },
-                take: 5
-            }),
-            prisma.vault.findMany({
-                where: { name: { contains: q, mode: 'insensitive' } },
-                select: { id: true, name: true, admin: { select: { name: true } } },
-                take: 5
-            }),
-            prisma.tontineGroup.findMany({
-                where: { name: { contains: q, mode: 'insensitive' } },
-                select: { id: true, name: true, creator: { select: { name: true } } },
-                take: 5
-            })
-        ]);
-
-        res.json({ users, vaults, tontines });
-    } catch (e: any) {
-        res.status(500).json({ error: friendlyErrorMessage(e) });
-    }
-});
-
-// ==========================================
-// COMPTES SYSTÈME — VISIBILITÉ + HISTORIQUE
-// ==========================================
-// Passerelle Externe, Corporate, Coffre Tontine, Trésorerie Centrale : des comptes
-// techniques (contreparties de double-écriture) auparavant invisibles dans tout
-// l'admin — exclus des listes clients (rôle ADMIN) et de la recherche globale, sans
-// écran dédié. Résultat : leur solde apparaissait seulement noyé dans des totaux
-// (ex. "Portefeuilles Clients" en Trésorerie), impossible à attribuer à un compte
-// précis ni à auditer (qui a fait entrer/sortir quoi). Lecture seule ici ; toute
-// correction de solde passe par le circuit Maker/Checker existant de Trésorerie
-// (ADJUSTMENT/REVERSAL avec targetWalletId) — jamais un solde éditable directement.
-// Removed SYSTEM_ACCOUNTS_ROLES in favor of perm_treasury_view
-
-router.get('/system-accounts', authMiddleware, async (req: AuthRequest, res) => {
-    try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_treasury_view')) return res.status(403).json({ error: 'Accès refusé.' });
-
-        const [users, centralTreasury] = await Promise.all([
-            prisma.user.findMany({
-                where: { role: 'ADMIN' },
-                select: { id: true, name: true, phone: true, createdAt: true, wallet: { select: { id: true, balance: true } } },
-                orderBy: { createdAt: 'asc' }
-            }),
-            getCentralTreasury()
-        ]);
-
-        const accounts = [
-            {
-                id: `treasury:${centralTreasury.id}`,
-                walletId: centralTreasury.walletId,
-                name: centralTreasury.name,
-                balance: centralTreasury.wallet.balance,
-                kind: 'CENTRAL_TREASURY'
-            },
-            ...users.filter(u => u.wallet).map(u => ({
-                id: `user:${u.id}`,
-                walletId: u.wallet!.id,
-                name: u.name,
-                phone: u.phone,
-                balance: u.wallet!.balance,
-                kind: 'SYSTEM_USER',
-                createdAt: u.createdAt
-            }))
-        ];
-
-        res.json({ accounts });
-    } catch (e: any) {
-        res.status(500).json({ error: friendlyErrorMessage(e) });
-    }
-});
-
-router.get('/system-accounts/:walletId/transactions', authMiddleware, async (req: AuthRequest, res) => {
-    try {
-        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_treasury_view')) return res.status(403).json({ error: 'Accès refusé.' });
-
-        const walletId = req.params.walletId as string;
-        const transactions = await prisma.transaction.findMany({
-            where: { OR: [{ senderWalletId: walletId }, { receiverWalletId: walletId }] },
-            orderBy: { createdAt: 'desc' },
-            take: 200,
-            include: {
-                senderWallet: { include: { user: { select: { name: true, phone: true } } } },
-                receiverWallet: { include: { user: { select: { name: true, phone: true } } } }
-            }
-        });
-
-        res.json({ transactions });
-    } catch (e: any) {
-        res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });
 

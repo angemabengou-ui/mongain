@@ -6,6 +6,7 @@ import {
     Alert,
     KeyboardAvoidingView,
     Platform,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -14,11 +15,16 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import BalanceCard from '../components/ui/BalanceCard';
+import InlineInviteForm from '../components/ui/InlineInviteForm';
+import ScreenHeader from '../components/ui/ScreenHeader';
+import SectionHeading from '../components/ui/SectionHeading';
 import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import {
     apiApproveVault,
     apiDepositVault,
+    apiGetMyVouchers,
     apiGetVaultDetails,
     apiInviteVault,
     apiLeaveVault,
@@ -60,7 +66,9 @@ export default function VaultDetailScreen() {
 
     const [vault, setVault] = useState<any>(null);
     const [myRole, setMyRole] = useState<any>(null);
+    const [myVouchers, setMyVouchers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
     const [depositAmount, setDepositAmount] = useState('');
     const [depositLoading, setDepositLoading] = useState(false);
@@ -80,6 +88,10 @@ export default function VaultDetailScreen() {
 
     const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
     const [roleUpdateLoading, setRoleUpdateLoading] = useState(false);
+
+    const [showInviteForm, setShowInviteForm] = useState(false);
+
+    const [thresholdLoading, setThresholdLoading] = useState(false);
 
     // Vérifie le numéro saisi et affiche le nom du destinataire avant l'envoi —
     // même logique de confiance que src/app/transfer.tsx pour un transfert P2P
@@ -104,24 +116,24 @@ export default function VaultDetailScreen() {
         return () => clearTimeout(handle);
     }, [transferPhone]);
 
-    const [showInviteForm, setShowInviteForm] = useState(false);
-    const [invitePhone, setInvitePhone] = useState('');
-    const [inviteLoading, setInviteLoading] = useState(false);
-
-    const [thresholdLoading, setThresholdLoading] = useState(false);
-
-    const load = useCallback(async () => {
+    const load = useCallback(async (isRefresh = false) => {
         if (!id) return;
+        if (isRefresh) setRefreshing(true);
         try {
-            const res = await apiGetVaultDetails(id);
-            if (res.success) {
-                setVault(res.data);
-                setMyRole(res.role);
+            const [detailRes, vouchersRes] = await Promise.all([
+                apiGetVaultDetails(id),
+                apiGetMyVouchers().catch(() => ({ data: [] })),
+            ]);
+            if (detailRes.success) {
+                setVault(detailRes.data);
+                setMyRole(detailRes.role);
             }
+            setMyVouchers((vouchersRes.data || []).filter((v: any) => v.vaultId === id));
         } catch (e: any) {
             Alert.alert('Erreur', e.message || 'Impossible de charger la caisse.');
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     }, [id]);
 
@@ -213,23 +225,13 @@ export default function VaultDetailScreen() {
         }
     };
 
-    const handleInvite = async () => {
-        if (!invitePhone.trim()) return;
-        setInviteLoading(true);
+    const handleInvite = async (formattedPhone: string) => {
         try {
-            let formatted = invitePhone.trim();
-            if (!formatted.startsWith('+')) {
-                if (formatted.startsWith('0')) formatted = formatted.substring(1);
-                formatted = '+241' + formatted;
-            }
-            await apiInviteVault(id, formatted);
-            setInvitePhone('');
+            await apiInviteVault(id, formattedPhone);
             setShowInviteForm(false);
             load();
         } catch (e: any) {
             Alert.alert('Échec de l\'invitation', e.message || 'Une erreur est survenue.');
-        } finally {
-            setInviteLoading(false);
         }
     };
 
@@ -289,26 +291,19 @@ export default function VaultDetailScreen() {
 
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
-            <View style={styles.header}>
-                <TouchableOpacity style={styles.headerBtn} onPress={() => router.back()}>
-                    <Ionicons name="arrow-back" size={24} color="#fff" />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle} numberOfLines={1}>{vault.name}</Text>
-                <View style={{ width: 44 }} />
-            </View>
+            <ScreenHeader title={vault.name} onBack={() => router.back()} />
 
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.content, { backgroundColor: COLORS.background }]}>
-                <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    keyboardShouldPersistTaps="handled"
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={COLORS.primary} />}
+                >
 
-                    {/* Solde */}
-                    <View style={[styles.balanceCard, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
-                        <Text style={[styles.balanceLabel, { color: COLORS.textSecondary }]}>Solde de la caisse</Text>
-                        <Text style={[styles.balanceAmount, { color: COLORS.textPrimary }]}>{vault.balance.toLocaleString('fr-FR')} FCFA</Text>
-                        {vault.description ? <Text style={[styles.description, { color: COLORS.textSecondary }]}>{vault.description}</Text> : null}
-                    </View>
+                    <BalanceCard colors={COLORS} label="Solde de la caisse" amount={`${vault.balance.toLocaleString('fr-FR')} FCFA`} description={vault.description || undefined} />
 
                     {/* Dépôt */}
-                    <Text style={[styles.sectionTitle, { color: COLORS.textPrimary }]}>Déposer</Text>
+                    <SectionHeading colors={COLORS} title="Déposer" />
                     <View style={[styles.inlineForm, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
                         <TextInput
                             style={[styles.inlineInput, { color: COLORS.textPrimary }]}
@@ -330,12 +325,14 @@ export default function VaultDetailScreen() {
                     {/* Demande de retrait */}
                     {myRole?.isInitiator && (
                         <>
-                            <View style={styles.sectionRow}>
-                                <Text style={[styles.sectionTitle, { color: COLORS.textPrimary, marginBottom: 0 }]}>Demander un retrait</Text>
-                                <TouchableOpacity onPress={() => setShowWithdrawForm(!showWithdrawForm)}>
-                                    <Ionicons name={showWithdrawForm ? 'chevron-up' : 'chevron-down'} size={20} color={COLORS.primary} />
-                                </TouchableOpacity>
-                            </View>
+                            <SectionHeading
+                                colors={COLORS}
+                                title="Demander un retrait"
+                                marginTop={22}
+                                marginBottom={0}
+                                actionIcon={showWithdrawForm ? 'chevron-up' : 'chevron-down'}
+                                onAction={() => setShowWithdrawForm(!showWithdrawForm)}
+                            />
 
                             {showWithdrawForm && (
                                 <View style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
@@ -440,7 +437,7 @@ export default function VaultDetailScreen() {
                     {/* Retraits en attente */}
                     {pendingTx.length > 0 && (
                         <>
-                            <Text style={[styles.sectionTitle, { color: COLORS.textPrimary }]}>En attente d'approbation</Text>
+                            <SectionHeading colors={COLORS} title="En attente d'approbation" />
                             {pendingTx.map((tx: any) => {
                                 // Lire l'instantané figé par le serveur à la création de la demande
                                 // (requiredApprovalsSnapshot/requiredValidatorIdsSnapshot,
@@ -490,10 +487,33 @@ export default function VaultDetailScreen() {
                         </>
                     )}
 
+                    {/* Mes bons actifs pour cette caisse — jusqu'ici uniquement visibles/dépensables
+                        depuis transfer-confirm.tsx, aucune trace d'eux ici alors qu'ils proviennent
+                        justement de cette caisse. */}
+                    {myVouchers.length > 0 && (
+                        <>
+                            <SectionHeading colors={COLORS} title={`Mes bons actifs (${myVouchers.length})`} />
+                            <View style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border, padding: 6 }]}>
+                                {myVouchers.map((v: any) => (
+                                    <View key={v.id} style={[styles.memberRow, { borderColor: COLORS.border }]}>
+                                        <View>
+                                            <Text style={{ color: COLORS.textPrimary, fontWeight: '700' }}>{v.amount.toLocaleString('fr-FR')} FCFA</Text>
+                                            <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2 }}>
+                                                Émis le {new Date(v.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                            </Text>
+                                        </View>
+                                        <Ionicons name="ticket-outline" size={20} color={COLORS.primary} />
+                                    </View>
+                                ))}
+                            </View>
+                            <Text style={[styles.helper, { color: COLORS.textSecondary, marginTop: 8 }]}>Dépensez un bon depuis un paiement (numéro du marchand + code PIN).</Text>
+                        </>
+                    )}
+
                     {/* Seuil d'approbation (Président uniquement) */}
                     {myRole?.isAdmin && (
                         <>
-                            <Text style={[styles.sectionTitle, { color: COLORS.textPrimary }]}>Approbations requises pour un retrait</Text>
+                            <SectionHeading colors={COLORS} title="Approbations requises pour un retrait" />
                             <View style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
                                 <View style={styles.cardRow}>
                                     <Text style={{ color: COLORS.textSecondary, flex: 1 }}>Nombre de commissaires devant valider</Text>
@@ -546,36 +566,18 @@ export default function VaultDetailScreen() {
                     )}
 
                     {/* Membres */}
-                    <View style={styles.sectionRow}>
-                        <Text style={[styles.sectionTitle, { color: COLORS.textPrimary, marginBottom: 0 }]}>Membres ({vault.members.length})</Text>
-                        {myRole?.isAdmin && (
-                            <TouchableOpacity onPress={() => setShowInviteForm(!showInviteForm)}>
-                                <Ionicons name={showInviteForm ? 'chevron-up' : 'person-add-outline'} size={20} color={COLORS.primary} />
-                            </TouchableOpacity>
-                        )}
-                    </View>
+                    <SectionHeading
+                        colors={COLORS}
+                        title={`Membres (${vault.members.length})`}
+                        marginTop={22}
+                        marginBottom={0}
+                        actionIcon={myRole?.isAdmin ? (showInviteForm ? 'chevron-up' : 'person-add-outline') : undefined}
+                        onAction={myRole?.isAdmin ? () => setShowInviteForm(!showInviteForm) : undefined}
+                    />
 
-                    {showInviteForm && (
-                        <View style={[styles.inlineForm, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
-                            <TextInput
-                                style={[styles.inlineInput, { color: COLORS.textPrimary }]}
-                                placeholder="Téléphone (ex : 074...)"
-                                placeholderTextColor={COLORS.textSecondary}
-                                keyboardType="phone-pad"
-                                value={invitePhone}
-                                onChangeText={setInvitePhone}
-                            />
-                            <TouchableOpacity
-                                style={[styles.inlineBtn, { backgroundColor: COLORS.primary }, (!invitePhone || inviteLoading) && styles.disabled]}
-                                onPress={handleInvite}
-                                disabled={!invitePhone || inviteLoading}
-                            >
-                                {inviteLoading ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="send" size={18} color="#fff" />}
-                            </TouchableOpacity>
-                        </View>
-                    )}
+                    {showInviteForm && <InlineInviteForm colors={COLORS} onInvite={handleInvite} />}
 
-                    <View style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border, padding: 6 }]}>
+                    <View style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border, padding: 6, marginTop: 12 }]}>
                         {vault.members.map((m: any) => {
                             const canEdit = myRole?.isAdmin;
                             const isOpen = editingMemberId === m.id;
@@ -627,7 +629,7 @@ export default function VaultDetailScreen() {
                     {/* Historique */}
                     {historyTx.length > 0 && (
                         <>
-                            <Text style={[styles.sectionTitle, { color: COLORS.textPrimary }]}>Historique</Text>
+                            <SectionHeading colors={COLORS} title="Historique" />
                             <View style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border, padding: 6 }]}>
                                 {historyTx.map((tx: any) => (
                                     <View key={tx.id} style={[styles.memberRow, { borderColor: COLORS.border }]}>
@@ -658,19 +660,8 @@ export default function VaultDetailScreen() {
 const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create({
     safeArea: { flex: 1 },
     centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 12 },
-    headerBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-    headerTitle: { fontSize: 17, fontWeight: '700', color: '#fff', flex: 1, textAlign: 'center', marginHorizontal: 8 },
     content: { flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
     scrollContent: { padding: 20, paddingBottom: 60 },
-
-    balanceCard: { borderRadius: 18, borderWidth: 1, padding: 20, marginBottom: 24 },
-    balanceLabel: { fontSize: 12.5, textTransform: 'uppercase', letterSpacing: 0.4 },
-    balanceAmount: { fontSize: 28, fontWeight: '900', marginTop: 6 },
-    description: { fontSize: 13.5, marginTop: 10, lineHeight: 19 },
-
-    sectionTitle: { fontSize: 15, fontWeight: '700', marginBottom: 10, marginTop: 4 },
-    sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 22 },
 
     inlineForm: { flexDirection: 'row', gap: 10, borderRadius: 14, borderWidth: 1, padding: 8, alignItems: 'center' },
     inlineInput: { flex: 1, height: 42, paddingHorizontal: 12, fontSize: 15 },

@@ -29,7 +29,7 @@ describe('Tontines', () => {
 
     it('affiche la liste des tontines', async () => {
         mockedApiFetch.mockResolvedValue({ groups: [sampleGroup] });
-        render(<Tontines token="tok" />);
+        render(<Tontines token="tok" hasPerm={() => false} />);
         expect(await screen.findByText('Tontine des Amis')).toBeInTheDocument();
         expect(screen.getByText('Alice Ndong')).toBeInTheDocument();
         expect(screen.getByText('Tontines')).toBeInTheDocument();
@@ -37,13 +37,13 @@ describe('Tontines', () => {
 
     it("affiche un message quand aucune tontine n'existe", async () => {
         mockedApiFetch.mockResolvedValue({ groups: [] });
-        render(<Tontines token="tok" />);
+        render(<Tontines token="tok" hasPerm={() => false} />);
         expect(await screen.findByText("Aucune tontine créée pour l'instant.")).toBeInTheDocument();
     });
 
     it("affiche une erreur avec bouton de réessai en cas d'échec", async () => {
         mockedApiFetch.mockRejectedValue(new Error("Impossible de contacter le serveur."));
-        render(<Tontines token="tok" />);
+        render(<Tontines token="tok" hasPerm={() => false} />);
         expect(await screen.findByText('Impossible de contacter le serveur.')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
     });
@@ -53,7 +53,7 @@ describe('Tontines', () => {
             .mockResolvedValueOnce({ groups: [sampleGroup] })
             .mockResolvedValueOnce({ group: sampleDetail, transactions: sampleTransactions });
 
-        render(<Tontines token="tok" />);
+        render(<Tontines token="tok" hasPerm={() => false} />);
         const row = await screen.findByText('Tontine des Amis');
         fireEvent.click(row);
 
@@ -68,10 +68,50 @@ describe('Tontines', () => {
             .mockResolvedValueOnce({ groups: [sampleGroup] })
             .mockResolvedValueOnce({ group: sampleDetail, transactions: [] });
 
-        render(<Tontines token="tok" />);
+        render(<Tontines token="tok" hasPerm={() => false} />);
         fireEvent.click(await screen.findByText('Tontine des Amis'));
         fireEvent.click(await screen.findByText('Retour aux tontines'));
 
         expect(await screen.findByText('Tontines')).toBeInTheDocument();
+    });
+
+    it("n'affiche pas le bouton Mettre en pause sans perm_tontine_manage", async () => {
+        mockedApiFetch
+            .mockResolvedValueOnce({ groups: [sampleGroup] })
+            .mockResolvedValueOnce({ group: sampleDetail, transactions: [] });
+
+        render(<Tontines token="tok" hasPerm={() => false} />);
+        fireEvent.click(await screen.findByText('Tontine des Amis'));
+
+        expect(await screen.findByRole('heading', { name: 'Participants (1)' })).toBeInTheDocument();
+        expect(screen.queryByText('Mettre en pause')).not.toBeInTheDocument();
+    });
+
+    it('mise en pause : ouvre la confirmation, exige un motif, puis appelle POST /pause', async () => {
+        mockedApiFetch
+            .mockResolvedValueOnce({ groups: [sampleGroup] })
+            .mockResolvedValueOnce({ group: sampleDetail, transactions: [] })
+            .mockResolvedValueOnce({ success: true, group: { ...sampleDetail, isPaused: true } })
+            .mockResolvedValueOnce({ group: { ...sampleDetail, isPaused: true }, transactions: [] })
+            .mockResolvedValueOnce({ groups: [sampleGroup] });
+
+        render(<Tontines token="tok" hasPerm={() => true} />);
+        fireEvent.click(await screen.findByText('Tontine des Amis'));
+        // Le bouton d'action du groupe (en-tête) et celui de la ligne participant partagent
+        // le même libellé « Mettre en pause » — le premier du DOM est celui de l'en-tête.
+        fireEvent.click((await screen.findAllByRole('button', { name: 'Mettre en pause' }))[0]);
+
+        const confirmButton = await screen.findByRole('button', { name: 'Confirmer la pause' });
+        expect(confirmButton).toBeDisabled();
+
+        fireEvent.change(screen.getByPlaceholderText(/Motif de la pause/), { target: { value: 'Cagnotte contestée par un membre' } });
+        expect(confirmButton).toBeEnabled();
+        fireEvent.click(confirmButton);
+
+        expect(await screen.findByText('Tontine mise en pause.')).toBeInTheDocument();
+        expect(mockedApiFetch).toHaveBeenCalledWith(
+            expect.stringContaining('/api/admin/tontines/g1/pause'),
+            expect.objectContaining({ method: 'POST', body: JSON.stringify({ reason: 'Cagnotte contestée par un membre' }) })
+        );
     });
 });

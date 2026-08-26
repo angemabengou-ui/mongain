@@ -9,7 +9,10 @@ export function initCronJobs() {
     cron.schedule('0 0 * * *', async () => {
         console.log('🔄 Exécution CRON Tontine...');
         try {
-            const activeGroups = await prisma.tontineGroup.findMany({ where: { status: 'ACTIVE' } });
+            // isPaused: mise en pause admin (litige, enquête) — voir admin.tontines.ts,
+            // POST /:id/pause. Le groupe garde intact currentCycle/lastPayoutDate pendant la
+            // pause et reprend exactement où il en était à la levée.
+            const activeGroups = await prisma.tontineGroup.findMany({ where: { status: 'ACTIVE', isPaused: false } });
             const now = new Date();
             const todayStr = now.toISOString().slice(0, 10);
 

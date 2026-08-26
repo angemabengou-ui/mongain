@@ -1,4 +1,4 @@
-import { Activity, Banknote, ChevronDown, ChevronRight, LayoutDashboard, LogOut, MessageSquare, Settings as SettingsIcon, Shield, ShieldAlert, ShieldCheck, Store, Users as UsersIcon } from 'lucide-react';
+import { Activity, Banknote, ChevronDown, ChevronRight, LayoutDashboard, LogOut, MessageSquare, Settings as SettingsIcon, Shield, ShieldAlert, ShieldCheck, ShoppingBag, Store, Users as UsersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Accounts from './Accounts';
 import AgencyCenter from './AgencyCenter';
@@ -13,6 +13,7 @@ import KycMod from './KycMod';
 import Ledger from './Ledger';
 import Login from './Login';
 import MacroStats from './MacroStats';
+import Merchants from './Merchants';
 import Settings from './Settings';
 import SupportCenter from './SupportCenter';
 import TellerTerminal from './TellerTerminal';
@@ -144,11 +145,16 @@ export default function App() {
     },
     {
       id: 'clients-comptes', label: 'PRODUITS COLLECTIFS', icon: <Shield size={18} />,
-      reqPerms: ['perm_customer_360_basic', 'perm_customer_view'],
+      reqPerms: ['perm_vault_view', 'perm_tontine_view'],
       items: [
-        { id: 'vaults', label: 'Caisses Communes', reqPerms: ['perm_customer_360_basic'] },
-        { id: 'tontines', label: 'Tontines', reqPerms: ['perm_customer_360_basic'] }
+        { id: 'vaults', label: 'Caisses Communes', reqPerms: ['perm_vault_view'] },
+        { id: 'tontines', label: 'Tontines', reqPerms: ['perm_tontine_view'] }
       ]
+    },
+    {
+      id: 'marchands', label: 'MARCHANDS', icon: <ShoppingBag size={18} />,
+      reqPerms: ['perm_merchant_view'],
+      items: [{ id: 'merchants', label: 'Comptes Marchands', reqPerms: ['perm_merchant_view'] }]
     },
     {
       id: 'ops-agence', label: 'GUICHET & AGENCE', icon: <Store size={18} />,
@@ -333,8 +339,9 @@ export default function App() {
 
           {/* Les sous-pages Customer 360 se branchent ici. users est activé par accounts ou global search */}
           {activeTab === 'users' && hasPerm(['perm_customer_360_basic', 'perm_customer_view']) && <Users token={token} staffRole={role} initialSelectedUserId={searchTarget?.tab === 'users' ? searchTarget.id : undefined} />}
-          {activeTab === 'vaults' && hasPerm(['perm_customer_360_basic']) && <Vaults token={token} initialSelectedId={searchTarget?.tab === 'vaults' ? searchTarget.id : undefined} />}
-          {activeTab === 'tontines' && hasPerm(['perm_customer_360_basic']) && <Tontines token={token} initialSelectedId={searchTarget?.tab === 'tontines' ? searchTarget.id : undefined} />}
+          {activeTab === 'vaults' && hasPerm(['perm_vault_view']) && <Vaults token={token} hasPerm={hasPerm} initialSelectedId={searchTarget?.tab === 'vaults' ? searchTarget.id : undefined} />}
+          {activeTab === 'tontines' && hasPerm(['perm_tontine_view']) && <Tontines token={token} hasPerm={hasPerm} initialSelectedId={searchTarget?.tab === 'tontines' ? searchTarget.id : undefined} />}
+          {activeTab === 'merchants' && hasPerm(['perm_merchant_view']) && <Merchants token={token} hasPerm={hasPerm} initialSelectedId={searchTarget?.tab === 'merchants' ? searchTarget.id : undefined} />}
 
           {activeTab === 'reclamations' && hasPerm(['perm_ticket_view']) && <SupportCenter token={token} hasPerm={hasPerm} />}
           {activeTab === 'branch-dash' && hasPerm(['perm_branch_view']) && <BranchDashboard token={token} staffId={staffId} onNavigateToTreasury={hasPerm(['perm_treasury_view']) ? () => setActiveTab('treasury') : undefined} />}

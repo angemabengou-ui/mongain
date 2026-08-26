@@ -1,7 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import { prisma } from '../../prisma';
-import adminRoutes from '../admin';
+import adminRoutes from '../admin.systemAccounts';
 
 jest.mock('../../middleware/auth', () => ({
     authMiddleware: (req: any, res: any, next: any) => {

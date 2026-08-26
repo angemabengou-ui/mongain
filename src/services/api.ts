@@ -313,12 +313,21 @@ export const apiAirtimeTopUp = (network: 'AIRTEL' | 'MOOV', phoneNumber: string,
 // Marchand
 export const apiGetMerchantStats = () =>
     request('GET', '/api/merchant/stats', undefined, true) as Promise<{
-        balance: number; todaySalesAmount: number; todaySalesCount: number;
+        balance: number; commissionBalance: number; todaySalesAmount: number; todaySalesCount: number;
         allTimeSalesAmount: number; todayCommission: number; allTimeCommission: number;
     }>;
 
-export const apiGetMerchantTransactions = () =>
-    request('GET', '/api/merchant/transactions', undefined, true) as Promise<any[]>;
+export const apiGetMerchantTransactions = (category?: 'SALES' | 'COMMISSION') =>
+    request('GET', `/api/merchant/transactions${category ? `?category=${category}` : ''}`, undefined, true) as Promise<any[]>;
+
+// sourceAccount : 'SALES' (solde ventes/paiements) ou 'COMMISSION' (solde commission) —
+// voir MerchantPayoutRequest (backend/prisma/schema.prisma) et admin.merchants.ts pour le
+// traitement (approbation/rejet) côté staff.
+export const apiCreateMerchantPayout = (sourceAccount: 'SALES' | 'COMMISSION', amount: number, note?: string) =>
+    request('POST', '/api/merchant/payouts', { sourceAccount, amount, note }, true) as Promise<{ success: boolean; data: any }>;
+
+export const apiGetMerchantPayouts = () =>
+    request('GET', '/api/merchant/payouts', undefined, true) as Promise<any[]>;
 
 // Tontine
 export const apiGetTontineGroups = () =>

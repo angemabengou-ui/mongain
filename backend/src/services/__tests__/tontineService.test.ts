@@ -7,6 +7,9 @@ jest.mock('../../prisma', () => ({
     prisma: {
         user: { findUnique: jest.fn(), create: jest.fn() },
         tontineGroup: { findUnique: jest.fn(), update: jest.fn() },
+        tontineParticipant: { findUnique: jest.fn(), update: jest.fn() },
+        tontineCycle: { upsert: jest.fn(), update: jest.fn(), findUnique: jest.fn() },
+        tontineContribution: { upsert: jest.fn(), count: jest.fn() },
         transaction: { findFirst: jest.fn() },
         wallet: { findUnique: jest.fn() },
         notification: { create: jest.fn() },
@@ -72,6 +75,9 @@ describe('executeTontineCycle', () => {
         (LimitEngine.verifyAndIncrementConsumption as jest.Mock).mockResolvedValue(undefined);
         (prisma.$transaction as jest.Mock).mockImplementation((cb: any) => cb(buildDebitTx()));
         (prisma.tontineGroup.update as jest.Mock).mockResolvedValue({});
+        (prisma.tontineCycle.upsert as jest.Mock).mockResolvedValue({ id: 'cycle_1', tontineGroupId: 'g1', cycleNumber: 1, totalCollected: 0 });
+        (prisma.tontineCycle.update as jest.Mock).mockResolvedValue({});
+        (prisma.tontineContribution.upsert as jest.Mock).mockResolvedValue({});
         jest.spyOn(console, 'log').mockImplementation(() => undefined);
     });
 

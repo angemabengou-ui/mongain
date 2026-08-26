@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import express from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { applyRoleChangeGuards, executeVaultWithdraw } from '../services/vaultService';
 
 const router = express.Router();
 
@@ -175,28 +176,13 @@ router.put('/:id/roles', authMiddleware, async (req: AuthRequest, res) => {
             return res.status(404).json({ success: false, message: "Cette personne n'est pas membre de la caisse — invitez-la d'abord." });
         }
 
-        // Une caisse sans aucun administrateur ne peut plus jamais être gérée
-        // (personne ne peut plus inviter, changer un rôle, ou ajuster le seuil
-        // d'approbation) — on refuse donc de retirer le dernier isAdmin restant.
-        if (isAdmin === false) {
-            const otherAdmins = await prisma.vaultMember.count({
-                where: { vaultId, isAdmin: true, userId: { not: targetUserId } }
-            });
-            if (otherAdmins === 0) {
-                return res.status(400).json({ success: false, message: "Impossible de retirer le dernier administrateur de la caisse." });
-            }
-        }
-
-        // Sans ce contrôle, décocher le dernier commissaire restant rendait la caisse
-        // définitivement bloquée : plus aucun retrait n'aurait jamais pu être approuvé
-        // (même bug de fond que le seuil requiredApprovals corrigé plus tôt dans cette caisse).
-        if (isValidator === false) {
-            const otherValidators = await prisma.vaultMember.count({
-                where: { vaultId, isValidator: true, userId: { not: targetUserId } }
-            });
-            if (otherValidators === 0) {
-                return res.status(400).json({ success: false, message: "Impossible de retirer le dernier commissaire — plus personne ne pourrait approuver un retrait." });
-            }
+        // Une caisse sans aucun administrateur ne peut plus jamais être gérée, et une caisse
+        // sans commissaire ne peut plus jamais approuver de retrait — voir applyRoleChangeGuards
+        // (vaultService.ts), partagé avec l'override admin (admin.vaults.ts).
+        try {
+            await applyRoleChangeGuards(prisma, vaultId, targetUserId, { isAdmin, isValidator });
+        } catch (guardError: any) {
+            return res.status(400).json({ success: false, message: guardError.message });
         }
 
         // Un validateur obligatoire est nécessairement un validateur : si Commissaire est
@@ -308,6 +294,11 @@ router.post('/:id/deposit', authMiddleware, async (req: AuthRequest, res) => {
             });
             if (!membership) throw new Error("Vous n'êtes pas membre de cette caisse.");
 
+            const vaultForFreezeCheck = await tx.vault.findUnique({ where: { id: vaultId }, select: { isFrozen: true, frozenReason: true } });
+            if (vaultForFreezeCheck?.isFrozen) {
+                throw new Error(`Cette caisse est gelée par l'administration${vaultForFreezeCheck.frozenReason ? ` (${vaultForFreezeCheck.frozenReason})` : ''}. Dépôt impossible.`);
+            }
+
             // Vérifier solde utilisateur
             const settings = await tx.systemSettings.findFirst();
             const fee = settings ? parsedAmount * settings.taxP2P : 0;
@@ -361,7 +352,7 @@ router.post('/:id/deposit', authMiddleware, async (req: AuthRequest, res) => {
                     senderWalletId: userWallet.id,
                     receiverWalletId: userWallet.id,
                     status: 'COMPLETED',
-                    reference: 'VAULTDEPOSIT'
+                    reference: `VAULT_DEP_${vtx.id}`
                 }
             });
 
@@ -404,6 +395,9 @@ router.post('/:id/withdraw-request', authMiddleware, async (req: AuthRequest, re
         const vault = await prisma.vault.findUnique({ where: { id: vaultId } });
         if (!vault || vault.balance < parsedAmount) {
             return res.status(400).json({ success: false, message: "Le solde de la caisse est insuffisant." });
+        }
+        if (vault.isFrozen) {
+            return res.status(400).json({ success: false, message: `Cette caisse est gelée par l'administration${vault.frozenReason ? ` (${vault.frozenReason})` : ''}. Retrait impossible.` });
         }
 
         let resolvedDestinationId = destinationId;
@@ -499,6 +493,9 @@ router.post('/:id/approve/:txId', authMiddleware, async (req: AuthRequest, res) 
             if (!vaultTx || vaultTx.status !== 'PENDING') {
                 throw new Error("Transaction non trouvée ou déjà traitée.");
             }
+            if (vaultTx.vault.isFrozen) {
+                throw new Error(`Cette caisse est gelée par l'administration${vaultTx.vault.frozenReason ? ` (${vaultTx.vault.frozenReason})` : ''}. Approbation impossible tant que le gel n'est pas levé.`);
+            }
 
             if (vaultTx.approvals.some(a => a.userId === req.userId!)) {
                 throw new Error("Vous avez déjà approuvé cette transaction.");
@@ -547,89 +544,14 @@ router.post('/:id/approve/:txId', authMiddleware, async (req: AuthRequest, res) 
                 });
                 if (claim.count === 0) throw new Error("Ce retrait vient d'être traité par un autre validateur.");
 
-                // Débit Caisse — garde atomique (balance: gte) : empêche le solde de la
-                // caisse de passer en négatif si le solde ne couvre plus ce retrait.
-                const debited = await tx.vault.updateMany({
-                    where: { id: vaultTx.vaultId, balance: { gte: vaultTx.amount } },
-                    data: { balance: { decrement: vaultTx.amount } }
-                });
-                if (debited.count === 0) throw new Error("Solde de la caisse insuffisant pour exécuter ce retrait.");
-
-                // Execution — TREASURER (membre trésorier désigné) et TRANSFER (numéro
-                // Mongain quelconque, résolu à la demande) créditent tous deux directement
-                // un portefeuille par userId ; seule la restriction au moment de la
-                // demande diffère (TREASURER est limité aux membres isTreasurer=true).
-                if (vaultTx.destinationType === 'TREASURER' || vaultTx.destinationType === 'TRANSFER') {
-                    if (!vaultTx.destinationId) throw new Error("Destinataire manquant.");
-
-                    const destWallet = await tx.wallet.findUnique({ where: { userId: vaultTx.destinationId } });
-                    if (!destWallet) throw new Error("Portefeuille destinataire introuvable.");
-
-                    // Appliquer les frais P2P sur les retraits vers Trésorier / Transfer
-                    const settings = await tx.systemSettings.findFirst();
-                    const fee = settings ? vaultTx.amount * settings.taxP2P : 0;
-                    const netAmount = vaultTx.amount - fee;
-
-                    await tx.wallet.update({
-                        where: { id: destWallet.id },
-                        data: { balance: { increment: netAmount } }
-                    });
-
-                    if (fee > 0) {
-                        const { getOrCreateCorporateWallet } = await import('./wallet');
-                        const corporate = await getOrCreateCorporateWallet(tx);
-                        await tx.wallet.update({
-                            where: { id: corporate.wallet.id },
-                            data: { balance: { increment: fee } }
-                        });
-                    }
-
-                    await tx.notification.create({
-                        data: {
-                            userId: vaultTx.destinationId,
-                            title: 'Vous avez reçu un virement de caisse commune',
-                            body: `${netAmount.toLocaleString('fr-FR')} FCFA reçus depuis « ${vaultTx.vault.name} » (après ${fee} FCFA de frais).`,
-                            type: 'TRANSACTION'
-                        }
-                    });
-
-                    await tx.transaction.create({
-                        data: {
-                            amount: vaultTx.amount,
-                            fee: fee,
-                            senderWalletId: destWallet.id,
-                            receiverWalletId: destWallet.id,
-                            status: 'COMPLETED',
-                            reference: 'VAULTOUT'
-                        }
-                    });
-                } else if (vaultTx.destinationType === 'VOUCHER') {
-                    // Création du Bon de Retrait pour le Président (Initiator actuel, admin, ou spécifié)
-                    const presidentId = vaultTx.requestedById;
-                    await tx.vaultVoucher.create({
-                        data: {
-                            vaultId: vaultTx.vaultId,
-                            amount: vaultTx.amount,
-                            presidentId
-                        }
-                    });
-                }
+                // Débit + exécution (TREASURER/TRANSFER/VOUCHER) + notification au demandeur —
+                // logique partagée avec l'override admin (admin.vaults.ts, force-resolve).
+                await executeVaultWithdraw(tx, vaultTx);
 
                 // Statut déjà passé à COMPLETED par la réclamation atomique ci-dessus — pas
                 // besoin d'un second UPDATE, la ligne renvoyée en réponse est reconstruite
                 // localement plutôt que relue.
                 const updatedTx = { ...vaultTx, status: 'COMPLETED' as const };
-
-                // Le Secrétaire qui a initié la demande n'a autrement aucun moyen d'être
-                // averti que son retrait est passé, hormis rouvrir la caisse manuellement.
-                await tx.notification.create({
-                    data: {
-                        userId: vaultTx.requestedById,
-                        title: 'Retrait de caisse exécuté',
-                        body: `Votre demande de ${vaultTx.amount.toLocaleString('fr-FR')} FCFA sur « ${vaultTx.vault.name} » a été approuvée et exécutée.`,
-                        type: 'TRANSACTION'
-                    }
-                });
 
                 return { executed: true, data: updatedTx };
             }
@@ -719,6 +641,11 @@ router.post('/vouchers/:id/spend', authMiddleware, async (req: AuthRequest, res)
             if (!voucher) throw new Error("Bon de retrait introuvable.");
             if (voucher.status !== 'ACTIVE') throw new Error("Ce bon de retrait est déjà utilisé ou inactif.");
             if (voucher.presidentId !== req.userId!) throw new Error("Vous n'êtes pas le propriétaire de ce bon.");
+
+            const ownerVault = await tx.vault.findUnique({ where: { id: voucher.vaultId }, select: { isFrozen: true, frozenReason: true } });
+            if (ownerVault?.isFrozen) {
+                throw new Error(`La caisse émettrice est gelée par l'administration${ownerVault.frozenReason ? ` (${ownerVault.frozenReason})` : ''}. Ce bon ne peut pas être dépensé.`);
+            }
 
             const merchantUser = await tx.user.findUnique({ where: { phone: destinationPhone }, include: { wallet: true } });
             if (!merchantUser || !merchantUser.wallet) throw new Error("Le portefeuille destinataire (marchand/agence) est introuvable avec ce numéro.");
