@@ -10,11 +10,12 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
 import { apiGetTontineGroups } from '../../services/api';
 
 export default function TontineListScreen() {
+    const insets = useSafeAreaInsets();
     const COLORS = useAppTheme();
     const styles = getStyles(COLORS);
     const router = useRouter();
@@ -45,9 +46,14 @@ export default function TontineListScreen() {
                     <Ionicons name="arrow-back" size={24} color="#fff" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Tontines</Text>
-                <TouchableOpacity style={styles.headerBtn} onPress={() => router.push('/tontine-create' as any)}>
-                    <Ionicons name="add" size={26} color="#fff" />
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row' }}>
+                    <TouchableOpacity style={styles.headerBtn} onPress={() => router.push('/tontine-discover' as any)}>
+                        <Ionicons name="compass-outline" size={24} color="#fff" />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.headerBtn} onPress={() => router.push('/tontine-create' as any)}>
+                        <Ionicons name="add" size={26} color="#fff" />
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <View style={[styles.content, { backgroundColor: COLORS.background }]}>
@@ -76,6 +82,9 @@ export default function TontineListScreen() {
                                 </Text>
                                 <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: COLORS.primary }]} onPress={() => router.push('/tontine-create' as any)}>
                                     <Text style={styles.primaryBtnText}>Lancer un club</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={{ marginTop: 14 }} onPress={() => router.push('/tontine-discover' as any)}>
+                                    <Text style={{ color: COLORS.primary, fontWeight: '700', fontSize: 14 }}>Ou découvrir des tontines publiques →</Text>
                                 </TouchableOpacity>
                             </View>
                         ) : (
@@ -119,6 +128,7 @@ export default function TontineListScreen() {
                         )}
                     </ScrollView>
                 )}
+                <View style={{ height: Math.max(insets.bottom, 20) }} />
             </View>
         </SafeAreaView>
     );

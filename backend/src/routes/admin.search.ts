@@ -21,11 +21,14 @@ router.get('/search', authMiddleware, async (req: AuthRequest, res) => {
         if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const q = ((req.query.q as string) || '').trim();
-        if (q.length < 2) return res.json({ users: [], vaults: [], tontines: [] });
+        if (q.length < 2) return res.json({ users: [], vaults: [], tontines: [], merchants: [] });
 
-        const [users, vaults, tontines] = await Promise.all([
+        // Les marchands (role=MERCHANT) ont désormais leur propre écran de supervision
+        // (Merchants.tsx, soldes ventes/commission séparés) — exclus de "users" pour éviter
+        // un doublon (même compte listé deux fois avec deux destinations différentes).
+        const [users, vaults, tontines, merchants] = await Promise.all([
             prisma.user.findMany({
-                where: { OR: [{ name: { contains: q, mode: 'insensitive' } }, { phone: { contains: q } }] },
+                where: { role: { not: 'MERCHANT' }, OR: [{ name: { contains: q, mode: 'insensitive' } }, { phone: { contains: q } }] },
                 select: { id: true, name: true, phone: true, role: true },
                 take: 5
             }),
@@ -38,10 +41,15 @@ router.get('/search', authMiddleware, async (req: AuthRequest, res) => {
                 where: { name: { contains: q, mode: 'insensitive' } },
                 select: { id: true, name: true, creator: { select: { name: true } } },
                 take: 5
+            }),
+            prisma.user.findMany({
+                where: { role: 'MERCHANT', OR: [{ name: { contains: q, mode: 'insensitive' } }, { phone: { contains: q } }] },
+                select: { id: true, name: true, phone: true },
+                take: 5
             })
         ]);
 
-        res.json({ users, vaults, tontines });
+        res.json({ users, vaults, tontines, merchants });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }

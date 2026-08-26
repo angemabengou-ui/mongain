@@ -45,13 +45,18 @@ describe('GET /admin/search (recherche globale)', () => {
         const res = await request(app).get('/admin/search').query({ q: 'a' });
 
         expect(res.status).toBe(200);
-        expect(res.body).toEqual({ users: [], vaults: [], tontines: [] });
+        expect(res.body).toEqual({ users: [], vaults: [], tontines: [], merchants: [] });
         expect(prisma.user.findMany).not.toHaveBeenCalled();
     });
 
-    it('devrait interroger les 3 domaines en parallèle et retourner les résultats', async () => {
+    it('devrait interroger les 4 domaines en parallèle et retourner les résultats', async () => {
         (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
-        (prisma.user.findMany as jest.Mock).mockResolvedValue([{ id: 'u1', name: 'Jean Ndong', phone: '077', role: 'USER' }]);
+        // user.findMany est appelé deux fois (users hors MERCHANT, puis merchants) —
+        // distinguer les deux appels via le filtre `role` passé en argument.
+        (prisma.user.findMany as jest.Mock).mockImplementation(async (args: any) => {
+            if (args.where?.role === 'MERCHANT') return [{ id: 'm1', name: 'Boutique Ndong', phone: '066' }];
+            return [{ id: 'u1', name: 'Jean Ndong', phone: '077', role: 'USER' }];
+        });
         (prisma.vault.findMany as jest.Mock).mockResolvedValue([{ id: 'v1', name: 'Caisse Ndong' }]);
         (prisma.tontineGroup.findMany as jest.Mock).mockResolvedValue([{ id: 'g1', name: 'Tontine Ndong' }]);
 
@@ -61,6 +66,7 @@ describe('GET /admin/search (recherche globale)', () => {
         expect(res.body.users).toHaveLength(1);
         expect(res.body.vaults).toHaveLength(1);
         expect(res.body.tontines).toHaveLength(1);
+        expect(res.body.merchants).toEqual([{ id: 'm1', name: 'Boutique Ndong', phone: '066' }]);
         expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 5 }));
     });
 });

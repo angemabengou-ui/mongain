@@ -40,8 +40,23 @@ describe('GlobalSearch', () => {
         expect(mockedApiFetch).toHaveBeenCalledWith(expect.stringContaining('/api/admin/search?q=ndong'), expect.anything());
     });
 
+    it('affiche les marchands dans leur propre groupe et navigue vers /merchants', async () => {
+        mockedApiFetch.mockResolvedValue({
+            users: [], vaults: [], tontines: [],
+            merchants: [{ id: 'm1', name: 'Boutique Ndong', phone: '+24166000001' }],
+        });
+        const onNavigate = vi.fn();
+        const user = userEvent.setup();
+        render(<GlobalSearch token="tok" onNavigate={onNavigate} />);
+
+        await user.type(screen.getByPlaceholderText(/Rechercher un client/i), 'ndong');
+        fireEvent.click(await screen.findByText('Boutique Ndong'));
+
+        expect(onNavigate).toHaveBeenCalledWith('merchants', 'm1');
+    });
+
     it("affiche un message quand aucun résultat n'est trouvé", async () => {
-        mockedApiFetch.mockResolvedValue({ users: [], vaults: [], tontines: [] });
+        mockedApiFetch.mockResolvedValue({ users: [], vaults: [], tontines: [], merchants: [] });
         const user = userEvent.setup();
         render(<GlobalSearch token="tok" onNavigate={vi.fn()} />);
 

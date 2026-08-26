@@ -11,7 +11,7 @@ const router = express.Router();
 router.post('/create', authMiddleware, async (req: Request, res: Response) => {
     try {
         const userId = (req as AuthRequest).userId!;
-        const { name, contribution, frequency } = req.body;
+        const { name, contribution, frequency, isPublic } = req.body;
 
         if (!name || !contribution) {
             return res.status(400).json({ success: false, message: "Nom et contribution requis." });
@@ -28,7 +28,8 @@ router.post('/create', authMiddleware, async (req: Request, res: Response) => {
                 name,
                 contribution: contributionAmount,
                 frequency: frequency || 'MONTHLY',
-                status: 'ACTIVE'
+                status: 'ACTIVE',
+                isPublic: !!isPublic
             }
         });
 
@@ -79,6 +80,38 @@ router.get('/groups', authMiddleware, async (req: Request, res: Response) => {
         });
     } catch (error: any) {
         console.error("Erreur récupération Tontine:", error);
+        res.status(500).json({ success: false, message: friendlyErrorMessage(error, "Erreur serveur") });
+    }
+});
+
+// Découverte de tontines publiques à rejoindre librement (isPublic=true) — jusqu'ici,
+// apiJoinTontine n'était appelable que si l'on connaissait déjà un groupId (invitation),
+// aucun parcours de navigation/recherche ne menait à cette route côté app.
+router.get('/discover', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as AuthRequest).userId!;
+        const q = ((req.query.q as string) || '').trim();
+
+        const alreadyIn = await prisma.tontineParticipant.findMany({ where: { userId }, select: { tontineGroupId: true } });
+        const excludedIds = alreadyIn.map(p => p.tontineGroupId);
+
+        const groups = await prisma.tontineGroup.findMany({
+            where: {
+                isPublic: true,
+                status: 'ACTIVE',
+                id: { notIn: excludedIds },
+                ...(q ? { name: { contains: q, mode: 'insensitive' } } : {})
+            },
+            include: {
+                creator: { select: { name: true } },
+                _count: { select: { participants: { where: { status: 'ACTIVE' } } } }
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 30
+        });
+
+        res.json({ success: true, data: groups });
+    } catch (error: any) {
         res.status(500).json({ success: false, message: friendlyErrorMessage(error, "Erreur serveur") });
     }
 });
@@ -349,6 +382,16 @@ router.post('/join', authMiddleware, async (req: Request, res: Response) => {
         const group = await prisma.tontineGroup.findUnique({ where: { id: String(groupId) } });
         if (!group || group.status !== 'ACTIVE') {
             return res.status(404).json({ success: false, message: "Groupe introuvable ou inactif." });
+        }
+
+        // Corrige une faille : cette route ne vérifiait auparavant AUCUNE condition de
+        // visibilité — n'importe quel utilisateur connaissant un groupId (deep link, fuite,
+        // ID deviné) pouvait rejoindre n'importe quelle tontine, y compris une que son
+        // créateur pensait strictement sur invitation. Seuls les groupes explicitement
+        // rendus publics (voir /discover) sont auto-joignables ; les autres restent
+        // accessibles uniquement via /invite (créateur uniquement).
+        if (!group.isPublic) {
+            return res.status(403).json({ success: false, message: "Cette tontine est privée — seul le créateur peut vous inviter." });
         }
 
         // Vérifier si l'utilisateur y est déjà

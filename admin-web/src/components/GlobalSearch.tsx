@@ -1,12 +1,12 @@
-import { Repeat, Search, Shield, Users as UsersIcon } from 'lucide-react';
+import { Repeat, Search, Shield, Store, Users as UsersIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { API_URL } from '../config';
 import { apiFetch } from '../utils/apiFetch';
 
 type SearchResult = { id: string; name: string; phone?: string; role?: string };
-type SearchResponse = { users: SearchResult[]; vaults: (SearchResult & { admin?: { name: string } })[]; tontines: (SearchResult & { creator?: { name: string } })[] };
+type SearchResponse = { users: SearchResult[]; vaults: (SearchResult & { admin?: { name: string } })[]; tontines: (SearchResult & { creator?: { name: string } })[]; merchants: SearchResult[] };
 
-const EMPTY: SearchResponse = { users: [], vaults: [], tontines: [] };
+const EMPTY: SearchResponse = { users: [], vaults: [], tontines: [], merchants: [] };
 
 // Un seul champ, visible sur tout le portail, pour ne plus avoir à deviner dans quel
 // écran chercher un client / une caisse commune / une tontine avant de pouvoir taper
@@ -28,7 +28,7 @@ export default function GlobalSearch({ token, onNavigate }: { token: string; onN
         debounceRef.current = setTimeout(async () => {
             try {
                 const data = await apiFetch(`${API_URL}/api/admin/search?q=${encodeURIComponent(q)}`, { headers: { Authorization: `Bearer ${token}` } });
-                setResults({ users: data.users || [], vaults: data.vaults || [], tontines: data.tontines || [] });
+                setResults({ users: data.users || [], vaults: data.vaults || [], tontines: data.tontines || [], merchants: data.merchants || [] });
             } catch {
                 setResults(EMPTY);
             } finally {
@@ -54,7 +54,7 @@ export default function GlobalSearch({ token, onNavigate }: { token: string; onN
         setOpen(false);
     };
 
-    const hasResults = results.users.length > 0 || results.vaults.length > 0 || results.tontines.length > 0;
+    const hasResults = results.users.length > 0 || results.vaults.length > 0 || results.tontines.length > 0 || results.merchants.length > 0;
     const showPanel = open && query.trim().length >= 2;
 
     return (
@@ -80,9 +80,16 @@ export default function GlobalSearch({ token, onNavigate }: { token: string; onN
                     ) : (
                         <>
                             {results.users.length > 0 && (
-                                <SearchGroup icon={<UsersIcon size={13} />} label="Clients, Agents & Marchands">
+                                <SearchGroup icon={<UsersIcon size={13} />} label="Clients & Agents">
                                     {results.users.map(u => (
                                         <SearchRow key={u.id} onClick={() => select('users', u.id)} title={u.name} subtitle={u.phone} />
+                                    ))}
+                                </SearchGroup>
+                            )}
+                            {results.merchants.length > 0 && (
+                                <SearchGroup icon={<Store size={13} />} label="Marchands">
+                                    {results.merchants.map(m => (
+                                        <SearchRow key={m.id} onClick={() => select('merchants', m.id)} title={m.name} subtitle={m.phone} />
                                     ))}
                                 </SearchGroup>
                             )}

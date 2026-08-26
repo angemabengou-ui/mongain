@@ -406,6 +406,12 @@ model TontineGroup {
   // où elle en était à la levée de la pause.
   isPaused       Boolean   @default(false)
   pausedReason   String?
+  // Rejoignable librement via /tontine/discover + POST /tontine/join si true — sinon
+  // (par défaut, et pour tous les groupes créés avant ce champ) invitation uniquement.
+  // /tontine/join ne vérifiait auparavant AUCUNE condition de visibilité : n'importe
+  // quel utilisateur authentifié connaissant un groupId pouvait rejoindre n'importe
+  // quelle tontine, y compris une tontine que son créateur pensait invitation-only.
+  isPublic       Boolean   @default(false)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 

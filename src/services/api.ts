@@ -333,11 +333,16 @@ export const apiGetMerchantPayouts = () =>
 export const apiGetTontineGroups = () =>
     request('GET', '/api/tontine/groups', undefined, true) as Promise<{ data: { groups: any[]; myParticipations: any[] } }>;
 
-export const apiCreateTontine = (name: string, contribution: number, frequency: string) =>
-    request('POST', '/api/tontine/create', { name, contribution, frequency }, true) as Promise<any>;
+export const apiCreateTontine = (name: string, contribution: number, frequency: string, isPublic?: boolean) =>
+    request('POST', '/api/tontine/create', { name, contribution, frequency, isPublic }, true) as Promise<any>;
 
 export const apiJoinTontine = (groupId: string) =>
     request('POST', '/api/tontine/join', { groupId }, true) as Promise<any>;
+
+// Tontines publiques rejoignables librement (isPublic=true, non déjà rejointes) — voir
+// backend/src/routes/tontine.ts GET /discover.
+export const apiDiscoverTontines = (q?: string) =>
+    request('GET', `/api/tontine/discover${q ? `?q=${encodeURIComponent(q)}` : ''}`, undefined, true) as Promise<{ success: boolean; data: any[] }>;
 
 // Nouvelles Fonctions Tontine Privée
 export const apiGetTontineDetails = (groupId: string) =>

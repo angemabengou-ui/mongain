@@ -1,8 +1,8 @@
 import express from 'express';
 import request from 'supertest';
 import { prisma } from '../../prisma';
-import tontineRoutes from '../tontine';
 import { executeTontineCycle, getTontineVaultWallet } from '../../services/tontineService';
+import tontineRoutes from '../tontine';
 
 // Mock du middleware pour simuler un userId injecté
 jest.mock('../../middleware/auth', () => ({
@@ -19,7 +19,7 @@ jest.mock('../../services/tontineService', () => ({
 
 jest.mock('../../prisma', () => ({
     prisma: {
-        tontineGroup: { create: jest.fn(), findUnique: jest.fn() },
+        tontineGroup: { create: jest.fn(), findUnique: jest.fn(), findMany: jest.fn() },
         tontineParticipant: {
             create: jest.fn(),
             findMany: jest.fn(),
@@ -81,6 +81,49 @@ describe('Tontine Routes', () => {
             (prisma.tontineGroup.create as jest.Mock).mockRejectedValue(new Error('DB fail'));
 
             const res = await request(app).post('/tontine/create').send({ name: 'Club A', contribution: 5000 });
+
+            expect(res.status).toBe(500);
+        });
+
+        it('devrait passer isPublic à la création (false par défaut)', async () => {
+            (prisma.tontineGroup.create as jest.Mock).mockResolvedValue({ id: 'group1', name: 'Club A', contribution: 5000 });
+            (prisma.tontineParticipant.create as jest.Mock).mockResolvedValue({ id: 'p1', payoutOrder: 1 });
+
+            await request(app).post('/tontine/create').send({ name: 'Club A', contribution: 5000, isPublic: true });
+
+            expect(prisma.tontineGroup.create).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({ isPublic: true }),
+            }));
+
+            await request(app).post('/tontine/create').send({ name: 'Club B', contribution: 5000 });
+            expect(prisma.tontineGroup.create).toHaveBeenLastCalledWith(expect.objectContaining({
+                data: expect.objectContaining({ isPublic: false }),
+            }));
+        });
+    });
+
+    // ==========================================
+    // GET /tontine/discover
+    // ==========================================
+    describe('GET /tontine/discover', () => {
+        it('devrait exclure les tontines déjà rejointes et lister les publiques actives', async () => {
+            (prisma.tontineParticipant.findMany as jest.Mock).mockResolvedValue([{ tontineGroupId: 'already_in' }]);
+            const mockGroups = [{ id: 'g1', name: 'Club Public', isPublic: true, creator: { name: 'Alice' }, _count: { participants: 3 } }];
+            (prisma.tontineGroup.findMany as jest.Mock).mockResolvedValue(mockGroups);
+
+            const res = await request(app).get('/tontine/discover');
+
+            expect(res.status).toBe(200);
+            expect(res.body.data).toEqual(mockGroups);
+            expect(prisma.tontineGroup.findMany).toHaveBeenCalledWith(expect.objectContaining({
+                where: expect.objectContaining({ isPublic: true, status: 'ACTIVE', id: { notIn: ['already_in'] } }),
+            }));
+        });
+
+        it('devrait retourner 500 en cas d\'erreur serveur', async () => {
+            (prisma.tontineParticipant.findMany as jest.Mock).mockRejectedValue(new Error('DB fail'));
+
+            const res = await request(app).get('/tontine/discover');
 
             expect(res.status).toBe(500);
         });
@@ -385,8 +428,16 @@ describe('Tontine Routes', () => {
             expect(res.status).toBe(404);
         });
 
+        it('devrait retourner 403 si la tontine est privée (isPublic=false)', async () => {
+            (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({ id: 'group1', status: 'ACTIVE', isPublic: false });
+
+            const res = await request(app).post('/tontine/join').send({ groupId: 'group1' });
+
+            expect(res.status).toBe(403);
+        });
+
         it('devrait retourner 400 si l\'utilisateur participe déjà', async () => {
-            (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({ id: 'group1', status: 'ACTIVE' });
+            (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({ id: 'group1', status: 'ACTIVE', isPublic: true });
             (prisma.tontineParticipant.findFirst as jest.Mock).mockResolvedValue({ id: 'p_existing' });
 
             const res = await request(app).post('/tontine/join').send({ groupId: 'group1' });
@@ -395,7 +446,7 @@ describe('Tontine Routes', () => {
         });
 
         it('devrait rejoindre le club avec succès', async () => {
-            (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({ id: 'group1', status: 'ACTIVE', name: 'Club A', contribution: 1000 });
+            (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({ id: 'group1', status: 'ACTIVE', isPublic: true, name: 'Club A', contribution: 1000 });
             (prisma.tontineParticipant.findFirst as jest.Mock).mockResolvedValue(null);
             (prisma.tontineParticipant.count as jest.Mock).mockResolvedValue(3);
             (prisma.tontineParticipant.create as jest.Mock).mockResolvedValue({ id: 'p_new', payoutOrder: 4 });
@@ -448,7 +499,7 @@ describe('Tontine Routes', () => {
         });
 
         it('devrait exécuter le cycle avec succès', async () => {
-            (prisma.staff.findUnique as jest.Mock).mockResolvedValue({ id: 'staff1', isActive: true, role: 'RISK' });
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue({ id: 'staff1', isActive: true, role: 'SUPER_ADMIN' });
             (executeTontineCycle as jest.Mock).mockResolvedValue({
                 success: true, currentCycle: 2, debitedCount: 4, failedCount: 1, totalPot: 4000
             });

@@ -8,6 +8,7 @@ import {
     Platform,
     ScrollView,
     StyleSheet,
+    Switch,
     Text,
     TextInput,
     TouchableOpacity,
@@ -26,6 +27,7 @@ export default function TontineCreateScreen() {
     const [name, setName] = useState('');
     const [contribution, setContribution] = useState('');
     const [frequency, setFrequency] = useState<'WEEKLY' | 'MONTHLY'>('MONTHLY');
+    const [isPublic, setIsPublic] = useState(false);
     const [loading, setLoading] = useState(false);
 
     const handleCreate = async () => {
@@ -36,7 +38,7 @@ export default function TontineCreateScreen() {
         }
         setLoading(true);
         try {
-            await apiCreateTontine(name.trim(), Number(amt), frequency);
+            await apiCreateTontine(name.trim(), Number(amt), frequency, isPublic);
             router.back();
         } catch (e: any) {
             Alert.alert('Échec', e.message || 'Impossible de créer le club.');
@@ -96,6 +98,16 @@ export default function TontineCreateScreen() {
                         Vous rejoignez automatiquement en premier de la liste. Invitez ensuite les autres membres depuis le club.
                     </Text>
 
+                    <View style={[styles.publicRow, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                            <Text style={{ color: COLORS.textPrimary, fontWeight: '700', fontSize: 14 }}>Club public</Text>
+                            <Text style={[styles.helper, { color: COLORS.textSecondary, marginTop: 4 }]}>
+                                Visible dans « Découvrir des tontines » — n'importe qui peut le rejoindre sans invitation. Laissez désactivé pour un club privé, sur invitation uniquement.
+                            </Text>
+                        </View>
+                        <Switch value={isPublic} onValueChange={setIsPublic} trackColor={{ true: COLORS.primary }} />
+                    </View>
+
                     <TouchableOpacity
                         style={[styles.submitBtn, { backgroundColor: COLORS.primary }, (!name.trim() || !contribution || loading) && styles.submitBtnDisabled]}
                         onPress={handleCreate}
@@ -104,7 +116,7 @@ export default function TontineCreateScreen() {
                         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Créer le club</Text>}
                     </TouchableOpacity>
                 </ScrollView>
-                {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
+                <View style={{ height: Math.max(insets.bottom, 20) }} />
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
@@ -125,6 +137,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     toggleBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, borderWidth: 1, alignItems: 'center' },
     toggleText: { fontSize: 13.5, fontWeight: '700' },
     helper: { fontSize: 12.5, lineHeight: 18, marginTop: 10 },
+    publicRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 14, padding: 16, marginTop: 24 },
 
     submitBtn: { marginTop: 32, paddingVertical: 17, borderRadius: 16, alignItems: 'center' },
     submitBtnDisabled: { opacity: 0.5 },
