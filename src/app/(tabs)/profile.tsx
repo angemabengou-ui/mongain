@@ -2,17 +2,31 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Platform, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
-import QRCode from 'react-native-qrcode-svg';
+import { Alert, Platform, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
+import { useTabBarHeight } from '../../hooks/useTabBarHeight';
 import { apiGetBalance, apiGetDailyLimits } from '../../services/api';
 
+// Refonte : l'ancienne page mettait "Informations personnelles", "Sécurité & PIN",
+// "Notifications", "Centre d'aide" et "Conditions d'utilisation" (qui ne menait nulle
+// part — aucun onPress) dans deux groupes vagues ("Compte"/"Support") avec exactement
+// le même style de carte pour chaque ligne, y compris le Verrou Biométrique qui est
+// pourtant un réglage de sécurité et se retrouvait mélangé aux infos de profil. Résultat :
+// tout paraissait au même niveau d'importance, sans hiérarchie ni cohérence.
+// Regroupement par vraie fonction (Aperçu / Compte / Sécurité / Assistance), avec une
+// teinte d'icône propre à chaque groupe pour que la hiérarchie se voie, pas seulement
+// se lise. Le QR code intégré ici (généré à la volée, sans le paramètre `action`) a
+// aussi été retiré au profit d'un lien vers /receive-qr, seul endroit qui reflète
+// correctement les 2 codes distincts d'un marchand (paiement/retrait) — l'ancien
+// doublon aurait affiché un troisième code, générique et incohérent avec les deux autres.
 export default function ProfileScreen() {
     const { user, logout } = useAuth();
     const router = useRouter();
     const COLORS = useAppTheme();
     const styles = getStyles(COLORS);
+    const tabBarHeight = useTabBarHeight();
 
     const [balance, setBalance] = useState(user?.wallet?.balance ?? 0);
     const [currency, setCurrency] = useState(user?.wallet?.currency ?? 'FCFA');
@@ -58,10 +72,14 @@ export default function ProfileScreen() {
         : '??';
 
     return (
-        <SafeAreaView style={styles.safeArea}>
-            <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        // edges exclut 'top' : heroHeader simule déjà l'espace du haut via un paddingTop
+        // fixe — laisser SafeAreaView gérer aussi le haut doublerait cet espace sur
+        // Android (où l'ancien SafeAreaView de 'react-native' était un no-op, contrairement
+        // à celui-ci) au lieu de le remplacer.
+        <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
+            <ScrollView contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight + 20 }]} showsVerticalScrollIndicator={false}>
 
-                {/* Hero Header Area */}
+                {/* Identité */}
                 <View style={styles.heroHeader}>
                     <View style={styles.headerTop}>
                         <Text style={styles.headerTitle}>Mon Profil</Text>
@@ -79,27 +97,10 @@ export default function ProfileScreen() {
                     </View>
                 </View>
 
-                {/* Identity P2P Barcode - Lifted over the hero curve */}
-                <View style={styles.qrContainer}>
-                    {user?.phone ? (
-                        <>
-                            <QRCode
-                                value={`mongain://user?phone=${encodeURIComponent(user.phone)}&name=${encodeURIComponent(user.name || '')}&role=${encodeURIComponent(user.role || 'USER')}`}
-                                size={110}
-                                color="#1a1d2e"
-                                backgroundColor="#ffffff"
-                            />
-                            <Text style={styles.qrLabel}>SCAN ME TO PAY</Text>
-                        </>
-                    ) : (
-                        <Text style={styles.qrLabel}>QR Indisponible</Text>
-                    )}
-                </View>
-
-                {/* Curved Container Start */}
                 <View style={styles.contentContainer}>
 
-                    {/* Carte solde */}
+                    {/* Aperçu */}
+                    <Text style={styles.sectionTitle}>Aperçu</Text>
                     <View style={styles.balanceCard}>
                         <View style={styles.balanceRow}>
                             <Ionicons name="wallet-outline" size={22} color={COLORS.primary} />
@@ -110,9 +111,8 @@ export default function ProfileScreen() {
                         </Text>
                     </View>
 
-                    {/* --- Limits Progress Bar --- */}
                     {limits && !limits.skip && (
-                        <View style={{ marginHorizontal: 20, marginTop: 15, padding: 18, backgroundColor: COLORS.surface, borderRadius: 16, elevation: 1, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5 }}>
+                        <View style={styles.limitsCard}>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                                 <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.textPrimary }}>Plafond Journalier</Text>
                                 <Text style={{ fontSize: 13, fontWeight: '600', color: COLORS.textSecondary }}>{(limits.dailySpend / limits.dailyLimit * 100).toFixed(0)}%</Text>
@@ -131,17 +131,23 @@ export default function ProfileScreen() {
                         </View>
                     )}
 
-                    {/* Options */}
+                    {/* Compte */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Compte</Text>
-                        <MenuItem icon="person-outline" label="Informations personnelles" onPress={() => router.push('/profile-edit')} styles={styles} colors={COLORS} />
-                        <MenuItem icon="shield-checkmark-outline" label="Sécurité & PIN" onPress={() => router.push('/pin-change')} styles={styles} colors={COLORS} />
-                        <MenuItem icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications' as any)} styles={styles} colors={COLORS} />
-                        {/* AppLock Toggle */}
+                        <MenuItem icon="person-outline" label="Informations personnelles" onPress={() => router.push('/profile-edit')} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
+                        <MenuItem icon="qr-code-outline" label="Mon code QR" sublabel="Pour recevoir un paiement" onPress={() => router.push('/receive-qr' as any)} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
+                        <MenuItem icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications' as any)} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
+                    </View>
+
+                    {/* Sécurité — regroupe tout ce qui protège le compte, y compris le Verrou
+                        Biométrique qui était auparavant mélangé aux réglages de profil. */}
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Sécurité</Text>
+                        <MenuItem icon="shield-checkmark-outline" label="Sécurité & PIN" onPress={() => router.push('/pin-change')} styles={styles} tint={COLORS.warning} chevronColor={COLORS.textSecondary} />
                         <View style={[styles.menuItem, { justifyContent: 'space-between' }]}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <View style={styles.menuIconWrap}>
-                                    <Ionicons name="lock-closed-outline" size={20} color={COLORS.primary} />
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                <View style={[styles.menuIconWrap, { backgroundColor: COLORS.warning + '18' }]}>
+                                    <Ionicons name="lock-closed-outline" size={20} color={COLORS.warning} />
                                 </View>
                                 <View style={styles.menuTextWrap}>
                                     <Text style={styles.menuLabel}>Verrou Biométrique</Text>
@@ -151,20 +157,27 @@ export default function ProfileScreen() {
                             <Switch
                                 value={appLockEnabled}
                                 onValueChange={toggleAppLock}
-                                trackColor={{ false: '#767577', true: '#208AEF' }}
-                                thumbColor={appLockEnabled ? '#fff' : '#f4f3f4'}
+                                trackColor={{ false: COLORS.border, true: COLORS.warning + '80' }}
+                                thumbColor={appLockEnabled ? COLORS.warning : '#f4f3f4'}
                             />
                         </View>
                     </View>
 
+                    {/* Assistance */}
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Support</Text>
-                        <MenuItem icon="help-circle-outline" label="Centre d'aide" onPress={() => router.push('/support')} styles={styles} colors={COLORS} />
-                        <MenuItem icon="document-text-outline" label="Conditions d'utilisation" styles={styles} colors={COLORS} />
-                        <MenuItem icon="information-circle-outline" label="À propos de Mongain" sublabel="v1.0.0" styles={styles} colors={COLORS} />
+                        <Text style={styles.sectionTitle}>Assistance</Text>
+                        <MenuItem icon="help-circle-outline" label="Centre d'aide" onPress={() => router.push('/support')} styles={styles} tint={COLORS.textSecondary} chevronColor={COLORS.textSecondary} />
+                        <MenuItem
+                            icon="document-text-outline"
+                            label="Conditions d'utilisation"
+                            onPress={() => Alert.alert('Bientôt disponible', "Les conditions d'utilisation seront consultables ici prochainement.")}
+                            styles={styles}
+                            tint={COLORS.textSecondary}
+                            chevronColor={COLORS.textSecondary}
+                        />
+                        <MenuItem icon="information-circle-outline" label="À propos de Mongain" sublabel="v1.0.0" styles={styles} tint={COLORS.textSecondary} />
                     </View>
 
-                    {/* Déconnexion */}
                     <TouchableOpacity style={styles.logoutBtn} onPress={logout} activeOpacity={0.8}>
                         <Ionicons name="log-out-outline" size={20} color={COLORS.error} />
                         <Text style={styles.logoutText}>Se déconnecter</Text>
@@ -176,29 +189,41 @@ export default function ProfileScreen() {
     );
 }
 
-function MenuItem({ icon, label, sublabel, onPress, styles, colors }: any) {
-    return (
-        <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={onPress}>
-            <View style={styles.menuIconWrap}>
-                <Ionicons name={icon} size={20} color={colors.primary} />
+// `onPress` absent (ex : "À propos") -> ligne purement informative : ni chevron ni
+// retour visuel au toucher, pour ne plus laisser croire qu'elle mène quelque part.
+function MenuItem({ icon, label, sublabel, onPress, styles, tint, chevronColor }: any) {
+    const content = (
+        <>
+            <View style={[styles.menuIconWrap, { backgroundColor: tint + '18' }]}>
+                <Ionicons name={icon} size={20} color={tint} />
             </View>
             <View style={styles.menuTextWrap}>
                 <Text style={styles.menuLabel}>{label}</Text>
                 {sublabel && <Text style={styles.menuSublabel}>{sublabel}</Text>}
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+            {onPress && <Ionicons name="chevron-forward" size={18} color={chevronColor} />}
+        </>
+    );
+
+    if (!onPress) {
+        return <View style={[styles.menuItem, styles.menuItemStatic]}>{content}</View>;
+    }
+
+    return (
+        <TouchableOpacity style={styles.menuItem} activeOpacity={0.7} onPress={onPress}>
+            {content}
         </TouchableOpacity>
     );
 }
 
 const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: COLORS.primary }, // Match hero header background
-    container: { flexGrow: 1, backgroundColor: COLORS.primary, paddingBottom: 0 },
+    safeArea: { flex: 1, backgroundColor: COLORS.primary },
+    container: { flexGrow: 1, backgroundColor: COLORS.primary },
 
     heroHeader: {
         backgroundColor: COLORS.primary,
         paddingTop: 40,
-        paddingBottom: 80, // Space for the floating QR Code
+        paddingBottom: 36,
         paddingHorizontal: 20,
     },
     headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
@@ -216,32 +241,17 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     userName: { fontSize: 24, fontWeight: '800', color: '#fff', marginBottom: 4 },
     userPhone: { fontSize: 16, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
 
-    qrContainer: {
-        alignSelf: 'center',
-        marginTop: -65, // Lift over the edge
-        marginBottom: 20,
-        padding: 12,
-        backgroundColor: '#fff',
-        borderRadius: 20,
-        elevation: 8,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.15, shadowRadius: 15,
-        alignItems: 'center',
-        zIndex: 10,
-    },
-    qrLabel: { textAlign: 'center', marginTop: 10, fontSize: 11, color: COLORS.textSecondary, fontWeight: '800', letterSpacing: 1 },
-
     contentContainer: {
         flex: 1,
         backgroundColor: COLORS.background,
-        borderTopLeftRadius: 36,
-        borderTopRightRadius: 36,
-        paddingTop: 10,
-        paddingBottom: 40,
-        minHeight: 500,
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        paddingTop: 20,
+        paddingHorizontal: 20,
     },
 
     balanceCard: {
-        marginHorizontal: 20, backgroundColor: COLORS.primary + '12',
+        backgroundColor: COLORS.primary + '12',
         borderRadius: 20, padding: 20, borderWidth: 1, borderColor: COLORS.primary + '30',
     },
     balanceRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
@@ -249,22 +259,25 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     balanceAmount: { fontSize: 32, fontWeight: '800', color: COLORS.textPrimary },
     balanceCurrency: { fontSize: 18, fontWeight: '600', color: COLORS.textSecondary },
 
-    section: { marginTop: 28, marginHorizontal: 20 },
+    limitsCard: { marginTop: 12, padding: 18, backgroundColor: COLORS.surface, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border },
+
+    section: { marginTop: 28 },
     sectionTitle: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
     menuItem: {
         flexDirection: 'row', alignItems: 'center',
         backgroundColor: COLORS.surface, borderRadius: 16, padding: 18,
         marginBottom: 8,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2,
+        borderWidth: 1, borderColor: COLORS.border,
     },
-    menuIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: COLORS.primary + '15', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
+    menuItemStatic: { opacity: 0.75 },
+    menuIconWrap: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
     menuTextWrap: { flex: 1 },
     menuLabel: { fontSize: 15, fontWeight: '600', color: COLORS.textPrimary },
     menuSublabel: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
 
     logoutBtn: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-        marginHorizontal: 20, marginTop: 32,
+        marginTop: 32,
         backgroundColor: COLORS.error + '12', borderRadius: 16, height: 56, gap: 10,
         borderWidth: 1, borderColor: COLORS.error + '30',
     },
