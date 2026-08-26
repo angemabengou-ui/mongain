@@ -17,6 +17,11 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAppTheme } from '../constants/theme';
 import { apiCreateVault } from '../services/api';
 
+// Le seuil d'approbations (combien de commissaires doivent valider un retrait) n'est
+// plus demandé ici — un nouvel utilisateur ne sait pas encore ce que ça signifie ni
+// combien de membres rejoindront sa caisse. Le backend démarre à 1 (le créateur peut
+// agir seul) par défaut ; réglable ensuite depuis les Paramètres de la caisse une fois
+// que d'autres membres l'ont rejointe.
 export default function VaultCreateScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
@@ -25,7 +30,6 @@ export default function VaultCreateScreen() {
 
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
-    const [requiredApprovals, setRequiredApprovals] = useState(1);
     const [loading, setLoading] = useState(false);
 
     const handleCreate = async () => {
@@ -35,7 +39,7 @@ export default function VaultCreateScreen() {
         }
         setLoading(true);
         try {
-            await apiCreateVault({ name: name.trim(), description: description.trim() || undefined, requiredApprovals });
+            await apiCreateVault({ name: name.trim(), description: description.trim() || undefined });
             router.back();
         } catch (e: any) {
             Alert.alert('Échec', e.message || 'Impossible de créer la caisse.');
@@ -76,27 +80,12 @@ export default function VaultCreateScreen() {
                         multiline
                     />
 
-                    <Text style={[styles.label, { color: COLORS.textSecondary }]}>Approbations requises pour un retrait</Text>
-                    <View style={[styles.stepper, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
-                        <TouchableOpacity
-                            style={styles.stepperBtn}
-                            onPress={() => setRequiredApprovals(Math.max(1, requiredApprovals - 1))}
-                        >
-                            <Ionicons name="remove" size={20} color={COLORS.primary} />
-                        </TouchableOpacity>
-                        <Text style={[styles.stepperValue, { color: COLORS.textPrimary }]}>{requiredApprovals}</Text>
-                        <TouchableOpacity
-                            style={styles.stepperBtn}
-                            onPress={() => setRequiredApprovals(Math.min(10, requiredApprovals + 1))}
-                        >
-                            <Ionicons name="add" size={20} color={COLORS.primary} />
-                        </TouchableOpacity>
+                    <View style={[styles.infoBox, { backgroundColor: COLORS.primary + '10' }]}>
+                        <Ionicons name="information-circle" size={18} color={COLORS.primary} style={{ marginRight: 8 }} />
+                        <Text style={[styles.infoText, { color: COLORS.textSecondary }]}>
+                            Vous serez seul décideur au départ. Une fois d'autres membres ajoutés, réglez depuis les Paramètres de la caisse combien doivent valider chaque retrait.
+                        </Text>
                     </View>
-                    <Text style={[styles.helper, { color: COLORS.textSecondary }]}>
-                        {requiredApprovals === 1
-                            ? "Vous pourrez approuver seul tout retrait, envois directs compris — pratique pour démarrer. Relevez ce nombre plus tard une fois d'autres commissaires ajoutés."
-                            : `Tout retrait, envois directs compris, devra être approuvé par ${requiredApprovals} commissaires désignés avant d'être exécuté.`}
-                    </Text>
 
                     <TouchableOpacity
                         style={[styles.submitBtn, { backgroundColor: COLORS.primary }, (!name.trim() || loading) && styles.submitBtnDisabled]}
@@ -106,7 +95,7 @@ export default function VaultCreateScreen() {
                         {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Créer la caisse</Text>}
                     </TouchableOpacity>
                 </ScrollView>
-                {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
+                <View style={{ height: Math.max(insets.bottom, 20) }} />
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
@@ -123,10 +112,8 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     label: { fontSize: 13, fontWeight: '600', marginBottom: 8, marginTop: 18 },
     input: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, height: 54, fontSize: 15 },
 
-    stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderRadius: 14, paddingVertical: 8, gap: 28 },
-    stepperBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-    stepperValue: { fontSize: 22, fontWeight: '800', minWidth: 30, textAlign: 'center' },
-    helper: { fontSize: 12.5, lineHeight: 18, marginTop: 10 },
+    infoBox: { flexDirection: 'row', alignItems: 'flex-start', borderRadius: 14, padding: 14, marginTop: 24 },
+    infoText: { flex: 1, fontSize: 12.5, lineHeight: 18 },
 
     submitBtn: { marginTop: 32, paddingVertical: 17, borderRadius: 16, alignItems: 'center' },
     submitBtnDisabled: { opacity: 0.5 },
