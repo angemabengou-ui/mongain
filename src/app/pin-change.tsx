@@ -15,12 +15,14 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../constants/theme';
+import { useAuth } from '../context/AuthContext';
 import { apiUpdatePin } from '../services/api';
 import { disableBiometricPin } from '../services/biometrics';
 
 export default function PinChangeScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
+    const { logout } = useAuth();
     const COLORS = useAppTheme();
     const styles = getStyles(COLORS);
 
@@ -42,12 +44,20 @@ export default function PinChangeScreen() {
 
         setLoading(true);
         try {
-            const res = await apiUpdatePin(oldPin, newPin);
+            await apiUpdatePin(oldPin, newPin);
             // Le PIN mis en cache pour le déverrouillage biométrique est désormais obsolète.
             await disableBiometricPin();
-            Alert.alert('Succès', res.message, [
-                { text: 'OK', onPress: () => router.back() }
-            ]);
+            // Le serveur révoque la session en cours dès que le PIN change (mesure de
+            // sécurité : couper l'accès à quiconque détenait déjà un token valide). Sans
+            // déconnexion explicite ici, l'app restait sur cet écran avec un token déjà
+            // mort — le prochain appel authentifié échouait avec une erreur "Session
+            // expirée" surprenante, sans rapport apparent avec le changement de PIN qui
+            // venait pourtant de réussir.
+            Alert.alert(
+                'Code PIN mis à jour',
+                'Pour votre sécurité, veuillez vous reconnecter avec votre nouveau code.',
+                [{ text: 'OK', onPress: () => logout() }]
+            );
         } catch (e: any) {
             Alert.alert('Erreur', e.message || 'Impossible de mettre à jour le code PIN');
         } finally {

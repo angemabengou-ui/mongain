@@ -107,7 +107,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         registerForPushNotificationsAsync().then(token => {
             if (token) {
                 console.log('📱 Push Token obtenu:', token);
-                apiUpdatePushToken(token).catch(e => console.error('Erreur API sauver token', e));
+                // Best-effort, comme apiLogoutServer() ci-dessous : si la session vient
+                // d'expirer (ex. juste après un changement de PIN, qui la révoque
+                // volontairement), _onUnauthorized() a déjà déconnecté l'utilisateur —
+                // consigner cet échec via console.error ne faisait qu'afficher un écran
+                // d'erreur rouge alarmant pour un enregistrement de notification par
+                // ailleurs sans conséquence (retenté à la prochaine connexion).
+                apiUpdatePushToken(token).catch(() => {});
             }
         });
 
