@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
-import { apiResetPIN } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { disableBiometricPin } from '../../services/biometrics';
 
 export default function ResetPinScreen() {
@@ -22,6 +22,7 @@ export default function ResetPinScreen() {
     const COLORS = useAppTheme();
     const styles = getStyles(COLORS);
     const router = useRouter();
+    const { resetPin } = useAuth();
     const { phone } = useLocalSearchParams<{ phone: string }>();
 
     const [otp, setOtp] = useState('');
@@ -44,7 +45,7 @@ export default function ResetPinScreen() {
         }
         setLoading(true);
         try {
-            await apiResetPIN(phone || '', otp, newPin);
+            await resetPin(phone || '', otp, newPin);
             await disableBiometricPin();
             setSuccess(true);
         } catch (e: any) {
@@ -59,12 +60,12 @@ export default function ResetPinScreen() {
             <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center' }]}>
                 <Ionicons name="checkmark-circle" size={80} color={COLORS.success} />
                 <Text style={[styles.appName, { marginTop: 20 }]}>Code réinitialisé !</Text>
-                <Text style={styles.tagline}>Votre nouveau Code PIN est maintenant actif.</Text>
+                <Text style={styles.tagline}>Votre nouveau Code PIN est maintenant actif. Vous êtes reconnecté.</Text>
                 <TouchableOpacity
                     style={[styles.btn, { marginTop: 40, width: '80%' }]}
-                    onPress={() => router.replace('/auth/login')}
+                    onPress={() => router.replace('/')}
                 >
-                    <Text style={styles.btnText}>Retour à la connexion</Text>
+                    <Text style={styles.btnText}>Continuer</Text>
                 </TouchableOpacity>
             </SafeAreaView>
         );

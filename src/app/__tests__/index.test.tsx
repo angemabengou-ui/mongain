@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react-native';
 import React from 'react';
 
-const mockRedirect = jest.fn(() => null);
+const mockRedirect = jest.fn((_props: any) => null);
 jest.mock('expo-router', () => ({
     Redirect: (props: any) => {
         mockRedirect(props);

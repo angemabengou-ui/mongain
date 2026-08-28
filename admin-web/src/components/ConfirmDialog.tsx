@@ -6,7 +6,7 @@ import Modal from './Modal';
 // requireReason est vrai, un motif texte avant tout appel API — construit sur Modal.tsx
 // existant plutôt que de réinventer un overlay.
 export default function ConfirmDialog({
-    title, subtitle, confirmLabel = 'Confirmer', danger, requireReason, reasonLabel = 'Motif', onConfirm, onClose,
+    title, subtitle, confirmLabel = 'Confirmer', danger, requireReason, reasonLabel = 'Motif', numberField, onConfirm, onClose,
 }: {
     title: string;
     subtitle?: string;
@@ -14,18 +14,23 @@ export default function ConfirmDialog({
     danger?: boolean;
     requireReason?: boolean;
     reasonLabel?: string;
-    onConfirm: (reason: string) => void | Promise<void>;
+    // Champ numérique optionnel (ex: nombre de jours de report) — évite de construire une
+    // modale bespoke à chaque fois qu'une action a besoin d'une seule valeur en plus du motif.
+    numberField?: { label: string; defaultValue: number; min?: number; max?: number };
+    onConfirm: (reason: string, numberValue?: number) => void | Promise<void>;
     onClose: () => void;
 }) {
     const [reason, setReason] = useState('');
+    const [numberValue, setNumberValue] = useState(numberField?.defaultValue ?? 0);
     const [submitting, setSubmitting] = useState(false);
-    const canConfirm = !requireReason || reason.trim().length >= 3;
+    const canConfirm = (!requireReason || reason.trim().length >= 3)
+        && (!numberField || (Number.isInteger(numberValue) && numberValue >= (numberField.min ?? 1) && (numberField.max === undefined || numberValue <= numberField.max)));
 
     const handleConfirm = async () => {
         if (!canConfirm || submitting) return;
         setSubmitting(true);
         try {
-            await onConfirm(reason.trim());
+            await onConfirm(reason.trim(), numberField ? numberValue : undefined);
         } finally {
             setSubmitting(false);
         }
@@ -55,9 +60,24 @@ export default function ConfirmDialog({
                 </>
             }
         >
+            {numberField && (
+                <div style={{ marginBottom: requireReason ? 12 : 0 }}>
+                    <label htmlFor="confirm-dialog-number-field" style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6 }}>{numberField.label}</label>
+                    <input
+                        id="confirm-dialog-number-field"
+                        type="number"
+                        autoFocus
+                        value={numberValue}
+                        min={numberField.min ?? 1}
+                        max={numberField.max}
+                        onChange={e => setNumberValue(parseInt(e.target.value, 10) || 0)}
+                        style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }}
+                    />
+                </div>
+            )}
             {requireReason && (
                 <textarea
-                    autoFocus
+                    autoFocus={!numberField}
                     placeholder={`${reasonLabel} (obligatoire, au moins 3 caractères)`}
                     value={reason}
                     onChange={e => setReason(e.target.value)}

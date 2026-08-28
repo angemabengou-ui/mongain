@@ -51,6 +51,12 @@ export default function NotificationsScreen() {
             case 'TRANSACTION': return { icon: 'swap-horizontal', color: COLORS.primary };
             case 'SECURITY': return { icon: 'shield-checkmark', color: COLORS.error };
             case 'SYSTEM': return { icon: 'information-circle', color: '#f59e0b' };
+            // Gel/pause/dissolution d'une caisse ou tontine, bon annulé, cotisation en échec…
+            // — ce type existait déjà (côté serveur) avant même les notifications ajoutées
+            // cette session, mais n'avait jamais été géré ici : sans ce cas, une alerte
+            // méritant d'être visible ressortait identique à une notification anodine (cloche
+            // grise par défaut), ce qui annule l'intérêt même de l'avoir envoyée.
+            case 'ALERT': return { icon: 'warning', color: COLORS.error };
             default: return { icon: 'notifications', color: COLORS.textSecondary };
         }
     };

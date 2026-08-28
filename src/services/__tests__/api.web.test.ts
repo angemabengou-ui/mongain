@@ -20,13 +20,18 @@ import * as SecureStore from 'expo-secure-store';
 import { deleteToken, getToken, saveToken } from '../api';
 
 describe('api service — token storage (web)', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
         jest.resetAllMocks();
         (global as any).localStorage = {
             setItem: jest.fn(),
             getItem: jest.fn(),
             removeItem: jest.fn(),
         };
+        // api.ts caches the token in a module-level variable, which outlives resetAllMocks()
+        // (plain module state, not a jest mock) — without clearing it here, saveToken() in
+        // one test poisons getToken() in every test that runs after it in this file. See the
+        // same fix/comment in api.test.ts.
+        await deleteToken();
     });
 
     it('saveToken writes to localStorage instead of SecureStore', async () => {

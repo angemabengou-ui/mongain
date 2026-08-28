@@ -39,10 +39,20 @@ describe('Admin Customers/Teller Routes', () => {
     });
 
     describe('GET /admin/customers', () => {
-        it('devrait retourner 403 pour un rôle non autorisé', async () => {
-            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(TELLER);
+        // TELLER a perm_customer_view par défaut (RBAC.ts) : depuis la correction de ce
+        // contrôle (qui vérifiait auparavant perm_ticket_resolve, sans rapport), TELLER doit
+        // désormais réussir cet appel — voir le test dédié plus bas.
+        it('devrait retourner 403 pour un rôle sans aucun droit client', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue({ id: 'test_staff_id', role: 'INVALID_ROLE' });
             const res = await request(app).get('/admin/customers');
             expect(res.status).toBe(403);
+        });
+
+        it('devrait autoriser un TELLER (perm_customer_view)', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(TELLER);
+            (prisma.$transaction as jest.Mock).mockResolvedValue([[], 0]);
+            const res = await request(app).get('/admin/customers');
+            expect(res.status).toBe(200);
         });
 
         it('devrait retourner les clients paginés (segment USER par défaut)', async () => {
@@ -74,7 +84,7 @@ describe('Admin Customers/Teller Routes', () => {
         });
 
         it('devrait invalider toutes les sessions avec succès', async () => {
-            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPPORT_MAKER);
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
 
             const res = await request(app).post('/admin/users/u1/logout-all');
 

@@ -23,6 +23,16 @@ router.get('/search', authMiddleware, async (req: AuthRequest, res) => {
         const q = ((req.query.q as string) || '').trim();
         if (q.length < 2) return res.json({ users: [], vaults: [], tontines: [], merchants: [] });
 
+        // Chaque catégorie est cloisonnée par SA propre permission de destination, pas
+        // uniquement par le contrôle d'accès global ci-dessus (perm_customer_360_basic) : un
+        // TELLER a ce dernier mais ni perm_vault_view/perm_tontine_view/perm_merchant_view — sans
+        // ce cloisonnement, sa recherche renvoyait quand même des caisses/tontines/marchands, et
+        // cliquer dessus menait à un onglet vide (App.tsx bloque le rendu de Vaults/Tontines/
+        // Merchants sur ces mêmes permissions), un résultat de recherche fantôme.
+        const canVaults = hasPermission(staff, 'perm_vault_view');
+        const canTontines = hasPermission(staff, 'perm_tontine_view');
+        const canMerchants = hasPermission(staff, 'perm_merchant_view');
+
         // Les marchands (role=MERCHANT) ont désormais leur propre écran de supervision
         // (Merchants.tsx, soldes ventes/commission séparés) — exclus de "users" pour éviter
         // un doublon (même compte listé deux fois avec deux destinations différentes).
@@ -32,21 +42,21 @@ router.get('/search', authMiddleware, async (req: AuthRequest, res) => {
                 select: { id: true, name: true, phone: true, role: true },
                 take: 5
             }),
-            prisma.vault.findMany({
+            canVaults ? prisma.vault.findMany({
                 where: { name: { contains: q, mode: 'insensitive' } },
                 select: { id: true, name: true, admin: { select: { name: true } } },
                 take: 5
-            }),
-            prisma.tontineGroup.findMany({
+            }) : Promise.resolve([]),
+            canTontines ? prisma.tontineGroup.findMany({
                 where: { name: { contains: q, mode: 'insensitive' } },
                 select: { id: true, name: true, creator: { select: { name: true } } },
                 take: 5
-            }),
-            prisma.user.findMany({
+            }) : Promise.resolve([]),
+            canMerchants ? prisma.user.findMany({
                 where: { role: 'MERCHANT', OR: [{ name: { contains: q, mode: 'insensitive' } }, { phone: { contains: q } }] },
                 select: { id: true, name: true, phone: true },
                 take: 5
-            })
+            }) : Promise.resolve([])
         ]);
 
         res.json({ users, vaults, tontines, merchants });

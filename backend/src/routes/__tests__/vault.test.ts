@@ -52,7 +52,11 @@ jest.mock('../../prisma', () => ({
         user: {
             findUnique: jest.fn(),
             findMany: jest.fn(),
-            update: jest.fn()
+            update: jest.fn(),
+            // Utilisé par getOrCreateCorporateWallet (wallet.ts) quand le compte corporate
+            // n'existe pas encore — sans ce stub, un test qui atteint ce chemin plante avec
+            // "tx.user.create is not a function" plutôt que d'échouer sur une vraie assertion.
+            create: jest.fn()
         },
         notification: {
             create: jest.fn(),
@@ -84,6 +88,14 @@ app.use('/vault', vaultRoutes);
 describe('Vault Routes', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        // Baseline "aucun frais configuré" — jest.clearAllMocks() ne réinitialise QUE
+        // l'historique d'appels, jamais une implémentation posée par un test précédent
+        // (mockResolvedValue). Sans cette ligne, un test plus haut qui configure taxP2P
+        // (ex. "devrait prélever les frais taxP2P...") laissait ce réglage fuiter vers TOUS
+        // les tests suivants du fichier, qui se retrouvaient alors à tort sur le chemin
+        // payant (crédit du corporate, éventuellement getOrCreateCorporateWallet) sans
+        // jamais l'avoir demandé.
+        (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue(null);
     });
 
     // ==========================================
@@ -368,6 +380,46 @@ describe('Vault Routes', () => {
 
             expect(res.status).toBe(500);
         });
+
+        it('devrait retourner 400 si aucune modification n\'est fournie', async () => {
+            const res = await request(app).put('/vault/v1/settings').send({});
+
+            expect(res.status).toBe(400);
+            expect(res.body.message).toContain('Aucune modification');
+        });
+
+        it('devrait rejeter un nom vide', async () => {
+            const res = await request(app).put('/vault/v1/settings').send({ name: '   ' });
+
+            expect(res.status).toBe(400);
+            expect(res.body.message).toContain('vide');
+        });
+
+        it('devrait renommer la caisse et mettre à jour la description sans toucher au seuil', async () => {
+            (prisma.vaultMember.findUnique as jest.Mock).mockResolvedValue({ isAdmin: true });
+            (prisma.vault.update as jest.Mock).mockResolvedValue({ id: 'v1', name: 'Caisse Mariage 2', description: 'Nouvelle description' });
+
+            const res = await request(app).put('/vault/v1/settings').send({ name: 'Caisse Mariage 2', description: 'Nouvelle description' });
+
+            expect(res.status).toBe(200);
+            expect(prisma.vault.update).toHaveBeenCalledWith({
+                where: { id: 'v1' },
+                data: { name: 'Caisse Mariage 2', description: 'Nouvelle description' },
+            });
+        });
+
+        it('devrait effacer la description avec une chaîne vide', async () => {
+            (prisma.vaultMember.findUnique as jest.Mock).mockResolvedValue({ isAdmin: true });
+            (prisma.vault.update as jest.Mock).mockResolvedValue({ id: 'v1', description: null });
+
+            const res = await request(app).put('/vault/v1/settings').send({ description: '   ' });
+
+            expect(res.status).toBe(200);
+            expect(prisma.vault.update).toHaveBeenCalledWith({
+                where: { id: 'v1' },
+                data: { description: null },
+            });
+        });
     });
 
     // ==========================================
@@ -495,6 +547,42 @@ describe('Vault Routes', () => {
             expect(res.status).toBe(200);
             expect(res.body.success).toBe(true);
             expect(res.body.data.id).toBe('tx1');
+        });
+
+        it('devrait créer une transaction fantôme FEE-VD- pour le frais, en plus de la transaction principale', async () => {
+            (prisma.vaultMember.findUnique as jest.Mock).mockResolvedValue({ vaultId: 'v1', userId: 'test_user_id' });
+            (prisma.wallet.findUnique as jest.Mock).mockResolvedValue({ id: 'w1', balance: 500 });
+            (prisma.wallet.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+            (prisma.vault.update as jest.Mock).mockResolvedValue({ id: 'v1', balance: 600 });
+            (prisma.vaultTransaction.create as jest.Mock).mockResolvedValue({ id: 'tx1', type: 'DEPOSIT', amount: 100 });
+            (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ taxP2P: 0.01 });
+            // getOrCreateCorporateWallet (../wallet, non mocké ici) interroge à son tour
+            // prisma.user.findUnique pour le compte système "corporate".
+            (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({ id: 'corp_user', wallet: { id: 'w_corporate', balance: 0 } });
+            (prisma.transaction.create as jest.Mock).mockResolvedValue({});
+
+            const res = await request(app).post('/vault/v1/deposit').send({ amount: 100 });
+
+            expect(res.status).toBe(200);
+            expect(prisma.transaction.create).toHaveBeenCalledWith({
+                data: {
+                    amount: 100,
+                    fee: 1,
+                    senderWalletId: 'w1',
+                    receiverWalletId: 'w1',
+                    status: 'COMPLETED',
+                    reference: 'VAULT_DEP_tx1',
+                }
+            });
+            expect(prisma.transaction.create).toHaveBeenCalledWith({
+                data: {
+                    amount: 1,
+                    senderWalletId: 'w1',
+                    receiverWalletId: 'w_corporate',
+                    status: 'COMPLETED',
+                    reference: 'FEE-VD-tx1',
+                }
+            });
         });
     });
 
@@ -1020,6 +1108,57 @@ describe('Vault Routes', () => {
             expect(prisma.wallet.update).toHaveBeenCalledWith({
                 where: { id: 'w_merchant' },
                 data: { balance: { increment: 500 } }
+            });
+        });
+
+        it('devrait prélever les frais taxP2P, créditer le corporate et tracer une Transaction', async () => {
+            (prisma.user.findUnique as jest.Mock)
+                .mockResolvedValueOnce({ id: 'test_user_id', pin: 'hashed', failedPinAttempts: 0, lockedUntil: null })
+                .mockResolvedValueOnce({ id: 'merchant1', name: 'Marchand', wallet: { id: 'w_merchant', balance: 0 } })
+                // getOrCreateCorporateWallet (via ../wallet, non mocké ici) interroge à son tour
+                // prisma.user.findUnique pour le compte système "corporate" — 3e appel.
+                .mockResolvedValueOnce({ id: 'corp_user', wallet: { id: 'w_corporate', balance: 0 } });
+            (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+            (prisma.vaultVoucher.findUnique as jest.Mock).mockResolvedValue({ id: 'v1', status: 'ACTIVE', presidentId: 'test_user_id', amount: 500 });
+            (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ taxP2P: 0.01 });
+            (prisma.wallet.update as jest.Mock).mockResolvedValue({});
+            (prisma.vaultVoucher.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+            (prisma.transaction.create as jest.Mock).mockResolvedValue({});
+            (prisma.notification.create as jest.Mock).mockResolvedValue({});
+
+            const res = await request(app).post('/vault/vouchers/v1/spend').send({ destinationPhone: '+241000000', pin: '1234' });
+
+            expect(res.status).toBe(200);
+            // 500 FCFA à 1% => 5 FCFA de frais, 495 FCFA nets pour le marchand.
+            expect(prisma.wallet.update).toHaveBeenCalledWith({
+                where: { id: 'w_merchant' },
+                data: { balance: { increment: 495 } }
+            });
+            expect(prisma.wallet.update).toHaveBeenCalledWith({
+                where: { id: 'w_corporate' },
+                data: { balance: { increment: 5 } }
+            });
+            expect(prisma.transaction.create).toHaveBeenCalledWith({
+                data: {
+                    amount: 500,
+                    fee: 5,
+                    senderWalletId: 'w_merchant',
+                    receiverWalletId: 'w_merchant',
+                    status: 'COMPLETED',
+                    reference: 'VAULT_VOUCHER_v1',
+                }
+            });
+            // Transaction fantôme dédiée au frais (voir vault.ts) — sans elle, ce frais
+            // n'apparaissait dans aucun graphique de revenu admin (Dashboard.tsx/
+            // MacroStats.tsx/Ledger.tsx), qui n'agrègent que les références "FEE"-préfixées.
+            expect(prisma.transaction.create).toHaveBeenCalledWith({
+                data: {
+                    amount: 5,
+                    senderWalletId: 'w_merchant',
+                    receiverWalletId: 'w_corporate',
+                    status: 'COMPLETED',
+                    reference: 'FEE-VV-v1',
+                }
             });
         });
 

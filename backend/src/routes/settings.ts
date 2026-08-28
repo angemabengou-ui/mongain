@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { adminIpAllowlistMiddleware, normalizeIp } from '../middleware/adminIpAllowlist';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { hasPermission } from '../services/RBAC';
@@ -132,10 +133,22 @@ const settingsSchema = z.object({
     antiFractioningMaxAmount: z.number().min(100).optional(),
     antiFractioningMaxCount: z.number().int().min(1).optional(),
     antiFractioningAction: z.enum(["ALLOW", "APPLY_FEE", "BLOCK", "ALERT"]).optional(),
+
+    // Restriction réseau du portail personnel (voir middleware/adminIpAllowlist.ts)
+    adminIpAllowlistEnabled: z.boolean().optional(),
+    adminIpAllowlist: z.array(z.string().min(1)).optional(),
+});
+
+// GET /api/settings/my-ip — volontairement NON protégée par adminIpAllowlistMiddleware :
+// un membre du personnel déjà exclu par une liste mal configurée doit pouvoir au moins
+// s'auto-diagnostiquer (« quelle IP le serveur voit-il pour moi ? ») pour la transmettre à
+// quelqu'un ayant encore accès. Ne révèle rien d'autre que l'IP de l'appelant lui-même.
+router.get('/my-ip', authMiddleware, (req: AuthRequest, res) => {
+    res.json({ ip: req.ip ? normalizeIp(req.ip) : null });
 });
 
 // POST /api/settings/request (Maker System)
-router.post('/request', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/request', authMiddleware, adminIpAllowlistMiddleware, async (req: AuthRequest, res) => {
     try {
         // Même whitelist que /approve, /requests et /history ci-dessous — sans elle, n'importe
         // quel staff actif (TELLER, SUPPORT_MAKER) pouvait soumettre une demande sur les
@@ -178,7 +191,7 @@ router.post('/request', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // POST /api/settings/approve/:id (Checker System)
-router.post('/approve/:id', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/approve/:id', authMiddleware, adminIpAllowlistMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, permissions: true, permissionsCustomized: true } });
         if (!staff || !hasPermission(staff, 'perm_system_settings_approve')) {
@@ -198,6 +211,25 @@ router.post('/approve/:id', authMiddleware, async (req: AuthRequest, res) => {
 
         const payload = JSON.parse(approval.payload);
         const settings = await getSystemSettings();
+
+        // Garde anti-auto-verrouillage : si cette approbation activerait (ou laisserait
+        // active) la restriction IP du portail personnel, vérifier AVANT d'appliquer quoi
+        // que ce soit que (a) la liste résultante n'est pas vide — activée + vide bloquerait
+        // tout le monde sans exception — et (b) l'IP du Checker qui approuve EN CE MOMENT
+        // MÊME y figure bien, sans quoi il se déconnecterait lui-même du portail en validant
+        // sa propre action, sans plus aucun moyen d'y revenir pour corriger.
+        const resultingEnabled = payload.adminIpAllowlistEnabled !== undefined ? payload.adminIpAllowlistEnabled : settings.adminIpAllowlistEnabled;
+        if (resultingEnabled) {
+            const resultingList: string[] = payload.adminIpAllowlist !== undefined ? payload.adminIpAllowlist : settings.adminIpAllowlist;
+            if (!resultingList || resultingList.length === 0) {
+                return res.status(400).json({ error: 'Impossible d\'activer la restriction IP avec une liste vide — cela bloquerait tout le personnel, y compris vous-même.' });
+            }
+            const checkerIp = req.ip ? normalizeIp(req.ip) : '';
+            const normalizedList = resultingList.map(normalizeIp);
+            if (!checkerIp || !normalizedList.includes(checkerIp)) {
+                return res.status(400).json({ error: `Votre IP actuelle (${checkerIp || 'inconnue'}) n'est pas dans la liste proposée — vous seriez déconnecté du portail en approuvant. Ajoutez-la à la liste avant d'approuver.` });
+            }
+        }
 
         if (approval.action === 'CUSTOMER_LIMIT_INCREASE') {
             await prisma.$transaction([
@@ -269,7 +301,7 @@ router.post('/approve/:id', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // GET /api/settings/requests
-router.get('/requests', authMiddleware, async (req: AuthRequest, res) => {
+router.get('/requests', authMiddleware, adminIpAllowlistMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, permissions: true, permissionsCustomized: true } });
         if (!staff || !hasPermission(staff, 'perm_system_settings_view')) {
@@ -278,7 +310,9 @@ router.get('/requests', authMiddleware, async (req: AuthRequest, res) => {
 
         const requests = await prisma.settingsApproval.findMany({
             orderBy: { createdAt: 'desc' },
-            include: { maker: { select: { name: true, role: true } }, checker: { select: { name: true, role: true } } }
+            // `id` sur maker : mêmes raisons que treasury.ts GET /requests — permet à
+            // Settings.tsx de griser Approuver/Rejeter sur sa propre demande par avance.
+            include: { maker: { select: { id: true, name: true, role: true } }, checker: { select: { name: true, role: true } } }
         });
         return res.json(requests);
     } catch (e: any) {
@@ -287,7 +321,7 @@ router.get('/requests', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // DELETE /api/settings/requests/:id
-router.delete('/requests/:id', authMiddleware, async (req: AuthRequest, res) => {
+router.delete('/requests/:id', authMiddleware, adminIpAllowlistMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, permissions: true, permissionsCustomized: true } });
         if (!staff || !hasPermission(staff, 'perm_system_settings_approve')) {
@@ -309,7 +343,7 @@ router.delete('/requests/:id', authMiddleware, async (req: AuthRequest, res) => 
 });
 
 // GET /api/settings/history (Prompt 07)
-router.get('/history', authMiddleware, async (req: AuthRequest, res) => {
+router.get('/history', authMiddleware, adminIpAllowlistMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, permissions: true, permissionsCustomized: true } });
         if (!staff || !hasPermission(staff, 'perm_system_settings_view')) {

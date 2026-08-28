@@ -7,13 +7,12 @@
  * DEL  /api/admin/staff/:staffId/permissions  → remettre aux défauts du rôle
  * GET  /api/admin/rbac/me                     → permissions de l'employé connecté (pour le frontend)
  */
-import { PrismaClient } from '@prisma/client';
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth';
+import { prisma } from '../prisma';
 import { ALL_PERMISSIONS, getEffectivePermissions, PERMISSION_GROUPS, ROLE_DEFAULT_PERMISSIONS } from '../services/RBAC';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // ── Middleware: SUPER_ADMIN uniquement pour certaines routes ──────────────
 function superAdminOnly(req: any, res: any, next: any) {

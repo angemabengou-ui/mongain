@@ -66,9 +66,11 @@ export async function executeVaultWithdraw(tx: TxClient, vaultTx: WithdrawableVa
             data: { balance: { increment: netAmount } }
         });
 
+        let corporateWalletId: string | null = null;
         if (fee > 0) {
             const { getOrCreateCorporateWallet } = await import('../routes/wallet');
             const corporate = await getOrCreateCorporateWallet(tx);
+            corporateWalletId = corporate.wallet.id;
             await tx.wallet.update({
                 where: { id: corporate.wallet.id },
                 data: { balance: { increment: fee } }
@@ -94,6 +96,21 @@ export async function executeVaultWithdraw(tx: TxClient, vaultTx: WithdrawableVa
                 reference: `VAULT_OUT_${vaultTx.id}`
             }
         });
+
+        // Transaction fantôme dédiée au frais — voir vault.ts (VAULT_DEP_) pour le contexte
+        // complet : même convention que wallet.ts (FEE-, FEE-W-, FEE-MM-), sans quoi ce frais
+        // n'apparaissait dans aucun graphique de revenu admin.
+        if (fee > 0 && corporateWalletId) {
+            await tx.transaction.create({
+                data: {
+                    amount: fee,
+                    senderWalletId: destWallet.id,
+                    receiverWalletId: corporateWalletId,
+                    status: 'COMPLETED',
+                    reference: `FEE-VO-${vaultTx.id}`
+                }
+            });
+        }
     } else if (vaultTx.destinationType === 'VOUCHER') {
         await tx.vaultVoucher.create({
             data: {

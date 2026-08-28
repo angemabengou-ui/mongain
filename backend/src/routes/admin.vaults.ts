@@ -87,8 +87,29 @@ router.post('/vaults/:id/freeze', authMiddleware, async (req: AuthRequest, res) 
 
         const vault = await prisma.vault.update({
             where: { id: vaultId },
-            data: { isFrozen: true, frozenReason: String(reason).trim(), frozenAt: new Date() }
+            data: { isFrozen: true, frozenReason: String(reason).trim(), frozenAt: new Date() },
+            include: { members: { select: { userId: true, user: { select: { pushToken: true } } } } }
         });
+
+        // Avant ce correctif, un gel était totalement silencieux pour les membres — ils ne le
+        // découvraient qu'en essayant de déposer/retirer et en recevant une erreur, ou en
+        // rouvrant par hasard l'écran de la caisse (qui affiche désormais une bannière, voir
+        // vault-detail.tsx). Une notification proactive touche aussi ceux qui n'ouvrent pas
+        // l'app entre-temps. Le push est en plus de l'enregistrement en base, jamais à sa
+        // place : sendPush échoue silencieusement (token absent/invalide/désinstallation), et
+        // seul l'enregistrement Notification garantit que l'alerte reste visible plus tard.
+        if (vault.members.length > 0) {
+            await prisma.notification.createMany({
+                data: vault.members.map((m) => ({
+                    userId: m.userId,
+                    title: 'Caisse commune gelée',
+                    body: `« ${vault.name} » a été gelée par l'administration (${reason}). Dépôts, retraits et bons sont bloqués jusqu'au dégel.`,
+                    type: 'ALERT'
+                }))
+            });
+            const { sendPush } = await import('./wallet');
+            await Promise.all(vault.members.map((m) => sendPush(m.user.pushToken, 'Caisse commune gelée', `« ${vault.name} » a été gelée par l'administration.`)));
+        }
 
         await prisma.auditLog.create({
             data: { adminId: staff.id, action: 'FREEZE_VAULT', details: `Caisse « ${vault.name} » (${vaultId}) gelée. Motif : ${reason}` }
@@ -108,8 +129,22 @@ router.post('/vaults/:id/unfreeze', authMiddleware, async (req: AuthRequest, res
 
         const vault = await prisma.vault.update({
             where: { id: vaultId },
-            data: { isFrozen: false, frozenReason: null, frozenAt: null }
+            data: { isFrozen: false, frozenReason: null, frozenAt: null },
+            include: { members: { select: { userId: true, user: { select: { pushToken: true } } } } }
         });
+
+        if (vault.members.length > 0) {
+            await prisma.notification.createMany({
+                data: vault.members.map((m) => ({
+                    userId: m.userId,
+                    title: 'Caisse commune dégelée',
+                    body: `« ${vault.name} » est de nouveau active — dépôts, retraits et bons sont rétablis.`,
+                    type: 'INFO'
+                }))
+            });
+            const { sendPush } = await import('./wallet');
+            await Promise.all(vault.members.map((m) => sendPush(m.user.pushToken, 'Caisse commune dégelée', `« ${vault.name} » est de nouveau active.`)));
+        }
 
         await prisma.auditLog.create({
             data: { adminId: staff.id, action: 'UNFREEZE_VAULT', details: `Caisse « ${vault.name} » (${vaultId}) dégelée.` }
@@ -217,6 +252,16 @@ router.put('/vaults/:id/members/:userId/role', authMiddleware, async (req: AuthR
             data: { isInitiator, isValidator, isTreasurer, isAdmin, isRequiredValidator: resolvedIsRequiredValidator }
         });
 
+        const vaultForNotif = await prisma.vault.findUnique({ where: { id: vaultId }, select: { name: true } });
+        await prisma.notification.create({
+            data: {
+                userId: targetUserId,
+                title: 'Vos rôles ont été modifiés',
+                body: `L'administration a modifié vos rôles dans la caisse « ${vaultForNotif?.name ?? ''} » — vérifiez ce que vous pouvez désormais y faire.`,
+                type: 'INFO'
+            }
+        });
+
         await prisma.auditLog.create({
             data: { adminId: staff.id, action: 'OVERRIDE_VAULT_MEMBER_ROLE', details: `Rôles du membre ${targetUserId} (caisse ${vaultId}) modifiés par l'admin : ${JSON.stringify({ isInitiator, isValidator, isTreasurer, isAdmin, isRequiredValidator: resolvedIsRequiredValidator })}` }
         });
@@ -237,20 +282,51 @@ router.post('/vaults/:id/vouchers/:voucherId/void', authMiddleware, async (req: 
 
         const voucher = await prisma.vaultVoucher.findUnique({ where: { id: voucherId } });
         if (!voucher || voucher.vaultId !== (req.params.id as string)) return res.status(404).json({ error: 'Bon introuvable.' });
-        if (voucher.status !== 'ACTIVE') return res.status(400).json({ error: 'Ce bon est déjà utilisé ou déjà annulé.' });
 
-        const updated = await prisma.vaultVoucher.update({
-            where: { id: voucherId },
-            data: { status: 'VOID', voidReason: reason ? String(reason).trim() : null }
+        const updated = await prisma.$transaction(async (tx) => {
+            // Réclamation atomique : sans elle, une annulation et une dépense simultanées
+            // (admin.vaults.ts vs vault.ts /vouchers/:id/spend) pouvaient toutes deux lire
+            // ACTIVE avant qu'aucune n'écrive.
+            const claim = await tx.vaultVoucher.updateMany({
+                where: { id: voucherId, status: 'ACTIVE' },
+                data: { status: 'VOID', voidReason: reason ? String(reason).trim() : null }
+            });
+            if (claim.count === 0) throw new Error('Ce bon est déjà utilisé ou déjà annulé.');
+
+            // Le solde de la caisse a déjà été débité du montant du bon au moment de sa
+            // création (executeVaultWithdraw, vaultService.ts) — tant qu'il n'est pas dépensé
+            // chez un marchand, cet argent n'a jamais été crédité nulle part. Sans ce
+            // remboursement, annuler un bon actif faisait purement et simplement disparaître
+            // la somme : ni dans la caisse, ni chez un marchand, ni ailleurs.
+            await tx.vault.update({
+                where: { id: voucher.vaultId },
+                data: { balance: { increment: voucher.amount } }
+            });
+
+            // Sans ça, le porteur du bon (le Président qui l'a émis) ne l'apprend qu'en essayant
+            // de le dépenser chez un marchand et en se le voyant refuser, sans explication.
+            await tx.notification.create({
+                data: {
+                    userId: voucher.presidentId,
+                    title: 'Bon de retrait annulé',
+                    body: `Votre bon de ${voucher.amount.toLocaleString('fr-FR')} FCFA a été annulé par l'administration et reversé au solde de la caisse.${reason ? ` Motif : ${reason}` : ''}`,
+                    type: 'ALERT'
+                }
+            });
+
+            return { ...voucher, status: 'VOID' as const, voidReason: reason ? String(reason).trim() : null };
         });
 
         await prisma.auditLog.create({
-            data: { adminId: staff.id, action: 'VOID_VAULT_VOUCHER', details: `Bon ${voucherId} (${voucher.amount} FCFA) annulé par l'admin.${reason ? ` Motif : ${reason}` : ''}` }
+            data: { adminId: staff.id, action: 'VOID_VAULT_VOUCHER', details: `Bon ${voucherId} (${voucher.amount} FCFA) annulé par l'admin et reversé au solde de la caisse.${reason ? ` Motif : ${reason}` : ''}` }
         });
 
         res.json({ success: true, voucher: updated });
     } catch (e: any) {
-        res.status(500).json({ error: friendlyErrorMessage(e) });
+        // 400 (pas 500) : le cas le plus probable ici est la course avec /spend, réclamée
+        // atomiquement ci-dessus — une erreur métier attendue, pas une panne serveur. Même
+        // convention que force-resolve un peu plus haut dans ce fichier.
+        res.status(400).json({ error: e.message || friendlyErrorMessage(e) });
     }
 });
 

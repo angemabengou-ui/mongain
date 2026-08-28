@@ -84,7 +84,11 @@ function Badge({ text, color }: { text: string; color: string }) {
 interface SupportCenterProps { token: string; hasPerm: (perms: string[]) => boolean; }
 
 export default function SupportCenter({ token, hasPerm }: SupportCenterProps) {
-    const canApproveRefunds = hasPerm(['perm_refund_request']);
+    // Régression : gatait Approuver/Exécuter sur `perm_refund_request` (le Maker, qui CRÉE la
+    // demande) au lieu de `perm_refund_approve` (le Checker, seul autorisé côté backend) — le
+    // Checker (COMPLIANCE_CHECKER) ne voyait jamais ces boutons, tandis que les Makers en
+    // voyaient qui échouaient systématiquement en 403 au clic.
+    const canApproveRefunds = hasPerm(['perm_refund_approve']);
     const [tab, setTab] = useState<'dashboard' | 'inbox' | 'fraud' | 'refunds'>('dashboard');
     const [stats, setStats] = useState<any>(null);
     const [tickets, setTickets] = useState<any[]>([]);

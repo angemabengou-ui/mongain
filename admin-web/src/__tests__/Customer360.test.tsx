@@ -56,7 +56,7 @@ describe('Customer360', () => {
 
     it('affiche un état de chargement puis la fiche client', async () => {
         setupFetch();
-        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" />);
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
 
         expect(screen.getByText('Chargement Customer 360…')).toBeInTheDocument();
         expect(await screen.findByText('Sophie Ndong')).toBeInTheDocument();
@@ -65,7 +65,7 @@ describe('Customer360', () => {
 
     it("affiche l'onglet Aperçu avec transactions et logs récents", async () => {
         setupFetch();
-        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" />);
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
         await screen.findByText('Sophie Ndong');
 
         expect(screen.getByText('TRANSFER')).toBeInTheDocument();
@@ -74,7 +74,7 @@ describe('Customer360', () => {
 
     it('appelle onBack et alerte en cas d\'échec du chargement principal', async () => {
         (global.fetch as any) = vi.fn(async () => jsonResponse({ error: 'Client introuvable.' }, false, 404));
-        render(<Customer360 token="tok" userId="unknown-user" onBack={onBack} staffRole="SUPER_ADMIN" />);
+        render(<Customer360 token="tok" userId="unknown-user" onBack={onBack} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
 
         await waitFor(() => expect(onBack).toHaveBeenCalled());
         expect(alertSpy).toHaveBeenCalledWith('Client introuvable.');
@@ -83,7 +83,7 @@ describe('Customer360', () => {
     it('charge les transactions au clic sur l\'onglet Transactions', async () => {
         setupFetch({ transactions: { txs: [{ id: 'tx-2', createdAt: '2026-01-03T10:00:00Z', reference: 'REF0000000000123456', type: 'CASH_IN', amount: 20000, fee: 0, status: 'COMPLETED', senderWallet: { user: { id: 'other-user' } }, receiverWallet: { user: { id: 'user-123456789', name: 'Sophie Ndong' } } }], total: 1, page: 1, pages: 1 } });
         const user = userEvent.setup();
-        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" />);
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
         await screen.findByText('Sophie Ndong');
 
         await user.click(screen.getByRole('button', { name: /Transactions/i }));
@@ -95,7 +95,7 @@ describe('Customer360', () => {
     it('masque le solde du portefeuille pour un rôle non sensible', async () => {
         setupFetch();
         const user = userEvent.setup();
-        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="AGENCY_STAFF" />);
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="AGENCY_STAFF" hasPerm={() => false} />);
         await screen.findByText('Sophie Ndong');
 
         await user.click(screen.getByRole('button', { name: /Wallet/i }));
@@ -107,7 +107,7 @@ describe('Customer360', () => {
     it('affiche le solde du portefeuille pour un rôle sensible (SUPER_ADMIN)', async () => {
         setupFetch();
         const user = userEvent.setup();
-        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" />);
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
         await screen.findByText('Sophie Ndong');
 
         await user.click(screen.getByRole('button', { name: /Wallet/i }));
@@ -119,7 +119,7 @@ describe('Customer360', () => {
     it('approuve un dossier KYC en attente (succès)', async () => {
         const fetchMock = setupFetch({ main: { ...mainData, user: { ...baseUser, kycStatus: 'PENDING' } } });
         const user = userEvent.setup();
-        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" />);
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
         await screen.findByText('Sophie Ndong');
 
         await user.click(screen.getByRole('button', { name: /^KYC/i }));
@@ -141,7 +141,7 @@ describe('Customer360', () => {
             return jsonResponse({});
         });
         const user = userEvent.setup();
-        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" />);
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
         await screen.findByText('Sophie Ndong');
 
         await user.click(screen.getByRole('button', { name: /^KYC/i }));
@@ -157,7 +157,7 @@ describe('Customer360', () => {
     it('gèle le compte via l\'onglet Risque (succès)', async () => {
         const fetchMock = setupFetch();
         const user = userEvent.setup();
-        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" />);
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
         await screen.findByText('Sophie Ndong');
 
         await user.click(screen.getByRole('button', { name: /Risque/i }));
@@ -175,12 +175,36 @@ describe('Customer360', () => {
     it("masque la création de flag et le gel de compte pour un rôle non sensible", async () => {
         setupFetch();
         const user = userEvent.setup();
-        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="AGENCY_STAFF" />);
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="AGENCY_STAFF" hasPerm={() => false} />);
         await screen.findByText('Sophie Ndong');
 
         await user.click(screen.getByRole('button', { name: /Risque/i }));
 
         expect(screen.queryByText('Créer un Flag')).not.toBeInTheDocument();
         expect(screen.queryByText('Gestion du Statut du Compte')).not.toBeInTheDocument();
+    });
+
+    it("masque « + Nouveau ticket » pour un rôle exclu de hasSupportAccess côté serveur (ex: TELLER)", async () => {
+        // POST /users/:id/reclamation (admin.ts) vérifie un rôle codé en dur (hasSupportAccess),
+        // pas une permission — TELLER en est exclu et se heurterait à un refus serveur.
+        setupFetch();
+        const user = userEvent.setup();
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="TELLER" hasPerm={() => true} />);
+        await screen.findByText('Sophie Ndong');
+
+        await user.click(screen.getByRole('button', { name: /Réclamations/i }));
+
+        expect(screen.queryByText('+ Nouveau ticket')).not.toBeInTheDocument();
+    });
+
+    it("affiche « + Nouveau ticket » pour un rôle autorisé (ex: SUPPORT_MAKER)", async () => {
+        setupFetch();
+        const user = userEvent.setup();
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPPORT_MAKER" hasPerm={() => true} />);
+        await screen.findByText('Sophie Ndong');
+
+        await user.click(screen.getByRole('button', { name: /Réclamations/i }));
+
+        expect(screen.getByText('+ Nouveau ticket')).toBeInTheDocument();
     });
 });

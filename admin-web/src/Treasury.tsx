@@ -19,7 +19,7 @@ function StatusBadge({ status }: { status: string }) {
     return <span style={{ padding: '4px 10px', borderRadius: 20, background: s.bg, color: s.color, fontSize: 11, fontWeight: 800 }}>{s.label}</span>;
 }
 
-export default function Treasury({ token, hasPerm, prefillAdjustTarget }: { token: string; hasPerm: (perms: string[]) => boolean; prefillAdjustTarget?: { walletId: string; name: string } | null }) {
+export default function Treasury({ token, hasPerm, prefillAdjustTarget, staffId }: { token: string; hasPerm: (perms: string[]) => boolean; prefillAdjustTarget?: { walletId: string; name: string } | null; staffId?: string }) {
     type TreasuryTab = 'overview' | 'agencies' | 'reconciliation' | 'requests' | 'create';
     const [tab, setTab] = useState<TreasuryTab>('overview');
     const [loading, setLoading] = useState(true);
@@ -156,12 +156,17 @@ export default function Treasury({ token, hasPerm, prefillAdjustTarget }: { toke
         } catch (err: any) { alert(err.message); }
     };
 
+    // "Lancer Opération" n'a de sens que pour qui peut réellement soumettre : le backend
+    // (POST /treasury/requests) exige perm_treasury_mint pour ISSUANCE et perm_treasury_allocate
+    // pour les 4 autres types. Sans ce filtre, RISK (qui n'a que perm_treasury_view) voyait cet
+    // onglet, remplissait le formulaire, et se prenait systématiquement un 403 à la soumission.
+    const canCreateTreasuryOp = hasPerm(['perm_treasury_mint', 'perm_treasury_allocate']);
     const treasuryTabs = [
         { id: 'overview' as const, icon: <BarChart3 size={18} />, label: 'Tableau de Bord & KPI' },
         { id: 'agencies' as const, icon: <Building2 size={18} />, label: 'Liquidité Agences' },
         { id: 'reconciliation' as const, icon: <AlertTriangle size={18} />, label: 'Rapprochements' },
         { id: 'requests' as const, icon: <Activity size={18} />, label: 'Opérations & Approbations' },
-        { id: 'create' as const, icon: <Shield size={18} />, label: 'Lancer Opération' }
+        ...(canCreateTreasuryOp ? [{ id: 'create' as const, icon: <Shield size={18} />, label: 'Lancer Opération' }] : [])
     ];
 
     return (
@@ -358,13 +363,18 @@ export default function Treasury({ token, hasPerm, prefillAdjustTarget }: { toke
                                             <td style={{ padding: '14px 16px' }}>
                                                 {r.status === 'PENDING' ? (
                                                     <div style={{ display: 'flex', gap: 6 }}>
-                                                        {hasPerm(['perm_treasury_approve']) ? (
+                                                        {!hasPerm(['perm_treasury_approve']) ? (
+                                                            <span style={{ color: 'var(--text-muted)' }}>En attente d'approbation...</span>
+                                                        ) : staffId && r.maker?.id === staffId ? (
+                                                            // Bloqué côté serveur de toute façon (treasury.ts : "Un Maker ne peut pas
+                                                            // s'approuver") — sans ce contrôle ici, le bouton restait actif et
+                                                            // échouait au clic plutôt que d'annoncer clairement pourquoi.
+                                                            <span style={{ color: 'var(--text-muted)' }} title="Vous ne pouvez pas approuver votre propre demande.">Votre propre demande</span>
+                                                        ) : (
                                                             <>
                                                                 <button onClick={() => handleApprove(r.id, r.reference)} style={{ padding: '6px 12px', background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success-bg)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Valider</button>
                                                                 <button onClick={() => handleReject(r.id, r.reference)} style={{ padding: '6px 12px', background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger-bg)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Rejeter</button>
                                                             </>
-                                                        ) : (
-                                                            <span style={{ color: 'var(--text-muted)' }}>En attente d'approbation...</span>
                                                         )}
                                                     </div>
                                                 ) : <span style={{ color: 'var(--text-muted)' }}>Terminé</span>}

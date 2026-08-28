@@ -1,4 +1,4 @@
-import { Activity, Calculator, CheckCircle, Clock, Copy, Database, Eye, Globe, Key, Power, RefreshCw, Shield, Smartphone, UserCheck, Wallet } from 'lucide-react';
+import { Activity, Calculator, CheckCircle, Clock, Copy, Database, Eye, Globe, Key, Lock, Power, RefreshCw, Shield, Smartphone, UserCheck, Wallet, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Modal from './components/Modal';
 import PageHeader from './components/PageHeader';
@@ -215,7 +215,7 @@ function ApiManagementTab({ token }: { token: string }) {
     );
 }
 
-export default function PlatformConfig({ token }: { token: string }) {
+export default function PlatformConfig({ token, hasPerm, staffId }: { token: string; hasPerm?: (perms: string[]) => boolean; staffId?: string }) {
     const [activeTab, setActiveTab] = useState('general');
 
     const [settings, setSettings] = useState<any>({});
@@ -231,7 +231,16 @@ export default function PlatformConfig({ token }: { token: string }) {
     // FEE PREVIEW STATE
     const [sim, setSim] = useState({ amount: 100000, type: 'CASH_OUT_AGENCE', kyc: 'TIER1' });
 
+    // Restriction IP du portail (voir tab 'network' ci-dessous)
+    const [myIp, setMyIp] = useState<string | null>(null);
+    const [newIpInput, setNewIpInput] = useState('');
+
     useEffect(() => { loadAll(); }, []);
+
+    useEffect(() => {
+        fetch(API_URL + '/api/settings/my-ip', { headers: { 'Authorization': `Bearer ${token}` } })
+            .then(r => r.json()).then(d => setMyIp(d.ip || null)).catch(() => {});
+    }, [token]);
 
     const fetchSettings = async () => {
         try {
@@ -331,6 +340,25 @@ export default function PlatformConfig({ token }: { token: string }) {
         submitRequest(groupAction, payload);
     };
 
+    // Dédié plutôt que handleSaveGroup générique : ajoute un avertissement immédiat côté
+    // client si l'IP détectée du Maker lui-même n'est pas dans la liste proposée — le
+    // serveur refuse de toute façon à l'approbation (voir settings.ts, même garde côté
+    // Checker), mais prévenir ici évite de déposer une demande manifestement bloquante.
+    const submitIpAllowlist = () => {
+        const enabled = drafts.adminIpAllowlistEnabled;
+        const list: string[] = drafts.adminIpAllowlist || [];
+
+        if (enabled && list.length === 0) {
+            setError('Impossible de déposer une activation avec une liste vide — cela bloquerait tout le personnel.');
+            return;
+        }
+        if (enabled && myIp && !list.includes(myIp)) {
+            if (!window.confirm(`Attention : votre IP actuelle (${myIp}) n'est pas dans la liste. Un Checker devra ajouter la sienne pour pouvoir approuver, sans quoi la demande restera bloquée. Continuer quand même ?`)) return;
+        }
+
+        handleSaveGroup('UPDATE_ADMIN_IP_ALLOWLIST', ['adminIpAllowlistEnabled', 'adminIpAllowlist']);
+    };
+
     const handleApprove = async (id: string) => {
         if (!window.confirm('Valider cette modification de politique ? Il impactera immédiatement le système.')) return;
 
@@ -383,6 +411,7 @@ export default function PlatformConfig({ token }: { token: string }) {
         { id: 'integrations', label: 'Intégrations (API)', icon: Database },
         { id: 'gateways', label: 'Passerelles de Paiement', icon: Smartphone },
         { id: 'breaker', label: 'Circuit Breaker', icon: Power },
+        { id: 'network', label: 'Sécurité Réseau', icon: Lock },
         { id: 'approvals', label: 'Approbation (Checker) ' + (requests.filter(r => r.status === 'PENDING').length ? `(${requests.filter(r => r.status === 'PENDING').length})` : ''), icon: CheckCircle },
         { id: 'history', label: 'Historique', icon: Clock }
     ];
@@ -661,6 +690,81 @@ export default function PlatformConfig({ token }: { token: string }) {
                             </div>
                         )}
 
+                        {/* TAB: NETWORK — restriction IP du portail personnel */}
+                        {activeTab === 'network' && (
+                            <div className="card" style={{ padding: 24 }}>
+                                <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Lock size={20} /> Restriction IP du Portail</h3>
+                                <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: -8, marginBottom: 20 }}>
+                                    Équivalent applicatif d'un VPN entre l'admin-web et le backend : une fois activée, seules les adresses IP listées ci-dessous peuvent atteindre les routes réservées au personnel (connexion, gestion des clients, trésorerie, etc.) — l'application mobile des clients n'est jamais concernée. Désactivée par défaut.
+                                </p>
+
+                                <div style={{ padding: 14, background: 'var(--accent-bg)', borderRadius: 10, marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                                    <div style={{ fontSize: 13 }}>Votre adresse IP détectée : <code style={{ fontWeight: 800 }}>{myIp || 'détection en cours…'}</code></div>
+                                    {myIp && (
+                                        <button type="button" onClick={() => {
+                                            const list: string[] = drafts.adminIpAllowlist || [];
+                                            if (!list.includes(myIp)) handleFieldChange('adminIpAllowlist', [...list, myIp]);
+                                        }} style={{ padding: '6px 14px', background: 'var(--accent)', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>
+                                            + Ajouter mon IP à la liste
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)', marginBottom: 20 }}>
+                                    <div>
+                                        <div style={{ fontWeight: 700 }}>Restriction activée</div>
+                                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Statut actuel : {settings.adminIpAllowlistEnabled ? <span style={{ color: 'var(--success)', fontWeight: 700 }}>ACTIVÉE</span> : <span style={{ color: 'var(--text-muted)', fontWeight: 700 }}>DÉSACTIVÉE</span>}</div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleFieldChange('adminIpAllowlistEnabled', !(drafts.adminIpAllowlistEnabled !== undefined ? drafts.adminIpAllowlistEnabled : settings.adminIpAllowlistEnabled))}
+                                        style={{
+                                            padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
+                                            background: (drafts.adminIpAllowlistEnabled !== undefined ? drafts.adminIpAllowlistEnabled : settings.adminIpAllowlistEnabled) ? 'var(--success-bg)' : 'var(--danger-bg)',
+                                            color: (drafts.adminIpAllowlistEnabled !== undefined ? drafts.adminIpAllowlistEnabled : settings.adminIpAllowlistEnabled) ? 'var(--success)' : 'var(--danger)',
+                                        }}
+                                    >
+                                        {(drafts.adminIpAllowlistEnabled !== undefined ? drafts.adminIpAllowlistEnabled : settings.adminIpAllowlistEnabled) ? 'ACTIVÉE' : 'DÉSACTIVÉE'}
+                                    </button>
+                                </div>
+
+                                <label>Adresses IP autorisées</label>
+                                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                                    <input
+                                        className="input" placeholder="ex: 203.0.113.5" value={newIpInput}
+                                        onChange={e => setNewIpInput(e.target.value)}
+                                        onKeyDown={e => {
+                                            if (e.key !== 'Enter' || !newIpInput.trim()) return;
+                                            const list: string[] = drafts.adminIpAllowlist || [];
+                                            if (!list.includes(newIpInput.trim())) handleFieldChange('adminIpAllowlist', [...list, newIpInput.trim()]);
+                                            setNewIpInput('');
+                                        }}
+                                    />
+                                    <button type="button" onClick={() => {
+                                        if (!newIpInput.trim()) return;
+                                        const list: string[] = drafts.adminIpAllowlist || [];
+                                        if (!list.includes(newIpInput.trim())) handleFieldChange('adminIpAllowlist', [...list, newIpInput.trim()]);
+                                        setNewIpInput('');
+                                    }} style={{ padding: '0 18px', background: 'var(--btn-dark-bg)', color: 'var(--btn-dark-text)', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>Ajouter</button>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+                                    {(drafts.adminIpAllowlist || []).length === 0 ? (
+                                        <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-muted)', background: 'var(--bg-secondary)', borderRadius: 8, fontSize: 13 }}>Aucune IP dans la liste.</div>
+                                    ) : (drafts.adminIpAllowlist || []).map((ip: string) => (
+                                        <div key={ip} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8 }}>
+                                            <code style={{ fontWeight: 700 }}>{ip}{myIp === ip && <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>(vous)</span>}</code>
+                                            <button type="button" onClick={() => handleFieldChange('adminIpAllowlist', (drafts.adminIpAllowlist || []).filter((x: string) => x !== ip))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', display: 'flex', alignItems: 'center' }}>
+                                                <X size={16} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <button className="btn" style={{ width: '100%' }} onClick={submitIpAllowlist}>Déposer Changement (Maker)</button>
+                            </div>
+                        )}
+
                         {/* TAB: APPROVALS */}
                         {activeTab === 'approvals' && (
                             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -671,17 +775,32 @@ export default function PlatformConfig({ token }: { token: string }) {
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                                         <thead><tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', textAlign: 'left' }}><th style={{ padding: 16 }}>Maker</th><th style={{ padding: 16 }}>Action</th><th style={{ padding: 16 }}>Motif</th><th style={{ padding: 16 }}>Actions Checker</th></tr></thead>
                                         <tbody>
-                                            {requests.filter(r => r.status === 'PENDING').map(r => (
+                                            {requests.filter(r => r.status === 'PENDING').map(r => {
+                                                // `PlatformConfig` n'était auparavant jamais gaté sur perm_system_settings_approve
+                                                // (App.tsx la monte dès perm_system_settings_view OU _approve) : un Maker, qui n'a
+                                                // que _view, voyait ces boutons alors que le serveur les refuse systématiquement.
+                                                const canApprove = hasPerm ? hasPerm(['perm_system_settings_approve']) : true;
+                                                const isOwnRequest = !!staffId && r.maker?.id === staffId;
+                                                return (
                                                 <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
                                                     <td style={{ padding: 16 }}>{r.maker.name}<br /><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.maker.role}</span></td>
                                                     <td style={{ padding: 16, fontWeight: 700 }}>{r.action}</td>
                                                     <td style={{ padding: 16 }}>{r.reason}</td>
                                                     <td style={{ padding: 16 }}>
-                                                        <button onClick={() => handleApprove(r.id)} style={{ padding: '8px 16px', background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, marginRight: 8 }}>Valider</button>
-                                                        <button onClick={() => handleReject(r.id)} style={{ padding: '8px 16px', background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>Rejeter</button>
+                                                        {!canApprove ? (
+                                                            <span style={{ color: 'var(--text-muted)' }}>En attente d'approbation...</span>
+                                                        ) : isOwnRequest ? (
+                                                            <span style={{ color: 'var(--text-muted)' }} title="Vous ne pouvez pas approuver votre propre demande.">Votre propre demande</span>
+                                                        ) : (
+                                                            <>
+                                                                <button onClick={() => handleApprove(r.id)} style={{ padding: '8px 16px', background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, marginRight: 8 }}>Valider</button>
+                                                                <button onClick={() => handleReject(r.id)} style={{ padding: '8px 16px', background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>Rejeter</button>
+                                                            </>
+                                                        )}
                                                     </td>
                                                 </tr>
-                                            ))}
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 )}

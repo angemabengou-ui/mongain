@@ -22,7 +22,7 @@ export default function WithdrawFormScreen() {
     const insets = useSafeAreaInsets();
     const COLORS = useAppTheme();
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, settings } = useAuth();
     const { method } = useLocalSearchParams<{ method: string }>();
 
     const isAirtel = method === 'AIRTEL';
@@ -38,6 +38,15 @@ export default function WithdrawFormScreen() {
     const [confirmedPhone, setConfirmedPhone] = useState('');
 
     const submittingRef = useRef(false);
+
+    // Sans cet aperçu, aucun frais n'était montré avant validation (contrairement à
+    // client-withdraw-desk.tsx) alors que le serveur (wallet.ts POST /push) débite bien
+    // `amount + amount * taxWithdraw` — le client ne découvrait le prélèvement qu'après coup
+    // en vérifiant son solde. Pas d'arrondi ici : reflète exactement la formule serveur, non
+    // arrondie elle non plus, pour que l'aperçu et le débit réel coïncident au FCFA près.
+    const numAmountPreview = parseFloat(amount.replace(/\s/g, '').replace(',', '.')) || 0;
+    const taxRate = settings?.taxWithdraw ?? 0.013;
+    const fee = numAmountPreview * taxRate;
 
     const handleWithdraw = async () => {
         if (submittingRef.current) return;
@@ -143,6 +152,11 @@ export default function WithdrawFormScreen() {
                             placeholderTextColor={COLORS.textSecondary}
                         />
                     </View>
+                    {numAmountPreview > 0 && (
+                        <Text style={[styles.feeText, { color: COLORS.textSecondary }]}>
+                            Frais : {fee.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA · Total débité : {(numAmountPreview + fee).toLocaleString('fr-FR', { maximumFractionDigits: 0 })} FCFA
+                        </Text>
+                    )}
 
                     <Text style={[styles.label, { color: COLORS.textSecondary, marginTop: 16 }]}>Code PIN Mongain</Text>
                     <View style={[styles.inputContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
@@ -187,6 +201,7 @@ const styles = StyleSheet.create({
     infoPullText: { fontSize: 13, lineHeight: 20, fontWeight: '500' },
 
     label: { fontSize: 14, fontWeight: '700', marginBottom: 8, marginLeft: 4 },
+    feeText: { fontSize: 12.5, marginTop: -8, marginBottom: 16, marginLeft: 4 },
     inputContainer: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, paddingHorizontal: 16, height: 64, marginBottom: 16, borderWidth: 1.5 },
     prefix: { fontSize: 17, fontWeight: '800', marginRight: 12, paddingRight: 12, borderRightWidth: 1, borderRightColor: '#e2e8f0' },
     input: { flex: 1, fontSize: 18, fontWeight: '700', height: '100%', letterSpacing: 1 },

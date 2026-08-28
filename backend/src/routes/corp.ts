@@ -3,9 +3,12 @@ import crypto from 'crypto';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
+import { z } from 'zod';
 import { authCorp, AuthRequest, JWT_SECRET } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { sendSms } from '../services/sms';
 import { friendlyErrorMessage, withDbRetry } from '../utils/errors';
+import logger from '../utils/logger';
 
 const router = express.Router();
 
@@ -88,11 +91,65 @@ router.post('/login', loginLimiter, async (req, res) => {
             });
         }
 
-        const updatedStaff = staff.failedLoginAttempts > 0 || staff.lockedUntil
-            ? await prisma.staff.update({ where: { id: staff.id }, data: { failedLoginAttempts: 0, lockedUntil: null } })
-            : staff;
+        if (staff.failedLoginAttempts > 0 || staff.lockedUntil) {
+            await prisma.staff.update({ where: { id: staff.id }, data: { failedLoginAttempts: 0, lockedUntil: null } });
+        }
 
-        const token = jwt.sign({ userId: staff.id, role: staff.role, isCorp: true, jwtVersion: updatedStaff.jwtVersion }, JWT_SECRET, { expiresIn: '12h' });
+        // 2FA — le compte client a déjà PIN + OTP SMS (deux facteurs), ce portail se
+        // limitait jusqu'ici au mot de passe seul alors qu'il donne accès aux documents
+        // KYC, à l'émission de monnaie, etc. Staff.phone est optionnel (contrairement au
+        // téléphone client, obligatoire) : un compte sans numéro enregistré ne peut pas
+        // recevoir de code, donc pas se connecter — pas de repli silencieux qui
+        // contournerait le 2FA pour ces comptes-là.
+        if (!staff.phone) {
+            return res.status(400).json({ error: 'Aucun numéro de téléphone enregistré pour ce compte. Contactez un SUPER_ADMIN pour l\'ajouter avant de pouvoir vous connecter.' });
+        }
+
+        const useDemoMode = !process.env.TWILIO_ACCOUNT_SID;
+        const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes, comme le login client
+
+        await prisma.staffVerificationCode.upsert({
+            where: { staffId: staff.id },
+            update: { code, expiresAt },
+            create: { staffId: staff.id, code, expiresAt }
+        });
+
+        if (useDemoMode) {
+            logger.info(`[DEMO MODE] Code d'accès 1234 généré pour le login staff de ${staff.email}`);
+        } else {
+            await sendSms(staff.phone, `[Mongain] Votre code de connexion personnel est : ${code}.`);
+        }
+
+        return res.json({ requireOtp: true, message: 'Un code de sécurité a été envoyé par SMS.' });
+    } catch (e: any) {
+        console.error('Erreur /corp/login:', e);
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+const verifyLoginOtpSchema = z.object({
+    email: z.string().min(1, 'Email requis.'),
+    otpCode: z.string().length(4, 'Le code doit comporter 4 chiffres.'),
+});
+
+router.post('/verify-login-otp', loginLimiter, async (req, res) => {
+    const parsed = verifyLoginOtpSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+    const { email, otpCode } = parsed.data;
+
+    try {
+        const staff = await prisma.staff.findUnique({ where: { email } });
+        if (!staff || !staff.isActive) return res.status(401).json({ error: 'Identifiants invalides ou compte suspendu' });
+
+        const otpRecord = await prisma.staffVerificationCode.findUnique({ where: { staffId: staff.id } });
+        if (!otpRecord || otpRecord.code !== otpCode || otpRecord.expiresAt < new Date()) {
+            return res.status(400).json({ error: 'Code expiré ou invalide.' });
+        }
+
+        await prisma.staffVerificationCode.delete({ where: { staffId: staff.id } });
+
+        const token = jwt.sign({ userId: staff.id, role: staff.role, isCorp: true, jwtVersion: staff.jwtVersion }, JWT_SECRET, { expiresIn: '12h' });
         res.json({
             token,
             user: {
@@ -105,7 +162,7 @@ router.post('/login', loginLimiter, async (req, res) => {
             }
         });
     } catch (e: any) {
-        console.error('Erreur /corp/login:', e);
+        console.error('Erreur /corp/verify-login-otp:', e);
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });

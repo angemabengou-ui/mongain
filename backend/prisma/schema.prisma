@@ -341,6 +341,15 @@ model SystemSettings {
   agencyLowLiquidityThreshold  Float @default(15000000.0) // Alerte orange
   agencyCriticalLiquidity      Float @default(5000000.0) // Alerte rouge
 
+  // Restriction réseau du portail personnel (équivalent applicatif d'un VPN pour la jambe
+  // admin-web ↔ backend) — désactivée par défaut : le personnel travaille depuis des réseaux
+  // variables (télétravail, terrain), une liste vide + activée bloquerait tout le monde.
+  // Voir middleware/adminIpAllowlist.ts pour l'application et les gardes anti-auto-verrouillage
+  // (l'approbation Maker/Checker refuse d'activer si la liste résultante exclurait l'IP du
+  // Checker qui approuve, ou si elle est vide).
+  adminIpAllowlistEnabled Boolean  @default(false)
+  adminIpAllowlist        String[] @default([])
+
   updatedAt DateTime @updatedAt
 }
 
@@ -398,9 +407,13 @@ model TontineGroup {
   contribution   Float
   frequency      String    @default("MONTHLY") // WEEKLY, MONTHLY
   startDate      DateTime  @default(now())
-  status         String    @default("ACTIVE") // ACTIVE, COMPLETED, CANCELLED
+  status         String    @default("ACTIVE") // ACTIVE, PENDING_RENEWAL, COMPLETED, CANCELLED
   currentCycle   Int       @default(1)
   lastPayoutDate DateTime? // Date du dernier paiement, pour rattrapage CRON si crash
+  // Sondage de relance en fin de boucle (status PENDING_RENEWAL) : chaque participant vote
+  // via TontineParticipant.renewalVote avant cette date. Passé ce délai (ou dès que tout le
+  // monde a répondu), resolveRenewalPoll (tontineService.ts) tranche — voir son commentaire.
+  renewalDeadline DateTime?
   // Mise en pause admin (litige, enquête) : le CRON saute executeTontineCycle tant que
   // isPaused=true, sans altérer currentCycle/lastPayoutDate — la tontine reprend exactement
   // où elle en était à la levée de la pause.
@@ -425,7 +438,7 @@ model TontineParticipant {
   user           User         @relation(fields: [userId], references: [id])
   tontineGroupId String
   group          TontineGroup @relation(fields: [tontineGroupId], references: [id])
-  status         String       @default("ACTIVE") // ACTIVE, PAUSED
+  status         String       @default("ACTIVE") // ACTIVE, PAUSED, LEFT
   joinedAt       DateTime     @default(now())
   payoutOrder    Int          @default(0)
   // Empêche un participant (typiquement le créateur, seul habilité à réordonner via
@@ -434,6 +447,10 @@ model TontineParticipant {
   // executeTontineCycle : un participant déjà payé n'est plus jamais sélectionné comme
   // bénéficiaire, quelle que soit la valeur de payoutOrder au moment du cycle.
   hasReceivedPayout Boolean    @default(false)
+  // Réponse au sondage de relance (group.status PENDING_RENEWAL) : null (pas encore
+  // répondu), 'YES', 'NO'. Remis à null par resolveRenewalPoll au démarrage de chaque
+  // nouvelle boucle — un vote ne vaut que pour la boucle qui vient de se terminer.
+  renewalVote       String?
 
   contributions TontineContribution[]
 }
@@ -467,8 +484,12 @@ model TontineContribution {
   participantId String
   participant   TontineParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
   transactionId String?
+  // Montant CUMULÉ versé pour ce cycle — pas un dépôt figé unique. Un participant peut
+  // cotiser en plusieurs fois, d'un montant libre à chaque fois (voir tontineService.ts,
+  // collectParticipantContribution) ; `amount` grandit à chaque dépôt jusqu'à atteindre
+  // TontineGroup.contribution.
   amount        Float
-  status        String             @default("PAID") // PAID, FAILED
+  status        String             @default("PAID") // PAID (amount >= contribution), PARTIAL (0 < amount < contribution), FAILED (legacy — cycles antérieurs au dépôt libre, 0 collecté)
   createdAt     DateTime           @default(now())
 
   @@unique([cycleId, participantId])
@@ -636,6 +657,22 @@ model Staff {
   refundRequestsMade       RefundRequest[]    @relation("RefundRequester")
   refundRequestsApproved   RefundRequest[]    @relation("RefundApprover")
   merchantPayoutsProcessed MerchantPayoutRequest[] @relation("MerchantPayoutProcessor")
+  verificationCode         StaffVerificationCode?
+}
+
+// 2FA personnel (portail admin-web) : le compte client a déjà PIN + OTP SMS (deux facteurs),
+// mais /api/corp/login se limitait à un mot de passe — un écart pour un portail qui donne
+// accès aux documents KYC, à l'émission de monnaie, etc. Modèle séparé de VerificationCode
+// (client) plutôt que réutilisé : ce dernier est indexé par téléphone (identifiant client),
+// alors que le personnel s'identifie par email et n'a pas toujours de téléphone renseigné
+// (Staff.phone est optionnel) — un seul but ici (LOGIN), pas besoin du champ `purpose`.
+model StaffVerificationCode {
+  id        String   @id @default(uuid())
+  staffId   String   @unique
+  staff     Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 }
 
 // ==========================================

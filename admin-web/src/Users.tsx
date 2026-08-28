@@ -10,7 +10,7 @@ const KYC_STATUS_LABELS: Record<string, string> = {
     REJECTED: 'Rejeté',
 };
 
-export default function UsersManagement({ token, staffRole, lockedRole, initialSelectedUserId }: { token: string; staffRole?: string; lockedRole?: 'AGENT'; initialSelectedUserId?: string }) {
+export default function UsersManagement({ token, staffRole, hasPerm, lockedRole, initialSelectedUserId }: { token: string; staffRole?: string; hasPerm: (perms: string[]) => boolean; lockedRole?: 'AGENT'; initialSelectedUserId?: string }) {
     const [users, setUsers] = useState<any[]>([]);
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(false);
@@ -121,7 +121,7 @@ export default function UsersManagement({ token, staffRole, lockedRole, initialS
     };
 
     if (selectedUserId) {
-        return <Customer360 token={token} userId={selectedUserId} onBack={() => setSelectedUserId(null)} staffRole={staffRole} />;
+        return <Customer360 token={token} userId={selectedUserId} onBack={() => setSelectedUserId(null)} staffRole={staffRole} hasPerm={hasPerm} />;
     }
 
     const handleCreatePro = async (e: React.FormEvent) => {

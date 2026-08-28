@@ -817,7 +817,14 @@ router.get('/logs', authMiddleware, async (req: AuthRequest, res) => {
 router.get('/ledger', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!admin || !hasPermission(admin, 'perm_system_settings_view')) return res.status(403).json({ error: 'Accès refusé.' });
+        // Régression : cette route vérifiait `perm_system_settings_view` — sans rapport avec
+        // le Grand Livre — au lieu de `perm_transaction_view`, la permission sur laquelle
+        // App.tsx/Ledger.tsx gatent réellement l'onglet côté UI. Seuls SUPER_ADMIN/ADMIN
+        // possèdent la permission settings par défaut, donc BRANCH_MANAGER/TELLER/RISK/
+        // SUPPORT_MAKER (qui ont bien perm_transaction_view) recevaient un 403 malgré un
+        // accès légitime — et comme Dashboard.tsx enchaîne cet appel dans le MÊME try/catch
+        // que /admin/stats, l'échec faisait disparaître tout le tableau de bord, KPIs inclus.
+        if (!admin || !hasPermission(admin, 'perm_transaction_view')) return res.status(403).json({ error: 'Accès refusé.' });
 
         // Les courbes 7j/14j et le Grand Livre (admin-web Dashboard.tsx, MacroStats.tsx,
         // Ledger.tsx) agrègent/filtrent TOUT côté client sur ce même jeu de résultats. À
@@ -892,7 +899,11 @@ router.delete('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
 router.get('/users/kyc', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!admin || !hasPermission(admin, 'perm_customer_kyc_validate')) return res.status(403).json({ error: 'Accès refusé.' });
+        // Consulter la file (et les photos) est une action distincte d'approuver/rejeter —
+        // `perm_customer_kyc_view` couvre la première (TELLER/RISK/SUPPORT_MAKER, ex. vérifier
+        // une pièce au guichet), `perm_customer_kyc_validate` reste seule à autoriser le PUT
+        // ci-dessous. Vérifier uniquement `validate` ici bloquait tous les rôles voir-seul.
+        if (!admin || !(hasPermission(admin, 'perm_customer_kyc_view') || hasPermission(admin, 'perm_customer_kyc_validate'))) return res.status(403).json({ error: 'Accès refusé.' });
 
         const filter = req.query.status as string || 'PENDING';
         const pendingList = await (prisma.user as any).findMany({
@@ -1096,7 +1107,10 @@ router.get('/teller/lookup/:phone', authMiddleware, async (req: AuthRequest, res
 router.get('/staff', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!admin || !hasPermission(admin, 'perm_system_settings_view')) {
+        // Régression : vérifiait `perm_system_settings_view` (sans rapport) au lieu de
+        // `perm_staff_view` — BRANCH_MANAGER, seul rôle non-admin qui l'a par défaut, voyait
+        // l'onglet Personnel (App.tsx, perm_staff_view) mais chaque appel y échouait en 403.
+        if (!admin || !hasPermission(admin, 'perm_staff_view')) {
             return res.status(403).json({ error: 'Accès refusé.' });
         }
 
@@ -1151,7 +1165,11 @@ router.get('/staff', authMiddleware, async (req: AuthRequest, res) => {
 router.post('/staff', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!admin || !hasPermission(admin, 'perm_audit_log_view')) {
+        // Régression : vérifiait `perm_audit_log_view` (consultation de logs, sans rapport) au
+        // lieu de `perm_staff_manage` — la permission dédiée dans RBAC.ts, jamais accordée par
+        // défaut à un rôle non-admin, ce qui restreint correctement cette action à SUPER_ADMIN/
+        // ADMIN (ou une surcharge explicite) plutôt qu'à quiconque a déjà consulté les audit logs.
+        if (!admin || !hasPermission(admin, 'perm_staff_manage')) {
             return res.status(403).json({ error: 'Seule la direction peut habiliter du personnel.' });
         }
 
@@ -1210,7 +1228,7 @@ router.post('/staff', authMiddleware, async (req: AuthRequest, res) => {
 router.put('/staff/:id/approve', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!admin || !hasPermission(admin, 'perm_audit_log_view')) {
+        if (!admin || !hasPermission(admin, 'perm_staff_manage')) {
             return res.status(403).json({ error: 'Autorisation Maker-Checker requise pour valider un recrutement.' });
         }
 
@@ -1246,7 +1264,7 @@ const STAFF_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER
 router.put('/staff/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!admin || !hasPermission(admin, 'perm_audit_log_view')) {
+        if (!admin || !hasPermission(admin, 'perm_staff_manage')) {
             return res.status(403).json({ error: 'Droit institutionnel requis.' });
         }
 
@@ -1309,7 +1327,10 @@ router.put('/staff/:id', authMiddleware, async (req: AuthRequest, res) => {
 router.get('/customers', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) {
+        // Régression : vérifiait `perm_ticket_resolve` (sans rapport avec la liste clients) au
+        // lieu de `perm_customer_view` — la permission sur laquelle App.tsx/Users.tsx gatent
+        // réellement l'onglet côté UI (TELLER et RISK l'ont par défaut mais pas ticket_resolve).
+        if (!staff || !hasPermission(staff, 'perm_customer_view')) {
             return res.status(403).json({ error: 'Accès refusé.' });
         }
 
@@ -1497,17 +1518,13 @@ router.get('/users/:id/limit-requests', authMiddleware, async (req: AuthRequest,
 // PROMPT 09 ? SUPPORT, LITIGES, FRAUD & REFUNDS
 // ============================================================
 
-// Roles helpers
-const SUPPORT_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER'];
-const FRAUD_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'];
-const FINANCE_ROLES = ['SUPER_ADMIN', 'RISK'];
-
-
 // -- Create Ticket -----------------------------------------------
 router.post('/reclamations', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) return res.status(403).json({ error: 'Accès refusé.' });
+        // Régression : vérifiait `perm_ticket_resolve` (clôturer un ticket) au lieu de
+        // `perm_ticket_create` — la permission dédiée à cette action dans RBAC.ts.
+        if (!staff || !hasPermission(staff, 'perm_ticket_create')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const { title, description, category, priority, userId, transactionId, branchId, tellerId } = req.body;
         if (!title || !description || !userId) return res.status(400).json({ error: 'title, description et userId sont obligatoires.' });
@@ -1640,7 +1657,9 @@ router.patch('/fraud-cases/:id', authMiddleware, async (req: AuthRequest, res) =
 router.post('/refund-requests', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) return res.status(403).json({ error: 'Accès non autorisé.' });
+        // Régression : vérifiait `perm_ticket_resolve` (sans rapport) au lieu de
+        // `perm_refund_request`, la permission Maker dédiée pour cette action (voir RBAC.ts).
+        if (!staff || !hasPermission(staff, 'perm_refund_request')) return res.status(403).json({ error: 'Accès non autorisé.' });
 
         const { transactionId, userId, amount, refundType, reason, description, reclamationId } = req.body;
         if (!transactionId || !userId || !amount || !reason) return res.status(400).json({ error: 'transactionId, userId, amount, reason sont obligatoires.' });
@@ -1666,7 +1685,9 @@ router.post('/refund-requests', authMiddleware, async (req: AuthRequest, res) =>
 router.get('/refund-requests', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) return res.status(403).json({ error: 'Accès non autorisé.' });
+        // Régression : vérifiait `perm_ticket_resolve` (sans rapport) au lieu d'autoriser à la
+        // fois le Maker (crée la demande) et le Checker (l'approuve) à consulter la liste.
+        if (!staff || !(hasPermission(staff, 'perm_refund_request') || hasPermission(staff, 'perm_refund_approve'))) return res.status(403).json({ error: 'Accès non autorisé.' });
 
         const { status, page = '1', limit = '50' } = req.query;
         const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
@@ -1794,10 +1815,6 @@ router.post('/refund-requests/:id/execute', authMiddleware, async (req: AuthRequ
 // PROMPT 13 ? CUSTOMER 360 : ROUTES ADMIN ENRICHIES
 // ============================================================
 
-const CRM_FULL_ACCESS = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER'];
-const CRM_RISK_ROLES = ['SUPER_ADMIN', 'RISK'];
-const CRM_BROAD_ACCESS = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER', 'BRANCH_MANAGER', 'TELLER'];
-
 // -- GET /api/admin/users/:id/360 ----------------------------
 router.get('/users/:id/360', authMiddleware, async (req: AuthRequest, res) => {
     try {
@@ -1805,7 +1822,17 @@ router.get('/users/:id/360', authMiddleware, async (req: AuthRequest, res) => {
         if (!staff || !hasPermission(staff, 'perm_customer_view')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const customerId = req.params.id as string;
-        const isSensitive = hasPermission(staff, 'perm_customer_360_basic');
+        // Régression : un unique flag `isSensitive` sur `perm_customer_360_basic` gatait wallet,
+        // photos KYC ET notes de risque/gel à la fois — or `perm_customer_360_basic` est
+        // accordée par défaut à TOUS les rôles non-admin (TELLER, BRANCH_MANAGER inclus), ce
+        // qui rendait ce contrôle inopérant : Customer360.tsx masque bien wallet/KYC/motif de
+        // gel côté UI pour TELLER/BRANCH_MANAGER, mais le backend les envoyait quand même dans
+        // la réponse JSON brute (visible depuis l'onglet réseau du navigateur). Chaque
+        // catégorie utilise désormais sa propre permission dédiée (RBAC.ts).
+        const canViewWallet = hasPermission(staff, 'perm_customer_wallet_view');
+        const canViewKyc = hasPermission(staff, 'perm_customer_kyc_view');
+        const canViewRisk = hasPermission(staff, 'perm_customer_flag');
+        const canViewAnySensitive = canViewWallet || canViewKyc || canViewRisk;
 
         const user = await prisma.user.findUnique({
             where: { id: customerId },
@@ -1815,7 +1842,7 @@ router.get('/users/:id/360', authMiddleware, async (req: AuthRequest, res) => {
                 phone: true,
                 username: true,
                 accountNumber: true,
-                email: isSensitive ? true : false,
+                email: canViewAnySensitive ? true : false,
                 role: true,
                 isActive: true,
                 accountStatus: true,
@@ -1823,28 +1850,28 @@ router.get('/users/:id/360', authMiddleware, async (req: AuthRequest, res) => {
                 updatedAt: true,
                 kycLevel: true,
                 kycStatus: true,
-                idCardFront: isSensitive ? true : false,
-                idCardBack: isSensitive ? true : false,
-                selfie: isSensitive ? true : false,
+                idCardFront: canViewKyc ? true : false,
+                idCardBack: canViewKyc ? true : false,
+                selfie: canViewKyc ? true : false,
                 failedPinAttempts: true,
                 lockedUntil: true,
                 jwtVersion: true,
                 // Motif de gel et description des alertes de risque : notes de conformité en
                 // clair, jamais destinées à un rôle guichet (TELLER) ou d'agence
                 // (BRANCH_MANAGER) — désormais masquées comme le reste des champs sensibles.
-                freezeReason: isSensitive ? true : false,
-                frozenUntil: isSensitive ? true : false,
-                customDailyLimit: isSensitive ? true : false,
-                customMonthlyLimit: isSensitive ? true : false,
-                customPerTxLimit: isSensitive ? true : false,
-                customLimitExpiresAt: isSensitive ? true : false,
-                wallet: isSensitive ? {
+                freezeReason: canViewRisk ? true : false,
+                frozenUntil: canViewRisk ? true : false,
+                customDailyLimit: canViewWallet ? true : false,
+                customMonthlyLimit: canViewWallet ? true : false,
+                customPerTxLimit: canViewWallet ? true : false,
+                customLimitExpiresAt: canViewWallet ? true : false,
+                wallet: canViewWallet ? {
                     select: { id: true, balance: true, currency: true, dailySpent: true, monthlySpent: true, createdAt: true }
                 } : false,
                 riskFlags: {
                     orderBy: { createdAt: 'desc' },
                     take: 5,
-                    select: isSensitive
+                    select: canViewRisk
                         ? { id: true, type: true, status: true, description: true, createdAt: true, author: { select: { name: true } } }
                         : { id: true, type: true, status: true, createdAt: true },
                 },
@@ -1860,7 +1887,7 @@ router.get('/users/:id/360', authMiddleware, async (req: AuthRequest, res) => {
 
         // Recent Transactions (last 10)
         let recentTx: any[] = [];
-        if (isSensitive && user.wallet) {
+        if (canViewWallet && user.wallet) {
             recentTx = await prisma.transaction.findMany({
                 where: { OR: [{ senderWalletId: (user as any).wallet.id }, { receiverWalletId: (user as any).wallet.id }] },
                 orderBy: { createdAt: 'desc' },
@@ -1980,7 +2007,10 @@ router.post('/users/:id/unblock', authMiddleware, async (req: AuthRequest, res) 
 router.post('/users/:id/flag', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
+        // Régression : vérifiait `perm_customer_360_basic` (accordée par défaut à tous les
+        // rôles non-admin, donc inopérante) au lieu de `perm_customer_flag`, la permission
+        // dédiée dans RBAC.ts (que TELLER, notamment, n'a pas par défaut).
+        if (!staff || !hasPermission(staff, 'perm_customer_flag')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const { type, description } = req.body;
         const validTypes = ['SUSPICIOUS_ACTIVITY', 'AML_ALERT', 'FRAUD_REPORT', 'IDENTITY_THEFT', 'ANTI_FRACTIONING', 'OTHER'];
@@ -2036,8 +2066,14 @@ router.get('/users/:id/transactions', authMiddleware, async (req: AuthRequest, r
             prisma.transaction.findMany({
                 where, orderBy: { createdAt: 'desc' }, skip, take: parseInt(limit as string),
                 include: {
-                    senderWallet: { include: { user: { select: { name: true, phone: true } } } },
-                    receiverWallet: { include: { user: { select: { name: true, phone: true } } } }
+                    // `id` est indispensable ici : Customer360.tsx compare
+                    // `t.senderWallet?.user?.id === userId` pour déterminer le sens de la
+                    // transaction (entrant/sortant) et qui afficher comme contrepartie. Sans
+                    // lui, cette comparaison est toujours `undefined === userId` (faux), donc
+                    // TOUTE transaction sortante s'affichait comme entrante, avec le client
+                    // lui-même affiché comme contrepartie au lieu du vrai destinataire.
+                    senderWallet: { include: { user: { select: { id: true, name: true, phone: true } } } },
+                    receiverWallet: { include: { user: { select: { id: true, name: true, phone: true } } } }
                 }
             }),
             prisma.transaction.count({ where })
@@ -2259,8 +2295,8 @@ router.get('/users/:id/reclamations', authMiddleware, async (req: AuthRequest, r
             include: {
                 // Notes internes (support/conformité) masquées aux rôles guichet/agence
                 // (TELLER, BRANCH_MANAGER) — même filtre que la route client (reclamation.ts),
-                // absent ici jusqu'à présent alors que ce endpoint est accessible à
-                // CRM_BROAD_ACCESS, plus large que CRM_FULL_ACCESS.
+                // absent ici jusqu'à présent alors que cette route (perm_customer_view) reste
+                // accessible à des rôles bien plus larges que ceux censés voir ces notes.
                 notes: {
                     where: isSensitive ? undefined : { isInternal: false },
                     orderBy: { createdAt: 'asc' },
@@ -2677,7 +2713,10 @@ router.patch('/users/:id/reclamation/:recId/status', authMiddleware, async (req:
 router.get('/reclamations/stats', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) return res.status(403).json({ error: 'Accès non autorisé.' });
+        // Régression : n'autorisait que `perm_ticket_resolve` — TELLER et RISK, qui n'ont que
+        // `perm_ticket_view` (lecture seule) par défaut, voyaient l'onglet Support (gaté sur
+        // perm_ticket_view côté App.tsx) mais chaque appel y échouait en 403.
+        if (!staff || !(hasPermission(staff, 'perm_ticket_view') || hasPermission(staff, 'perm_ticket_resolve'))) return res.status(403).json({ error: 'Accès non autorisé.' });
 
         const [
             open, inProgress, waitingCustomer, slaBreached, critical, refundPending, fraudCases
@@ -2700,7 +2739,7 @@ router.get('/reclamations/stats', authMiddleware, async (req: AuthRequest, res) 
 router.get('/reclamations', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) return res.status(403).json({ error: 'Accès non autorisé.' });
+        if (!staff || !(hasPermission(staff, 'perm_ticket_view') || hasPermission(staff, 'perm_ticket_resolve'))) return res.status(403).json({ error: 'Accès non autorisé.' });
 
         const { status, priority, category, query, slaBreached, limit = '100' } = req.query;
         const where: any = {};
@@ -2746,7 +2785,7 @@ router.get('/reclamations', authMiddleware, async (req: AuthRequest, res) => {
 router.get('/reclamations/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) return res.status(403).json({ error: 'Accès non autorisé.' });
+        if (!staff || !(hasPermission(staff, 'perm_ticket_view') || hasPermission(staff, 'perm_ticket_resolve'))) return res.status(403).json({ error: 'Accès non autorisé.' });
 
         const ticket = await prisma.reclamation.findUnique({
             where: { id: String(req.params.id) as string },
@@ -2784,7 +2823,9 @@ router.get('/reclamations/:id', authMiddleware, async (req: AuthRequest, res) =>
 router.post('/reclamations/:id/notes', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) return res.status(403).json({ error: 'Accès non autorisé.' });
+        // `perm_support_note` est la permission dédiée à cette action (RBAC.ts) — tenue par
+        // BRANCH_MANAGER/TELLER/SUPPORT_MAKER, qui n'ont pas forcément `perm_ticket_resolve`.
+        if (!staff || !(hasPermission(staff, 'perm_support_note') || hasPermission(staff, 'perm_ticket_resolve'))) return res.status(403).json({ error: 'Accès non autorisé.' });
 
         const { content, isInternal } = req.body;
         if (!content) return res.status(400).json({ error: 'Note vide interdite.' });

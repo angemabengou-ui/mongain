@@ -219,6 +219,22 @@ describe('Admin CRM360 Routes', () => {
             expect(res.status).toBe(200);
             expect(res.body.total).toBe(1);
         });
+
+        it("devrait inclure l'id de l'utilisateur du sender/receiverWallet (Customer360.tsx en a besoin pour déterminer le sens entrant/sortant de chaque transaction)", async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1', wallet: { id: 'w1' } });
+            (prisma.transaction.findMany as jest.Mock).mockResolvedValue([]);
+            (prisma.transaction.count as jest.Mock).mockResolvedValue(0);
+
+            await request(app).get('/admin/users/u1/transactions');
+
+            expect(prisma.transaction.findMany).toHaveBeenCalledWith(expect.objectContaining({
+                include: expect.objectContaining({
+                    senderWallet: expect.objectContaining({ include: expect.objectContaining({ user: expect.objectContaining({ select: expect.objectContaining({ id: true }) }) }) }),
+                    receiverWallet: expect.objectContaining({ include: expect.objectContaining({ user: expect.objectContaining({ select: expect.objectContaining({ id: true }) }) }) }),
+                }),
+            }));
+        });
     });
 
     describe('GET /admin/users/:id/cash-ops', () => {

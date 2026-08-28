@@ -68,20 +68,38 @@ router.post('/sessions/open', requireBranchId, async (req: AuthRequest, res) => 
         const branchId = (req as any).branchId;
         const initialCash = parseFloat(req.body.initialCash) || 0;
 
-        // Check rule: 1 session active max
-        const active = await prisma.cashSession.findFirst({
-            where: { tellerId: req.userId, status: 'OPEN' }
-        });
-        if (active) return res.status(400).json({ error: 'Vous avez déjà une session de caisse ouverte.' });
+        // Check-then-create sans verrou : deux ouvertures concurrentes pour le même teller
+        // (double-tap, retry réseau) passaient toutes deux le `findFirst` avant qu'aucune
+        // n'ait créé sa ligne, produisant deux CashSession OPEN simultanées. Pas de contrainte
+        // unique possible côté schéma (un teller a légitimement plusieurs sessions CLOSED dans
+        // le temps, seul un OPEN à la fois est interdit) — verrou advisory Postgres scopé à la
+        // transaction (auto-libéré au commit/rollback) pour sérialiser par teller à la place.
+        // Sans ce verrou, CashOperationService.executeCashIn/executeCashOut et POST
+        // /sessions/close (findFirst non ordonné) pouvaient chacun sélectionner une session
+        // OPEN différente, fragmentant le suivi de caisse et laissant l'une des deux bloquée
+        // OPEN indéfiniment (jamais sélectionnée à la clôture).
+        let session;
+        try {
+            session = await prisma.$transaction(async (tx) => {
+                await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${req.userId!}))`;
+                const active = await tx.cashSession.findFirst({
+                    where: { tellerId: req.userId, status: 'OPEN' }
+                });
+                if (active) throw new Error('DUPLICATE_SESSION');
 
-        const session = await prisma.cashSession.create({
-            data: {
-                branchId,
-                tellerId: req.userId!,
-                initialCash,
-                status: 'OPEN'
-            }
-        });
+                return tx.cashSession.create({
+                    data: {
+                        branchId,
+                        tellerId: req.userId!,
+                        initialCash,
+                        status: 'OPEN'
+                    }
+                });
+            });
+        } catch (e: any) {
+            if (e.message === 'DUPLICATE_SESSION') return res.status(400).json({ error: 'Vous avez déjà une session de caisse ouverte.' });
+            throw e;
+        }
 
         await prisma.auditLog.create({
             data: { adminId: req.userId!, action: 'OPEN_SESSION', details: `Ouverture caisse agence. Initial: ${initialCash}` }
@@ -113,8 +131,13 @@ router.post('/sessions/close', async (req: AuthRequest, res) => {
         const discrepancy = finalCashDeclared - expectedCash;
         const reason = req.body.reason || (discrepancy !== 0 ? 'ECART NON JUSTIFIÉ' : null);
 
-        const closed = await prisma.cashSession.update({
-            where: { id: active.id },
+        // Réclamation atomique avant toute écriture dérivée : un double-clic sur "Clôturer"
+        // (le bouton n'a pas de garde `disabled` côté TellerTerminal.tsx) lançait deux requêtes
+        // qui trouvaient toutes deux la même session encore OPEN via le `findFirst` ci-dessus,
+        // et créaient chacune leur propre ReconciliationCase pour le MÊME écart — même pattern
+        // que la course sur /sessions/open (voir commentaire ci-dessus).
+        const claim = await prisma.cashSession.updateMany({
+            where: { id: active.id, status: 'OPEN' },
             data: {
                 status: 'CLOSED',
                 closedAt: new Date(),
@@ -123,6 +146,8 @@ router.post('/sessions/close', async (req: AuthRequest, res) => {
                 discrepancyReason: discrepancy !== 0 ? reason : null
             }
         });
+        if (claim.count === 0) return res.status(400).json({ error: 'Cette session vient d\'être clôturée.' });
+        const closed = await prisma.cashSession.findUnique({ where: { id: active.id } });
 
         // Un écart déclaré ici était enregistré sur la session (discrepancy/discrepancyReason)
         // mais aucun ReconciliationCase n'était JAMAIS créé nulle part dans le code — la page
@@ -176,18 +201,32 @@ router.get('/sessions', requireBranchId, async (req: AuthRequest, res) => {
 router.get('/info', requireBranchId, async (req: AuthRequest, res) => {
     try {
         const branchId = (req as any).branchId;
-        const branch = await prisma.branch.findUnique({
-            where: { id: branchId },
-            include: {
-                wallet: true,
-                staff: { select: { id: true, name: true, role: true } },
-                targetTreasuryRequests: { orderBy: { createdAt: 'desc' }, take: 20 },
-                sessions: { orderBy: { openedAt: 'desc' }, take: 10, include: { teller: { select: { id: true, name: true } } } }
-            }
-        });
+        const [branch, myActiveSession] = await Promise.all([
+            prisma.branch.findUnique({
+                where: { id: branchId },
+                include: {
+                    wallet: true,
+                    staff: { select: { id: true, name: true, role: true } },
+                    targetTreasuryRequests: { orderBy: { createdAt: 'desc' }, take: 20 },
+                    sessions: { orderBy: { openedAt: 'desc' }, take: 10, include: { teller: { select: { id: true, name: true } } } }
+                }
+            }),
+            // Recherche dédiée, indépendante du `take: 10` ci-dessus : BranchDashboard.tsx
+            // dérivait jusqu'ici "ma session active" en cherchant dans ces 10 dernières
+            // sessions DE TOUTE L'AGENCE — dans une agence à forte activité (10+ ouvertures
+            // par d'autres caissiers depuis la mienne), ma propre session, pourtant bien
+            // ouverte, sortait de cette fenêtre. L'écran affichait alors "guichet fermé" à
+            // tort, et une tentative de réouverture échouait avec un message déroutant
+            // ("vous avez déjà une session ouverte") pour un caissier qui voyait, lui, un
+            // formulaire d'OUVERTURE.
+            prisma.cashSession.findFirst({
+                where: { tellerId: req.userId, status: 'OPEN' },
+                include: { teller: { select: { id: true, name: true } } }
+            })
+        ]);
         if (!branch) return res.status(404).json({ error: 'Agence introuvable.' });
 
-        res.json(branch);
+        res.json({ ...branch, myActiveSession });
     } catch (e: any) { res.status(500).json({ error: friendlyErrorMessage(e) }); }
 });
 

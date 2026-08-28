@@ -63,7 +63,7 @@ describe('AgencyCenter', () => {
     });
 
     it('masque le bouton "Nouvelle Agence" pour un rôle non-admin', async () => {
-        render(<AgencyCenter token="tok" hasPerm={() => true} />);
+        render(<AgencyCenter token="tok" hasPerm={() => false} />);
         await screen.findByText('Agence Centrale');
         expect(screen.queryByRole('button', { name: /Nouvelle Agence/i })).not.toBeInTheDocument();
     });

@@ -69,4 +69,29 @@ describe('GET /admin/search (recherche globale)', () => {
         expect(res.body.merchants).toEqual([{ id: 'm1', name: 'Boutique Ndong', phone: '066' }]);
         expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 5 }));
     });
+
+    it("ne renvoie ni caisses, ni tontines, ni marchands pour un TELLER (dépourvu de perm_vault_view/perm_tontine_view/perm_merchant_view) même si des résultats existent", async () => {
+        (prisma.staff.findUnique as jest.Mock).mockResolvedValue(TELLER);
+        (prisma.user.findMany as jest.Mock).mockImplementation(async (args: any) => {
+            if (args.where?.role === 'MERCHANT') return [{ id: 'm1', name: 'Boutique Ndong', phone: '066' }];
+            return [{ id: 'u1', name: 'Jean Ndong', phone: '077', role: 'USER' }];
+        });
+        (prisma.vault.findMany as jest.Mock).mockResolvedValue([{ id: 'v1', name: 'Caisse Ndong' }]);
+        (prisma.tontineGroup.findMany as jest.Mock).mockResolvedValue([{ id: 'g1', name: 'Tontine Ndong' }]);
+
+        const res = await request(app).get('/admin/search').query({ q: 'ndong' });
+
+        expect(res.status).toBe(200);
+        // Un TELLER a perm_customer_360_basic (passe le contrôle d'accès global), donc "users"
+        // reste peuplé — mais aucune des 3 autres catégories, dont il n'a la permission de
+        // destination pour aucune, sans quoi il obtiendrait un résultat de recherche menant à
+        // un onglet vide côté interface (App.tsx bloque Vaults/Tontines/Merchants sur ces mêmes
+        // permissions).
+        expect(res.body.users).toHaveLength(1);
+        expect(res.body.vaults).toEqual([]);
+        expect(res.body.tontines).toEqual([]);
+        expect(res.body.merchants).toEqual([]);
+        expect(prisma.vault.findMany).not.toHaveBeenCalled();
+        expect(prisma.tontineGroup.findMany).not.toHaveBeenCalled();
+    });
 });

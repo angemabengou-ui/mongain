@@ -46,6 +46,7 @@ const PERM_LABELS: Record<string, string> = {
     perm_treasury_view: 'Voir la masse monétaire globale',
     perm_treasury_mint: 'Émettre de la monnaie (Mint)',
     perm_treasury_allocate: 'Allouer des fonds à une agence',
+    perm_treasury_approve: 'Approuver une demande de trésorerie (Checker)',
     perm_system_settings_view: 'Voir les paramètres système',
     perm_system_settings_edit: 'Modifier les paramètres (Maker)',
     perm_system_settings_approve: 'Approuver un paramètre (Checker)',
@@ -64,7 +65,7 @@ const PERM_GROUPS = [
     { label: 'Agences', perms: ['perm_branch_view', 'perm_branch_manage'] },
     { label: 'Caisse Commune & Tontine', perms: ['perm_vault_view', 'perm_vault_manage', 'perm_tontine_view', 'perm_tontine_manage'] },
     { label: 'Marchands', perms: ['perm_merchant_view', 'perm_merchant_manage'] },
-    { label: 'Trésorerie & Système', perms: ['perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_allocate', 'perm_system_settings_view', 'perm_system_settings_edit', 'perm_system_settings_approve'] },
+    { label: 'Trésorerie & Système', perms: ['perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_allocate', 'perm_treasury_approve', 'perm_system_settings_view', 'perm_system_settings_edit', 'perm_system_settings_approve'] },
     { label: 'Personnel', perms: ['perm_staff_view', 'perm_staff_manage', 'perm_staff_permissions_edit'] },
     { label: 'Rapports & Audit', perms: ['perm_analytics_view', 'perm_audit_log_view'] },
 ];
@@ -356,7 +357,13 @@ export default function StaffAccessRights({ token }: { token: string }) {
                                 </p>
 
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                                    {PERM_GROUPS.map(group => (
+                                    {/* Source de vérité = le catalogue renvoyé par le backend (permData.groups), pas la
+                                        copie codée en dur PERM_GROUPS ci-dessus : celle-ci avait dérivé et omettait
+                                        perm_treasury_approve, rendant ce droit impossible à consulter ou modifier depuis
+                                        cette matrice pour n'importe quel employé, alors que le catalogue RBAC.ts (source
+                                        réelle) le porte bien. PERM_GROUPS ne reste qu'un repli si le backend n'en renvoie
+                                        pas (compat descendante). */}
+                                    {(permData.groups && permData.groups.length > 0 ? permData.groups : PERM_GROUPS).map((group: { label: string; perms: string[] }) => (
                                         <div key={group.label}>
                                             <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
                                                 {group.label}

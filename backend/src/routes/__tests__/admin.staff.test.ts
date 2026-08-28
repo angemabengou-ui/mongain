@@ -30,7 +30,12 @@ const TELLER = { id: 'test_staff_id', role: 'TELLER' };
 
 describe('Admin Staff Management Routes', () => {
     beforeEach(() => {
-        jest.clearAllMocks();
+        // resetAllMocks (pas clearAllMocks) : plusieurs tests ci-dessous enchaînent des
+        // mockResolvedValueOnce (ex. admin lookup + target staff lookup) — clearAllMocks
+        // n'efface que l'historique d'appels, jamais ces valeurs mises en file, qui fuitaient
+        // donc vers le test suivant dès qu'un test n'en consommait pas exactement autant
+        // qu'il en empilait (voir POST /admin/staff, qui réassigne même le mock entier).
+        jest.resetAllMocks();
     });
 
     describe('GET /admin/staff', () => {
@@ -126,8 +131,13 @@ describe('Admin Staff Management Routes', () => {
         });
 
         it('devrait refuser l\'auto-approbation par le recruteur (non SUPER_ADMIN)', async () => {
+            // RISK n'a pas perm_staff_manage par défaut (RBAC.ts — jamais accordée à un rôle
+            // non-admin) : depuis la correction de ce contrôle, RISK est désormais rejeté avant
+            // même d'atteindre la règle métier d'auto-approbation ci-dessous, qu'il faut donc
+            // tester via une surcharge de permissions explicite plutôt qu'un simple rôle RISK.
+            const RISK_WITH_STAFF_MANAGE = { id: 'test_staff_id', role: 'RISK', permissionsCustomized: true, permissions: ['perm_staff_manage'] };
             (prisma.staff.findUnique as jest.Mock)
-                .mockResolvedValueOnce(RISK)
+                .mockResolvedValueOnce(RISK_WITH_STAFF_MANAGE)
                 .mockResolvedValueOnce({ id: 's1', status: 'PENDING', createdById: 'test_staff_id' });
 
             const res = await request(app).put('/admin/staff/s1/approve');

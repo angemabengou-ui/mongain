@@ -8,6 +8,7 @@ import {
     StyleSheet,
     Switch,
     Text,
+    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
@@ -45,6 +46,10 @@ export default function VaultSettingsScreen() {
     const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
     const [roleUpdateLoading, setRoleUpdateLoading] = useState<string | null>(null);
 
+    const [name, setName] = useState('');
+    const [description, setDescription] = useState('');
+    const [savingInfo, setSavingInfo] = useState(false);
+
     const load = useCallback(async () => {
         if (!id) return;
         try {
@@ -52,6 +57,8 @@ export default function VaultSettingsScreen() {
             if (res.success) {
                 setVault(res.data);
                 setMyRole(res.role);
+                setName(res.data.name);
+                setDescription(res.data.description || '');
             }
         } catch (e: any) {
             Alert.alert('Erreur', e.message || 'Impossible de charger les réglages.');
@@ -63,6 +70,23 @@ export default function VaultSettingsScreen() {
     useFocusEffect(useCallback(() => { load(); }, [load]));
 
     const validatorCount = (vault?.members || []).filter((m: any) => m.isValidator).length;
+
+    const handleSaveInfo = async () => {
+        if (!name.trim()) {
+            Alert.alert('Nom requis', 'Le nom de la caisse ne peut pas être vide.');
+            return;
+        }
+        setSavingInfo(true);
+        try {
+            await apiUpdateVaultSettings(id, { name: name.trim(), description: description.trim() });
+            Alert.alert('Enregistré', 'Les informations de la caisse ont été mises à jour.');
+            load();
+        } catch (e: any) {
+            Alert.alert('Échec', e.message || 'Impossible d\'enregistrer.');
+        } finally {
+            setSavingInfo(false);
+        }
+    };
 
     const adjustThreshold = async (delta: number) => {
         if (!vault) return;
@@ -150,7 +174,32 @@ export default function VaultSettingsScreen() {
             <View style={[styles.content, { backgroundColor: COLORS.background }]}>
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-                    <SectionHeading colors={COLORS} title="Seuil d'approbation" marginTop={0} />
+                    <SectionHeading colors={COLORS} title="Informations générales" marginTop={0} />
+                    <View style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
+                        <Text style={[styles.label, { color: COLORS.textSecondary }]}>Nom de la caisse</Text>
+                        <TextInput
+                            style={[styles.input, { color: COLORS.textPrimary, borderColor: COLORS.border }]}
+                            value={name}
+                            onChangeText={setName}
+                            autoCapitalize="sentences"
+                        />
+                        <Text style={[styles.label, { color: COLORS.textSecondary }]}>Description (optionnel)</Text>
+                        <TextInput
+                            style={[styles.input, { color: COLORS.textPrimary, borderColor: COLORS.border, height: 80, textAlignVertical: 'top', paddingTop: 12, marginBottom: 14 }]}
+                            value={description}
+                            onChangeText={setDescription}
+                            multiline
+                        />
+                        <TouchableOpacity
+                            style={[styles.saveBtn, { backgroundColor: COLORS.primary }, savingInfo && styles.disabled]}
+                            onPress={handleSaveInfo}
+                            disabled={savingInfo}
+                        >
+                            {savingInfo ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveBtnText}>Enregistrer</Text>}
+                        </TouchableOpacity>
+                    </View>
+
+                    <SectionHeading colors={COLORS} title="Seuil d'approbation" />
                     <View style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
                         <Text style={[styles.helper, { color: COLORS.textSecondary, marginBottom: 14 }]}>
                             Combien de commissaires doivent approuver un retrait avant qu'il ne soit exécuté.
@@ -262,6 +311,11 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     card: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 10 },
     helper: { fontSize: 12.5, lineHeight: 18 },
     disabled: { opacity: 0.4 },
+
+    label: { fontSize: 12.5, fontWeight: '600', marginBottom: 8 },
+    input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, height: 48, fontSize: 15, marginBottom: 16 },
+    saveBtn: { paddingVertical: 13, borderRadius: 12, alignItems: 'center' },
+    saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
     stepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24 },
     stepperBtn: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },

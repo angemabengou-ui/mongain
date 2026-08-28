@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as Contacts from 'expo-contacts';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Animated, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import ContactPickerModal from '../components/ui/ContactPickerModal';
 import { useAppTheme } from '../constants/theme';
 import { apiLookupUser } from '../services/api';
+import type { MongainContact } from '../services/contacts';
 
 export default function TransferScreen() {
     const COLORS = useAppTheme();
@@ -18,11 +19,12 @@ export default function TransferScreen() {
 
     // Contact Picker State
     const [contactsModalVisible, setContactsModalVisible] = useState(false);
-    const [contactsList, setContactsList] = useState<Contacts.Contact[]>([]);
-    const [searchContact, setSearchContact] = useState('');
 
     // Animation de la carte destinataire
     const cardAnim = useRef(new Animated.Value(0)).current;
+    // Voir handleContactPicked : évite que l'effet de lookup débounce ci-dessous n'efface le
+    // destinataire qu'on vient tout juste de choisir via le sélecteur de contacts.
+    const skipNextPhoneEffect = useRef(false);
 
     useEffect(() => {
         Animated.timing(cardAnim, {
@@ -34,6 +36,15 @@ export default function TransferScreen() {
 
     // Lookup automatique quand le numéro a au moins 8 chiffres
     useEffect(() => {
+        // handleContactPicked vide le champ manuel PAR PROPRETÉ après avoir choisi un contact
+        // (déjà confirmé côté serveur) — sans ce garde-fou, ce simple changement de `phone`
+        // relançait cet effet, qui efface `recipient` en tout premier (voir juste plus bas) et
+        // écrasait silencieusement le contact qu'on venait tout juste de sélectionner.
+        if (skipNextPhoneEffect.current) {
+            skipNextPhoneEffect.current = false;
+            return;
+        }
+
         const cleaned = phone.replace(/\s/g, '');
         // Effacé de façon SYNCHRONE dès que le numéro change (pas seulement à l'intérieur du
         // setTimeout ci-dessous) : sinon la carte destinataire ET le bouton "Continuer" restent
@@ -71,24 +82,18 @@ export default function TransferScreen() {
         });
     };
 
-    const handleContactSelect = async () => {
-        const { status } = await Contacts.requestPermissionsAsync();
-        if (status === 'granted') {
-            const { data } = await Contacts.getContactsAsync({
-                fields: [Contacts.Fields.PhoneNumbers],
-                sort: Contacts.SortTypes.FirstName,
-            });
-            setContactsList(data.filter(c => c.phoneNumbers && c.phoneNumbers.length > 0));
-            setContactsModalVisible(true);
-        }
-    };
-
-    const pickContact = (phoneString: string) => {
+    // Le contact choisi est DÉJÀ un compte Mongain confirmé (ContactPickerModal ne montre
+    // que les correspondances côté serveur) — on définit directement le destinataire, sans
+    // repasser par le lookup débounce ci-dessus (qui reste utile pour la saisie manuelle).
+    const handleContactPicked = (contact: MongainContact) => {
         setContactsModalVisible(false);
-        let cPhone = phoneString.replace(/\D/g, ''); // enlever espaces
-        if (cPhone.startsWith('241')) cPhone = cPhone.slice(3);
-        if (cPhone.startsWith('0')) cPhone = cPhone.slice(1);
-        setPhone(cPhone);
+        // Ne pose le garde-fou que si `setPhone('')` va réellement changer `phone` (et donc
+        // relancer l'effet de lookup) — sinon le flag resterait armé sans jamais être consommé,
+        // et sauterait le PROCHAIN vrai changement de numéro par erreur.
+        if (phone !== '') skipNextPhoneEffect.current = true;
+        setPhone('');
+        setLookupError('');
+        setRecipient({ id: contact.id, name: contact.name, phone: contact.phone, role: contact.role });
     };
 
     return (
@@ -115,7 +120,7 @@ export default function TransferScreen() {
                             <Text style={styles.actionCardSub}>Instantané</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={[styles.actionCard, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]} onPress={handleContactSelect}>
+                        <TouchableOpacity style={[styles.actionCard, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]} onPress={() => setContactsModalVisible(true)}>
                             <View style={[styles.actionIconWrap, { backgroundColor: '#8B5CF615' }]}>
                                 <Ionicons name="people" size={28} color="#8B5CF6" />
                             </View>
@@ -199,52 +204,12 @@ export default function TransferScreen() {
 
                 </ScrollView>
 
-                {/* MODAL CONTACTS (Même logique, styles propres) */}
-                <Modal
+                <ContactPickerModal
                     visible={contactsModalVisible}
-                    animationType="slide"
-                    presentationStyle="formSheet"
-                    onRequestClose={() => setContactsModalVisible(false)}
-                >
-                    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
-                        <View style={styles.header}>
-                            <TouchableOpacity onPress={() => setContactsModalVisible(false)} style={styles.backButton}>
-                                <Ionicons name="close" size={28} color={COLORS.textPrimary} />
-                            </TouchableOpacity>
-                            <Text style={[styles.headerTitle, { color: COLORS.textPrimary }]}>Mes Contacts</Text>
-                            <View style={{ width: 44 }} />
-                        </View>
-                        <View style={{ padding: 16 }}>
-                            <TextInput
-                                style={[styles.searchInput, { backgroundColor: COLORS.surface, borderColor: COLORS.border, color: COLORS.textPrimary }]}
-                                placeholder="Rechercher un nom..."
-                                placeholderTextColor={COLORS.textSecondary}
-                                value={searchContact}
-                                onChangeText={setSearchContact}
-                            />
-                        </View>
-                        <FlatList
-                            data={contactsList.filter(c => c.name?.toLowerCase().includes(searchContact.toLowerCase()))}
-                            keyExtractor={(item, index) => (item as any).id || index.toString()}
-                            renderItem={({ item }) => (
-                                <TouchableOpacity
-                                    style={[styles.contactRow, { backgroundColor: COLORS.surface, borderBottomColor: COLORS.border }]}
-                                    onPress={() => item.phoneNumbers && pickContact(item.phoneNumbers[0].number || '')}
-                                >
-                                    <View style={[styles.contactAvatar, { backgroundColor: COLORS.primary + '15' }]}>
-                                        <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.primary }}>
-                                            {(item.name || '?').charAt(0).toUpperCase()}
-                                        </Text>
-                                    </View>
-                                    <View style={{ marginLeft: 12, justifyContent: 'center' }}>
-                                        <Text style={[styles.contactName, { color: COLORS.textPrimary }]}>{item.name}</Text>
-                                        <Text style={styles.contactPhone}>{item.phoneNumbers?.[0]?.number}</Text>
-                                    </View>
-                                </TouchableOpacity>
-                            )}
-                        />
-                    </SafeAreaView>
-                </Modal>
+                    onClose={() => setContactsModalVisible(false)}
+                    onSelect={handleContactPicked}
+                    colors={COLORS}
+                />
 
                 {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
             </KeyboardAvoidingView>
@@ -306,11 +271,4 @@ const styles = StyleSheet.create({
         height: 60, borderRadius: 16, marginTop: 32,
     },
     sendButtonText: { fontSize: 17, fontWeight: '800' },
-
-    // Modal
-    searchInput: { borderRadius: 12, paddingHorizontal: 16, height: 50, borderWidth: 1, fontSize: 16, fontWeight: '600' },
-    contactRow: { flexDirection: 'row', padding: 16, borderBottomWidth: 1 },
-    contactAvatar: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-    contactName: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
-    contactPhone: { fontSize: 14, color: '#94a3b8', fontWeight: '500' }
 });

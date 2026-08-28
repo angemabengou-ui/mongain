@@ -85,7 +85,11 @@ router.get('/requests', authMiddleware, async (req: AuthRequest, res) => {
 
         const requests = await prisma.treasuryRequest.findMany({
             include: {
-                maker: { select: { name: true, role: true } },
+                // `id` sur maker : sans lui, l'admin-web (Treasury.tsx) n'a aucun moyen de
+                // désactiver par avance le bouton Approuver sur sa propre demande (le
+                // serveur bloque déjà l'auto-approbation, mais le bouton restait actif et
+                // échouait au clic plutôt que d'être grisé d'emblée).
+                maker: { select: { id: true, name: true, role: true } },
                 checker: { select: { name: true, role: true } },
                 targetBranch: { select: { name: true, code: true, balance: true } }
             },

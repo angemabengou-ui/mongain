@@ -29,7 +29,8 @@ jest.mock('../../prisma', () => ({
         transaction: { create: jest.fn() },
         auditLog: { create: jest.fn() },
         reconciliationCase: { findMany: jest.fn(), update: jest.fn() },
-        $transaction: jest.fn((callback) => callback(prisma))
+        $transaction: jest.fn((callback) => callback(prisma)),
+        $executeRaw: jest.fn()
     },
 }));
 
@@ -40,7 +41,7 @@ app.use('/treasury', treasuryRoutes);
 const SUPER_ADMIN = { id: 'staff_1', role: 'SUPER_ADMIN', isActive: true, branchId: null };
 const CHECKER = { id: 'staff_1', role: 'COMPLIANCE_CHECKER', isActive: true, branchId: null };
 const RISK = { id: 'staff_1', role: 'RISK', isActive: true, branchId: null };
-const BRANCH_MANAGER = { id: 'staff_1', role: 'BRANCH_MANAGER', isActive: true, branchId: 'branch_own' };
+const BRANCH_MANAGER = { id: 'staff_1', role: 'BRANCH_MANAGER', isActive: true, branchId: 'branch_own', permissionsCustomized: true, permissions: ['perm_treasury_allocate'] };
 
 // Depuis la séparation Trésorerie Centrale / Siège : la Réserve n'est plus une Branch,
 // getCentralTreasury() la trouve via prisma.centralTreasury.findFirst().
@@ -603,7 +604,7 @@ describe('Treasury Routes', () => {
     // ==========================================
     describe('GET /treasury/agencies-liquidity', () => {
         it('devrait retourner 403 si le rôle est insuffisant', async () => {
-            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(CHECKER);
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue({ id: 'staff_1', role: 'INVALID_ROLE' });
 
             const res = await request(app).get('/treasury/agencies-liquidity');
 
@@ -641,7 +642,7 @@ describe('Treasury Routes', () => {
     // ==========================================
     describe('GET /treasury/reconciliation', () => {
         it('devrait retourner 403 si le rôle est insuffisant', async () => {
-            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(CHECKER);
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue({ id: 'staff_1', role: 'INVALID_ROLE' });
 
             const res = await request(app).get('/treasury/reconciliation');
 
@@ -673,7 +674,7 @@ describe('Treasury Routes', () => {
     // ==========================================
     describe('POST /treasury/reconciliation/:id/resolve', () => {
         it('devrait retourner 403 si le rôle est insuffisant', async () => {
-            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(CHECKER);
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue({ id: 'staff_1', role: 'INVALID_ROLE' });
 
             const res = await request(app).post('/treasury/reconciliation/case1/resolve').send({ resolution: 'OK', newStatus: 'RESOLVED' });
 

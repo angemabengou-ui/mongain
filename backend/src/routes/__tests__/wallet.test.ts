@@ -7,7 +7,7 @@ import walletRoutes from '../wallet';
 // Mock du module Prisma pour ne pas taper la base de données de dev
 jest.mock('../../prisma', () => ({
     prisma: {
-        user: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn(), create: jest.fn() },
+        user: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn(), create: jest.fn() },
         wallet: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn(), create: jest.fn() },
         transaction: { create: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
         notification: { create: jest.fn() },
@@ -46,9 +46,15 @@ jest.mock('../settings', () => ({
     getSystemSettings: jest.fn().mockResolvedValue({ taxWithdraw: 0 }),
 }));
 
+jest.mock('../../services/centralTreasury', () => ({
+    getCentralTreasury: jest.fn(),
+}));
+
 const bcrypt = require('bcryptjs');
 const pvit = require('../../services/pvit');
 const { getSystemSettings } = require('../settings');
+const { getCentralTreasury } = require('../../services/centralTreasury');
+const { LimitEngine } = require('../../services/LimitEngine');
 const CORPORATE_PHONE = process.env.CORPORATE_PHONE || '+2410000000';
 
 // Setup d'une mini-app Express avec nos routes
@@ -93,6 +99,52 @@ describe('Wallet Routes', () => {
 
             expect(res.status).toBe(404);
             expect(res.body.error).toContain('Portefeuille introuvable');
+        });
+    });
+
+    describe('POST /wallet/match-contacts', () => {
+        it("devrait retourner 400 si aucun numéro n'est fourni", async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'user123', isActive: true, jwtVersion: 0 });
+
+            const res = await request(app)
+                .post('/wallet/match-contacts')
+                .set('Authorization', 'Bearer dummy-token')
+                .send({ phones: [] });
+
+            expect(res.status).toBe(400);
+        });
+
+        it("ne devrait renvoyer que les numéros correspondant à un compte Mongain existant, sans jamais exposer les numéros absents", async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'user123', isActive: true, jwtVersion: 0 });
+            (prisma.user.findMany as jest.Mock).mockResolvedValue([
+                { id: 'u2', name: 'Alice', phone: '+24177000002', role: 'USER' },
+            ]);
+
+            const res = await request(app)
+                .post('/wallet/match-contacts')
+                .set('Authorization', 'Bearer dummy-token')
+                .send({ phones: ['+24177000002', '+24177000099'] }); // le second n'a pas de compte
+
+            expect(res.status).toBe(200);
+            expect(res.body.matches).toEqual([{ id: 'u2', name: 'Alice', phone: '+24177000002', role: 'USER' }]);
+            expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
+                where: expect.objectContaining({ phone: { in: ['+24177000002', '+24177000099'] } }),
+            }));
+        });
+
+        it("ne devrait jamais renvoyer l'appelant lui-même parmi les correspondances", async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'user123', isActive: true, jwtVersion: 0 });
+            (prisma.user.findMany as jest.Mock).mockResolvedValue([]);
+
+            const res = await request(app)
+                .post('/wallet/match-contacts')
+                .set('Authorization', 'Bearer dummy-token')
+                .send({ phones: ['+24177000001'] });
+
+            expect(res.status).toBe(200);
+            expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
+                where: expect.objectContaining({ id: { not: 'user123' } }),
+            }));
         });
     });
 
@@ -303,6 +355,116 @@ describe('Wallet Routes', () => {
             expect(prisma.wallet.create).not.toHaveBeenCalled();
             expect(prisma.user.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: { commissionWalletId: expect.anything() } }));
             expect(prisma.wallet.update).toHaveBeenCalledWith({ where: { id: 'w_commission_existing' }, data: { balance: { increment: 50 } } });
+        });
+    });
+
+    // ==========================================
+    // POST /wallet/pay-service
+    // ==========================================
+    describe('POST /wallet/pay-service', () => {
+        const ORIGINAL_FLAG = process.env.ENABLE_UNVERIFIED_EXTERNAL_SERVICES;
+        afterAll(() => { process.env.ENABLE_UNVERIFIED_EXTERNAL_SERVICES = ORIGINAL_FLAG; });
+
+        it('devrait retourner 501 si le flag bêta est désactivé (comportement par défaut)', async () => {
+            process.env.ENABLE_UNVERIFIED_EXTERNAL_SERVICES = 'false';
+
+            const res = await request(app)
+                .post('/wallet/pay-service')
+                .set('Authorization', 'Bearer dummy-token')
+                .send({ type: 'WATER', amount: 1000 });
+
+            expect(res.status).toBe(501);
+        });
+
+        // Régression : le crédit vers la réserve centrale avait disparu entièrement — le
+        // client était débité mais l'argent n'atterrissait nulle part (ni la réserve, ni
+        // aucun autre wallet), alors que la ligne Transaction prétendait qu'il l'était.
+        it('devrait débiter le client ET créditer la réserve centrale du même montant', async () => {
+            process.env.ENABLE_UNVERIFIED_EXTERNAL_SERVICES = 'true';
+            (prisma.user.findUnique as jest.Mock).mockImplementation(async (args: any) => {
+                if (args.select?.jwtVersion) return { id: 'user123', isActive: true, jwtVersion: 0 };
+                if (args.where?.id === 'user123' && args.include?.wallet) {
+                    return { id: 'user123', role: 'USER', wallet: { id: 'w_client', balance: 100000 } };
+                }
+                return null;
+            });
+            (getCentralTreasury as jest.Mock).mockResolvedValue({ wallet: { id: 'w_reserve', balance: 0 } });
+            (prisma.wallet.update as jest.Mock).mockResolvedValue({ id: 'w_client', balance: 99000 });
+            (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: 'tx1' });
+
+            const res = await request(app)
+                .post('/wallet/pay-service')
+                .set('Authorization', 'Bearer dummy-token')
+                .send({ type: 'WATER', amount: 1000, reference: 'REF1' });
+
+            expect(res.status).toBe(200);
+            expect(prisma.wallet.update).toHaveBeenCalledWith({ where: { id: 'w_client', balance: { gte: 1000 } }, data: { balance: { decrement: 1000 } } });
+            expect(prisma.wallet.update).toHaveBeenCalledWith({ where: { id: 'w_reserve' }, data: { balance: { increment: 1000 } } });
+        });
+
+        // Régression : cette route ne vérifiait jamais les plafonds anti-blanchiment,
+        // contrairement à tous les autres rails sortants (transfer, pay-bill, retraits).
+        it('devrait vérifier les plafonds anti-blanchiment via LimitEngine', async () => {
+            process.env.ENABLE_UNVERIFIED_EXTERNAL_SERVICES = 'true';
+            (prisma.user.findUnique as jest.Mock).mockImplementation(async (args: any) => {
+                if (args.select?.jwtVersion) return { id: 'user123', isActive: true, jwtVersion: 0 };
+                if (args.where?.id === 'user123' && args.include?.wallet) {
+                    return { id: 'user123', role: 'USER', wallet: { id: 'w_client', balance: 100000 } };
+                }
+                return null;
+            });
+            (getCentralTreasury as jest.Mock).mockResolvedValue({ wallet: { id: 'w_reserve', balance: 0 } });
+            (prisma.wallet.update as jest.Mock).mockResolvedValue({ id: 'w_client', balance: 99000 });
+            (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: 'tx1' });
+
+            const res = await request(app)
+                .post('/wallet/pay-service')
+                .set('Authorization', 'Bearer dummy-token')
+                .send({ type: 'WATER', amount: 1000, reference: 'REF1' });
+
+            expect(res.status).toBe(200);
+            expect(LimitEngine.verifyAndIncrementConsumption).toHaveBeenCalledWith(expect.anything(), 'user123', 'w_client', 1000, expect.anything());
+        });
+    });
+
+    // ==========================================
+    // POST /wallet/transfer
+    // ==========================================
+    describe('POST /wallet/transfer', () => {
+        // Régression : LimitEngine verrouille sender.wallet.id en interne (FOR UPDATE). S'il
+        // s'exécutait AVANT le verrou trié (sender+receiver), deux /transfer concurrents en
+        // sens opposé entre les deux mêmes wallets pouvaient se verrouiller mutuellement
+        // (deadlock réel) au lieu que l'un attende simplement l'autre. Le verrou trié doit
+        // donc être acquis avant l'appel à LimitEngine.
+        it('devrait acquérir le verrou pessimiste (sender+receiver) avant d\'appeler LimitEngine', async () => {
+            (prisma.user.findUnique as jest.Mock).mockImplementation(async (args: any) => {
+                if (args.select?.jwtVersion) return { id: 'user123', isActive: true, jwtVersion: 0 };
+                if (args.where?.id === 'user123' && !args.include) {
+                    return { id: 'user123', pin: 'hashed-pin', failedPinAttempts: 0, lockedUntil: null };
+                }
+                if (args.where?.id === 'user123' && args.include?.wallet) {
+                    return { id: 'user123', role: 'USER', wallet: { id: 'w_sender', balance: 100000 } };
+                }
+                if (args.where?.phone === CORPORATE_PHONE) {
+                    return { id: 'corporate_id', wallet: { id: 'w_corporate', balance: 0 } };
+                }
+                return null;
+            });
+            (prisma.user.findFirst as jest.Mock).mockResolvedValue({ id: 'user456', role: 'USER', wallet: { id: 'w_receiver', balance: 0 } });
+            (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+            (getSystemSettings as jest.Mock).mockResolvedValue({ taxP2P: 0 });
+            (prisma.wallet.update as jest.Mock).mockResolvedValue({ id: 'w_sender', balance: 99000 });
+            (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: 'tx1' });
+
+            const res = await request(app)
+                .post('/wallet/transfer')
+                .set('Authorization', 'Bearer dummy-token')
+                .send({ receiverPhone: '077000000', amount: 1000, pin: '1234' });
+
+            expect(res.status).toBe(200);
+            const lockOrder = (prisma.$executeRaw as jest.Mock).mock.invocationCallOrder[0];
+            const limitEngineOrder = (LimitEngine.verifyAndIncrementConsumption as jest.Mock).mock.invocationCallOrder[0];
+            expect(lockOrder).toBeLessThan(limitEngineOrder);
         });
     });
 });

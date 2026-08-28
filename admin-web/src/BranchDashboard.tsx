@@ -2,7 +2,7 @@ import { Archive, ArrowRight, Building2, DoorClosed, LockKeyhole, Store, Users }
 import { useEffect, useState } from 'react';
 import { API_URL } from './config';
 
-export default function BranchDashboard({ token, staffId, onNavigateToTreasury }: { token: string; staffId: string; onNavigateToTreasury?: () => void }) {
+export default function BranchDashboard({ token, onNavigateToTreasury }: { token: string; onNavigateToTreasury?: () => void }) {
     const [branch, setBranch] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -78,11 +78,11 @@ export default function BranchDashboard({ token, staffId, onNavigateToTreasury }
     if (loading) return <div>Chargement sécurisé de l'agence...</div>;
     if (error) return <div style={{ color: 'red' }}>Erreur critique : {error}</div>;
 
-    // `/api/agency/info` renvoie les sessions récentes de TOUTE l'agence, pas seulement les
-    // miennes — sans filtrer par `staffId`, un caissier B voyait la session (et les totaux) du
-    // caissier A si celui-ci avait une caisse ouverte au même moment, et ne pouvait pas ouvrir
-    // la sienne (l'app pensait qu'une session était déjà active pour lui).
-    const myActiveSession = branch?.sessions?.find((s: any) => s.status === 'OPEN' && s.teller?.id === staffId);
+    // Le backend renvoie désormais `myActiveSession` directement (recherche dédiée, jamais
+    // limitée par le `take: 10` sur `sessions` ci-dessous) — dériver ça nous-mêmes depuis les
+    // 10 sessions les plus récentes DE TOUTE L'AGENCE sous-estimait ma propre session dans une
+    // agence à forte activité (voir agency.ts, GET /info pour le détail du bug corrigé).
+    const myActiveSession = branch?.myActiveSession;
     // Depuis la séparation Trésorerie Centrale / Siège (voir services/centralTreasury.ts),
     // le wallet du Siège n'est plus la Réserve Centrale — c'est redevenu une agence normale,
     // avec son propre petit e-wallet opérationnel. On garde juste une note "(Siège)" pour le

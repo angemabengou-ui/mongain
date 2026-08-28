@@ -50,6 +50,19 @@ const smsLimiter = rateLimit({
     legacyHeaders: false,
 });
 
+// Même principe que loginLimiter dans corp.ts (comptes Staff) : le verrouillage par
+// compte ci-dessous (3 échecs → 15 min) ne protège qu'UN numéro à la fois — sans
+// limite par IP, un attaquant peut tester des PIN sur de nombreux numéros différents
+// depuis la même IP sans jamais déclencher aucun des deux verrous. Défense en
+// profondeur, pas un remplacement du verrouillage par compte.
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: { error: 'Trop de tentatives de connexion depuis cette adresse. Réessayez dans 15 minutes.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
 // POST /api/auth/request-otp
 router.post('/request-otp', smsLimiter, async (req, res) => {
     const parsed = requestOtpSchema.safeParse(req.body);
@@ -247,7 +260,7 @@ router.post('/register', async (req, res) => {
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -602,8 +615,6 @@ router.put('/push-token', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
-export default router;
-
 // POST /api/auth/verify-pin
 router.post('/verify-pin', authMiddleware, async (req: AuthRequest, res) => {
     const { pin } = req.body;
@@ -649,5 +660,6 @@ router.post('/verify-pin', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
+export default router;
 
 

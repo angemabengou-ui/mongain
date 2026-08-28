@@ -26,7 +26,7 @@ app.use(express.json());
 app.use('/admin', adminRoutes);
 
 const SUPER_ADMIN = { id: 'test_staff_id', role: 'SUPER_ADMIN' };
-const RISK = { id: 'test_staff_id', role: 'RISK' };
+const RISK = { id: 'test_staff_id', role: 'COMPLIANCE_CHECKER' }; // Renamed role for validation tests
 const TELLER = { id: 'test_staff_id', role: 'TELLER' };
 
 describe('Admin KYC Routes', () => {
@@ -35,10 +35,21 @@ describe('Admin KYC Routes', () => {
     });
 
     describe('GET /admin/users/kyc', () => {
-        it('devrait retourner 403 pour un rôle non KYC', async () => {
-            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(TELLER);
+        // TELLER a perm_customer_kyc_view par défaut (RBAC.ts — vérifier une pièce au
+        // guichet) : depuis la correction de ce contrôle (qui n'acceptait auparavant QUE
+        // perm_customer_kyc_validate, refusant même la simple lecture aux rôles voir-seul),
+        // TELLER doit désormais réussir cet appel — voir le test dédié plus bas.
+        it('devrait retourner 403 pour un rôle sans aucun droit KYC', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue({ id: 'test_staff_id', role: 'INVALID_ROLE' });
             const res = await request(app).get('/admin/users/kyc');
             expect(res.status).toBe(403);
+        });
+
+        it('devrait autoriser un TELLER (lecture seule via perm_customer_kyc_view)', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(TELLER);
+            (prisma.user.findMany as jest.Mock).mockResolvedValue([]);
+            const res = await request(app).get('/admin/users/kyc');
+            expect(res.status).toBe(200);
         });
 
         it('devrait retourner la liste des dossiers KYC en attente par défaut', async () => {

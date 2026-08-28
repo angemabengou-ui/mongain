@@ -24,6 +24,7 @@ function jsonResponse(body: any, ok = true, status = 200) {
 
 function setupFetch() {
     (global.fetch as any) = vi.fn(async (url: string) => {
+        if (url.includes('/api/settings/my-ip')) return jsonResponse({ ip: '203.0.113.5' });
         if (url.includes('/api/settings/requests')) return jsonResponse(requests);
         if (url.includes('/api/settings/history')) return jsonResponse(history);
         if (url.includes('/api/settings')) return jsonResponse(settings);
@@ -200,5 +201,58 @@ describe('PlatformConfig (Settings)', () => {
         await screen.findByText('FEE PREVIEW / Simulateur');
         // Retrait Agence par défaut : 100000 <= seuil (500000) => frais gratuits (0 FCFA)
         expect(screen.getByText('0 FCFA')).toBeInTheDocument();
+    });
+
+    it("onglet Sécurité Réseau : affiche l'IP détectée et refuse de déposer une activation avec une liste vide", async () => {
+        const user = userEvent.setup();
+        render(<PlatformConfig token="tok" />);
+        await screen.findByDisplayValue('Mongain V6');
+        await user.click(screen.getByRole('button', { name: /Sécurité Réseau/i }));
+
+        expect(await screen.findByText('203.0.113.5')).toBeInTheDocument();
+
+        // Activer sans jamais ajouter d'IP -> dépôt refusé côté client
+        await user.click(screen.getByRole('button', { name: 'DÉSACTIVÉE' }));
+        await user.click(screen.getByRole('button', { name: /Déposer Changement/i }));
+
+        expect(await screen.findByText(/liste vide/i)).toBeInTheDocument();
+    });
+
+    it("onglet Sécurité Réseau : ajoute son IP via le bouton dédié puis dépose le changement", async () => {
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('Mise en place VPN admin');
+        const fetchMock = vi.fn(async (url: string, opts?: any) => {
+            if (opts?.method === 'POST' && url.includes('/api/settings/request')) {
+                return jsonResponse({ message: 'Requête soumise.' });
+            }
+            if (url.includes('/api/settings/my-ip')) return jsonResponse({ ip: '203.0.113.5' });
+            if (url.includes('/api/settings/requests')) return jsonResponse(requests);
+            if (url.includes('/api/settings/history')) return jsonResponse(history);
+            if (url.includes('/api/settings')) return jsonResponse(settings);
+            return jsonResponse({});
+        });
+        (global.fetch as any) = fetchMock;
+
+        const user = userEvent.setup();
+        render(<PlatformConfig token="tok" />);
+        await screen.findByDisplayValue('Mongain V6');
+        await user.click(screen.getByRole('button', { name: /Sécurité Réseau/i }));
+        await screen.findByText('203.0.113.5');
+
+        await user.click(screen.getByRole('button', { name: /\+ Ajouter mon IP/i }));
+        await user.click(screen.getByRole('button', { name: 'DÉSACTIVÉE' }));
+        await user.click(screen.getByRole('button', { name: /Déposer Changement/i }));
+
+        await waitFor(() => {
+            expect(fetchMock).toHaveBeenCalledWith(
+                expect.stringContaining('/api/settings/request'),
+                expect.objectContaining({
+                    method: 'POST',
+                    body: expect.stringContaining('"adminIpAllowlistEnabled":true'),
+                })
+            );
+        });
+        confirmSpy.mockRestore();
+        promptSpy.mockRestore();
     });
 });

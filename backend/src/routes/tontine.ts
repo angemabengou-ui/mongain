@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { hasPermission } from '../services/RBAC';
-import { executeTontineCycle, getTontineVaultWallet } from '../services/tontineService';
+import { contributeNow, executeTontineCycle, getTontineVaultWallet, resolveRenewalPoll } from '../services/tontineService';
 import { friendlyErrorMessage } from '../utils/errors';
 
 const router = express.Router();
@@ -49,6 +49,115 @@ router.post('/create', authMiddleware, async (req: Request, res: Response) => {
     }
 });
 
+// Modifier les paramètres d'un club — réservé au créateur. Le nom et le statut public
+// restent modifiables à tout moment (aucun impact sur les cycles déjà exécutés). La
+// cotisation et la fréquence, en revanche, sont figées dès que le premier cycle a tourné :
+// les changer en cours de route créerait une incohérence entre ce que les premiers membres
+// ont déjà payé et ce qui serait prélevé ensuite, ou déclencherait un cycle prématuré si la
+// fréquence raccourcit alors qu'un délai plus long court déjà depuis le dernier versement.
+router.put('/settings', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as AuthRequest).userId!;
+        const { groupId, name, contribution, frequency, isPublic } = req.body;
+
+        const group = await prisma.tontineGroup.findUnique({ where: { id: String(groupId) } });
+        if (!group) return res.status(404).json({ success: false, message: 'Club introuvable.' });
+        if (group.creatorId !== userId) {
+            return res.status(403).json({ success: false, message: 'Seul le créateur peut modifier les paramètres du club.' });
+        }
+
+        const data: { name?: string; contribution?: number; frequency?: string; isPublic?: boolean } = {};
+
+        if (name !== undefined) {
+            if (!String(name).trim()) return res.status(400).json({ success: false, message: 'Le nom ne peut pas être vide.' });
+            data.name = String(name).trim();
+        }
+        if (isPublic !== undefined) {
+            data.isPublic = !!isPublic;
+        }
+
+        if (contribution !== undefined || frequency !== undefined) {
+            const hasStarted = (await prisma.tontineCycle.count({ where: { tontineGroupId: group.id } })) > 0;
+            if (hasStarted) {
+                return res.status(400).json({ success: false, message: 'Impossible de modifier la cotisation ou la fréquence : le premier cycle a déjà été exécuté.' });
+            }
+            if (contribution !== undefined) {
+                const amt = parseFloat(contribution);
+                if (isNaN(amt) || amt <= 0) return res.status(400).json({ success: false, message: 'Montant de cotisation invalide.' });
+                data.contribution = amt;
+            }
+            if (frequency !== undefined) {
+                if (frequency !== 'WEEKLY' && frequency !== 'MONTHLY') return res.status(400).json({ success: false, message: 'Fréquence invalide.' });
+                data.frequency = frequency;
+            }
+        }
+
+        if (Object.keys(data).length === 0) {
+            return res.status(400).json({ success: false, message: 'Aucune modification fournie.' });
+        }
+
+        const updated = await prisma.tontineGroup.update({ where: { id: group.id }, data });
+        res.json({ success: true, message: 'Paramètres mis à jour.', data: updated });
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: friendlyErrorMessage(e, 'Erreur serveur') });
+    }
+});
+
+// Dissoudre définitivement un club — le schéma prévoyait un statut CANCELLED depuis
+// l'origine (voir schema.prisma, TontineGroup.status) mais aucune route ne l'a jamais
+// utilisé : jusqu'ici, la seule façon de mettre fin à une tontine était que chaque membre
+// la quitte un par un, ou une mise en pause (temporaire, admin uniquement). Réservé au
+// créateur ; le CRON (cron.ts, filtre status:'ACTIVE') ignorera ce groupe dès que le
+// statut change, sans avoir besoin d'un garde-fou supplémentaire côté cron.
+router.post('/cancel', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as AuthRequest).userId!;
+        const { groupId } = req.body;
+
+        const group = await prisma.tontineGroup.findUnique({ where: { id: String(groupId) } });
+        if (!group) return res.status(404).json({ success: false, message: 'Club introuvable.' });
+        if (group.creatorId !== userId) {
+            return res.status(403).json({ success: false, message: 'Seul le créateur peut dissoudre le club.' });
+        }
+        if (group.status !== 'ACTIVE') {
+            return res.status(400).json({ success: false, message: 'Ce club est déjà dissous ou terminé.' });
+        }
+
+        // Un cycle dont la collecte a réussi mais dont le versement est resté bloqué laisse
+        // de l'argent réel immobilisé dans le Coffre Tontine (partagé entre tous les
+        // groupes) — dissoudre le club maintenant le laisserait sans propriétaire ni recours
+        // pour le bénéficiaire visé. Il faut d'abord résoudre ce versement (voir
+        // admin.tontines.ts, retry) avant de pouvoir dissoudre.
+        const stuckCycle = await prisma.tontineCycle.findFirst({ where: { tontineGroupId: group.id, status: 'PAYOUT_FAILED' } });
+        if (stuckCycle) {
+            return res.status(400).json({ success: false, message: `Le versement du cycle #${stuckCycle.cycleNumber} est encore bloqué — faites-le résoudre par le support avant de dissoudre le club.` });
+        }
+
+        const updated = await prisma.tontineGroup.update({ where: { id: group.id }, data: { status: 'CANCELLED' } });
+
+        const activeParticipants = await prisma.tontineParticipant.findMany({
+            where: { tontineGroupId: group.id, status: 'ACTIVE', userId: { not: userId } },
+            select: { userId: true, user: { select: { pushToken: true } } }
+        });
+        if (activeParticipants.length > 0) {
+            await prisma.notification.createMany({
+                data: activeParticipants.map((p) => ({
+                    userId: p.userId,
+                    title: 'Tontine dissoute',
+                    body: `« ${group.name} » a été dissoute par son créateur. Plus aucune cotisation ne sera prélevée.`,
+                    type: 'ALERT'
+                }))
+            });
+            const { sendPush } = await import('./wallet');
+            await Promise.all(activeParticipants.map((p) => sendPush(p.user.pushToken, 'Tontine dissoute', `« ${group.name} » a été dissoute par son créateur.`)));
+        }
+
+        res.json({ success: true, message: 'Le club a été dissous.', data: updated });
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: friendlyErrorMessage(e, 'Erreur serveur') });
+    }
+});
+
 // Récupérer uniquement les tontines de l'utilisateur (Publique -> Privée)
 router.get('/groups', authMiddleware, async (req: Request, res: Response) => {
     try {
@@ -92,17 +201,30 @@ router.get('/discover', authMiddleware, async (req: Request, res: Response) => {
         const userId = (req as AuthRequest).userId!;
         const q = ((req.query.q as string) || '').trim();
 
-        const alreadyIn = await prisma.tontineParticipant.findMany({ where: { userId }, select: { tontineGroupId: true } });
+        // Un LEFT peut redécouvrir et rejoindre à nouveau un club qu'il a quitté — seule une
+        // ligne encore ACTIVE/PAUSED doit masquer le club de cette liste (même logique que
+        // POST /join, voir plus bas).
+        const alreadyIn = await prisma.tontineParticipant.findMany({ where: { userId, status: { not: 'LEFT' } }, select: { tontineGroupId: true } });
         const excludedIds = alreadyIn.map(p => p.tontineGroupId);
 
         const groups = await prisma.tontineGroup.findMany({
             where: {
                 isPublic: true,
                 status: 'ACTIVE',
+                isPaused: false,
                 id: { notIn: excludedIds },
                 ...(q ? { name: { contains: q, mode: 'insensitive' } } : {})
             },
-            include: {
+            // `select` explicite (pas `include`) : un club public expose son nom, sa
+            // cotisation et son créateur à N'IMPORTE QUEL utilisateur connecté avant même
+            // qu'il ne le rejoigne — `include` ferait fuiter des champs internes/admin comme
+            // `pausedReason` (motif de litige saisi par le staff, voir admin.tontines.ts).
+            select: {
+                id: true,
+                name: true,
+                contribution: true,
+                frequency: true,
+                createdAt: true,
                 creator: { select: { name: true } },
                 _count: { select: { participants: { where: { status: 'ACTIVE' } } } }
             },
@@ -167,23 +289,43 @@ router.post('/invite', authMiddleware, async (req: Request, res: Response) => {
         if (!group || group.creatorId !== userId) {
             return res.status(403).json({ success: false, message: "Seul le créateur peut inviter." });
         }
+        if (group.status !== 'ACTIVE') {
+            return res.status(400).json({ success: false, message: "Ce club est dissous — impossible d'y inviter quelqu'un." });
+        }
 
         const invitee = await prisma.user.findUnique({ where: { phone } });
         if (!invitee) {
             return res.status(404).json({ success: false, message: "Numéro non trouvé sur Mongain." });
         }
 
-        const existing = await prisma.tontineParticipant.findFirst({
-            where: { userId: invitee.id, tontineGroupId: groupId }
+        const participant = await prisma.$transaction(async (tx) => {
+            // Même verrou et même calcul de payoutOrder que POST /join — voir les
+            // commentaires là-bas : un simple count() collisionnait avec les membres
+            // renumérotés après une relance de boucle (resolveRenewalPoll).
+            await tx.$executeRaw`SELECT id FROM "TontineGroup" WHERE id = ${group.id} FOR UPDATE;`;
+
+            const existing = await tx.tontineParticipant.findFirst({
+                where: { userId: invitee.id, tontineGroupId: groupId, status: { not: 'LEFT' } }
+            });
+            if (existing) throw new Error('ALREADY_MEMBER');
+
+            const activeParticipants = await tx.tontineParticipant.findMany({
+                where: { tontineGroupId: groupId, status: 'ACTIVE' },
+                select: { payoutOrder: true }
+            });
+            const maxOrder = Math.max(group.currentCycle - 1, 0, ...activeParticipants.map(p => p.payoutOrder));
+
+            return tx.tontineParticipant.create({
+                data: { userId: invitee.id, tontineGroupId: groupId, payoutOrder: maxOrder + 1 }
+            });
+        }).catch((e: any) => {
+            if (e.message === 'ALREADY_MEMBER') return null;
+            throw e;
         });
-        if (existing) {
+
+        if (!participant) {
             return res.status(400).json({ success: false, message: "Ce membre y est déjà." });
         }
-
-        const count = await prisma.tontineParticipant.count({ where: { tontineGroupId: groupId } });
-        const participant = await prisma.tontineParticipant.create({
-            data: { userId: invitee.id, tontineGroupId: groupId, payoutOrder: count + 1 }
-        });
 
         await prisma.notification.create({
             data: {
@@ -215,7 +357,9 @@ router.post('/leave', authMiddleware, async (req: Request, res: Response) => {
         const group = await prisma.tontineGroup.findUnique({ where: { id: String(groupId) } });
         if (!group) return res.status(404).json({ success: false, message: "Club introuvable." });
 
-        if (group.creatorId === userId) {
+        // Un club dissous ne gère plus rien (voir POST /cancel) : le créateur n'a plus besoin
+        // de rester pour "gérer" un club qui n'exécutera plus jamais de cycle.
+        if (group.creatorId === userId && group.status === 'ACTIVE') {
             const otherActive = await prisma.tontineParticipant.count({
                 where: { tontineGroupId: groupId, status: 'ACTIVE', userId: { not: userId } }
             });
@@ -234,7 +378,11 @@ router.post('/leave', authMiddleware, async (req: Request, res: Response) => {
         const alreadyPaidOut = participant.payoutOrder < group.currentCycle;
         let debt = 0;
 
-        if (alreadyPaidOut) {
+        // Un club dissous n'exécutera plus jamais aucun cycle (voir POST /cancel) : réclamer
+        // une dette "envers les membres qui n'ont pas encore eu leur tour" n'aurait ici aucun
+        // moyen d'être un jour reversée à qui que ce soit — ce serait prélever de l'argent
+        // pour rien plutôt qu'un vrai solde dû.
+        if (alreadyPaidOut && group.status === 'ACTIVE') {
             const remainingBeneficiaries = await prisma.tontineParticipant.count({
                 where: { tontineGroupId: groupId, status: 'ACTIVE', payoutOrder: { gte: group.currentCycle }, userId: { not: userId } }
             });
@@ -314,6 +462,71 @@ router.post('/leave', authMiddleware, async (req: Request, res: Response) => {
     }
 });
 
+// Cotisation volontaire pour le tour en cours, d'un montant libre (contributeNow,
+// tontineService.ts) — jusqu'ici, seul le CRON quotidien pouvait prélever une cotisation,
+// et uniquement pour le montant fixe et entier de la part. Chacun peut désormais compléter
+// sa part en plusieurs dépôts, du montant de son choix, jusqu'à atteindre le montant total ;
+// dès que tout le monde a fini, la cagnotte part immédiatement.
+router.post('/contribute', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as AuthRequest).userId!;
+        const { groupId, amount } = req.body;
+
+        const result = await contributeNow(String(groupId), userId, Number(amount));
+
+        res.json({
+            success: true,
+            payoutTriggered: result.payoutTriggered,
+            totalPaid: result.totalPaid,
+            remaining: result.remaining,
+            message: result.payoutTriggered
+                ? 'Cotisation enregistrée — tous les membres ont payé, la cagnotte vient d\'être versée !'
+                : result.remaining > 0
+                    ? `${result.amountPaid.toLocaleString('fr-FR')} FCFA cotisés. Il vous reste ${result.remaining.toLocaleString('fr-FR')} FCFA à verser pour ce tour.`
+                    : 'Cotisation complète pour ce tour. La cagnotte sera versée une fois que tous les membres auront terminé (ou à la date prévue).'
+        });
+    } catch (e: any) {
+        res.status(400).json({ success: false, message: e.message || friendlyErrorMessage(e, 'Erreur serveur') });
+    }
+});
+
+// Répond au sondage de relance ouvert par executeTontineCycle en fin de rotation
+// (group.status PENDING_RENEWAL — voir tontineService.ts, resolveRenewalPoll). Dès que
+// tous les participants actifs ont voté, le sondage est tranché immédiatement sans
+// attendre l'échéance ; sinon le CRON le tranchera de toute façon à la date limite
+// (silence = considéré comme un refus, voir schema.prisma).
+router.post('/renewal-vote', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as AuthRequest).userId!;
+        const { groupId, vote } = req.body;
+        if (vote !== 'YES' && vote !== 'NO') {
+            return res.status(400).json({ success: false, message: "vote doit être 'YES' ou 'NO'." });
+        }
+
+        const group = await prisma.tontineGroup.findUnique({ where: { id: String(groupId) } });
+        if (!group) return res.status(404).json({ success: false, message: 'Club introuvable.' });
+        if (group.status !== 'PENDING_RENEWAL') {
+            return res.status(400).json({ success: false, message: "Ce club n'a pas de sondage de relance en cours." });
+        }
+
+        const participant = await prisma.tontineParticipant.findFirst({ where: { userId, tontineGroupId: groupId, status: 'ACTIVE' } });
+        if (!participant) return res.status(404).json({ success: false, message: "Vous ne faites pas partie de ce club." });
+
+        await prisma.tontineParticipant.update({ where: { id: participant.id }, data: { renewalVote: vote } });
+
+        const stillWaiting = await prisma.tontineParticipant.count({
+            where: { tontineGroupId: groupId, status: 'ACTIVE', renewalVote: null }
+        });
+        if (stillWaiting === 0) {
+            await resolveRenewalPoll(String(groupId));
+        }
+
+        res.json({ success: true, message: vote === 'YES' ? 'Vote enregistré : vous souhaitez continuer.' : 'Vote enregistré : vous ne souhaitez pas continuer.' });
+    } catch (e: any) {
+        res.status(500).json({ success: false, message: friendlyErrorMessage(e, 'Erreur serveur') });
+    }
+});
+
 // Modifier l'ordre de passage d'un membre manuellement
 router.post('/reorder', authMiddleware, async (req: Request, res: Response) => {
     try {
@@ -324,6 +537,9 @@ router.post('/reorder', authMiddleware, async (req: Request, res: Response) => {
         const group = await prisma.tontineGroup.findUnique({ where: { id: String(groupId) } });
         if (!group || group.creatorId !== userId) {
             return res.status(403).json({ success: false, message: "Seul le créateur peut modifier l'ordre." });
+        }
+        if (group.status !== 'ACTIVE') {
+            return res.status(400).json({ success: false, message: "Ce club est dissous — l'ordre de passage n'a plus d'effet." });
         }
 
         if (!Array.isArray(orderMap) || orderMap.length === 0) {
@@ -393,24 +609,48 @@ router.post('/join', authMiddleware, async (req: Request, res: Response) => {
         if (!group.isPublic) {
             return res.status(403).json({ success: false, message: "Cette tontine est privée — seul le créateur peut vous inviter." });
         }
-
-        // Vérifier si l'utilisateur y est déjà
-        const existing = await prisma.tontineParticipant.findFirst({
-            where: { userId, tontineGroupId: groupId }
-        });
-        if (existing) {
-            return res.status(400).json({ success: false, message: "Vous participez déjà à cette Tontine." });
+        if (group.isPaused) {
+            return res.status(400).json({ success: false, message: "Ce club est actuellement suspendu par l'administration — impossible de le rejoindre pour le moment." });
         }
 
-        // Rejoindre
-        const count = await prisma.tontineParticipant.count({ where: { tontineGroupId: groupId } });
-        const participant = await prisma.tontineParticipant.create({
-            data: {
-                userId,
-                tontineGroupId: groupId,
-                payoutOrder: count + 1 // Ordre de passage
-            }
+        const participant = await prisma.$transaction(async (tx) => {
+            // Verrou pessimiste sur le groupe (même pattern que wallet.ts) : sans lui, deux
+            // utilisateurs qui rejoignent au même instant peuvent tous les deux lire le même
+            // payoutOrder maximum ci-dessous et se retrouver avec le même tour de passage —
+            // un seul des deux serait alors jamais payé (executeTontineCycle ne sélectionne
+            // que le PREMIER participant dont payoutOrder === currentCycle).
+            await tx.$executeRaw`SELECT id FROM "TontineGroup" WHERE id = ${group.id} FOR UPDATE;`;
+
+            // Un LEFT peut revenir (le club l'accepte de nouveau) : seule une ligne encore
+            // ACTIVE/PAUSED compte comme "déjà membre".
+            const existing = await tx.tontineParticipant.findFirst({
+                where: { userId, tontineGroupId: groupId, status: { not: 'LEFT' } }
+            });
+            if (existing) throw new Error('ALREADY_MEMBER');
+
+            // Le tour du nouveau membre se place après le dernier tour ACTIF existant — jamais
+            // un simple compte de lignes historiques (count()) : après une relance de boucle,
+            // les membres restants sont renumérotés à partir de currentCycle (voir
+            // resolveRenewalPoll, tontineService.ts), qui peut être très inférieur au nombre
+            // total de lignes jamais créées dans ce groupe (membres LEFT compris). Un compte
+            // brut retomberait alors sur un payoutOrder déjà attribué à un membre actif.
+            const activeParticipants = await tx.tontineParticipant.findMany({
+                where: { tontineGroupId: groupId, status: 'ACTIVE' },
+                select: { payoutOrder: true }
+            });
+            const maxOrder = Math.max(group.currentCycle - 1, 0, ...activeParticipants.map(p => p.payoutOrder));
+
+            return tx.tontineParticipant.create({
+                data: { userId, tontineGroupId: groupId, payoutOrder: maxOrder + 1 }
+            });
+        }).catch((e: any) => {
+            if (e.message === 'ALREADY_MEMBER') return null;
+            throw e;
         });
+
+        if (!participant) {
+            return res.status(400).json({ success: false, message: "Vous participez déjà à cette Tontine." });
+        }
 
         // Notifier l'utilisateur
         await prisma.notification.create({

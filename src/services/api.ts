@@ -12,8 +12,12 @@ const REFRESH_TOKEN_KEY = 'mongain_refresh_token';
 
 import * as SecureStore from 'expo-secure-store';
 
+let cachedToken: string | null = null;
+let cachedRefreshToken: string | null = null;
+
 // ─── Stockage du token ─────────────────────────────────────────────
 export const saveToken = async (token: string) => {
+    cachedToken = token;
     if (Platform.OS === 'web') {
         localStorage.setItem(TOKEN_KEY, token);
     } else {
@@ -22,13 +26,19 @@ export const saveToken = async (token: string) => {
 };
 
 export const getToken = async (): Promise<string | null> => {
+    if (cachedToken) return cachedToken;
+    let t = null;
     if (Platform.OS === 'web') {
-        return localStorage.getItem(TOKEN_KEY);
+        t = localStorage.getItem(TOKEN_KEY);
+    } else {
+        t = await SecureStore.getItemAsync(TOKEN_KEY);
     }
-    return await SecureStore.getItemAsync(TOKEN_KEY);
+    if (t) cachedToken = t;
+    return t;
 };
 
 export const deleteToken = async () => {
+    cachedToken = null;
     if (Platform.OS === 'web') {
         localStorage.removeItem(TOKEN_KEY);
     } else {
@@ -41,11 +51,8 @@ export const deleteToken = async () => {
 // refresh token sert à en obtenir un nouveau en silence (voir tryRefreshSession)
 // sans jamais redemander le PIN à l'utilisateur, tant qu'il revient dans les temps.
 export const saveRefreshToken = async (token: string | null | undefined) => {
-    // Tolère l'absence de refreshToken (backend pas encore à jour avec cette fonctionnalité,
-    // ou déployé séparément du client) : SecureStore.setItemAsync plante avec "Invalid value
-    // provided to SecureStore" si on lui passe autre chose qu'une string, ce qui bloquait
-    // entièrement la connexion/l'OTP au lieu de simplement se passer du refresh silencieux.
     if (!token) return;
+    cachedRefreshToken = token;
     if (Platform.OS === 'web') {
         localStorage.setItem(REFRESH_TOKEN_KEY, token);
     } else {
@@ -54,13 +61,19 @@ export const saveRefreshToken = async (token: string | null | undefined) => {
 };
 
 export const getRefreshToken = async (): Promise<string | null> => {
+    if (cachedRefreshToken) return cachedRefreshToken;
+    let t = null;
     if (Platform.OS === 'web') {
-        return localStorage.getItem(REFRESH_TOKEN_KEY);
+        t = localStorage.getItem(REFRESH_TOKEN_KEY);
+    } else {
+        t = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
     }
-    return await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+    if (t) cachedRefreshToken = t;
+    return t;
 };
 
 export const deleteRefreshToken = async () => {
+    cachedRefreshToken = null;
     if (Platform.OS === 'web') {
         localStorage.removeItem(REFRESH_TOKEN_KEY);
     } else {
@@ -144,6 +157,9 @@ const request = async (method: string, path: string, body?: object, auth = false
 
         // Auto-logout si le renouvellement a échoué (ou n'était pas applicable)
         if (res.status === 401 && _onUnauthorized) {
+            if (path === '/api/auth/logout') {
+                return; // Empêcher la boucle infinie si le logout retourne 401 (token déjà invalidé).
+            }
             _onUnauthorized();
             throw new Error('Session expirée. Veuillez vous reconnecter.');
         }
@@ -214,8 +230,16 @@ export const apiVerifyLoginOtp = (phone: string, otpCode: string) =>
 export const apiLogoutServer = () =>
     request('POST', '/api/auth/logout', undefined, true) as Promise<{ message: string }>;
 
+// Régression : POST /api/auth/verify-pin exige authMiddleware côté serveur, mais cet appel
+// omettait le 4e argument `auth` de request() (défaut à false) — aucun token n'était donc
+// jamais envoyé. Le 401 qui en résultait déclenchait une tentative de rafraîchissement
+// silencieux (qui réussit, l'utilisateur ayant un refreshToken valide), puis la RETENTATIVE
+// répétait la même erreur (le flag `auth` manquant persiste), ce qui finissait par déclencher
+// une DÉCONNEXION COMPLÈTE — même en saisissant le bon code PIN. Le verrou biométrique en
+// mode PIN de secours (pas de matériel biométrique, ou "Utiliser le code PIN") ne pouvait
+// donc jamais être déverrouillé.
 export const apiVerifyAppLockPin = (pin: string) =>
-    request('POST', '/api/auth/verify-pin', { pin }) as Promise<{ success: boolean; error?: string }>;
+    request('POST', '/api/auth/verify-pin', { pin }, true) as Promise<{ success: boolean; error?: string }>;
 
 export const apiGetMe = () =>
     request('GET', '/api/auth/me', undefined, true) as Promise<User>;
@@ -232,13 +256,25 @@ export const apiUpdatePushToken = (pushToken: string) =>
 export const apiRequestResetOTP = (phone: string) =>
     request('POST', '/api/auth/request-reset-otp', { phone }, false) as Promise<{ message: string }>;
 
-export const apiResetPIN = (phone: string, otp: string, newPin: string) =>
-    request('POST', '/api/auth/reset-pin', { phone, otp, newPin }, false) as Promise<{ message: string }>;
+// Régression : le backend attend `otpCode` (voir auth.ts, resetPinSchema), pas `otp` — le
+// mauvais nom de champ faisait échouer TOUTE réinitialisation de PIN avec un 400, quel que
+// soit le code SMS saisi. Le succès renvoie en plus une session complète (token +
+// refreshToken + user), pas un simple message : l'utilisateur peut donc être reconnecté
+// directement plutôt que renvoyé se reconnecter manuellement avec le PIN qu'il vient de
+// définir (voir AuthContext.resetPin, qui suit le même schéma que register/verifyLoginOtp).
+export const apiResetPIN = (phone: string, otpCode: string, newPin: string) =>
+    request('POST', '/api/auth/reset-pin', { phone, otpCode, newPin }, false) as Promise<{ token: string; refreshToken: string; user: User }>;
 
 // ─── API Wallet ───────────────────────────────────────────────────
 
 export const apiLookupUser = (phone: string) =>
     request('GET', `/api/wallet/lookup/${encodeURIComponent(phone)}`, undefined, true) as Promise<{ id: string; name: string; phone: string; role: string }>;
+
+// Retrouve, parmi une liste de numéros (carnet de contacts du téléphone), lesquels ont un
+// compte Mongain — voir src/services/contacts.ts pour l'utilisation complète (permission,
+// lecture du carnet, normalisation des numéros).
+export const apiMatchContacts = (phones: string[]) =>
+    request('POST', '/api/wallet/match-contacts', { phones }, true) as Promise<{ matches: { id: string; name: string; phone: string; role: string }[] }>;
 
 export const apiGetDailyLimits = () =>
     request('GET', '/api/wallet/limits', undefined, true) as Promise<{ skip?: boolean, dailySpend: number, dailyLimit: number, kycStatus: string, kycLevel: number }>;
@@ -357,6 +393,25 @@ export const apiReorderTontine = (groupId: string, orderMap: { participantId: st
 export const apiLeaveTontine = (groupId: string) =>
     request('POST', '/api/tontine/leave', { groupId }, true) as Promise<any>;
 
+// Cotisation et fréquence : rejetées par le serveur dès que le premier cycle a tourné
+// (voir tontine.ts, PUT /settings) — le nom et isPublic restent modifiables à tout moment.
+export const apiUpdateTontineSettings = (groupId: string, data: { name?: string; contribution?: number; frequency?: string; isPublic?: boolean }) =>
+    request('PUT', '/api/tontine/settings', { groupId, ...data }, true) as Promise<any>;
+
+// Dissolution définitive — irréversible, réservée au créateur (voir tontine.ts, POST /cancel).
+export const apiCancelTontine = (groupId: string) =>
+    request('POST', '/api/tontine/cancel', { groupId }, true) as Promise<any>;
+
+// Réponse au sondage de relance en fin de boucle (voir tontine.ts, POST /renewal-vote).
+export const apiVoteTontineRenewal = (groupId: string, vote: 'YES' | 'NO') =>
+    request('POST', '/api/tontine/renewal-vote', { groupId, vote }, true) as Promise<any>;
+
+// Cotisation volontaire, montant libre, pour le tour en cours — jusqu'ici, seul le CRON
+// quotidien pouvait prélever une cotisation, pour le montant fixe et entier de la part
+// (voir tontine.ts, POST /contribute).
+export const apiContributeTontine = (groupId: string, amount: number) =>
+    request('POST', '/api/tontine/contribute', { groupId, amount }, true) as Promise<any>;
+
 // ==========================================
 // VAULTS (CAISSE COMMUNE / MULTISIG)
 // ==========================================
@@ -367,7 +422,7 @@ export const apiGetVaults = () =>
 export const apiCreateVault = (data: { name: string; description?: string; requiredApprovals?: number }) =>
     request('POST', '/api/vaults', data, true) as Promise<any>;
 
-export const apiUpdateVaultSettings = (id: string, data: { requiredApprovals: number }) =>
+export const apiUpdateVaultSettings = (id: string, data: { requiredApprovals?: number; name?: string; description?: string }) =>
     request('PUT', `/api/vaults/${id}/settings`, data, true) as Promise<any>;
 
 export const apiLeaveVault = (id: string) =>

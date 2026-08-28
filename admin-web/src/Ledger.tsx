@@ -83,12 +83,19 @@ export default function Ledger({ token, hasPerm }: { token: string; hasPerm: (pe
     const filteredTransactions = transactions.filter(tx => {
         if (!search) return true;
         const s = search.toLowerCase();
+        // Chaînage optionnel complet jusqu'au bout de CHAQUE appel : senderWallet/receiverWallet
+        // n'ont pas toujours de `user` (Wallet.userId est optionnel — le wallet d'une agence ou
+        // de la Trésorerie Centrale n'en a aucun). Sans le `?.` sur `.includes()`/`.toLowerCase()`
+        // eux-mêmes, une transaction de trésorerie (MINT/ISSUANCE/ADJUSTMENT, visibles et
+        // étiquetées [MINT] dans ce même écran) faisait planter tout le Ledger dès la moindre
+        // recherche : `undefined.includes(s)` lève une exception, pas juste un résultat "non
+        // trouvé".
         return (
             tx.reference?.toLowerCase().includes(s) ||
-            tx.senderWallet?.user?.phone.includes(s) ||
-            tx.receiverWallet?.user?.phone.includes(s) ||
-            tx.senderWallet?.user?.name.toLowerCase().includes(s) ||
-            tx.receiverWallet?.user?.name.toLowerCase().includes(s)
+            tx.senderWallet?.user?.phone?.includes(s) ||
+            tx.receiverWallet?.user?.phone?.includes(s) ||
+            tx.senderWallet?.user?.name?.toLowerCase().includes(s) ||
+            tx.receiverWallet?.user?.name?.toLowerCase().includes(s)
         );
     });
 

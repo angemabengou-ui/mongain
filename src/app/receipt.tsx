@@ -33,6 +33,17 @@ export default function ReceiptScreen() {
     let title = isIncoming ? 'Paiement reçu' : 'Paiement envoyé';
     if (isDeposit) title = 'Dépôt sur compte';
     if (isWithdraw) title = 'Retrait en espèces';
+    // Même correctif que history.tsx (TransactionItem) : sans ça, un reçu de cotisation
+    // tontine ou de dépôt caisse commune affichait "Paiement envoyé/reçu", indiscernable
+    // d'un vrai transfert P2P.
+    const ref = (reference as string) || '';
+    if (ref.startsWith('VAULT_DEP_')) title = 'Dépôt Caisse Commune';
+    if (ref.startsWith('VAULT_OUT_')) title = 'Retrait Caisse Commune';
+    if (ref.startsWith('VAULT_VOUCHER_')) title = 'Bon Caisse Commune dépensé';
+    if (ref.startsWith('TONT_DBT_')) title = 'Cotisation Tontine';
+    if (ref.startsWith('TONT_PAY_')) title = 'Cagnotte Tontine reçue';
+    if (ref.startsWith('TONT_EXIT_')) title = 'Règlement dette Tontine';
+    if (ref.startsWith('MPAYOUT-')) title = 'Reversement marchand';
 
     // Le dépôt PVit reste PENDING tant que le webhook opérateur n'a pas confirmé (voir
     // backend/src/routes/wallet.ts et webhooks.ts) — afficher "Effectué" sans condition

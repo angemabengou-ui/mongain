@@ -40,7 +40,7 @@ describe('Admin Branches (Agency Ops) Routes', () => {
 
     describe('GET /admin/branches', () => {
         it('devrait retourner 403 pour un rôle non autorisé', async () => {
-            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(TELLER);
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue({ id: 'bad', role: 'INVALID_ROLE' });
             const res = await request(app).get('/admin/branches');
             expect(res.status).toBe(403);
         });

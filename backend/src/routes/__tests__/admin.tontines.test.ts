@@ -1,7 +1,8 @@
 import express from 'express';
 import request from 'supertest';
 import { prisma } from '../../prisma';
-import { retryFailedContributions } from '../../services/tontineService';
+import { executeTontineCycle, retryFailedContributions } from '../../services/tontineService';
+import { sendPush } from '../wallet';
 import adminRoutes from '../admin.tontines';
 
 jest.mock('../../middleware/auth', () => ({
@@ -11,17 +12,26 @@ jest.mock('../../middleware/auth', () => ({
     }
 }));
 
+// Import dynamique (await import('./wallet')) déclenché dès qu'il y a au moins un
+// participant actif à notifier lors d'une pause/reprise de groupe.
+jest.mock('../wallet', () => ({
+    sendPush: jest.fn(),
+}));
+
 jest.mock('../../prisma', () => ({
     prisma: {
         staff: { findUnique: jest.fn() },
-        tontineGroup: { findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
+        tontineGroup: { findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
         tontineParticipant: { findFirst: jest.fn(), update: jest.fn() },
         transaction: { findMany: jest.fn() },
+        notification: { create: jest.fn(), createMany: jest.fn() },
         auditLog: { create: jest.fn() },
+        $transaction: jest.fn((arg: any) => (Array.isArray(arg) ? Promise.all(arg) : arg)),
     },
 }));
 
 jest.mock('../../services/tontineService', () => ({
+    executeTontineCycle: jest.fn(),
     retryFailedContributions: jest.fn(),
 }));
 
@@ -117,9 +127,12 @@ describe('Admin Tontines Routes (lecture seule)', () => {
             expect(res.status).toBe(400);
         });
 
-        it('devrait mettre en pause et tracer un AuditLog', async () => {
+        it('devrait mettre en pause, notifier les participants actifs et tracer un AuditLog', async () => {
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
-            (prisma.tontineGroup.update as jest.Mock).mockResolvedValue({ id: 'g1', name: 'Amis', isPaused: true });
+            (prisma.tontineGroup.update as jest.Mock).mockResolvedValue({
+                id: 'g1', name: 'Amis', isPaused: true,
+                participants: [{ userId: 'u1', user: { pushToken: 'tok1' } }, { userId: 'u2', user: { pushToken: null } }],
+            });
 
             const res = await request(app).post('/admin/tontines/g1/pause').send({ reason: 'Cagnotte contestée' });
 
@@ -128,14 +141,21 @@ describe('Admin Tontines Routes (lecture seule)', () => {
                 where: { id: 'g1' },
                 data: { isPaused: true, pausedReason: 'Cagnotte contestée' },
             }));
+            expect(prisma.notification.createMany).toHaveBeenCalledWith({
+                data: [
+                    expect.objectContaining({ userId: 'u1', title: 'Tontine en pause' }),
+                    expect.objectContaining({ userId: 'u2', title: 'Tontine en pause' }),
+                ],
+            });
+            expect(sendPush).toHaveBeenCalledWith('tok1', 'Tontine en pause', expect.any(String));
             expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
                 data: expect.objectContaining({ action: 'PAUSE_TONTINE' }),
             }));
         });
 
-        it('devrait reprendre le groupe', async () => {
+        it('devrait reprendre le groupe et notifier les participants actifs (base + push)', async () => {
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
-            (prisma.tontineGroup.update as jest.Mock).mockResolvedValue({ id: 'g1', isPaused: false });
+            (prisma.tontineGroup.update as jest.Mock).mockResolvedValue({ id: 'g1', name: 'Amis', isPaused: false, participants: [{ userId: 'u1', user: { pushToken: 'tok1' } }] });
 
             const res = await request(app).post('/admin/tontines/g1/resume');
 
@@ -143,6 +163,10 @@ describe('Admin Tontines Routes (lecture seule)', () => {
             expect(prisma.tontineGroup.update).toHaveBeenCalledWith(expect.objectContaining({
                 data: { isPaused: false, pausedReason: null },
             }));
+            expect(sendPush).toHaveBeenCalledWith('tok1', 'Tontine reprise', expect.any(String));
+            expect(prisma.notification.createMany).toHaveBeenCalledWith({
+                data: [expect.objectContaining({ userId: 'u1', title: 'Tontine reprise' })],
+            });
         });
     });
 
@@ -156,26 +180,169 @@ describe('Admin Tontines Routes (lecture seule)', () => {
             expect(res.status).toBe(404);
         });
 
-        it('devrait mettre en pause un participant', async () => {
+        it('devrait mettre en pause un participant et le notifier', async () => {
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
-            (prisma.tontineParticipant.findFirst as jest.Mock).mockResolvedValue({ id: 'p1', tontineGroupId: 'g1', userId: 'u1', status: 'ACTIVE' });
+            (prisma.tontineParticipant.findFirst as jest.Mock).mockResolvedValue({ id: 'p1', tontineGroupId: 'g1', userId: 'u1', status: 'ACTIVE', group: { name: 'Amis' } });
             (prisma.tontineParticipant.update as jest.Mock).mockResolvedValue({ id: 'p1', status: 'PAUSED' });
 
             const res = await request(app).post('/admin/tontines/g1/participants/u1/pause');
 
             expect(res.status).toBe(200);
             expect(prisma.tontineParticipant.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { status: 'PAUSED' } });
+            expect(prisma.notification.create).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({ userId: 'u1', title: 'Vous avez été mis en pause' }),
+            }));
         });
 
-        it('devrait reprendre un participant', async () => {
+        it('devrait reprendre un participant et le notifier', async () => {
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
-            (prisma.tontineParticipant.findFirst as jest.Mock).mockResolvedValue({ id: 'p1', tontineGroupId: 'g1', userId: 'u1', status: 'PAUSED' });
+            (prisma.tontineParticipant.findFirst as jest.Mock).mockResolvedValue({ id: 'p1', tontineGroupId: 'g1', userId: 'u1', status: 'PAUSED', group: { name: 'Amis' } });
             (prisma.tontineParticipant.update as jest.Mock).mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
 
             const res = await request(app).post('/admin/tontines/g1/participants/u1/resume');
 
             expect(res.status).toBe(200);
             expect(prisma.tontineParticipant.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { status: 'ACTIVE' } });
+            expect(prisma.notification.create).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({ userId: 'u1', title: 'Vous avez été repris' }),
+            }));
+        });
+    });
+
+    describe('POST /admin/tontines/:id/postpone', () => {
+        it('devrait exiger un nombre de jours positif', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
+            const res = await request(app).post('/admin/tontines/g1/postpone').send({ days: 0, reason: 'Motif valide' });
+            expect(res.status).toBe(400);
+        });
+
+        it('devrait exiger un motif', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
+            const res = await request(app).post('/admin/tontines/g1/postpone').send({ days: 3 });
+            expect(res.status).toBe(400);
+        });
+
+        it("devrait retourner 400 si le club n'est pas actif", async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
+            (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({ id: 'g1', status: 'COMPLETED', participants: [] });
+
+            const res = await request(app).post('/admin/tontines/g1/postpone').send({ days: 3, reason: 'Certains membres ont besoin de plus de temps' });
+
+            expect(res.status).toBe(400);
+        });
+
+        it('devrait décaler lastPayoutDate de N jours à partir de la date de référence, et notifier les membres actifs', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
+            const lastPayoutDate = new Date('2026-01-01T00:00:00.000Z');
+            (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({
+                id: 'g1', name: 'Groupe A', status: 'ACTIVE', lastPayoutDate,
+                participants: [{ userId: 'u1', user: { pushToken: 'tok1' } }],
+            });
+            (prisma.tontineGroup.update as jest.Mock).mockResolvedValue({ id: 'g1', lastPayoutDate: new Date('2026-01-04T00:00:00.000Z') });
+
+            const res = await request(app).post('/admin/tontines/g1/postpone').send({ days: 3, reason: 'Certains membres ont besoin de plus de temps' });
+
+            expect(res.status).toBe(200);
+            expect(prisma.tontineGroup.update).toHaveBeenCalledWith({
+                where: { id: 'g1' },
+                data: { lastPayoutDate: new Date('2026-01-04T00:00:00.000Z') },
+            });
+            expect(prisma.notification.createMany).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.arrayContaining([expect.objectContaining({ userId: 'u1', title: 'Prélèvement reporté' })]),
+            }));
+            expect(sendPush).toHaveBeenCalled();
+            expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({ action: 'POSTPONE_TONTINE_CYCLE' }),
+            }));
+        });
+
+        it("devrait utiliser startDate comme référence si aucun cycle n'a encore eu lieu (lastPayoutDate null)", async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
+            const startDate = new Date('2026-02-01T00:00:00.000Z');
+            (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({
+                id: 'g1', name: 'Groupe A', status: 'ACTIVE', lastPayoutDate: null, startDate,
+                participants: [],
+            });
+            (prisma.tontineGroup.update as jest.Mock).mockResolvedValue({});
+
+            const res = await request(app).post('/admin/tontines/g1/postpone').send({ days: 5, reason: 'Motif valide' });
+
+            expect(res.status).toBe(200);
+            expect(prisma.tontineGroup.update).toHaveBeenCalledWith({
+                where: { id: 'g1' },
+                data: { lastPayoutDate: new Date('2026-02-06T00:00:00.000Z') },
+            });
+        });
+    });
+
+    describe('POST /admin/tontines/:id/participants/:userId/emergency-payout', () => {
+        it('devrait exiger un motif', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
+            const res = await request(app).post('/admin/tontines/g1/participants/u2/emergency-payout').send({});
+            expect(res.status).toBe(400);
+        });
+
+        it("devrait retourner 400 si le club n'est pas actif", async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
+            (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({ id: 'g1', status: 'PENDING_RENEWAL', isPaused: false, participants: [] });
+
+            const res = await request(app).post('/admin/tontines/g1/participants/u2/emergency-payout').send({ reason: 'Urgence médicale' });
+
+            expect(res.status).toBe(400);
+        });
+
+        it('devrait retourner 400 si la personne a déjà reçu sa cagnotte pour cette boucle', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
+            (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({
+                id: 'g1', name: 'Groupe A', status: 'ACTIVE', isPaused: false, currentCycle: 2,
+                participants: [{ id: 'p2', userId: 'u2', status: 'ACTIVE', payoutOrder: 1, hasReceivedPayout: true }],
+            });
+
+            const res = await request(app).post('/admin/tontines/g1/participants/u2/emergency-payout').send({ reason: 'Urgence médicale' });
+
+            expect(res.status).toBe(400);
+        });
+
+        it('devrait échanger le tour avec le bénéficiaire courant, notifier ce dernier et déclencher le cycle', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
+            (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({
+                id: 'g1', name: 'Groupe A', status: 'ACTIVE', isPaused: false, currentCycle: 2, lastPayoutDate: null,
+                participants: [
+                    { id: 'p1', userId: 'u1', status: 'ACTIVE', payoutOrder: 2, hasReceivedPayout: false, user: { pushToken: 'tok1' } },
+                    { id: 'p2', userId: 'u2', status: 'ACTIVE', payoutOrder: 4, hasReceivedPayout: false, user: { pushToken: 'tok2' } },
+                ],
+            });
+            (prisma.tontineParticipant.update as jest.Mock).mockResolvedValue({});
+            (prisma.tontineGroup.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+            (executeTontineCycle as jest.Mock).mockResolvedValue({ success: true, debitedCount: 2, totalPot: 10000 });
+
+            const res = await request(app).post('/admin/tontines/g1/participants/u2/emergency-payout').send({ reason: 'Urgence médicale' });
+
+            expect(res.status).toBe(200);
+            expect(prisma.tontineParticipant.update).toHaveBeenCalledWith({ where: { id: 'p2' }, data: { payoutOrder: 2 } });
+            expect(prisma.tontineParticipant.update).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { payoutOrder: 4 } });
+            expect(prisma.notification.create).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({ userId: 'u1', title: 'Votre tour a été décalé' }),
+            }));
+            expect(sendPush).toHaveBeenCalled();
+            expect(executeTontineCycle).toHaveBeenCalledWith('g1');
+            expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({ action: 'TONTINE_EMERGENCY_PAYOUT' }),
+            }));
+        });
+
+        it("devrait retourner 409 si le CRON réclame le cycle au même instant", async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
+            (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({
+                id: 'g1', name: 'Groupe A', status: 'ACTIVE', isPaused: false, currentCycle: 1, lastPayoutDate: null,
+                participants: [{ id: 'p1', userId: 'u1', status: 'ACTIVE', payoutOrder: 1, hasReceivedPayout: false, user: { pushToken: 'tok1' } }],
+            });
+            (prisma.tontineGroup.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+
+            const res = await request(app).post('/admin/tontines/g1/participants/u1/emergency-payout').send({ reason: 'Urgence médicale' });
+
+            expect(res.status).toBe(409);
+            expect(executeTontineCycle).not.toHaveBeenCalled();
         });
     });
 

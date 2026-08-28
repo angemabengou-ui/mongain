@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { Expo } from 'expo-server-sdk';
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
@@ -17,10 +18,10 @@ const expo = new Expo();
 
 const CORPORATE_PHONE = process.env.CORPORATE_PHONE || '+2410000000';
 
-// Compte de revenus (frais de transactions) â€” distinct du compte RÃ©serve/VoÃ»te
-// (+24199999999, gÃ©rÃ© par la TrÃ©sorerie) qui ne doit contenir que la monnaie qui adosse
-// les soldes clients. Auto-guÃ©rison (mÃªme principe que treasury.ts pour la RÃ©serve) : si le
-// compte n'existe pas encore en base, tout prÃ©lÃ¨vement de frais Ã©chouait silencieusement en
+// Compte de revenus (frais de transactions) — distinct du compte Réserve/Voûte
+// (+24199999999, géré par la Trésorerie) qui ne doit contenir que la monnaie qui adosse
+// les soldes clients. Auto-guérison (même principe que treasury.ts pour la Réserve) : si le
+// compte n'existe pas encore en base, tout prélèvement de frais échouait silencieusement en
 // erreur 500 ("Compte corporate introuvable"), ce qui pouvait bloquer tous les transferts P2P.
 export async function getOrCreateCorporateWallet(tx: any) {
     let corporate = await tx.user.findUnique({ where: { phone: CORPORATE_PHONE }, include: { wallet: true } });
@@ -61,27 +62,16 @@ const router = Router();
 
 const transferSchema = z.object({
     receiverPhone: z.string(),
-    amount: z.number().int('Les dÃ©cimales sont interdites pour le FCFA.').positive('Le montant doit Ãªtre positif.'),
-    // Le code PIN est toujours requis et vÃ©rifiÃ© cÃ´tÃ© serveur â€” voir src/services/biometrics.ts
-    // cÃ´tÃ© client, oÃ¹ le dÃ©verrouillage biomÃ©trique ne fait que rÃ©vÃ©ler le vrai PIN stockÃ©
-    // localement (SecureStore protÃ©gÃ©), plutÃ´t que de contourner la vÃ©rification serveur.
+    amount: z.number().int('Les décimales sont interdites pour le FCFA.').positive('Le montant doit être positif.'),
+    // Le code PIN est toujours requis et vérifié côté serveur — voir src/services/biometrics.ts
+    // côté client, où le déverrouillage biométrique ne fait que révéler le vrai PIN stocké
+    // localement (SecureStore protégé), plutôt que de contourner la vérification serveur.
     pin: z.string().length(4),
-});
-
-const depositSchema = z.object({
-    phone: z.string(),
-    amount: z.number().int('Les dÃ©cimales sont interdites pour le FCFA.').positive('Le montant doit Ãªtre positif.'),
 });
 
 const topUpSchema = z.object({
     amount: z.number().positive(),
     cardToken: z.string().optional()
-});
-
-const chargeSchema = z.object({
-    payerPhone: z.string().min(8),
-    amount: z.number().int('Les dÃ©cimales sont interdites pour le FCFA.').positive('Le montant doit Ãªtre positif.'),
-    withdrawCode: z.string().length(6)
 });
 
 router.post('/generate-withdraw-code', authMiddleware, async (req: AuthRequest, res) => {
@@ -106,7 +96,7 @@ router.post('/generate-withdraw-code', authMiddleware, async (req: AuthRequest, 
 
         return res.json({ code, expiresAt });
     } catch (e: any) {
-        return res.status(500).json({ error: 'Erreur gÃ©nÃ©ration code' });
+        return res.status(500).json({ error: 'Erreur génération code' });
     }
 });
 
@@ -163,15 +153,15 @@ router.post('/qr-cash-out', authMiddleware, async (req: AuthRequest, res) => {
 
         const branch = await prisma.branch.findUnique({ where: { code: branchCode }, include: { wallet: true, sessions: { where: { status: 'OPEN' } } } });
 
-        if (!branch || !branch.wallet) return res.status(404).json({ error: 'Agence ou Guichet systÃ¨me introuvable.' });
-        if (branch.status !== 'ACTIVE') return res.status(400).json({ error: 'Cette agence est momentanÃ©ment indisponible.' });
+        if (!branch || !branch.wallet) return res.status(404).json({ error: 'Agence ou Guichet système introuvable.' });
+        if (branch.status !== 'ACTIVE') return res.status(400).json({ error: 'Cette agence est momentanément indisponible.' });
 
         if (branch.sessions.length === 0) return res.status(400).json({ error: 'Aucun caissier n\'est en ligne pour autoriser ce guichet physiquement.' });
         const activeSession = branch.sessions[0];
 
-        if (branch.balance < amount) return res.status(400).json({ error: 'LiquiditÃ© de caisse insuffisante actuellement pour la remise.' });
+        if (branch.balance < amount) return res.status(400).json({ error: 'Liquidité de caisse insuffisante actuellement pour la remise.' });
 
-        // Frais CentralisÃ©s (TODO: Enrober dans LimitEngine anti-fractionnement)
+        // Frais Centralisés (TODO: Enrober dans LimitEngine anti-fractionnement)
         const settings = await prisma.systemSettings.findFirst();
         // Marginal sur le seul dépassement du seuil, pas sur le montant entier une fois
         // celui-ci franchi — sinon un retrait de 500 001 FCFA payait des frais sur la
@@ -184,13 +174,13 @@ router.post('/qr-cash-out', authMiddleware, async (req: AuthRequest, res) => {
         }
 
         const totalDebit = amount + feeAmount;
-        if (client.wallet.balance < totalDebit) return res.status(400).json({ error: 'Solde insuffisant pour ce retrait (incluant les frais de rÃ©seau).' });
+        if (client.wallet.balance < totalDebit) return res.status(400).json({ error: 'Solde insuffisant pour ce retrait (incluant les frais de réseau).' });
 
-        // Transaction Ledger 100% Atomique â€” gardes atomiques (balance: gte) sur les deux
-        // dÃ©crÃ©ments : les contrÃ´les ci-dessus (client.wallet.balance, branch.balance) lisent
-        // une valeur non verrouillÃ©e, donc deux retraits QR simultanÃ©s du mÃªme client ou sur
-        // la mÃªme agence pouvaient tous deux passer le contrÃ´le et faire passer le solde en
-        // nÃ©gatif (mÃªme classe de bug que celle corrigÃ©e dans CashOperationService).
+        // Transaction Ledger 100% Atomique — gardes atomiques (balance: gte) sur les deux
+        // décréments : les contrôles ci-dessus (client.wallet.balance, branch.balance) lisent
+        // une valeur non verrouillée, donc deux retraits QR simultanés du même client ou sur
+        // la même agence pouvaient tous deux passer le contrôle et faire passer le solde en
+        // négatif (même classe de bug que celle corrigée dans CashOperationService).
         await prisma.$transaction(async (tx) => {
             // 🛑 PESSIMISTIC LOCKING : Verrouillage strict anti-course
             const lockIds = [client.wallet!.id, branch.wallet!.id].sort();
@@ -198,17 +188,17 @@ router.post('/qr-cash-out', authMiddleware, async (req: AuthRequest, res) => {
                 await tx.$executeRaw`SELECT id FROM "Wallet" WHERE id = ${id} FOR UPDATE;`;
             }
 
-            // Plafond Anti-Blanchiment : mÃªme contrÃ´le que /transfer et /pay-bill (services.ts)
-            // â€” sans Ã§a, un client Tier 0 pouvait contourner sa limite journaliÃ¨re/mensuelle
-            // en retirant via QR guichet plutÃ´t que par un transfert P2P classique.
+            // Plafond Anti-Blanchiment : même contrôle que /transfer et /pay-bill (services.ts)
+            // — sans ça, un client Tier 0 pouvait contourner sa limite journalière/mensuelle
+            // en retirant via QR guichet plutôt que par un transfert P2P classique.
             await LimitEngine.verifyAndIncrementConsumption(tx, client.id, client.wallet!.id, amount, settings);
 
             await tx.wallet.update({ where: { id: client.wallet!.id, balance: { gte: totalDebit } }, data: { balance: { decrement: totalDebit } } });
             await tx.wallet.update({ where: { id: branch.wallet!.id }, data: { balance: { increment: amount } } });
 
             if (feeAmount > 0) {
-                // Frais rÃ©seau = revenu plateforme, pas de la monnaie qui adosse les soldes
-                // clients : va au compte Corporate (comme les frais P2P), pas Ã  la RÃ©serve.
+                // Frais réseau = revenu plateforme, pas de la monnaie qui adosse les soldes
+                // clients : va au compte Corporate (comme les frais P2P), pas à la Réserve.
                 const corporate = await getOrCreateCorporateWallet(tx);
                 await tx.wallet.update({ where: { id: corporate.wallet.id }, data: { balance: { increment: feeAmount } } });
             }
@@ -224,20 +214,26 @@ router.post('/qr-cash-out', authMiddleware, async (req: AuthRequest, res) => {
         // Notifications au Front
         await prisma.notification.createMany({
             data: [
-                { userId: client.id, title: 'Retrait Guichet ValidÃ©', body: `Votre retrait de ${amount} FCFA en agence (${branch.name}) a Ã©tÃ© traitÃ© avec succÃ¨s.` }
+                { userId: client.id, title: 'Retrait Guichet Validé', body: `Votre retrait de ${amount} FCFA en agence (${branch.name}) a été traité avec succès.` }
             ]
         });
 
-        res.json({ success: true, message: 'Transfert au guichet autorisÃ© !' });
+        res.json({ success: true, message: 'Transfert au guichet autorisé !' });
 
-    } catch (e: any) { res.status(500).json({ error: 'Erreur validation QR Cash-Out' }); }
+    } catch (e: any) {
+        // 400 + message réel (pas un 500 générique muet) : sinon un dépassement de plafond
+        // AML légitime (LimitEngine) ou un solde insuffisant (garde atomique ci-dessus)
+        // remontait comme une simple "erreur de validation" sans dire au client pourquoi —
+        // même convention que /transfer, /client-initiated-withdraw et le reste de ce fichier.
+        res.status(400).json({ error: friendlyErrorMessage(e, 'Erreur validation QR Cash-Out') });
+    }
 });
 
-// â”€â”€â”€ VÃ©rification atomique du plafond journalier â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Vérification atomique du plafond journalier ───────────────────────────
 import { LimitEngine, MAXIMUM_ALLOWED_LIMIT } from '../services/LimitEngine';
 
-// NOTE: L'ancienne fonction a Ã©tÃ© supprimÃ©e au profit du moteur centralisÃ© LimitEngine
-// pour Ã©viter la dette technique et la duplication de code P2P/Withdrawal.
+// NOTE: L'ancienne fonction a été supprimée au profit du moteur centralisé LimitEngine
+// pour éviter la dette technique et la duplication de code P2P/Withdrawal.
 
 
 // GET /api/wallet/limits
@@ -258,7 +254,7 @@ router.get('/limits', authMiddleware, async (req: AuthRequest, res) => {
 
         const settings = await getSystemSettings();
 
-        // Appelle le moteur global pour un affichage cohÃ©rent sur le Front B2C
+        // Appelle le moteur global pour un affichage cohérent sur le Front B2C
         const limits = await LimitEngine.getApplicableLimits(user, settings);
 
         res.json({
@@ -319,7 +315,7 @@ router.get('/transactions', authMiddleware, async (req: AuthRequest, res) => {
         });
 
         const formatted = transactions.map(tx => {
-            // Si c'est un dÃ©pÃ´t pur ou la mÃªme personne (nous utilisons senderWalletId = receiverWalletId pour dÃ©pÃ´t/retrait)
+            // Si c'est un dépôt pur ou la même personne (nous utilisons senderWalletId = receiverWalletId pour dépôt/retrait)
             if (tx.senderWalletId === tx.receiverWalletId) {
                 return {
                     id: tx.id,
@@ -328,7 +324,7 @@ router.get('/transactions', authMiddleware, async (req: AuthRequest, res) => {
                     currency: wallet.currency,
                     status: tx.status,
                     reference: tx.reference,
-                    counterpart: 'SystÃ¨me (Mongain)',
+                    counterpart: 'Système (Mongain)',
                     counterpartPhone: 'Mongain',
                     createdAt: tx.createdAt,
                 };
@@ -355,7 +351,7 @@ router.get('/transactions', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
-// GET /api/wallet/lookup/:phone â€” Trouver un destinataire par numÃ©ro avant transfert
+// GET /api/wallet/lookup/:phone — Trouver un destinataire par numéro avant transfert
 router.get('/lookup/:phone', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const phone = decodeURIComponent(req.params.phone as string);
@@ -365,12 +361,57 @@ router.get('/lookup/:phone', authMiddleware, async (req: AuthRequest, res) => {
             select: { id: true, name: true, phone: true, role: true },
         });
 
-        if (!user) return res.status(404).json({ error: 'Aucun compte trouvÃ© pour ce numÃ©ro.' });
+        if (!user) return res.status(404).json({ error: 'Aucun compte trouvé pour ce numéro.' });
         if (user.id === req.userId) return res.status(400).json({ error: "Vous ne pouvez pas vous envoyer de l'argent." });
 
         return res.json({ id: user.id, name: user.name, phone: user.phone, role: user.role });
     } catch (e: any) {
         console.error('Erreur /wallet/lookup:', e);
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+const matchContactsSchema = z.object({
+    // Numéros déjà normalisés côté mobile (même format que User.phone, ex: +241XXXXXXXX) —
+    // voir src/services/contacts.ts. Plafonné pour éviter qu'un carnet d'adresses géant (ou
+    // un appel abusif) ne déclenche une requête arbitrairement lourde.
+    phones: z.array(z.string()).min(1).max(1000),
+});
+
+// Un utilisateur authentifié pourrait sinon appeler cette route en boucle avec des numéros
+// devinés/générés pour cartographier qui, parmi une liste arbitraire, a un compte Mongain
+// et sous quel nom — une fuite de PII bien plus large que l'usage normal (synchroniser SON
+// PROPRE carnet, une poignée de fois par session tout au plus). 20 requêtes/15 min plafonne
+// la casse à 20 000 numéros testés dans la fenêtre, largement suffisant pour l'usage réel.
+const matchContactsLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: { error: 'Trop de requêtes de synchronisation de contacts, veuillez réessayer plus tard.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// POST /api/wallet/match-contacts — Retrouve, parmi les numéros du carnet de contacts du
+// téléphone, lesquels correspondent à un compte Mongain déjà inscrit (même principe que
+// WhatsApp : montrer directement qui de ses contacts est déjà sur l'app, plutôt que de
+// faire taper un numéro à l'aveugle pour chaque personne qu'on veut inviter/payer). Ne
+// renvoie et ne conserve jamais les numéros SANS correspondance — uniquement les comptes
+// réellement trouvés, avec le strict nécessaire pour les afficher (jamais de solde, de PIN,
+// ni aucune autre donnée sensible).
+router.post('/match-contacts', authMiddleware, matchContactsLimiter, async (req: AuthRequest, res) => {
+    const parsed = matchContactsSchema.safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.issues[0].message });
+    }
+    try {
+        const uniquePhones = [...new Set(parsed.data.phones)];
+        const users = await prisma.user.findMany({
+            where: { phone: { in: uniquePhones }, id: { not: req.userId } },
+            select: { id: true, name: true, phone: true, role: true },
+        });
+        return res.json({ matches: users });
+    } catch (e: any) {
+        console.error('Erreur /wallet/match-contacts:', e);
         return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });
@@ -387,16 +428,16 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
     const { receiverPhone, amount, pin } = parsed.data;
 
     try {
-        // VÃ©rification du PIN et gestion des tentatives Ã©chouÃ©es EN DEHORS de la
-        // transaction financiÃ¨re ci-dessous : un `throw` dans un `$transaction`
-        // interactif Prisma annule TOUTES ses Ã©critures, y compris celle qui
-        // enregistre la tentative Ã©chouÃ©e â€” ce qui rendait le verrouillage aprÃ¨s
-        // 3 Ã©checs totalement inopÃ©rant.
+        // Vérification du PIN et gestion des tentatives échouées EN DEHORS de la
+        // transaction financière ci-dessous : un `throw` dans un `$transaction`
+        // interactif Prisma annule TOUTES ses écritures, y compris celle qui
+        // enregistre la tentative échouée — ce qui rendait le verrouillage après
+        // 3 échecs totalement inopérant.
         const senderPreCheck = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!senderPreCheck) return res.status(400).json({ error: 'Compte expÃ©diteur introuvable.' });
+        if (!senderPreCheck) return res.status(400).json({ error: 'Compte expéditeur introuvable.' });
 
         if (senderPreCheck.lockedUntil && senderPreCheck.lockedUntil > new Date()) {
-            return res.status(400).json({ error: 'Votre compte est temporairement bloquÃ© suite Ã  plusieurs Ã©checs. RÃ©essayez plus tard.' });
+            return res.status(400).json({ error: 'Votre compte est temporairement bloqué suite à plusieurs échecs. Réessayez plus tard.' });
         }
 
         const pinMatch = await bcrypt.compare(pin, senderPreCheck.pin);
@@ -410,7 +451,7 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
                 data: { failedPinAttempts: attempts, lockedUntil }
             });
 
-            if (isLocked) return res.status(400).json({ error: 'Compte bloquÃ© (3 Ã©checs). RÃ©essayez dans 15 minutes.' });
+            if (isLocked) return res.status(400).json({ error: 'Compte bloqué (3 échecs). Réessayez dans 15 minutes.' });
             return res.status(400).json({ error: `Code PIN incorrect. Tentative ${attempts}/3.` });
         }
 
@@ -424,28 +465,7 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
                 include: { wallet: true },
             });
 
-            if (!sender || !sender.wallet) throw new Error('Compte expÃ©diteur introuvable.');
-
-            // La limite Anti-Blanchiment est maintenant intÃ©gralement calculÃ©e via le moteur.
-            // On vÃ©rifie de faÃ§on unifiÃ©e Daily, Monthly et Per_Tx
-            // getSystemSettings() (mis en cache, voir routes/settings.ts) au lieu d'un
-            // tx.systemSettings.findFirst() : évite un aller-retour Neon de plus à l'intérieur
-            // de cette transaction déjà proche du timeout Prisma.
-            const settings = await getSystemSettings();
-            await LimitEngine.verifyAndIncrementConsumption(tx, sender.id, sender.wallet.id, amount, settings);
-
-            // Un Agent qui crÃ©dite un client via cet endpoint effectue un dÃ©pÃ´t guichet
-            // (agent-action.tsx : Â« transfert gratuit d'un Agent vers Client Â»), pas un
-            // transfert P2P classique entre deux clients â€” sans cette exemption, l'agent
-            // payait de sa poche 1% de frais sur chaque dÃ©pÃ´t qu'il traitait, sans jamais
-            // en Ãªtre informÃ© (aucun aperÃ§u de frais dans cet Ã©cran), l'UI le prÃ©sentant
-            // comme gratuit alors que le serveur le facturait quand mÃªme.
-            const fee = sender.role === 'AGENT' ? 0 : amount * settings.taxP2P;
-            const totalRequired = amount + fee;
-
-            if (sender.wallet.balance < totalRequired) {
-                throw new Error(`Solde insuffisant. Vous devez avoir au moins ${totalRequired} FCFA.`);
-            }
+            if (!sender || !sender.wallet) throw new Error('Compte expéditeur introuvable.');
 
             const receiver = await tx.user.findFirst({
                 where: {
@@ -457,12 +477,42 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
                 include: { wallet: true },
             });
             if (!receiver || !receiver.wallet) throw new Error("Le destinataire n'existe pas.");
-            if (receiver.id === sender.id) throw new Error("Vous ne pouvez pas vous envoyer de l'argent Ã  vous-mÃªme.");
+            if (receiver.id === sender.id) throw new Error("Vous ne pouvez pas vous envoyer de l'argent à vous-même.");
 
             // 🛑 PESSIMISTIC LOCKING : Empêche le Double-Spend. On trie pour éviter les deadlocks croisés.
+            // Acquis AVANT LimitEngine (juste en dessous) : LimitEngine verrouille aussi
+            // sender.wallet.id en interne (FOR UPDATE) — s'il le faisait EN PREMIER, deux
+            // /transfer concurrents en sens opposé entre les deux mêmes wallets (Alice→Bob et
+            // Bob→Alice) verrouillaient chacun leur propre wallet expéditeur puis se
+            // bloquaient mutuellement en tentant d'acquérir l'autre dans l'ordre trié — un
+            // deadlock réel que Postgres détecte et résout en annulant l'une des deux
+            // transactions. Verrouiller la paire triée ICI d'abord rend le verrou interne de
+            // LimitEngine sur sender.wallet.id un no-op (même transaction, même ligne déjà
+            // tenue), fermant la fenêtre.
             const lockIds = [sender.wallet.id, receiver.wallet.id].sort();
             for (const id of lockIds) {
                 await tx.$executeRaw`SELECT id FROM "Wallet" WHERE id = ${id} FOR UPDATE;`;
+            }
+
+            // La limite Anti-Blanchiment est maintenant intégralement calculée via le moteur.
+            // On vérifie de façon unifiée Daily, Monthly et Per_Tx
+            // getSystemSettings() (mis en cache, voir routes/settings.ts) au lieu d'un
+            // tx.systemSettings.findFirst() : évite un aller-retour Neon de plus à l'intérieur
+            // de cette transaction déjà proche du timeout Prisma.
+            const settings = await getSystemSettings();
+            await LimitEngine.verifyAndIncrementConsumption(tx, sender.id, sender.wallet.id, amount, settings);
+
+            // Un Agent qui crédite un client via cet endpoint effectue un dépôt guichet
+            // (agent-action.tsx : « transfert gratuit d'un Agent vers Client »), pas un
+            // transfert P2P classique entre deux clients — sans cette exemption, l'agent
+            // payait de sa poche 1% de frais sur chaque dépôt qu'il traitait, sans jamais
+            // en être informé (aucun aperçu de frais dans cet écran), l'UI le présentant
+            // comme gratuit alors que le serveur le facturait quand même.
+            const fee = sender.role === 'AGENT' ? 0 : amount * settings.taxP2P;
+            const totalRequired = amount + fee;
+
+            if (sender.wallet.balance < totalRequired) {
+                throw new Error(`Solde insuffisant. Vous devez avoir au moins ${totalRequired} FCFA.`);
             }
 
             const corporate = await getOrCreateCorporateWallet(tx);
@@ -491,10 +541,10 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
                     senderWalletId: sender.wallet.id,
                     receiverWalletId: receiver.wallet.id,
                     status: 'COMPLETED',
-                    // Si l'expÃ©diteur est un Agent rattachÃ© Ã  une agence (ex: agent-action.tsx,
-                    // dÃ©pÃ´t guichet), l'opÃ©ration doit compter dans les rapports de cette
-                    // agence â€” sans ce champ, ces dÃ©pÃ´ts Ã©taient invisibles du rÃ©seau
-                    // d'agences alors qu'ils passent par un agent Mongain identifiÃ©.
+                    // Si l'expéditeur est un Agent rattaché à une agence (ex: agent-action.tsx,
+                    // dépôt guichet), l'opération doit compter dans les rapports de cette
+                    // agence — sans ce champ, ces dépôts étaient invisibles du réseau
+                    // d'agences alors qu'ils passent par un agent Mongain identifié.
                     branchId: sender.role === 'AGENT' ? (sender as any).branchId : undefined,
                     tellerId: sender.role === 'AGENT' ? sender.id : undefined,
                 },
@@ -513,15 +563,15 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
                 });
             }
 
-            // PersistÃ©es en base pour les deux parties â€” le push/socket ci-dessous est un
-            // best-effort en temps rÃ©el (Ã©choue silencieusement sans token/connexion), mais
-            // sans cette Ã©criture ni l'expÃ©diteur ni le destinataire ne voyaient JAMAIS
-            // l'opÃ©ration dans l'onglet Notifications de l'app.
+            // Persistées en base pour les deux parties — le push/socket ci-dessous est un
+            // best-effort en temps réel (échoue silencieusement sans token/connexion), mais
+            // sans cette écriture ni l'expéditeur ni le destinataire ne voyaient JAMAIS
+            // l'opération dans l'onglet Notifications de l'app.
             await tx.notification.create({
-                data: { userId: sender.id, title: 'Transfert envoyÃ©', body: `Vous avez envoyÃ© ${amount.toLocaleString('fr-FR')} FCFA Ã  ${receiver.name}.`, type: 'TRANSACTION' }
+                data: { userId: sender.id, title: 'Transfert envoyé', body: `Vous avez envoyé ${amount.toLocaleString('fr-FR')} FCFA à ${receiver.name}.`, type: 'TRANSACTION' }
             });
             await tx.notification.create({
-                data: { userId: receiver.id, title: 'ðŸ’° Transfert reÃ§u', body: `Vous avez reÃ§u ${amount.toLocaleString('fr-FR')} FCFA de la part de ${sender.name}.`, type: 'TRANSACTION' }
+                data: { userId: receiver.id, title: '💰 Transfert reçu', body: `Vous avez reçu ${amount.toLocaleString('fr-FR')} FCFA de la part de ${sender.name}.`, type: 'TRANSACTION' }
             });
 
             return {
@@ -544,7 +594,7 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     to: (result as any).receiverPushToken,
-                    title: 'ðŸ’° Transfert reÃ§u !',
+                    title: '💰 Transfert reçu !',
                     body: `Vous venez de recevoir ${amount.toLocaleString('fr-FR')} FCFA de la part de ${result.senderName || 'Un utilisateur'}.`,
                     data: { amount },
                     sound: 'default'
@@ -561,13 +611,13 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
             });
         }
 
-        return res.json({ message: 'Transfert rÃ©ussi !', data: result });
+        return res.json({ message: 'Transfert réussi !', data: result });
     } catch (error: any) {
         return res.status(400).json({ error: friendlyErrorMessage(error) });
     }
 });
 
-// â”€â”€â”€ Retrait InitiÃ© par le Client (QR Permanent) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Retrait Initié par le Client (QR Permanent) ──────────────────────
 router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthRequest, res) => {
     const parsed = transferSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -575,14 +625,14 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
     const { receiverPhone, amount, pin } = parsed.data;
 
     try {
-        // MÃªme raisonnement que /transfer : la vÃ©rification du PIN et la gestion des
-        // tentatives Ã©chouÃ©es doivent rester en dehors de la transaction financiÃ¨re,
-        // sous peine d'Ãªtre annulÃ©es par le rollback en cas d'Ã©chec.
+        // Même raisonnement que /transfer : la vérification du PIN et la gestion des
+        // tentatives échouées doivent rester en dehors de la transaction financière,
+        // sous peine d'être annulées par le rollback en cas d'échec.
         const senderPreCheck = await prisma.user.findUnique({ where: { id: req.userId } });
         if (!senderPreCheck) return res.status(400).json({ error: 'Compte client introuvable.' });
 
         if (senderPreCheck.lockedUntil && senderPreCheck.lockedUntil > new Date()) {
-            return res.status(400).json({ error: 'Votre compte est temporairement bloquÃ© suite Ã  plusieurs Ã©checs. RÃ©essayez plus tard.' });
+            return res.status(400).json({ error: 'Votre compte est temporairement bloqué suite à plusieurs échecs. Réessayez plus tard.' });
         }
 
         const pinMatchPreCheck = await bcrypt.compare(pin, senderPreCheck.pin);
@@ -596,7 +646,7 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
                 data: { failedPinAttempts: attempts, lockedUntil }
             });
 
-            if (isLocked) return res.status(400).json({ error: 'Compte bloquÃ© (3 Ã©checs). RÃ©essayez dans 15 minutes.' });
+            if (isLocked) return res.status(400).json({ error: 'Compte bloqué (3 échecs). Réessayez dans 15 minutes.' });
             return res.status(400).json({ error: `Code PIN incorrect. Tentative ${attempts}/3.` });
         }
 
@@ -622,7 +672,7 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
                 include: { wallet: true },
             });
             if (!agent || !agent.wallet) throw new Error("Agent introuvable.");
-            if (agent.role !== 'AGENT' && agent.role !== 'MERCHANT') throw new Error("OpÃ©ration impossible. Ce QR n'appartient ni Ã  un Agent ni Ã  un CommerÃ§ant.");
+            if (agent.role !== 'AGENT' && agent.role !== 'MERCHANT') throw new Error("Opération impossible. Ce QR n'appartient ni à un Agent ni à un Commerçant.");
 
             // 🛑 PESSIMISTIC LOCKING
             const lockIds = [sender.wallet.id, agent.wallet.id].sort();
@@ -634,9 +684,9 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
             // même correctif que ci-dessus : un round-trip Neon de moins dans cette transaction.
             const settings = await getSystemSettings();
 
-            // Plafond Anti-Blanchiment : mÃªme contrÃ´le que /transfer et /pay-bill (services.ts)
-            // â€” sans Ã§a, un client Tier 0 pouvait contourner sa limite journaliÃ¨re/mensuelle en
-            // retirant via QR agent/marchand plutÃ´t que par un transfert P2P classique.
+            // Plafond Anti-Blanchiment : même contrôle que /transfer et /pay-bill (services.ts)
+            // — sans ça, un client Tier 0 pouvait contourner sa limite journalière/mensuelle en
+            // retirant via QR agent/marchand plutôt que par un transfert P2P classique.
             await LimitEngine.verifyAndIncrementConsumption(tx, sender.id, sender.wallet.id, amount, settings);
 
             let fee = 0;
@@ -706,8 +756,8 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
                     senderWalletId: sender.wallet.id,
                     receiverWalletId: agent.wallet.id,
                     status: 'COMPLETED',
-                    // Idem /transfer : si l'agent qui reÃ§oit ce retrait guichet est rattachÃ©
-                    // Ã  une agence, l'opÃ©ration doit apparaÃ®tre dans les rapports de celle-ci.
+                    // Idem /transfer : si l'agent qui reçoit ce retrait guichet est rattaché
+                    // à une agence, l'opération doit apparaître dans les rapports de celle-ci.
                     branchId: agent.role === 'AGENT' ? (agent as any).branchId : undefined,
                     tellerId: agent.role === 'AGENT' ? agent.id : undefined,
                 },
@@ -725,12 +775,12 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
                 });
             }
 
-            // Enregistrement de la commission marchand â€” le crÃ©dit lui-mÃªme a dÃ©jÃ  eu lieu
-            // ci-dessus (agent.wallet incrÃ©mentÃ© de `amount + merchantReward` en une seule
-            // opÃ©ration, corporate n'ayant reÃ§u que le net `corporateCut`), donc cette ligne
-            // ne dÃ©place aucun fonds : elle rend juste la commission traÃ§able et sommable
-            // dans le relevÃ© du marchand, qui ne pouvait jusqu'ici jamais la distinguer de la
-            // vente elle-mÃªme.
+            // Enregistrement de la commission marchand — le crédit lui-même a déjà eu lieu
+            // ci-dessus (commissionWallet incrémenté de `merchantReward`, séparément de
+            // agent.wallet qui ne reçoit que `amount` ; corporate ne reçoit que le net
+            // `corporateCut`), donc cette ligne ne déplace aucun fonds : elle rend juste la
+            // commission traçable et sommable dans le relevé du marchand, qui ne pouvait
+            // jusqu'ici jamais la distinguer de la vente elle-même.
             if (merchantReward > 0 && commissionWalletId) {
                 await tx.transaction.create({
                     data: {
@@ -743,15 +793,15 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
                 });
             }
 
-            // MÃªme correctif que /transfer : le client n'avait jusqu'ici aucune trace de ce
-            // retrait dans son onglet Notifications, seulement le reÃ§u affichÃ© une fois Ã 
-            // l'Ã©cran juste aprÃ¨s l'opÃ©ration. L'agent/marchand ne recevait qu'un Ã©vÃ©nement
-            // Socket.IO best-effort â€” rien s'il n'Ã©tait pas connectÃ© Ã  ce moment prÃ©cis.
+            // Même correctif que /transfer : le client n'avait jusqu'ici aucune trace de ce
+            // retrait dans son onglet Notifications, seulement le reçu affiché une fois à
+            // l'écran juste après l'opération. L'agent/marchand ne recevait qu'un événement
+            // Socket.IO best-effort — rien s'il n'était pas connecté à ce moment précis.
             await tx.notification.create({
-                data: { userId: sender.id, title: 'Retrait effectuÃ©', body: `Vous avez retirÃ© ${amount.toLocaleString('fr-FR')} FCFA chez ${agent.name}.`, type: 'TRANSACTION' }
+                data: { userId: sender.id, title: 'Retrait effectué', body: `Vous avez retiré ${amount.toLocaleString('fr-FR')} FCFA chez ${agent.name}.`, type: 'TRANSACTION' }
             });
             await tx.notification.create({
-                data: { userId: agent.id, title: 'Paiement reÃ§u', body: `Vous avez reÃ§u ${amount.toLocaleString('fr-FR')} FCFA de la part de ${sender.name}.`, type: 'TRANSACTION' }
+                data: { userId: agent.id, title: 'Paiement reçu', body: `Vous avez reçu ${amount.toLocaleString('fr-FR')} FCFA de la part de ${sender.name}.`, type: 'TRANSACTION' }
             });
 
             return {
@@ -775,7 +825,7 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
             });
         }
 
-        return res.json({ message: 'Retrait autorisÃ© avec succÃ¨s !', data: result });
+        return res.json({ message: 'Retrait autorisé avec succès !', data: result });
     } catch (error: any) {
         return res.status(400).json({ error: friendlyErrorMessage(error) });
     }
@@ -788,19 +838,19 @@ const rechargeSchema = z.object({
     amount: z.number().int('Pas de centimes.').positive('Montant invalide.')
 });
 
-// âš ï¸ La recharge utilise maintenant la passerelle PVit (mypvit.pro)
+// ⚠️ La recharge utilise maintenant la passerelle PVit (mypvit.pro)
 router.post('/recharge', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const parsed = rechargeSchema.safeParse(req.body);
-        if (!parsed.success) return res.status(400).json({ error: 'DonnÃ©es invalides.' });
+        if (!parsed.success) return res.status(400).json({ error: 'Données invalides.' });
 
         const { method, identifier, amount } = parsed.data;
         if (amount > MAXIMUM_ALLOWED_LIMIT) {
-            return res.status(400).json({ error: `Montant plafonnÃ© Ã  ${MAXIMUM_ALLOWED_LIMIT.toLocaleString('fr-FR')} FCFA par opÃ©ration.` });
+            return res.status(400).json({ error: `Montant plafonné à ${MAXIMUM_ALLOWED_LIMIT.toLocaleString('fr-FR')} FCFA par opération.` });
         }
 
         if (method !== 'AIRTEL' && method !== 'MOOV') {
-            return res.status(400).json({ error: 'Seuls Airtel et Moov sont supportÃ©s par cette passerelle.' });
+            return res.status(400).json({ error: 'Seuls Airtel et Moov sont supportés par cette passerelle.' });
         }
 
         const user = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
@@ -808,10 +858,10 @@ router.post('/recharge', authMiddleware, async (req: AuthRequest, res) => {
 
         const settings = await getSystemSettings();
         if (!isPvitConfigured(settings)) {
-            return res.status(503).json({ error: 'La passerelle de paiement (PVit) n\'est pas configurÃ©e.' });
+            return res.status(503).json({ error: 'La passerelle de paiement (PVit) n\'est pas configurée.' });
         }
 
-        // Compte systÃ¨me "Passerelle de Paiement" (Aggregator) pour simuler l'entrÃ©e d'argent externe
+        // Compte système "Passerelle de Paiement" (Aggregator) pour simuler l'entrée d'argent externe
         const gatewayPhone = '+24133333333';
         let gateway = await prisma.user.findUnique({ where: { phone: gatewayPhone }, include: { wallet: true } });
         if (!gateway) {
@@ -839,7 +889,7 @@ router.post('/recharge', authMiddleware, async (req: AuthRequest, res) => {
             network: method as 'AIRTEL' | 'MOOV'
         });
 
-        // CrÃ©er la transaction en PENDING. L'argent N'EST PAS crÃ©ditÃ© immÃ©diatement.
+        // Créer la transaction en PENDING. L'argent N'EST PAS crédité immédiatement.
         // Le Webhook (/api/webhooks/pvit-status) s'en chargera.
         await prisma.transaction.create({
             data: {
@@ -860,7 +910,7 @@ router.post('/recharge', authMiddleware, async (req: AuthRequest, res) => {
         // On avertit le Front que la transaction est en cours
         res.json({
             status: 'PENDING',
-            message: 'Veuillez confirmer la transaction sur votre tÃ©lÃ©phone via le menu envoyÃ©.',
+            message: 'Veuillez confirmer la transaction sur votre téléphone via le menu envoyé.',
             balance: user.wallet.balance
         });
     } catch (e: any) {
@@ -871,19 +921,19 @@ router.post('/recharge', authMiddleware, async (req: AuthRequest, res) => {
 
 // POST /api/wallet/topup (Rechargement par Carte Bancaire Client)
 //
-// âš ï¸ Aucune passerelle de paiement rÃ©elle n'est intÃ©grÃ©e : `cardToken` n'est
-// jamais vÃ©rifiÃ©. Historiquement cette route crÃ©ditait le wallet du client
-// sans aucune contrepartie dÃ©bitÃ©e ailleurs â€” un simple appel authentifiÃ©
-// suffisait Ã  crÃ©er de la monnaie Ã©lectronique Ã  partir de rien. DÃ©sormais :
-//   1. La route est dÃ©sactivÃ©e par dÃ©faut (401/501) en production tant
-//      qu'aucune vraie intÃ©gration PSP (Stripe/CinetPay/etc.) n'est branchÃ©e.
-//   2. Quand explicitement activÃ©e (dÃ©mo/staging), le crÃ©dit provient d'un
-//      compte "passerelle" prÃ©-approvisionnÃ© (mÃªme schÃ©ma que /recharge),
-//      pour conserver une Ã©criture comptable Ã  double entrÃ©e.
+// ⚠️ Aucune passerelle de paiement réelle n'est intégrée : `cardToken` n'est
+// jamais vérifié. Historiquement cette route créditait le wallet du client
+// sans aucune contrepartie débitée ailleurs — un simple appel authentifié
+// suffisait à créer de la monnaie électronique à partir de rien. Désormais :
+//   1. La route est désactivée par défaut (401/501) en production tant
+//      qu'aucune vraie intégration PSP (Stripe/CinetPay/etc.) n'est branchée.
+//   2. Quand explicitement activée (démo/staging), le crédit provient d'un
+//      compte "passerelle" pré-approvisionné (même schéma que /recharge),
+//      pour conserver une écriture comptable à double entrée.
 router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
     if (process.env.ENABLE_UNVERIFIED_CARD_TOPUP !== 'true') {
         return res.status(501).json({
-            error: 'Le rechargement par carte bancaire nÃ©cessite une intÃ©gration avec un prestataire de paiement rÃ©el. Cette fonctionnalitÃ© est dÃ©sactivÃ©e tant que cette intÃ©gration n\'est pas en place.'
+            error: 'Le rechargement par carte bancaire nécessite une intégration avec un prestataire de paiement réel. Cette fonctionnalité est désactivée tant que cette intégration n\'est pas en place.'
         });
     }
 
@@ -892,7 +942,7 @@ router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
 
     const { amount } = parsed.data;
     if (amount > MAXIMUM_ALLOWED_LIMIT) {
-        return res.status(400).json({ error: `Montant plafonnÃ© Ã  ${MAXIMUM_ALLOWED_LIMIT.toLocaleString('fr-FR')} FCFA par opÃ©ration.` });
+        return res.status(400).json({ error: `Montant plafonné à ${MAXIMUM_ALLOWED_LIMIT.toLocaleString('fr-FR')} FCFA par opération.` });
     }
 
     try {
@@ -900,8 +950,8 @@ router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
         if (!user || user.role !== 'USER') throw new Error('Seuls les clients peuvent utiliser ce service de Top-Up.');
         if (!user.wallet) throw new Error('Wallet introuvable.');
 
-        // Compte passerelle simulÃ© (mÃªme mÃ©canisme que /recharge) : le crÃ©dit
-        // client a toujours une contrepartie dÃ©bitÃ©e, jamais crÃ©Ã© "from thin air".
+        // Compte passerelle simulé (même mécanisme que /recharge) : le crédit
+        // client a toujours une contrepartie débitée, jamais créé "from thin air".
         const gatewayPhone = '+24133333333';
         let gateway = await prisma.user.findUnique({ where: { phone: gatewayPhone }, include: { wallet: true } });
         if (!gateway) {
@@ -944,7 +994,7 @@ router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
                 data: {
                     userId: user.id,
                     title: 'Rechargement CB',
-                    body: `Votre compte a Ã©tÃ© rechargÃ© de ${amount.toLocaleString('fr-FR')} FCFA via Carte Bancaire.`,
+                    body: `Votre compte a été rechargé de ${amount.toLocaleString('fr-FR')} FCFA via Carte Bancaire.`,
                     type: 'TRANSACTION'
                 }
             });
@@ -954,7 +1004,7 @@ router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
 
         // Trigger socket IO if needed, but the user is the one initiating it.
         return res.json({
-            message: 'Rechargement rÃ©ussi.',
+            message: 'Rechargement réussi.',
             balance: newBalance
         });
     } catch (e: any) {
@@ -962,18 +1012,18 @@ router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
-// POST /api/wallet/pay-service (Achat Ã‰lectricitÃ©, etc.)
+// POST /api/wallet/pay-service (Achat Électricité, etc.)
 //
-// MÃªme situation que /api/services/pay-bill (services.ts) : aucune intÃ©gration rÃ©elle avec
+// Même situation que /api/services/pay-bill (services.ts) : aucune intégration réelle avec
 // SEEG/Edan n'existe (le type ELECTRICITY refuse plus bas), et aucun autre `type` n'est
-// rÃ©ellement implÃ©mentÃ© (serviceToken reste toujours vide) â€” sans ce gate, un appel direct
-// avec n'importe quel `type` autre que ELECTRICITY dÃ©bitait quand mÃªme le client pour un
-// service jamais livrÃ©. DÃ©sactivÃ© par dÃ©faut, mÃªme flag que services.ts (mÃªme catÃ©gorie :
-// paiement de service externe non branchÃ©, pas un rechargement de wallet).
+// réellement implémenté (serviceToken reste toujours vide) — sans ce gate, un appel direct
+// avec n'importe quel `type` autre que ELECTRICITY débitait quand même le client pour un
+// service jamais livré. Désactivé par défaut, même flag que services.ts (même catégorie :
+// paiement de service externe non branché, pas un rechargement de wallet).
 router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
     if (process.env.ENABLE_UNVERIFIED_EXTERNAL_SERVICES !== 'true') {
         return res.status(501).json({
-            error: 'Le paiement de services nÃ©cessite une intÃ©gration rÃ©elle avec le fournisseur. Cette fonctionnalitÃ© est dÃ©sactivÃ©e tant que cette intÃ©gration n\'est pas en place.'
+            error: 'Le paiement de services nécessite une intégration réelle avec le fournisseur. Cette fonctionnalité est désactivée tant que cette intégration n\'est pas en place.'
         });
     }
     try {
@@ -988,23 +1038,38 @@ router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
 
         let serviceToken = '';
         if (type === 'ELECTRICITY') {
-            throw new Error("L'intÃ©gration SEEG/EDAN est en cours de finalisation. Les achats d'Ã©lectricitÃ© sont suspendus pour la BÃªta.");
+            throw new Error("L'intégration SEEG/EDAN est en cours de finalisation. Les achats d'électricité sont suspendus pour la Bêta.");
         }
 
         const newBalance = await prisma.$transaction(async (tx) => {
-            // Garde atomique (balance: gte) : le contrÃ´le ci-dessus lit une valeur non
-            // verrouillÃ©e, donc deux paiements concurrents pouvaient tous deux le passer et
-            // faire passer le solde en nÃ©gatif (mÃªme classe de bug que /pay-bill, /topup).
+            // Même contrôle Anti-Blanchiment que /pay-bill (services.ts) — sans lui, ce rail
+            // permettait à un client Tier 0 de contourner sa limite journalière/mensuelle
+            // dès que ce flag bêta est activé.
+            const settings = await getSystemSettings();
+            await LimitEngine.verifyAndIncrementConsumption(tx, user.id, user.wallet!.id, amount, settings);
+
+            // Garde atomique (balance: gte) : le contrôle ci-dessus lit une valeur non
+            // verrouillée, donc deux paiements concurrents pouvaient tous deux le passer et
+            // faire passer le solde en négatif (même classe de bug que /pay-bill, /topup).
             const w = await tx.wallet.update({
                 where: { id: user.wallet!.id, balance: { gte: amount } },
                 data: { balance: { decrement: amount } }
             });
 
+            // Créditer la réserve centrale — sans ce update, le débit ci-dessus faisait
+            // purement et simplement disparaître l'argent : la ligne Transaction ci-dessous
+            // ENREGISTRE un crédit vers `reserve.wallet` mais ne le PROVOQUE pas, un
+            // Transaction n'étant qu'une écriture d'audit, jamais un mouvement de solde.
+            await tx.wallet.update({
+                where: { id: reserve!.wallet!.id },
+                data: { balance: { increment: amount } }
+            });
+
             await tx.transaction.create({
                 data: {
                     amount,
-                    senderWalletId: w.id, // DÃ©bit
-                    receiverWalletId: reserve!.wallet!.id, // CrÃ©dit Ã  la plateforme centrale
+                    senderWalletId: w.id, // Débit
+                    receiverWalletId: reserve!.wallet!.id, // Crédit à la plateforme centrale
                     status: 'COMPLETED',
                     reference: generateReference(`SERVICE-${type}`),
                 }
@@ -1014,7 +1079,7 @@ router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
                 data: {
                     userId: user.id,
                     title: `Achat de Service : ${type}`,
-                    body: `DÃ©bit de ${amount.toLocaleString('fr-FR')} FCFA. RÃ©fÃ©rence: ${reference}.`,
+                    body: `Débit de ${amount.toLocaleString('fr-FR')} FCFA. Référence: ${reference}.`,
                     type: 'SYSTEM'
                 }
             });
@@ -1023,7 +1088,7 @@ router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
         });
 
         return res.json({
-            message: 'Achat effectuÃ© avec succÃ¨s.',
+            message: 'Achat effectué avec succès.',
             balance: newBalance,
             serviceToken
         });
@@ -1032,42 +1097,42 @@ router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
-// POST /api/wallet/pull (DÃ©pÃ´t Mobile Money via PVit)
+// POST /api/wallet/pull (Dépôt Mobile Money via PVit)
 //
-// IntÃ©gration rÃ©elle (voir backend/src/services/pvit.ts) : cette route ne fait qu'INITIER la
-// demande â€” PVit rÃ©pond immÃ©diatement avec un accusÃ© de prise en compte, jamais le rÃ©sultat
-// final. Le wallet n'est crÃ©ditÃ© que par le webhook (backend/src/routes/webhooks.ts,
-// POST /api/webhooks/pvit-status) une fois l'opÃ©rateur confirmÃ©, ce qui est pourquoi la
-// transaction ci-dessous dÃ©marre PENDING et non COMPLETED.
+// Intégration réelle (voir backend/src/services/pvit.ts) : cette route ne fait qu'INITIER la
+// demande — PVit répond immédiatement avec un accusé de prise en compte, jamais le résultat
+// final. Le wallet n'est crédité que par le webhook (backend/src/routes/webhooks.ts,
+// POST /api/webhooks/pvit-status) une fois l'opérateur confirmé, ce qui est pourquoi la
+// transaction ci-dessous démarre PENDING et non COMPLETED.
 router.post('/pull', authMiddleware, async (req: AuthRequest, res) => {
     const settings = await getSystemSettings();
     if (!isPvitConfigured(settings)) {
         return res.status(501).json({
-            error: 'Le dÃ©pÃ´t Mobile Money nÃ©cessite une intÃ©gration rÃ©elle avec Airtel/Moov. Cette fonctionnalitÃ© est dÃ©sactivÃ©e tant que cette intÃ©gration n\'est pas configurÃ©e.'
+            error: 'Le dépôt Mobile Money nécessite une intégration réelle avec Airtel/Moov. Cette fonctionnalité est désactivée tant que cette intégration n\'est pas configurée.'
         });
     }
 
     try {
         const { phone, amount, network } = req.body;
         if (!amount || amount < 500) throw new Error('Montant minimum : 500 FCFA');
-        if (network !== 'AIRTEL' && network !== 'MOOV') throw new Error('OpÃ©rateur invalide.');
-        if (!phone) throw new Error('NumÃ©ro de tÃ©lÃ©phone requis.');
+        if (network !== 'AIRTEL' && network !== 'MOOV') throw new Error('Opérateur invalide.');
+        if (!phone) throw new Error('Numéro de téléphone requis.');
 
         const user = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
-        if (!user || !user.wallet) throw new Error('Compte expÃ©diteur introuvable');
+        if (!user || !user.wallet) throw new Error('Compte expéditeur introuvable');
 
-        // PVit rejette tout caractÃ¨re non-alphanumÃ©rique dans `reference` (leur propre exemple
-        // de doc, "ORDER-2026-0001", ne passe pourtant pas leur propre validation â€” vÃ©rifiÃ© en
-        // sandbox : "Le champ 'reference' doit Ãªtre une valeur alphanumerique") â€” retirer le
-        // tiret de generateReference() avant envoi, cette mÃªme valeur sert aussi de clÃ© de
-        // correspondance pour le webhook (Transaction.reference), donc les deux doivent Ãªtre
-        // strictement identiques au caractÃ¨re prÃ¨s.
+        // PVit rejette tout caractère non-alphanumérique dans `reference` (leur propre exemple
+        // de doc, "ORDER-2026-0001", ne passe pourtant pas leur propre validation — vérifié en
+        // sandbox : "Le champ 'reference' doit être une valeur alphanumerique") — retirer le
+        // tiret de generateReference() avant envoi, cette même valeur sert aussi de clé de
+        // correspondance pour le webhook (Transaction.reference), donc les deux doivent être
+        // strictement identiques au caractère près.
         const reference = generateReference('PULL').replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
         const customerAccountNumber = toPvitCustomerAccountNumber(String(phone));
 
         const response = await initiatePvitPayment(settings, { amount, reference, customerAccountNumber, network });
 
-        // Historiser la transaction â€” PENDING jusqu'Ã  confirmation par webhook.
+        // Historiser la transaction — PENDING jusqu'à confirmation par webhook.
         await prisma.transaction.create({
             data: {
                 amount,
@@ -1079,12 +1144,12 @@ router.post('/pull', authMiddleware, async (req: AuthRequest, res) => {
         });
 
         return res.json({
-            message: response.message || 'Demande de dÃ©pÃ´t initiÃ©e. Consultez votre tÃ©lÃ©phone pour valider avec votre code PIN Mobile Money.',
+            message: response.message || 'Demande de dépôt initiée. Consultez votre téléphone pour valider avec votre code PIN Mobile Money.',
             reference,
             network,
         });
     } catch (e: any) {
-        return res.status(400).json({ error: friendlyErrorMessage(e, 'Erreur lors de la requÃªte de dÃ©pÃ´t rÃ©seau.') });
+        return res.status(400).json({ error: friendlyErrorMessage(e, 'Erreur lors de la requête de dépôt réseau.') });
     }
 });
 
@@ -1093,22 +1158,22 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
     const settings = await getSystemSettings();
     if (!isPvitConfigured(settings)) {
         return res.status(501).json({
-            error: 'Les retraits Mobile Money nÃ©cessitent une configuration PVit active.'
+            error: 'Les retraits Mobile Money nécessitent une configuration PVit active.'
         });
     }
 
     try {
         const { phone, amount, network, pin } = req.body;
         if (!amount || amount < 500) throw new Error('Montant minimum : 500 FCFA');
-        if (network !== 'AIRTEL' && network !== 'MOOV') throw new Error('OpÃ©rateur invalide.');
-        if (!phone) throw new Error('NumÃ©ro de tÃ©lÃ©phone requis.');
+        if (network !== 'AIRTEL' && network !== 'MOOV') throw new Error('Opérateur invalide.');
+        if (!phone) throw new Error('Numéro de téléphone requis.');
 
-        // 1. VÃ©rification du profil et du PIN (hors transaction pour incrÃ©menter les Ã©checs)
+        // 1. Vérification du profil et du PIN (hors transaction pour incrémenter les échecs)
         const senderPreCheck = await prisma.user.findUnique({ where: { id: req.userId } });
-        if (!senderPreCheck) throw new Error('Compte expÃ©diteur introuvable.');
+        if (!senderPreCheck) throw new Error('Compte expéditeur introuvable.');
 
         if (senderPreCheck.lockedUntil && senderPreCheck.lockedUntil > new Date()) {
-            throw new Error('Votre compte est temporairement bloquÃ© suite Ã  plusieurs Ã©checs. RÃ©essayez plus tard.');
+            throw new Error('Votre compte est temporairement bloqué suite à plusieurs échecs. Réessayez plus tard.');
         }
 
         const pinMatch = await bcrypt.compare(pin, senderPreCheck.pin);
@@ -1120,7 +1185,7 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
                 where: { id: senderPreCheck.id },
                 data: { failedPinAttempts: attempts, lockedUntil }
             });
-            throw new Error(isLocked ? 'Compte bloquÃ© (3 Ã©checs). RÃ©essayez dans 15 minutes.' : `Code PIN incorrect. Tentative ${attempts}/3.`);
+            throw new Error(isLocked ? 'Compte bloqué (3 échecs). Réessayez dans 15 minutes.' : `Code PIN incorrect. Tentative ${attempts}/3.`);
         }
 
         if (senderPreCheck.failedPinAttempts > 0) {
@@ -1130,11 +1195,11 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
         const reference = generateReference('PUSH').replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
         const customerAccountNumber = toPvitCustomerAccountNumber(String(phone));
 
-        // 2. PrÃ©-dÃ©bit du solde + Frais
+        // 2. Pré-débit du solde + Frais
         const fee = amount * settings.taxWithdraw;
         const totalRequired = amount + fee;
 
-        // RÃ©cupÃ©rer le compte passerelle pour Ã©quilibrer la comptabilitÃ©
+        // Récupérer le compte passerelle pour équilibrer la comptabilité
         const gatewayPhone = '+24133333333';
         let gateway = await prisma.user.findUnique({ where: { phone: gatewayPhone }, include: { wallet: true } });
         if (!gateway || !gateway.wallet) {
@@ -1164,11 +1229,11 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
             // Anti-blanchiment
             await LimitEngine.verifyAndIncrementConsumption(tx, user.id, user.wallet!.id, amount, settings);
 
-            // On dÃ©duit directement pour verrouiller les fonds — updateMany + garde `gte`
+            // On déduit directement pour verrouiller les fonds — updateMany + garde `gte`
             // (pas un simple `update`) : la lecture ci-dessus ne prend aucun verrou de ligne,
-            // donc deux appels concurrents peuvent tous deux passer le contrÃ´le JS avant que
-            // l'un ou l'autre n'Ã©crive. Seule la condition Ã©valuÃ©e par Postgres AU MOMENT de
-            // l'Ã©criture (sous le verrou de ligne pris par l'UPDATE) empÃªche le double-retrait.
+            // donc deux appels concurrents peuvent tous deux passer le contrôle JS avant que
+            // l'un ou l'autre n'écrive. Seule la condition évaluée par Postgres AU MOMENT de
+            // l'écriture (sous le verrou de ligne pris par l'UPDATE) empêche le double-retrait.
             const debited = await tx.wallet.updateMany({
                 where: { id: user.wallet!.id, balance: { gte: totalRequired } },
                 data: { balance: { decrement: totalRequired } }
@@ -1220,7 +1285,7 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
             }
         });
 
-        // 3. Demande Ã  PVit d'exÃ©cuter le virement (Transfert)
+        // 3. Demande à PVit d'exécuter le virement (Transfert)
         try {
             await initiatePvitTransfer(settings, { amount, reference, customerAccountNumber, network });
         } catch (pvitError: any) {
@@ -1252,12 +1317,23 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
                     where: { id: senderWalletId },
                     data: { balance: { increment: totalRequired } }
                 });
+
+                // Sans ça, la ligne FEE-MM- restait `COMPLETED` alors que les frais qu'elle
+                // trace viennent d'être reversés au client ci-dessus — un retrait annulé
+                // continuait donc d'apparaître comme ayant généré une commission bien réelle
+                // dans l'historique/la comptabilité, malgré aucune perte de fonds.
+                if (corporateWalletId && fee > 0) {
+                    await tx.transaction.updateMany({
+                        where: { reference: 'FEE-MM-' + transactionId.substring(0, 8), status: 'COMPLETED' },
+                        data: { status: 'FAILED' }
+                    });
+                }
             });
             throw pvitError;
         }
 
         return res.json({
-            message: 'Votre demande de retrait est initiÃ©e. Vous allez le recevoir dans quelques instants.',
+            message: 'Votre demande de retrait est initiée. Vous allez le recevoir dans quelques instants.',
             reference,
             network,
         });

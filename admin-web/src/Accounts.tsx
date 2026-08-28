@@ -25,12 +25,19 @@ export default function Accounts({ token, role, hasPerm, onAdjustSystemAccount }
     // ne sont plus les premières choses vues en arrivant sur l'onglet Personnel.
     const [staffTab, setStaffTab] = useState<StaffSubTab>('assign');
 
+    // La garde au niveau de App.tsx (perm_customer_view OU perm_staff_view) ne suffit qu'à
+    // ouvrir CET écran — pas à autoriser chacun de ses 5 sous-onglets, qui exigent chacun
+    // côté serveur une permission différente (ex. perm_branch_manage pour Agences,
+    // perm_treasury_view pour Comptes Système). Sans ce filtre, un rôle qui n'a que
+    // perm_customer_view voyait quand même "Agences"/"Comptes Système", cliquait dessus, et
+    // se heurtait à un message d'erreur plutôt que de ne jamais voir l'onglet.
+    const canHasPerm = hasPerm || (() => true);
     const tabs = [
         { id: 'clients' as const, icon: <UsersIcon size={18} />, label: 'Clients & Marchands' },
         { id: 'agents' as const, icon: <Briefcase size={18} />, label: 'Agents (ancien système)' },
-        { id: 'staff' as const, icon: <ShieldCheck size={18} />, label: 'Personnel' },
-        { id: 'branches' as const, icon: <Building2 size={18} />, label: 'Agences' },
-        { id: 'system' as const, icon: <Server size={18} />, label: 'Comptes Système' },
+        ...(canHasPerm(['perm_staff_view']) ? [{ id: 'staff' as const, icon: <ShieldCheck size={18} />, label: 'Personnel' }] : []),
+        ...(canHasPerm(['perm_branch_manage']) ? [{ id: 'branches' as const, icon: <Building2 size={18} />, label: 'Agences' }] : []),
+        ...(canHasPerm(['perm_treasury_view']) ? [{ id: 'system' as const, icon: <Server size={18} />, label: 'Comptes Système' }] : []),
     ];
 
     const staffTabs = [
@@ -47,8 +54,8 @@ export default function Accounts({ token, role, hasPerm, onAdjustSystemAccount }
                 (fil d'Ariane) suffit à situer "où on est" ; cette TabBar dit "quoi". */}
             <TabBar<AccountsTab> tabs={tabs} active={tab} onChange={setTab} />
 
-            {tab === 'clients' && <Users token={token} staffRole={role} />}
-            {tab === 'agents' && <Users token={token} staffRole={role} lockedRole="AGENT" />}
+            {tab === 'clients' && <Users token={token} staffRole={role} hasPerm={canHasPerm} />}
+            {tab === 'agents' && <Users token={token} staffRole={role} hasPerm={canHasPerm} lockedRole="AGENT" />}
             {tab === 'branches' && <AgencyCenter token={token} hasPerm={hasPerm || (() => true)} />}
             {tab === 'system' && <SystemAccounts token={token} onAdjust={onAdjustSystemAccount} />}
 

@@ -51,11 +51,12 @@ const TABS = [
     { id: 'audit', label: 'Audit', icon: Clock },
 ];
 
-export default function Customer360({ token, userId, onBack, staffRole }: {
+export default function Customer360({ token, userId, onBack, staffRole, hasPerm }: {
     token: string;
     userId: string;
     onBack: () => void;
     staffRole?: string;
+    hasPerm: (perms: string[]) => boolean;
 }) {
     const [activeTab, setActiveTab] = useState('overview');
     const [data, setData] = useState<any>(null);
@@ -115,19 +116,30 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
     const [supportRecId, setSupportRecId] = useState('');
     const [ticketStatusForm, setTicketStatusForm] = useState<{ recId: string; status: string; comment: string } | null>(null);
 
-    // Données financières sensibles (solde wallet, email, etc.) — réservées au back-office.
-    const isSensitive = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER'].includes(staffRole || '');
-
-    // Photos KYC (CNI/selfie) — tout le personnel opérationnel doit pouvoir vérifier
-    // l'identité d'un client qui se présente physiquement en agence au guichet.
-    // Avant cette correction, TELLER et BRANCH_MANAGER ne pouvaient pas ouvrir les images.
-    const canViewKyc = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER',
-        'BRANCH_MANAGER', 'TELLER'].includes(staffRole || '');
-
-    // Validation KYC (approuver/rejeter) — back-office seulement.
-    const canValidateKyc = ['SUPER_ADMIN', 'COMPLIANCE_CHECKER', 'BRANCH_MANAGER'].includes(staffRole || '');
-
-    const isRisk = ['SUPER_ADMIN', 'RISK'].includes(staffRole || '');
+    // Avant ce correctif, ces indicateurs se déduisaient d'une liste de rôles codée en dur
+    // (staffRole), ignorant entièrement le catalogue RBAC réel et les permissions
+    // personnalisées qu'un SUPER_ADMIN peut accorder à un employé (StaffAccessRights.tsx) —
+    // exactement la même classe de dérive déjà corrigée ailleurs cette session. Chaque
+    // indicateur correspond maintenant à LA permission que le backend vérifie réellement
+    // pour l'action ou la donnée concernée (voir admin.ts) — jamais un rôle deviné, et
+    // parfois une permission bien plus large que ce que "isSensitive"/"isRisk" laissaient
+    // supposer (ex: la demande de relèvement de plafond et de remboursement n'exigent que
+    // perm_customer_360_basic, déjà accordée à la plupart des rôles opérationnels — ces
+    // formulaires étaient invisibles à tort pour TELLER/BRANCH_MANAGER).
+    const canViewWallet = hasPerm(['perm_customer_wallet_view']);
+    const canViewAnySensitiveData = hasPerm(['perm_customer_wallet_view', 'perm_customer_kyc_view', 'perm_customer_flag']);
+    const canViewKyc = hasPerm(['perm_customer_kyc_view']);
+    const canValidateKyc = hasPerm(['perm_customer_kyc_validate']);
+    const canRequestLimitIncrease = hasPerm(['perm_customer_360_basic']);
+    const canRequestRefund = hasPerm(['perm_customer_360_basic']);
+    const canFlagCustomer = hasPerm(['perm_customer_flag']);
+    const canManageAccountStatus = hasPerm(['perm_customer_freeze']);
+    // POST /users/:id/reclamation (admin.ts) vérifie un rôle codé en dur côté serveur
+    // (hasSupportAccess), pas une permission RBAC — TELLER en est exclu. Le bouton restait
+    // affiché sans condition à quiconque atteint cet onglet (perm_customer_360_basic suffit
+    // pour ça), donc un TELLER le voyait, remplissait le formulaire, et se heurtait à un
+    // refus serveur silencieux à la soumission.
+    const canCreateTicketAsStaff = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER', 'BRANCH_MANAGER'].includes(staffRole || '');
 
     const api = async (path: string, method = 'GET', body?: any) => {
         const resp = await fetch(`${API_URL}/api/admin${path}`, {
@@ -410,7 +422,7 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
                     { label: 'Statut Compte', value: <StatusBadge status={user?.accountStatus} /> },
                     { label: 'KYC Level', value: `Tier ${user?.kycLevel} — ${user?.kycStatus}` },
                     { label: 'Rôle', value: user?.role },
-                    { label: 'Solde', value: isSensitive ? fmt(user?.wallet?.balance || 0) : '••••• FCFA' },
+                    { label: 'Solde', value: canViewWallet ? fmt(user?.wallet?.balance || 0) : '••••• FCFA' },
                     { label: 'RiskFlags actifs', value: openRiskFlagsCount ?? 0 },
                     { label: 'Réclamations', value: reclamationsCount ?? 0 },
                 ].map(({ label, value }) => (
@@ -460,7 +472,7 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
                     ['Nom complet', user?.name],
                     ['Téléphone', user?.phone],
                     ['Pseudo', user?.username || '—'],
-                    ['Email', isSensitive ? (user?.email || '—') : '•••@•••'],
+                    ['Email', canViewAnySensitiveData ? (user?.email || '—') : '•••@•••'],
                     ['Rôle', user?.role],
                     ['Statut', user?.accountStatus],
                     ['Date inscription', fmtDate(user?.createdAt)],
@@ -520,7 +532,7 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
     // ── WALLET ────────────────────────────────────────────────
     const WalletTab = () => card(<>
         {sectionTitle('Portefeuille (Read-only)')}
-        {!isSensitive ? (
+        {!canViewWallet ? (
             <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>
                 <Lock size={32} style={{ marginBottom: 12 }} />
                 <p>Accès aux données financières restreint à votre rôle.</p>
@@ -576,7 +588,7 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
                     </div>
                 )}
             </>)}
-            {isSensitive && card(<>
+            {canRequestLimitIncrease && card(<>
                 {sectionTitle('Demande de Modification (Maker/Checker)')}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div>
@@ -652,7 +664,7 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
             {card(<>
                 {!txData ? <p>Chargement…</p> : txData.txs?.length === 0 ? <p style={{ color: 'var(--text-muted)' }}>Aucune transaction.</p> : (
                     <table style={{ width: '100%' }}>
-                        <thead><tr><th>Date</th><th>Réf.</th><th>Type</th><th>Montant</th><th>Frais</th><th>Contrepartie</th><th>Statut</th>{isSensitive && <th>Rembours.</th>}</tr></thead>
+                        <thead><tr><th>Date</th><th>Réf.</th><th>Type</th><th>Montant</th><th>Frais</th><th>Contrepartie</th><th>Statut</th>{canRequestRefund && <th>Rembours.</th>}</tr></thead>
                         <tbody>{txData.txs.map((t: any) => {
                             const isOut = t.senderWallet?.user?.id === userId;
                             const counterpart = isOut ? t.receiverWallet?.user : t.senderWallet?.user;
@@ -665,7 +677,7 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
                                     <td style={{ color: 'var(--text-muted)' }}>{fmt(t.fee)}</td>
                                     <td style={{ fontSize: 12 }}>{counterpart?.name || '—'}<br /><small style={{ color: 'var(--text-muted)' }}>{counterpart?.phone}</small></td>
                                     <td><StatusBadge status={t.status} /></td>
-                                    {isSensitive && <td>
+                                    {canRequestRefund && <td>
                                         {t.status === 'COMPLETED' && (
                                             <button onClick={() => { setRefundModal(t); setRefundAmount(String(t.amount)); setRefundReason(''); }}
                                                 style={{ padding: '4px 10px', fontSize: 11, background: 'rgba(99,102,241,0.1)', color: 'var(--accent)', border: '1px solid var(--accent)40', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}>
@@ -810,10 +822,10 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
                         <button style={btnStyle('var(--warning)')} onClick={() => doAction(`/users/${userId}/unlock-account`, { reason: actionReason }, 'Compte déverrouillé.')} disabled={actionLoading || actionReason.trim().length < 3}>
                             <Unlock size={14} style={{ marginRight: 6 }} />Déverrouiller PIN
                         </button>
-                        {isRisk && <button style={btnStyle('var(--danger)')} onClick={() => doAction(`/users/${userId}/revoke-sessions`, { reason: actionReason }, 'Sessions révoquées.')} disabled={actionLoading || actionReason.trim().length < 3}>
+                        {canManageAccountStatus && <button style={btnStyle('var(--danger)')} onClick={() => doAction(`/users/${userId}/revoke-sessions`, { reason: actionReason }, 'Sessions révoquées.')} disabled={actionLoading || actionReason.trim().length < 3}>
                             <Smartphone size={14} style={{ marginRight: 6 }} />Révoquer toutes les sessions
                         </button>}
-                        {isRisk && <button style={btnStyle('var(--accent)')} onClick={() => doAction(`/users/${userId}/reset-pin`, { reason: actionReason }, 'PIN réinitialisé. Client doit recréer son PIN.')} disabled={actionLoading || actionReason.trim().length < 5}>
+                        {canManageAccountStatus && <button style={btnStyle('var(--accent)')} onClick={() => doAction(`/users/${userId}/reset-pin`, { reason: actionReason }, 'PIN réinitialisé. Client doit recréer son PIN.')} disabled={actionLoading || actionReason.trim().length < 5}>
                             <Lock size={14} style={{ marginRight: 6 }} />Déclencher Reset PIN
                         </button>}
                     </div>
@@ -850,7 +862,7 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
                     </div>
                 ))}
             </>)}
-            {isSensitive && card(<>
+            {canFlagCustomer && card(<>
                 {sectionTitle('Créer un Flag')}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div>
@@ -871,7 +883,7 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
                 </div>
                 <button style={{ ...btnStyle('var(--warning)'), marginTop: 12 }} onClick={doFlag} disabled={actionLoading}><ShieldAlert size={14} style={{ marginRight: 6 }} />Créer le Flag</button>
             </>)}
-            {isRisk && card(<>
+            {canManageAccountStatus && card(<>
                 {sectionTitle('Gestion du Statut du Compte')}
 
                 {/* Current status banner */}
@@ -969,7 +981,7 @@ export default function Customer360({ token, userId, onBack, staffRole }: {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ margin: 0 }}>Réclamations ({recData.length})</h3>
-                <button style={btnStyle()} onClick={() => setShowTicketModal(true)}>+ Nouveau ticket</button>
+                {canCreateTicketAsStaff && <button style={btnStyle()} onClick={() => setShowTicketModal(true)}>+ Nouveau ticket</button>}
             </div>
             {recData.length === 0 ? <p style={{ color: 'var(--text-muted)' }}>Aucun ticket.</p> : recData.map((r: any) => (
                 <div key={r.id} className="card" style={{ padding: 20 }}>

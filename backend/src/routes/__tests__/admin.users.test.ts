@@ -277,7 +277,7 @@ describe('Admin Users/Logs/Ledger Routes', () => {
 
     describe('GET /admin/ledger', () => {
         it('devrait retourner 403 pour un rôle non autorisé', async () => {
-            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(TELLER);
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue({ id: 'staff_x', role: 'INVALID_ROLE' });
             const res = await request(app).get('/admin/ledger');
             expect(res.status).toBe(403);
         });
@@ -290,6 +290,19 @@ describe('Admin Users/Logs/Ledger Routes', () => {
 
             expect(res.status).toBe(200);
             expect(res.body).toHaveLength(1);
+        });
+
+        // Régression : cette route vérifiait `perm_system_settings_view` au lieu de
+        // `perm_transaction_view` (la permission sur laquelle App.tsx/Ledger.tsx gatent
+        // réellement l'onglet côté UI) — TELLER, BRANCH_MANAGER, RISK et SUPPORT_MAKER ont
+        // tous perm_transaction_view par défaut (voir RBAC.ts) mais recevaient un 403.
+        it('devrait autoriser un TELLER (qui possède perm_transaction_view par défaut)', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(TELLER);
+            (prisma.transaction.findMany as jest.Mock).mockResolvedValue([]);
+
+            const res = await request(app).get('/admin/ledger');
+
+            expect(res.status).toBe(200);
         });
     });
 

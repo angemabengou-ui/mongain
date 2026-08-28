@@ -46,12 +46,20 @@ const errResponse = (data: any, status = 400) => ({
 });
 
 describe('api service', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
         // resetAllMocks (not clearAllMocks) so that queued mockResolvedValueOnce
         // values from a previous test never leak into the next one.
         jest.resetAllMocks();
         // Reset to a no-op handler so 401 tests in other files/tests don't leak.
         setUnauthorizedHandler(() => {});
+        // api.ts caches the token/refresh token in a module-level variable (avoids a
+        // SecureStore round-trip on every request) — that cache outlives resetAllMocks(),
+        // since it's plain module state, not a jest mock. Without clearing it here, whichever
+        // test runs first to call saveToken()/getToken() poisons every later test in this
+        // file: they'd silently get back that cached value instead of exercising their own
+        // mocked SecureStore response.
+        await deleteToken();
+        await deleteRefreshToken();
     });
 
     // ─── Token storage (native branch — Platform.OS defaults to 'ios' under jest-expo) ───
@@ -162,14 +170,23 @@ describe('api service', () => {
             await apiResetPIN('+24177000003', '2222', '5678');
             const [url, options] = (global.fetch as jest.Mock).mock.calls[0];
             expect(url).toBe(`${BASE_URL}/api/auth/reset-pin`);
-            expect(JSON.parse(options.body)).toEqual({ phone: '+24177000003', otp: '2222', newPin: '5678' });
+            // Régression : le backend attend `otpCode` (resetPinSchema, auth.ts), pas `otp` —
+            // cette assertion verrouillait le mauvais nom de champ, qui faisait échouer TOUTE
+            // réinitialisation de PIN en conditions réelles sans qu'aucun test ne le détecte.
+            expect(JSON.parse(options.body)).toEqual({ phone: '+24177000003', otpCode: '2222', newPin: '5678' });
         });
 
-        it('apiVerifyAppLockPin posts the pin (unauthenticated endpoint)', async () => {
+        // Régression : POST /api/auth/verify-pin exige authMiddleware côté serveur (voir
+        // auth.ts) — cet appel n'envoyait auparavant aucun token (4e argument `auth` de
+        // request() omis), ce qui finissait par déconnecter l'utilisateur au lieu de
+        // déverrouiller l'app, même avec le bon code PIN.
+        it('apiVerifyAppLockPin posts the pin authenticated', async () => {
+            (SecureStore.getItemAsync as jest.Mock).mockResolvedValueOnce('tok-lock');
             mockFetch(() => Promise.resolve(okResponse({ success: true })));
             const res = await apiVerifyAppLockPin('1234');
             expect(res.success).toBe(true);
-            expect(SecureStore.getItemAsync).not.toHaveBeenCalled();
+            const [, options] = (global.fetch as jest.Mock).mock.calls[0];
+            expect(options.headers['Authorization']).toBe('Bearer tok-lock');
         });
 
         it('apiGetSystemSettings issues an unauthenticated GET', async () => {

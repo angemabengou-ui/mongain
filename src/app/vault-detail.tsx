@@ -1,5 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Print from 'expo-print';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
@@ -80,6 +82,7 @@ export default function VaultDetailScreen() {
     const [withdrawLoading, setWithdrawLoading] = useState(false);
 
     const [showInviteForm, setShowInviteForm] = useState(false);
+    const [exportingReport, setExportingReport] = useState(false);
 
     // Vérifie le numéro saisi et affiche le nom du destinataire avant l'envoi —
     // même logique de confiance que src/app/transfer.tsx pour un transfert P2P
@@ -133,6 +136,8 @@ export default function VaultDetailScreen() {
     // ces deux actions, un double-tap pouvait produire un double dépôt/double demande.
     const depositSubmittingRef = useRef(false);
     const withdrawSubmittingRef = useRef(false);
+    const approvingTxRef = useRef<Set<string>>(new Set());
+    const [approvingIds, setApprovingIds] = useState<Set<string>>(new Set());
 
     const handleDeposit = async () => {
         if (depositSubmittingRef.current) return;
@@ -205,12 +210,74 @@ export default function VaultDetailScreen() {
     };
 
     const handleApprove = async (txId: string) => {
+        if (approvingTxRef.current.has(txId)) return;
+        approvingTxRef.current.add(txId);
+        setApprovingIds(new Set(approvingTxRef.current));
         try {
             const res = await apiApproveVault(id, txId);
             Alert.alert(res.data?.executed ? 'Retrait exécuté' : 'Approuvé', res.message);
             load();
         } catch (e: any) {
             Alert.alert('Échec', e.message || 'Impossible d\'approuver.');
+        } finally {
+            approvingTxRef.current.delete(txId);
+            setApprovingIds(new Set(approvingTxRef.current));
+        }
+    };
+
+    // Comme pour la tontine (tontine-detail.tsx) : aucun cadre légal ne protège une caisse
+    // collective informelle en cas de litige, donc ce relevé imprimable — daté, vérifiable,
+    // incluant les demandes de retrait et leurs approbations — est le plus proche d'un
+    // recours concret qui existe. Même mécanisme que le QR marchand (receive-qr.tsx).
+    const handleExportReport = async () => {
+        if (exportingReport) return;
+        setExportingReport(true);
+        try {
+            const rows = (vault.transactions || []).slice().reverse().map((tx: any) => `<tr>
+                    <td>${new Date(tx.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                    <td>${tx.type === 'DEPOSIT' ? 'Dépôt' : 'Retrait'}</td>
+                    <td>${tx.amount.toLocaleString('fr-FR')} FCFA</td>
+                    <td>${tx.requestedBy?.name || '—'}</td>
+                    <td>${tx.reason ? tx.reason.replace(/</g, '&lt;') : '—'}</td>
+                    <td>${tx.status === 'COMPLETED' ? 'Terminé' : tx.status === 'PENDING' ? 'En attente' : 'Rejeté'}</td>
+                </tr>`).join('');
+
+            const html = `
+                <html>
+                <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                    <style>
+                        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 30px; color: #1a1d2e; }
+                        h1 { font-size: 20px; color: #10B981; margin-bottom: 4px; }
+                        .meta { color: #64748b; font-size: 13px; margin-bottom: 4px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                        th, td { border: 1px solid #e2e8f0; padding: 8px 10px; font-size: 13px; text-align: left; }
+                        th { background: #f8fafc; }
+                    </style>
+                </head>
+                <body>
+                    <h1>MONGAIN — Relevé de caisse commune</h1>
+                    <div class="meta"><b>${vault.name}</b>${vault.description ? ` — ${vault.description}` : ''}</div>
+                    <div class="meta">Solde actuel : ${vault.balance.toLocaleString('fr-FR')} FCFA</div>
+                    <div class="meta">Généré le ${new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+                    <table>
+                        <thead><tr><th>Date</th><th>Type</th><th>Montant</th><th>Demandé par</th><th>Motif</th><th>Statut</th></tr></thead>
+                        <tbody>${rows || '<tr><td colspan="6">Aucun mouvement pour l\'instant.</td></tr>'}</tbody>
+                    </table>
+                </body>
+                </html>
+            `;
+
+            const { uri } = await Print.printToFileAsync({ html, base64: false });
+            await Sharing.shareAsync(uri, {
+                mimeType: 'application/pdf',
+                dialogTitle: 'Relevé de caisse commune',
+                UTI: 'com.adobe.pdf',
+            });
+        } catch (error) {
+            Alert.alert('Erreur', "Impossible de générer le relevé.");
+        } finally {
+            setExportingReport(false);
         }
     };
 
@@ -262,6 +329,24 @@ export default function VaultDetailScreen() {
                 >
 
                     <BalanceCard colors={COLORS} label="Solde de la caisse" amount={`${vault.balance.toLocaleString('fr-FR')} FCFA`} description={vault.description || undefined} />
+
+                    {vault.isFrozen && (
+                        <View style={[styles.howItWorksBox, { backgroundColor: COLORS.error + '12' }]}>
+                            <Ionicons name="lock-closed" size={18} color={COLORS.error} style={{ marginRight: 8 }} />
+                            <Text style={[styles.howItWorksText, { color: COLORS.error }]}>
+                                Cette caisse est gelée par l'administration{vault.frozenReason ? ` (${vault.frozenReason})` : ''}. Dépôts, retraits et bons sont bloqués jusqu'au dégel.
+                            </Text>
+                        </View>
+                    )}
+
+                    <View style={[styles.howItWorksBox, { backgroundColor: COLORS.primary + '10' }]}>
+                        <Ionicons name="shield-checkmark" size={18} color={COLORS.primary} style={{ marginRight: 8 }} />
+                        <Text style={[styles.howItWorksText, { color: COLORS.textSecondary }]}>
+                            {vault.requiredApprovals > 1
+                                ? `Aucun retrait ne part sans l'accord d'au moins ${vault.requiredApprovals} commissaire${vault.requiredApprovals > 1 ? 's' : ''} — personne, pas même le Président, ne peut retirer seul.`
+                                : "Toute demande de retrait doit d'abord être approuvée par un commissaire avant de partir — le seuil peut être renforcé depuis les Paramètres."}
+                        </Text>
+                    </View>
 
                     {/* Dépôt */}
                     <SectionHeading colors={COLORS} title="Déposer" />
@@ -437,8 +522,14 @@ export default function VaultDetailScreen() {
                                             </View>
                                         )}
                                         {myRole?.isValidator && !iApproved && (
-                                            <TouchableOpacity style={[styles.approveBtn, { backgroundColor: COLORS.primary }]} onPress={() => handleApprove(tx.id)}>
-                                                <Text style={styles.inlineBtnText}>Approuver</Text>
+                                            <TouchableOpacity
+                                                style={[styles.approveBtn, { backgroundColor: COLORS.primary, opacity: approvingIds.has(tx.id) ? 0.6 : 1 }]}
+                                                onPress={() => handleApprove(tx.id)}
+                                                disabled={approvingIds.has(tx.id)}
+                                            >
+                                                {approvingIds.has(tx.id)
+                                                    ? <ActivityIndicator color="#fff" size="small" />
+                                                    : <Text style={styles.inlineBtnText}>Approuver</Text>}
                                             </TouchableOpacity>
                                         )}
                                         {iApproved && <Text style={{ color: COLORS.success, fontSize: 12.5, marginTop: 8, fontWeight: '600' }}>Vous avez déjà approuvé</Text>}
@@ -504,7 +595,12 @@ export default function VaultDetailScreen() {
                     {/* Historique */}
                     {historyTx.length > 0 && (
                         <>
-                            <SectionHeading colors={COLORS} title="Historique" />
+                            <SectionHeading
+                                colors={COLORS}
+                                title="Historique"
+                                actionIcon={exportingReport ? undefined : 'download-outline'}
+                                onAction={handleExportReport}
+                            />
                             <View style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border, padding: 6 }]}>
                                 {historyTx.map((tx: any) => (
                                     <View key={tx.id} style={[styles.memberRow, { borderColor: COLORS.border }]}>
@@ -547,6 +643,8 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
 
     card: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 10 },
     cardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    howItWorksBox: { flexDirection: 'row', alignItems: 'flex-start', borderRadius: 14, padding: 14, marginBottom: 20 },
+    howItWorksText: { flex: 1, fontSize: 12.5, lineHeight: 18 },
 
     input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, height: 48, fontSize: 15, marginBottom: 14 },
     label: { fontSize: 12.5, fontWeight: '600', marginBottom: 8 },

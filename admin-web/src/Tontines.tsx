@@ -1,4 +1,4 @@
-import { ArrowLeft, Pause, Play, RefreshCw, Users as UsersIcon } from 'lucide-react';
+import { ArrowLeft, CalendarClock, Pause, Play, RefreshCw, Users as UsersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import ConfirmDialog from './components/ConfirmDialog';
 import PageHeader from './components/PageHeader';
@@ -12,14 +12,27 @@ import { apiFetch } from './utils/apiFetch';
 // perm_tontine_manage. L'historique de cycles vient du grand livre structuré
 // (TontineCycle/TontineContribution) : les groupes créés avant son introduction n'ont pas
 // de ligne TontineCycle, d'où le repli sur les « Mouvements » (parsing Transaction.reference).
-const STATUS_LABELS: Record<string, string> = { ACTIVE: 'Active', COMPLETED: 'Terminée', CANCELLED: 'Annulée' };
+const STATUS_LABELS: Record<string, string> = { ACTIVE: 'Active', PENDING_RENEWAL: 'Sondage de relance', COMPLETED: 'Terminée', CANCELLED: 'Annulée' };
 const FREQUENCY_LABELS: Record<string, string> = { WEEKLY: 'Hebdomadaire', MONTHLY: 'Mensuelle' };
-const PARTICIPANT_STATUS_LABELS: Record<string, string> = { ACTIVE: 'Actif', PAUSED: 'En pause' };
+const PARTICIPANT_STATUS_LABELS: Record<string, string> = { ACTIVE: 'Actif', PAUSED: 'En pause', LEFT: 'Parti' };
 const TX_STATUS_LABELS: Record<string, string> = { PENDING: 'En attente', COMPLETED: 'Terminée', FAILED: 'Échouée' };
-const CYCLE_STATUS_LABELS: Record<string, string> = { COMPLETED: 'Complet', PARTIAL: 'Partiel (échecs)' };
+const CYCLE_STATUS_LABELS: Record<string, string> = { COMPLETED: 'Complet', PARTIAL: 'Partiel (échecs)', PAYOUT_FAILED: 'Versement bloqué' };
 
 const fmt = (n: number) => n.toLocaleString('fr-FR') + ' FCFA';
 const fmtDate = (iso: string) => new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+// Miroir de tontine-detail.tsx (mobile) : même calcul de ponctualité depuis l'historique
+// déjà chargé (detail.cycles), pour que le personnel dispose de la même visibilité que les
+// membres eux-mêmes lorsqu'ils tranchent un litige ("il n'a jamais payé" vs "il paie
+// toujours en retard" ne se lit pas pareil sur un seul cycle isolé).
+function computeReliability(participantId: string, cycles: any[]) {
+    let paid = 0, total = 0;
+    cycles.forEach((c: any) => {
+        const contrib = (c.contributions || []).find((x: any) => x.participantId === participantId);
+        if (contrib) { total++; if (contrib.status === 'PAID') paid++; }
+    });
+    return { paid, total };
+}
 
 function StatusPill({ status, labels }: { status: string; labels: Record<string, string> }) {
     const colors: Record<string, { bg: string; color: string }> = {
@@ -30,6 +43,7 @@ function StatusPill({ status, labels }: { status: string; labels: Record<string,
         PENDING: { bg: 'var(--warning-bg)', color: 'var(--warning)' },
         FAILED: { bg: 'var(--danger-bg)', color: 'var(--danger)' },
         PARTIAL: { bg: 'var(--warning-bg)', color: 'var(--warning)' },
+        PAYOUT_FAILED: { bg: 'var(--danger-bg)', color: 'var(--danger)' },
         PAID: { bg: 'var(--success-bg)', color: 'var(--success)' },
     };
     const c = colors[status] || { bg: 'var(--bg-secondary)', color: 'var(--text-secondary)' };
@@ -50,8 +64,10 @@ function ActionButton({ onClick, danger, children }: { onClick: () => void; dang
 type ConfirmState =
     | { type: 'pause-group' }
     | { type: 'resume-group' }
+    | { type: 'postpone-group' }
     | { type: 'pause-participant'; userId: string; name: string }
     | { type: 'resume-participant'; userId: string; name: string }
+    | { type: 'emergency-payout'; userId: string; name: string }
     | { type: 'retry-cycle'; cycleId: string; cycleNumber: number };
 
 export default function Tontines({ token, hasPerm, initialSelectedId }: { token: string; hasPerm: (perms: string[]) => boolean; initialSelectedId?: string }) {
@@ -135,9 +151,15 @@ export default function Tontines({ token, hasPerm, initialSelectedId }: { token:
                             title={detail.name}
                             subtitle={`Créateur : ${detail.creator?.name} (${detail.creator?.phone})`}
                             action={canManage ? (
-                                detail.isPaused
-                                    ? <button onClick={() => setConfirmState({ type: 'resume-group' })} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--success-bg)', color: 'var(--success)', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}><Play size={14} /> Reprendre la tontine</button>
-                                    : <button onClick={() => setConfirmState({ type: 'pause-group' })} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--danger-bg)', color: 'var(--danger)', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}><Pause size={14} /> Mettre en pause</button>
+                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                    {detail.status === 'ACTIVE' && (
+                                        <button onClick={() => setConfirmState({ type: 'postpone-group' })} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--accent-bg)', color: 'var(--accent)', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}><CalendarClock size={14} /> Reporter le prélèvement</button>
+                                    )}
+                                    {detail.isPaused
+                                        ? <button onClick={() => setConfirmState({ type: 'resume-group' })} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--success-bg)', color: 'var(--success)', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}><Play size={14} /> Reprendre la tontine</button>
+                                        : <button onClick={() => setConfirmState({ type: 'pause-group' })} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--danger-bg)', color: 'var(--danger)', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}><Pause size={14} /> Mettre en pause</button>
+                                    }
+                                </div>
                             ) : undefined}
                         />
 
@@ -169,26 +191,35 @@ export default function Tontines({ token, hasPerm, initialSelectedId }: { token:
                         <h3 style={{ fontSize: 16, marginBottom: 12 }}>Participants ({detail.participants.length})</h3>
                         <div className="table-container" style={{ marginBottom: 28 }}>
                             <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, textAlign: 'left' }}>
-                                <thead><tr><th>Nom</th><th>Téléphone</th><th>Ordre de versement</th><th>Statut</th><th>Cagnotte reçue</th>{canManage && <th></th>}</tr></thead>
+                                <thead><tr><th>Nom</th><th>Téléphone</th><th>Ordre de versement</th><th>Statut</th><th>Ponctualité</th><th>Cagnotte reçue</th>{canManage && <th></th>}</tr></thead>
                                 <tbody>
-                                    {detail.participants.map((p: any) => (
+                                    {detail.participants.map((p: any) => {
+                                        const rel = computeReliability(p.id, cycles);
+                                        return (
                                         <tr key={p.id}>
                                             <td>{p.user.name}</td>
                                             <td style={{ color: 'var(--text-secondary)' }}>{p.user.phone}</td>
                                             <td>{p.payoutOrder}</td>
                                             <td><StatusPill status={p.status} labels={PARTICIPANT_STATUS_LABELS} /></td>
+                                            <td style={{ color: rel.total === 0 ? 'var(--text-muted)' : rel.paid === rel.total ? 'var(--success)' : 'var(--warning)', fontWeight: 700, fontSize: 13 }}>
+                                                {rel.total === 0 ? 'Pas encore d’historique' : `${rel.paid}/${rel.total} cycles`}
+                                            </td>
                                             <td>{p.hasReceivedPayout ? '✅ Oui' : '—'}</td>
                                             {canManage && (
-                                                <td>
+                                                <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                                                     {p.status === 'PAUSED' ? (
-                                                        <ActionButton onClick={() => setConfirmState({ type: 'resume-participant', userId: p.user.id, name: p.user.name })}>Reprendre</ActionButton>
+                                                        <ActionButton onClick={() => setConfirmState({ type: 'resume-participant', userId: p.userId, name: p.user.name })}>Reprendre</ActionButton>
                                                     ) : (
-                                                        <ActionButton danger onClick={() => setConfirmState({ type: 'pause-participant', userId: p.user.id, name: p.user.name })}>Mettre en pause</ActionButton>
+                                                        <ActionButton danger onClick={() => setConfirmState({ type: 'pause-participant', userId: p.userId, name: p.user.name })}>Mettre en pause</ActionButton>
+                                                    )}
+                                                    {detail.status === 'ACTIVE' && p.status === 'ACTIVE' && !p.hasReceivedPayout && (
+                                                        <ActionButton onClick={() => setConfirmState({ type: 'emergency-payout', userId: p.userId, name: p.user.name })}>Paiement d'urgence</ActionButton>
                                                     )}
                                                 </td>
                                             )}
                                         </tr>
-                                    ))}
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -201,7 +232,9 @@ export default function Tontines({ token, hasPerm, initialSelectedId }: { token:
                                     {cycles.length === 0 ? (
                                         <tr><td colSpan={canManage ? 7 : 6} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Aucun cycle enregistré dans le grand livre structuré (groupe créé avant sa mise en place, ou aucun cycle exécuté) — voir « Mouvements » ci-dessous.</td></tr>
                                     ) : cycles.map((c: any) => {
-                                        const failed = (c.contributions || []).filter((ct: any) => ct.status === 'FAILED');
+                                        // PARTIAL : cotisation incomplète (dépôts libres, voir tontineService.ts) —
+                                        // FAILED : statut hérité des cycles antérieurs à leur introduction (0 collecté).
+                                        const incomplete = (c.contributions || []).filter((ct: any) => ct.status === 'PARTIAL' || ct.status === 'FAILED');
                                         return (
                                             <tr key={c.id}>
                                                 <td style={{ fontWeight: 700 }}>#{c.cycleNumber}</td>
@@ -210,11 +243,21 @@ export default function Tontines({ token, hasPerm, initialSelectedId }: { token:
                                                 <td style={{ fontWeight: 700 }}>{fmt(c.totalCollected)}</td>
                                                 <td><StatusPill status={c.status} labels={CYCLE_STATUS_LABELS} /></td>
                                                 <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                                                    {failed.length === 0 ? '—' : failed.map((ct: any) => ct.participant?.user?.name).filter(Boolean).join(', ')}
+                                                    {c.status === 'PAYOUT_FAILED'
+                                                        ? 'Cotisations OK — le versement de la cagnotte a échoué'
+                                                        : incomplete.length === 0 ? '—' : incomplete.map((ct: any) => {
+                                                            const name = ct.participant?.user?.name;
+                                            // Pour FAILED (statut hérité, voir tontineService.ts), `ct.amount` vaut déjà
+                                            // `detail.contribution` (figé dès le premier cycle exécuté — PUT /settings
+                                            // refuse tout changement de cotisation après coup) : les deux écritures sont
+                                            // équivalentes, celle-ci étant juste plus directe à lire.
+                                            const owed = ct.status === 'FAILED' ? detail.contribution : Math.max(0, detail.contribution - ct.amount);
+                                                            return name ? `${name} (doit ${fmt(owed)})` : null;
+                                                        }).filter(Boolean).join(', ')}
                                                 </td>
                                                 {canManage && (
                                                     <td>
-                                                        {c.status === 'PARTIAL' && (
+                                                        {(c.status === 'PARTIAL' || c.status === 'PAYOUT_FAILED') && (
                                                             <ActionButton onClick={() => setConfirmState({ type: 'retry-cycle', cycleId: c.id, cycleNumber: c.cycleNumber })}>
                                                                 <RefreshCw size={11} style={{ verticalAlign: -1, marginRight: 3 }} />Réessayer
                                                             </ActionButton>
@@ -267,6 +310,18 @@ export default function Tontines({ token, hasPerm, initialSelectedId }: { token:
                         onConfirm={reason => runAction(`/tontines/${selectedId}/pause`, { reason }, 'Tontine mise en pause.')}
                     />
                 )}
+                {confirmState?.type === 'postpone-group' && (
+                    <ConfirmDialog
+                        title="Reporter le prélèvement automatique"
+                        subtitle="Décale la date du prochain prélèvement du nombre de jours indiqué (à partir de la date de référence actuelle) — utile quand un ou plusieurs membres ont besoin de plus de temps pour compléter leur cotisation. currentCycle n'est pas modifié, seule l'échéance recule."
+                        confirmLabel="Reporter"
+                        requireReason
+                        reasonLabel="Motif du report"
+                        numberField={{ label: 'Nombre de jours de report', defaultValue: 3, min: 1, max: 90 }}
+                        onClose={() => setConfirmState(null)}
+                        onConfirm={(reason, days) => runAction(`/tontines/${selectedId}/postpone`, { days, reason }, 'Prélèvement reporté.')}
+                    />
+                )}
                 {confirmState?.type === 'resume-group' && (
                     <ConfirmDialog
                         title="Reprendre cette tontine"
@@ -293,6 +348,18 @@ export default function Tontines({ token, hasPerm, initialSelectedId }: { token:
                         confirmLabel="Confirmer la reprise"
                         onClose={() => setConfirmState(null)}
                         onConfirm={() => runAction(`/tontines/${selectedId}/participants/${confirmState.userId}/resume`, {}, 'Participant repris.')}
+                    />
+                )}
+                {confirmState?.type === 'emergency-payout' && (
+                    <ConfirmDialog
+                        title={`Paiement d'urgence hors tour pour ${confirmState.name}`}
+                        subtitle="Déclenche immédiatement le cycle en cours (collecte des cotisations de tous les membres actifs, puis versement) en désignant cette personne comme bénéficiaire à la place de celle normalement prévue — qui recevra sa cagnotte à un tour ultérieur à la place. À réserver aux situations où le membre concerné a explicitement demandé à l'administration de recevoir sa cagnotte avant son tour normal."
+                        confirmLabel="Déclencher le paiement"
+                        danger
+                        requireReason
+                        reasonLabel="Motif de l'urgence"
+                        onClose={() => setConfirmState(null)}
+                        onConfirm={reason => runAction(`/tontines/${selectedId}/participants/${confirmState.userId}/emergency-payout`, { reason }, 'Paiement d\'urgence déclenché.')}
                     />
                 )}
                 {confirmState?.type === 'retry-cycle' && (

@@ -350,9 +350,24 @@ function StatusPill({ status, styles }: { status: string; styles: any }) {
   return null;
 }
 
+// Même correctif que history.tsx (TransactionItem) : sans lui, ce widget "3 dernières
+// transactions" affichait une cotisation de tontine ou un dépôt de caisse commune comme un
+// "Transfert" générique indiscernable d'un vrai transfert P2P.
+function getTransactionTypeText(tx: any): string {
+  const ref: string = tx.reference || '';
+  if (ref.startsWith('VAULT_DEP_')) return 'Dépôt Caisse Commune';
+  if (ref.startsWith('VAULT_OUT_')) return 'Retrait Caisse Commune';
+  if (ref.startsWith('VAULT_VOUCHER_')) return 'Bon Caisse Commune dépensé';
+  if (ref.startsWith('TONT_DBT_')) return 'Cotisation Tontine';
+  if (ref.startsWith('TONT_PAY_')) return 'Cagnotte Tontine reçue';
+  if (ref.startsWith('TONT_EXIT_')) return 'Règlement dette Tontine';
+  if (ref.startsWith('MPAYOUT-')) return 'Reversement marchand';
+  return tx.type === 'incoming' ? 'Transfert reçu' : 'Transfert envoyé';
+}
+
 const TransactionItem = ({ tx, onPress, styles, colors }: any) => {
   const isIncoming = tx.type === 'incoming';
-  const typeText = isIncoming ? 'Transfert reçu' : 'Transfert envoyé';
+  const typeText = getTransactionTypeText(tx);
 
   return (
     <TouchableOpacity style={styles.txContainer} onPress={onPress}>

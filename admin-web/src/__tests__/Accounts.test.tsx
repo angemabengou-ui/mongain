@@ -70,4 +70,20 @@ describe('Accounts (hub)', () => {
         await user.click(screen.getByRole('button', { name: /Droits d'Accès/i }));
         expect(screen.getByText('StaffAccessRights Mock')).toBeInTheDocument();
     });
+
+    // Régression : Agences/Comptes Système restaient visibles à n'importe quel rôle ayant
+    // seulement de quoi ouvrir ce hub (perm_customer_view), sans vérifier perm_branch_manage/
+    // perm_treasury_view — l'onglet cliqué dégradait alors en message d'erreur plutôt que de
+    // ne jamais apparaître.
+    it('masque Agences/Comptes Système/Personnel pour un rôle qui n\'a que perm_customer_view', () => {
+        const hasPerm = (perms: string[]) => perms.includes('perm_customer_view');
+        render(<Accounts token="tok" role="TELLER" hasPerm={hasPerm} />);
+
+        expect(screen.queryByRole('button', { name: /^Agences$/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Comptes Système/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Personnel$/i })).not.toBeInTheDocument();
+        // Clients & Marchands / Agents restent visibles : pas de garde dédiée, ils dépendent
+        // uniquement du contrôle déjà fait par App.tsx pour ouvrir ce hub.
+        expect(screen.getByRole('button', { name: /Clients & Marchands/i })).toBeInTheDocument();
+    });
 });

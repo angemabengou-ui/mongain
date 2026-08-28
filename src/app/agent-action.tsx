@@ -81,10 +81,14 @@ export default function AgentActionDeskScreen() {
                     amount: numAmount,
                     currency: 'FCFA',
                     status: 'COMPLETED',
-                    // Vraie référence serveur (déjà utilisée juste au-dessus pour `id`) —
-                    // auparavant toujours fabriquée ici même quand la vraie était disponible,
-                    // introuvable ensuite côté support en cas de litige.
-                    reference: data.data?.transaction?.reference || 'DEPOSIT-AGENCY-' + Date.now().toString().substring(8),
+                    // Toujours fabriquée ici (jamais la référence serveur) — même pattern que
+                    // client-withdraw-desk.tsx. `/wallet/transfer` ne fixe jamais `reference`
+                    // explicitement, donc Prisma y écrit un cuid aléatoire quelconque (colonne
+                    // non nullable, @default(cuid())) : le `||` ci-dessous ne se déclenchait
+                    // JAMAIS puisque cette valeur est toujours "vraie" — receipt.tsx, qui décide
+                    // le titre "Dépôt sur compte" via `reference.startsWith('DEPOSIT')`,
+                    // affichait donc systématiquement "Paiement envoyé" pour un dépôt agent.
+                    reference: 'DEPOSIT-AGENCY-' + Date.now().toString().substring(8),
                     counterpart: clientName as string,
                     counterpartPhone: clientPhone as string,
                     createdAt: data.data?.transaction?.createdAt || new Date().toISOString(),

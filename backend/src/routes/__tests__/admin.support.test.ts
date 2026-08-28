@@ -42,10 +42,22 @@ describe('Admin Support/Fraud/Refund Routes', () => {
     });
 
     describe('POST /admin/reclamations', () => {
-        it('devrait retourner 403 pour un rôle non support', async () => {
-            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(TELLER);
+        // TELLER a perm_ticket_create par défaut (RBAC.ts) : depuis la correction de ce
+        // contrôle (qui vérifiait auparavant perm_ticket_resolve — clôturer un ticket, sans
+        // rapport avec le fait d'en créer un), TELLER doit désormais réussir cet appel. RISK
+        // n'a ni l'un ni l'autre, donc reste un bon exemple de rôle sans ce droit.
+        it('devrait retourner 403 pour un rôle sans droit de création de ticket', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(RISK);
             const res = await request(app).post('/admin/reclamations').send({ title: 'T', description: 'D', userId: 'u1' });
             expect(res.status).toBe(403);
+        });
+
+        it('devrait autoriser un TELLER (perm_ticket_create) à créer un ticket', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(TELLER);
+            (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue(null);
+            (prisma.reclamation.create as jest.Mock).mockResolvedValue({ id: 'r1' });
+            const res = await request(app).post('/admin/reclamations').send({ title: 'T', description: 'D', userId: 'u1' });
+            expect(res.status).toBe(201);
         });
 
         it('devrait retourner 400 si des champs obligatoires manquent', async () => {

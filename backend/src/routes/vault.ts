@@ -203,15 +203,32 @@ router.put('/:id/roles', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
-// Ajuster le nombre d'approbations requises pour un retrait (le Président peut
-// le relever au fur et à mesure que la caisse accueille des commissaires).
+// Ajuster le nom, la description et/ou le seuil d'approbation d'une caisse — le nom et la
+// description n'avaient jusqu'ici aucun moyen d'être modifiés après création (contrairement
+// au seuil, seul réglable ici depuis le début). Chaque champ est indépendamment optionnel :
+// un appel ne renommant que la caisse n'a pas besoin de renvoyer le seuil actuel.
 router.put('/:id/settings', authMiddleware, async (req: AuthRequest, res) => {
     const vaultId = req.params.id as string;
-    const { requiredApprovals } = req.body;
-    const parsed = Number(requiredApprovals);
+    const { requiredApprovals, name, description } = req.body;
 
-    if (!Number.isFinite(parsed) || parsed < 1) {
-        return res.status(400).json({ success: false, message: "Le seuil doit être un nombre entier d'au moins 1." });
+    const data: { requiredApprovals?: number; name?: string; description?: string | null } = {};
+
+    if (requiredApprovals !== undefined) {
+        const parsed = Number(requiredApprovals);
+        if (!Number.isFinite(parsed) || parsed < 1) {
+            return res.status(400).json({ success: false, message: "Le seuil doit être un nombre entier d'au moins 1." });
+        }
+        data.requiredApprovals = Math.floor(parsed);
+    }
+    if (name !== undefined) {
+        if (!String(name).trim()) return res.status(400).json({ success: false, message: "Le nom ne peut pas être vide." });
+        data.name = String(name).trim();
+    }
+    if (description !== undefined) {
+        data.description = String(description).trim() || null;
+    }
+    if (Object.keys(data).length === 0) {
+        return res.status(400).json({ success: false, message: "Aucune modification fournie." });
     }
 
     try {
@@ -224,7 +241,7 @@ router.put('/:id/settings', authMiddleware, async (req: AuthRequest, res) => {
 
         const updated = await prisma.vault.update({
             where: { id: vaultId },
-            data: { requiredApprovals: Math.floor(parsed) }
+            data
         });
 
         res.json({ success: true, data: updated });
@@ -324,9 +341,11 @@ router.post('/:id/deposit', authMiddleware, async (req: AuthRequest, res) => {
                 data: { balance: { increment: parsedAmount } }
             });
 
+            let corporateWalletId: string | null = null;
             if (fee > 0) {
                 const { getOrCreateCorporateWallet } = await import('./wallet');
                 const corporate = await getOrCreateCorporateWallet(tx);
+                corporateWalletId = corporate.wallet.id;
                 await tx.wallet.update({
                     where: { id: corporate.wallet.id },
                     data: { balance: { increment: fee } }
@@ -355,6 +374,24 @@ router.post('/:id/deposit', authMiddleware, async (req: AuthRequest, res) => {
                     reference: `VAULT_DEP_${vtx.id}`
                 }
             });
+
+            // Transaction fantôme dédiée au frais — même convention que wallet.ts (FEE-,
+            // FEE-W-, FEE-MM-) : sans elle, ce frais restait invisible des graphiques de
+            // revenu (Dashboard.tsx/MacroStats.tsx/Ledger.tsx), qui n'agrègent QUE les
+            // transactions dont la référence commence par "FEE", jamais le champ `fee` d'une
+            // transaction principale — un vrai revenu de plateforme qui n'apparaissait nulle
+            // part dans le chiffre d'affaires affiché à l'admin.
+            if (fee > 0 && corporateWalletId) {
+                await tx.transaction.create({
+                    data: {
+                        amount: fee,
+                        senderWalletId: userWallet.id,
+                        receiverWalletId: corporateWalletId,
+                        status: 'COMPLETED',
+                        reference: `FEE-VD-${vtx.id}`
+                    }
+                });
+            }
 
             return vtx;
         });
@@ -655,19 +692,66 @@ router.post('/vouchers/:id/spend', authMiddleware, async (req: AuthRequest, res)
             // Réclamer le bon AVANT de créditer quoi que ce soit : le `findUnique` ci-dessus
             // ne verrouille aucune ligne, donc deux appels concurrents liraient tous deux
             // `ACTIVE` avant qu'aucun des deux n'écrive. Seule cette transition conditionnelle
-            // (Ã©valuÃ©e par Postgres sous le verrou de ligne pris par l'UPDATE) empÃªche un
-            // double crÃ©dit marchand pour un seul bon.
+            // (évaluée par Postgres sous le verrou de ligne pris par l'UPDATE) empêche un
+            // double crédit marchand pour un seul bon.
             const claim = await tx.vaultVoucher.updateMany({
                 where: { id: voucherId, status: 'ACTIVE' },
                 data: { status: 'USED', usedAt: new Date() }
             });
             if (claim.count === 0) throw new Error("Ce bon de retrait est déjà utilisé ou inactif.");
 
+            // Avant ce correctif, dépenser un bon ne prélevait aucun frais (contrairement aux
+            // deux autres façons de sortir l'argent d'une caisse — Trésorier et Transfert
+            // direct, voir vaultService.ts, qui appliquent déjà taxP2P) et ne créait même
+            // aucune ligne Transaction : ce mouvement était à la fois gratuit pour la
+            // plateforme ET invisible dans l'historique du marchand qui le recevait.
+            const settings = await tx.systemSettings.findFirst();
+            const fee = settings ? voucher.amount * settings.taxP2P : 0;
+            const netAmount = voucher.amount - fee;
+
             // Exécution
             await tx.wallet.update({
                 where: { id: merchantWallet.id },
-                data: { balance: { increment: voucher.amount } }
+                data: { balance: { increment: netAmount } }
             });
+
+            let corporateWalletId: string | null = null;
+            if (fee > 0) {
+                const { getOrCreateCorporateWallet } = await import('./wallet');
+                const corporate = await getOrCreateCorporateWallet(tx);
+                corporateWalletId = corporate.wallet.id;
+                await tx.wallet.update({
+                    where: { id: corporate.wallet.id },
+                    data: { balance: { increment: fee } }
+                });
+            }
+
+            // Même convention que VAULT_DEP_/VAULT_OUT_ ci-dessus : la Caisse Commune n'a pas
+            // de Wallet propre (son solde vit sur Vault.balance), donc sender/receiver
+            // pointent tous deux vers le seul wallet réel impliqué — ici celui du marchand.
+            await tx.transaction.create({
+                data: {
+                    amount: voucher.amount,
+                    fee,
+                    senderWalletId: merchantWallet.id,
+                    receiverWalletId: merchantWallet.id,
+                    status: 'COMPLETED',
+                    reference: `VAULT_VOUCHER_${voucher.id}`
+                }
+            });
+
+            // Transaction fantôme dédiée au frais — voir commentaire sur VAULT_DEP_ ci-dessus.
+            if (fee > 0 && corporateWalletId) {
+                await tx.transaction.create({
+                    data: {
+                        amount: fee,
+                        senderWalletId: merchantWallet.id,
+                        receiverWalletId: corporateWalletId,
+                        status: 'COMPLETED',
+                        reference: `FEE-VV-${voucher.id}`
+                    }
+                });
+            }
 
             const updatedVoucher = { ...voucher, status: 'USED' as const, usedAt: new Date() };
 
@@ -675,7 +759,7 @@ router.post('/vouchers/:id/spend', authMiddleware, async (req: AuthRequest, res)
                 data: {
                     userId: merchantUser.id,
                     title: 'Bon de caisse commune reçu',
-                    body: `${voucher.amount.toLocaleString('fr-FR')} FCFA reçus via un bon de retrait Mongain.`,
+                    body: `${netAmount.toLocaleString('fr-FR')} FCFA reçus via un bon de retrait Mongain${fee > 0 ? ` (après ${fee.toLocaleString('fr-FR')} FCFA de frais)` : ''}.`,
                     type: 'TRANSACTION'
                 }
             });

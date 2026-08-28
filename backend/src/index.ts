@@ -7,6 +7,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import { initCronJobs } from './cron';
 import { prisma } from './prisma';
+import { resolveSocketRoom } from './sockets/socketAuth';
 import adminRoutes from './routes/admin';
 import adminMerchantsRoutes from './routes/admin.merchants';
 import adminSearchRoutes from './routes/admin.search';
@@ -30,45 +31,67 @@ import { withDbRetry } from './utils/errors';
 import logger from './utils/logger';
 
 const app = express();
+
+// Render (comme Heroku/Fly.io) place l'app derrière EXACTEMENT un saut de proxy inverse à
+// son bord — sans ce réglage, `req.ip` renvoie l'IP interne de ce proxy (la même pour
+// toutes les requêtes) plutôt que la vraie IP du client, et express-rate-limit clé alors
+// ses 3 limiteurs par IP (SMS, connexion client, connexion staff) sur cette même valeur
+// partagée : leur limite par IP devient de fait une limite globale, unique, partagée par
+// TOUS les utilisateurs à la fois. `1` (pas `true`) : ne fait confiance qu'au dernier
+// maillon X-Forwarded-For posé par Render, jamais à une valeur que le client pourrait
+// injecter lui-même plus en amont.
+app.set('trust proxy', 1);
+
 const server = http.createServer(app);
+
+const PORT = process.env.PORT || 3000;
+
+// CORS configuration (Restrict domains) — extrait en fonction nommée pour être partagé
+// entre le CORS Express (API REST) et le CORS Socket.io ci-dessous : celui-ci acceptait
+// jusqu'ici `origin: '*'` (n'importe quelle page web pouvait ouvrir une connexion
+// WebSocket vers ce serveur), alors que l'API REST est déjà correctement restreinte à
+// une liste précise depuis le début. Une seule logique d'autorisation, jamais deux
+// copies qui peuvent diverger.
+const isProd = process.env.NODE_ENV === 'production';
+const extraAllowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
+
+function isOriginAllowed(origin: string | undefined): boolean {
+    // Pas d'origine (apps mobiles, curl, Postman, clients Socket.io natifs) : autorisé.
+    if (!origin) return true;
+    const allowed = [
+        'http://localhost:5173',
+        'http://localhost:3000',
+        'http://localhost:8081',
+        'https://mongain-backend.onrender.com',
+        'https://mongain.vercel.app',
+        ...extraAllowedOrigins,
+    ];
+    if (allowed.includes(origin)) return true;
+    // Sous-domaines de preview (Vercel/Netlify/Render) : uniquement hors production.
+    // En production, seule la liste explicite ci-dessus (+ ALLOWED_ORIGINS) est acceptée.
+    if (!isProd && (origin.endsWith('.vercel.app') || origin.endsWith('.netlify.app') || origin.endsWith('.onrender.com'))) {
+        return true;
+    }
+    return false;
+}
+
 const io = new Server(server, {
-    cors: { origin: '*' }
+    cors: {
+        origin: (origin, callback) => {
+            if (isOriginAllowed(origin)) return callback(null, true);
+            callback(new Error('CORS: origine non autorisée — ' + origin));
+        }
+    }
 });
 
 app.set('io', io); // Makes it available to routes via req.app.get('io')
 
-const PORT = process.env.PORT || 3000;
-
 // Security Middleware (XSS, Clickjacking, Sniffing prevention)
 app.use(helmet());
 
-// CORS configuration (Restrict domains)
-const isProd = process.env.NODE_ENV === 'production';
-const extraAllowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
-
 app.use(cors({
     origin: (origin, callback) => {
-        // Allow requests with no origin (mobile apps, curl, Postman)
-        if (!origin) return callback(null, true);
-        const allowed = [
-            'http://localhost:5173',
-            'http://localhost:3000',
-            'http://localhost:8081',
-            'https://mongain-backend.onrender.com',
-            'https://mongain.vercel.app',
-            ...extraAllowedOrigins,
-        ];
-        if (allowed.includes(origin)) {
-            return callback(null, true);
-        }
-        // Sous-domaines de preview (Vercel/Netlify/Render) : uniquement hors production.
-        // En production, seule la liste explicite ci-dessus (+ ALLOWED_ORIGINS) est acceptée.
-        if (
-            !isProd &&
-            (origin.endsWith('.vercel.app') || origin.endsWith('.netlify.app') || origin.endsWith('.onrender.com'))
-        ) {
-            return callback(null, true);
-        }
+        if (isOriginAllowed(origin)) return callback(null, true);
         callback(new Error('CORS: origine non autorisée — ' + origin));
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -78,6 +101,25 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// --- DEBUG LOGGER (dev uniquement) --- Restait actif en production : loggait le corps de
+// CHAQUE réponse d'erreur (peut contenir des PII — nom, téléphone, montant) ainsi qu'un
+// extrait du header Authorization sur la console du serveur, sans aucune protection.
+if (!isProd) {
+    app.use((req, res, next) => {
+        const originalJson = res.json.bind(res);
+        res.json = (body) => {
+            if (res.statusCode >= 400) {
+                console.log(`[DEBUG HTTP] ${req.method} ${req.path} -> ${res.statusCode} | RES: ${JSON.stringify(body).slice(0, 200)}`);
+                if (req.headers.authorization) console.log(`   authHeader: ${req.headers.authorization.substring(0, 30)}...`);
+            }
+            return originalJson(body);
+        };
+        next();
+    });
+}
+// --------------------
+
+import { adminIpAllowlistMiddleware } from './middleware/adminIpAllowlist';
 import { circuitBreakerMiddleware } from './middleware/circuitBreaker';
 import reclamationRoutes from './routes/reclamation';
 import webhookRoutes from './routes/webhooks';
@@ -86,24 +128,31 @@ import webhookRoutes from './routes/webhooks';
 // ROUTES SYSTEME ET ADMINISTRATION (SAFE)
 // ==========================================
 app.use('/api/auth', authRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/admin', rbacRoutes); // RBAC: /api/admin/staff/:id/permissions & /api/admin/rbac/me
+app.use('/api/admin', adminIpAllowlistMiddleware, adminRoutes);
+app.use('/api/admin', adminIpAllowlistMiddleware, rbacRoutes); // RBAC: /api/admin/staff/:id/permissions & /api/admin/rbac/me
 // Extraits du monolithe admin.ts — vaults/tontines/search/system-accounts sont des sections
 // autonomes sans dépendance croisée avec branches/staff/users/KYC restés dans admin.ts.
-app.use('/api/admin', adminVaultsRoutes);
-app.use('/api/admin', adminTontinesRoutes);
-app.use('/api/admin', adminMerchantsRoutes);
-app.use('/api/admin', adminSearchRoutes);
-app.use('/api/admin', adminSystemAccountsRoutes);
+app.use('/api/admin', adminIpAllowlistMiddleware, adminVaultsRoutes);
+app.use('/api/admin', adminIpAllowlistMiddleware, adminTontinesRoutes);
+app.use('/api/admin', adminIpAllowlistMiddleware, adminMerchantsRoutes);
+app.use('/api/admin', adminIpAllowlistMiddleware, adminSearchRoutes);
+app.use('/api/admin', adminIpAllowlistMiddleware, adminSystemAccountsRoutes);
+// /api/settings mélange une route publique (GET / — taux de frais lus par l'app mobile,
+// accessible depuis n'importe où par nature) et des routes réservées au personnel : la
+// restriction IP est appliquée route par route À L'INTÉRIEUR de settings.ts, jamais ici au
+// niveau du mount, sous peine de couper l'app mobile de tous ses clients.
 app.use('/api/settings', settingsRoutes);
-app.use('/api/treasury', treasuryRoutes);
+app.use('/api/treasury', adminIpAllowlistMiddleware, treasuryRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reclamation', reclamationRoutes);
 // /api/corp = authentification/session du personnel (login, me, changement de mot de
 // passe), pas d'opération financière : si on la protège par le Circuit Breaker, l'activer
 // verrouille aussi la connexion elle-même, empêchant quiconque n'a pas déjà une session
 // active de se reconnecter pour aller le désactiver depuis Paramètres — un auto-blocage.
-app.use('/api/corp', corpRoutes);
+// La restriction IP, elle, s'applique bien ici (y compris sur /corp/login) : c'est
+// précisément l'effet recherché — une IP non listée ne doit jamais pouvoir même tenter de
+// s'authentifier comme membre du personnel.
+app.use('/api/corp', adminIpAllowlistMiddleware, corpRoutes);
 // Notifications entrantes de PVit — jamais derrière le Circuit Breaker : un dépôt déjà
 // débité côté opérateur doit toujours pouvoir être confirmé et crédité, même en verrouillage
 // d'urgence, sinon l'argent du client reste bloqué en PENDING indéfiniment.
@@ -117,7 +166,7 @@ app.use('/api/merchant', circuitBreakerMiddleware, merchantRoutes);
 app.use('/api/vaults', circuitBreakerMiddleware, vaultRoutes);
 app.use('/api/tontine', circuitBreakerMiddleware, tontineRoutes);
 app.use('/api/services', circuitBreakerMiddleware, servicesRoutes);
-app.use('/api/agency', circuitBreakerMiddleware, agencyRoutes);
+app.use('/api/agency', adminIpAllowlistMiddleware, circuitBreakerMiddleware, agencyRoutes);
 
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', app: 'Mongain Backend', socket: true }));
@@ -137,10 +186,15 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 io.on('connection', (socket) => {
     console.log('⚡ Socket connected:', socket.id);
 
-    // Le client enverra un événement 'register' avec son numéro de téléphone ou ID
-    socket.on('register', (phone: string) => {
-        socket.join(`user_${phone}`);
-        console.log(`🔗 Scocket ${socket.id} joined room user_${phone}`);
+    // Le client envoie son token JWT (voir sockets/socketAuth.ts pour la faille corrigée par
+    // ce changement) ; la salle rejointe est dérivée du numéro réel en base pour l'utilisateur
+    // authentifié par ce token, jamais d'une valeur fournie telle quelle par le client.
+    socket.on('register', async (authToken: string) => {
+        const room = await resolveSocketRoom(authToken);
+        if (room) {
+            socket.join(room);
+            console.log(`🔗 Socket ${socket.id} joined room ${room}`);
+        }
     });
 
     socket.on('disconnect', () => {

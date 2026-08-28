@@ -12,6 +12,23 @@ import { apiFetch } from './utils/apiFetch';
 // chaque action gérée par perm_vault_manage (perm_vault_view suffit pour la lecture, déjà
 // vérifié côté serveur avant que ce composant ne soit monté, voir App.tsx).
 const ROLE_LABELS: Record<string, string> = { isAdmin: 'Président', isInitiator: 'Secrétaire', isValidator: 'Commissaire', isTreasurer: 'Trésorier', isRequiredValidator: 'Validation obligatoire' };
+// Miroir de vault-detail.tsx (mobile) : lit le même instantané figé à la création de la
+// demande (requiredValidatorIdsSnapshot) plutôt que de recalculer depuis les membres
+// courants — sinon un commissaire qui quitte APRÈS abaisserait rétroactivement le quorum
+// affiché ici, en désaccord avec ce que le serveur applique réellement. Utile précisément
+// sur cet écran : débloquer un retrait contesté suppose de savoir QUI bloque, pas
+// seulement combien il manque d'approbations.
+function missingRequiredValidatorNames(tx: any, members: any[]): string[] {
+    if (tx.type !== 'WITHDRAW_REQUEST' || tx.status !== 'PENDING') return [];
+    const approvedIds = (tx.approvals || []).map((a: any) => a.userId);
+    const requiredIds: string[] = tx.requiredValidatorIdsSnapshot
+        ? tx.requiredValidatorIdsSnapshot
+        : members.filter((m: any) => m.isRequiredValidator).map((m: any) => m.userId);
+    return members
+        .filter((m: any) => requiredIds.includes(m.userId) && !approvedIds.includes(m.userId))
+        .map((m: any) => m.user.name);
+}
+
 const fmt = (n: number) => n.toLocaleString('fr-FR') + ' FCFA';
 const fmtDate = (iso: string) => new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
@@ -132,7 +149,15 @@ export default function Vaults({ token, hasPerm, initialSelectedId }: { token: s
                     <>
                         <PageHeader
                             title={detail.name}
-                            subtitle={detail.description || `Président : ${detail.admin?.name} (${detail.admin?.phone})`}
+                            subtitle={detail.description || (() => {
+                                // vault.admin (via adminId) n'est figé qu'à la création et n'est jamais
+                                // mis à jour ensuite — un Président peut être rétrogradé puis quitter
+                                // entièrement la caisse, laissant ce champ pointer vers quelqu'un qui n'en
+                                // est même plus membre. Les Présidents ACTUELS se lisent uniquement depuis
+                                // VaultMember.isAdmin, la même source que le tableau des membres ci-dessous.
+                                const currentAdmins = (detail.members || []).filter((m: any) => m.isAdmin).map((m: any) => m.user.name);
+                                return currentAdmins.length > 0 ? `Président${currentAdmins.length > 1 ? 's' : ''} : ${currentAdmins.join(', ')}` : 'Aucun président actif';
+                            })()}
                             action={canManage ? (
                                 detail.isFrozen
                                     ? <button onClick={() => setConfirmState({ type: 'unfreeze' })} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--success-bg)', color: 'var(--success)', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}><Unlock size={14} /> Dégeler la caisse</button>
@@ -191,7 +216,7 @@ export default function Vaults({ token, hasPerm, initialSelectedId }: { token: s
                                                 <td style={{ whiteSpace: 'nowrap' }}>
                                                     {editingMemberId === m.id ? (
                                                         <div style={{ display: 'flex', gap: 6 }}>
-                                                            <ActionButton onClick={() => saveRole(m.user.id)}>Enregistrer</ActionButton>
+                                                            <ActionButton onClick={() => saveRole(m.userId)}>Enregistrer</ActionButton>
                                                             <ActionButton onClick={() => setEditingMemberId(null)}>Annuler</ActionButton>
                                                         </div>
                                                     ) : (
@@ -220,7 +245,19 @@ export default function Vaults({ token, hasPerm, initialSelectedId }: { token: s
                                             <td>{tx.requestedBy?.name}</td>
                                             <td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-secondary)' }} title={tx.reason || ''}>{tx.reason || '—'}</td>
                                             <td style={{ color: 'var(--text-secondary)' }}>{tx.destinationType || '—'}</td>
-                                            <td>{tx.type === 'WITHDRAW_REQUEST' ? `${tx.approvals.length}/${detail.requiredApprovals}` : '—'}</td>
+                                            <td>
+                                                {tx.type === 'WITHDRAW_REQUEST' ? (
+                                                    <>
+                                                        {tx.approvals.length}/{detail.requiredApprovals}
+                                                        {(() => {
+                                                            const missing = missingRequiredValidatorNames(tx, detail.members);
+                                                            return missing.length > 0 ? (
+                                                                <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2 }}>Attend : {missing.join(', ')}</div>
+                                                            ) : null;
+                                                        })()}
+                                                    </>
+                                                ) : '—'}
+                                            </td>
                                             <td><StatusPill status={tx.status} /></td>
                                             {canManage && (
                                                 <td style={{ whiteSpace: 'nowrap' }}>
@@ -352,7 +389,7 @@ export default function Vaults({ token, hasPerm, initialSelectedId }: { token: s
                 <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, textAlign: 'left' }}>
                     <thead>
                         <tr>
-                            <th>Caisse</th><th>Président</th><th>Membres</th><th>Solde</th><th>Seuil</th><th>En attente</th>
+                            <th>Caisse</th><th>Créé par</th><th>Membres</th><th>Solde</th><th>Seuil</th><th>En attente</th>
                         </tr>
                     </thead>
                     <tbody>

@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { prisma } from './prisma';
 import { getSystemSettings } from './routes/settings';
-import { executeTontineCycle } from './services/tontineService';
+import { executeTontineCycle, notifyUpcomingCycle, resolveRenewalPoll } from './services/tontineService';
 import { startOfDayInTimezone, startOfMonthInTimezone } from './utils/timezone';
 
 export function initCronJobs() {
@@ -36,6 +36,18 @@ export function initCronJobs() {
                     const diffDays = Math.floor((now.getTime() - referenceDate.getTime()) / (1000 * 60 * 60 * 24));
                     const cycleDays = group.frequency === 'WEEKLY' ? 7 : 30;
 
+                    // Rappel la veille (J-1) — best-effort, jamais bloquant : un rappel manqué
+                    // (redémarrage serveur le jour précis, cron sauté) n'empêche jamais le
+                    // prélèvement réel du lendemain, contrairement à l'exécution du cycle
+                    // elle-même qui est rattrapée explicitement (voir plus bas).
+                    if (diffDays === cycleDays - 1) {
+                        try {
+                            await notifyUpcomingCycle(group);
+                        } catch (reminderError) {
+                            console.error(`Erreur rappel Tontine pour ${group.name}:`, reminderError);
+                        }
+                    }
+
                     if (diffDays >= cycleDays) {
                         // Réclamation atomique AVANT exécution (et non après) : si deux
                         // instances du CRON se chevauchent (process orphelin survivant à un
@@ -60,6 +72,24 @@ export function initCronJobs() {
                     console.error(`Erreur CRON Tontine pour le groupe ${group.name} (${group.id}):`, groupError);
                 }
             }
+
+            // Sondages de relance (PENDING_RENEWAL, voir tontineService.ts executeTontineCycle
+            // et resolveRenewalPoll) dont la date limite est dépassée — le silence des
+            // participants qui n'ont pas voté est alors tranché comme un refus. Un groupe où
+            // tout le monde a déjà voté est résolu immédiatement par POST /tontine/renewal-vote
+            // sans attendre ce passage du CRON ; ceci ne rattrape que les votes incomplets.
+            const expiredPolls = await prisma.tontineGroup.findMany({
+                where: { status: 'PENDING_RENEWAL', renewalDeadline: { lte: now } }
+            });
+            for (const group of expiredPolls) {
+                try {
+                    console.log(`⏳ Sondage de relance expiré, résolution: ${group.name}`);
+                    await resolveRenewalPoll(group.id);
+                } catch (pollError) {
+                    console.error(`Erreur résolution sondage de relance pour ${group.name} (${group.id}):`, pollError);
+                }
+            }
+
             console.log('✅ CRON Tontine terminé.');
         } catch (e) {
             console.error('Erreur CRON Tontine:', e);

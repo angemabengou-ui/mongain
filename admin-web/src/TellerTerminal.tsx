@@ -183,8 +183,8 @@ export default function TellerTerminal({ token, userName }: { token: string; use
                             <input type="number" required placeholder="0" value={openForm.initialCash} onChange={e => setOpenForm({ initialCash: e.target.value })} style={{ width: '100%', padding: '14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 24, fontWeight: 700, textAlign: 'center' }} />
                             <span style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: 'var(--text-muted)' }}>FCFA</span>
                         </div>
-                        <button type="submit" style={{ padding: '14px', background: 'black', color: 'white', borderRadius: 12, fontWeight: 700, fontSize: 16, cursor: 'pointer', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                            Ouvrir la Caisse
+                        <button type="submit" disabled={loading} style={{ padding: '14px', background: 'black', color: 'white', borderRadius: 12, fontWeight: 700, fontSize: 16, cursor: loading ? 'not-allowed' : 'pointer', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.7 : 1 }}>
+                            {loading ? 'Ouverture...' : 'Ouvrir la Caisse'}
                         </button>
                     </form>
                 </div>

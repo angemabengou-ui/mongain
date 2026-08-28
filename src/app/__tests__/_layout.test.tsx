@@ -10,7 +10,7 @@ jest.mock('expo-splash-screen', () => ({
 }));
 
 const mockReplace = jest.fn();
-const mockUseSegments = jest.fn(() => []);
+const mockUseSegments = jest.fn(() => [] as string[]);
 const mockUseRootNavigationState = jest.fn(() => ({ key: 'root' }));
 const mockScreenCalls: any[] = [];
 jest.mock('expo-router', () => {

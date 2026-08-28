@@ -171,9 +171,12 @@ export default function App() {
       items: [{ id: 'ledger', label: 'Grand Livre (Ledger)', reqPerms: ['perm_transaction_view'] }]
     },
     {
+      // Régression : COMPLIANCE_CHECKER n'a que perm_treasury_approve (RBAC.ts) — sans
+      // l'inclure ici, le Checker ne voyait jamais l'onglet Trésorerie où vivent
+      // Valider/Rejeter, alors que le backend l'autorise déjà pleinement à approuver.
       id: 'tresorerie', label: 'TRÉSORERIE', icon: <Banknote size={18} />,
-      reqPerms: ['perm_treasury_view', 'perm_treasury_mint'],
-      items: [{ id: 'treasury', label: 'Réserve & Injection Liquidité', reqPerms: ['perm_treasury_view', 'perm_treasury_mint'] }]
+      reqPerms: ['perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_approve'],
+      items: [{ id: 'treasury', label: 'Réserve & Injection Liquidité', reqPerms: ['perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_approve'] }]
     },
     {
       id: 'risque', label: 'RISQUE & CONFORMITÉ', icon: <ShieldAlert size={18} />,
@@ -183,14 +186,18 @@ export default function App() {
       ]
     },
     {
+      // COMPLIANCE_CHECKER n'a que perm_ticket_resolve (pas ticket_view/support_note) — sans
+      // l'inclure, le Checker ne voyait jamais cette section alors qu'il peut résoudre des tickets.
       id: 'litiges', label: 'LITIGES & SUPPORT', icon: <MessageSquare size={18} />,
-      reqPerms: ['perm_ticket_view', 'perm_support_note'],
-      items: [{ id: 'reclamations', label: 'Support & Réclamations', reqPerms: ['perm_ticket_view'] }]
+      reqPerms: ['perm_ticket_view', 'perm_support_note', 'perm_ticket_resolve'],
+      items: [{ id: 'reclamations', label: 'Support & Réclamations', reqPerms: ['perm_ticket_view', 'perm_ticket_resolve'] }]
     },
     {
+      // Même correctif que Trésorerie ci-dessus : COMPLIANCE_CHECKER n'a que
+      // perm_system_settings_approve, jamais _view, pour la file d'approbation Checker.
       id: 'platform', label: 'PARAMÈTRES SYSTÈME', icon: <SettingsIcon size={18} />,
-      reqPerms: ['perm_system_settings_view'],
-      items: [{ id: 'settings', label: 'Configuration & API', reqPerms: ['perm_system_settings_view'] }]
+      reqPerms: ['perm_system_settings_view', 'perm_system_settings_approve'],
+      items: [{ id: 'settings', label: 'Configuration & API', reqPerms: ['perm_system_settings_view', 'perm_system_settings_approve'] }]
     },
     {
       id: 'securite', label: 'SÉCURITÉ', icon: <ShieldCheck size={18} />,
@@ -338,22 +345,22 @@ export default function App() {
           {activeTab === 'accounts' && hasPerm(['perm_customer_view', 'perm_staff_view']) && <Accounts token={token} role={role} hasPerm={hasPerm} onAdjustSystemAccount={(walletId, name) => { setAdjustTarget({ walletId, name }); setActiveTab('treasury'); }} />}
 
           {/* Les sous-pages Customer 360 se branchent ici. users est activé par accounts ou global search */}
-          {activeTab === 'users' && hasPerm(['perm_customer_360_basic', 'perm_customer_view']) && <Users token={token} staffRole={role} initialSelectedUserId={searchTarget?.tab === 'users' ? searchTarget.id : undefined} />}
+          {activeTab === 'users' && hasPerm(['perm_customer_360_basic', 'perm_customer_view']) && <Users token={token} staffRole={role} hasPerm={hasPerm} initialSelectedUserId={searchTarget?.tab === 'users' ? searchTarget.id : undefined} />}
           {activeTab === 'vaults' && hasPerm(['perm_vault_view']) && <Vaults token={token} hasPerm={hasPerm} initialSelectedId={searchTarget?.tab === 'vaults' ? searchTarget.id : undefined} />}
           {activeTab === 'tontines' && hasPerm(['perm_tontine_view']) && <Tontines token={token} hasPerm={hasPerm} initialSelectedId={searchTarget?.tab === 'tontines' ? searchTarget.id : undefined} />}
           {activeTab === 'merchants' && hasPerm(['perm_merchant_view']) && <Merchants token={token} hasPerm={hasPerm} initialSelectedId={searchTarget?.tab === 'merchants' ? searchTarget.id : undefined} />}
 
-          {activeTab === 'reclamations' && hasPerm(['perm_ticket_view']) && <SupportCenter token={token} hasPerm={hasPerm} />}
-          {activeTab === 'branch-dash' && hasPerm(['perm_branch_view']) && <BranchDashboard token={token} staffId={staffId} onNavigateToTreasury={hasPerm(['perm_treasury_view']) ? () => setActiveTab('treasury') : undefined} />}
+          {activeTab === 'reclamations' && hasPerm(['perm_ticket_view', 'perm_ticket_resolve']) && <SupportCenter token={token} hasPerm={hasPerm} />}
+          {activeTab === 'branch-dash' && hasPerm(['perm_branch_view']) && <BranchDashboard token={token} onNavigateToTreasury={hasPerm(['perm_treasury_view']) ? () => setActiveTab('treasury') : undefined} />}
           {activeTab === 'agency-center' && hasPerm(['perm_branch_manage']) && <AgencyCenter token={token} hasPerm={hasPerm} />}
           {activeTab === 'teller-terminal' && hasPerm(['perm_cash_session_open', 'perm_cash_in', 'perm_cash_out']) && <TellerTerminal token={token} userName={userName} />}
 
           {activeTab === 'kyc' && hasPerm(['perm_customer_kyc_view', 'perm_customer_kyc_validate']) && <KycMod token={token} />}
           {activeTab === 'ledger' && hasPerm(['perm_transaction_view']) && <Ledger token={token} hasPerm={hasPerm} />}
-          {activeTab === 'treasury' && hasPerm(['perm_treasury_view', 'perm_treasury_mint']) && <Treasury token={token} prefillAdjustTarget={adjustTarget} hasPerm={hasPerm} />}
+          {activeTab === 'treasury' && hasPerm(['perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_approve']) && <Treasury token={token} prefillAdjustTarget={adjustTarget} hasPerm={hasPerm} staffId={staffId} />}
           {activeTab === 'audit' && hasPerm(['perm_audit_log_view']) && <AuditLogs token={token} />}
           {activeTab === 'error-logs' && hasPerm(['perm_audit_log_view']) && <ErrorLogs token={token} />}
-          {activeTab === 'settings' && hasPerm(['perm_system_settings_view']) && <Settings token={token} />}
+          {activeTab === 'settings' && hasPerm(['perm_system_settings_view', 'perm_system_settings_approve']) && <Settings token={token} hasPerm={hasPerm} staffId={staffId} />}
 
           {/* FALLBACK IF NOT AUTHORIZED TO VIEW TAB */}
           {![

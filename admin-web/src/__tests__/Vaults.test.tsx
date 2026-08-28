@@ -14,7 +14,7 @@ const sampleVault = {
 const sampleDetail = {
     id: 'v1', name: 'Caisse Famille', description: null, admin: { name: 'Paul Président', phone: '077222222' },
     balance: 50000, requiredApprovals: 2,
-    members: [{ id: 'm1', user: { name: 'Paul Président', phone: '077222222' }, isAdmin: true, isInitiator: false, isValidator: false, isTreasurer: false }],
+    members: [{ id: 'm1', userId: 'u1', user: { name: 'Paul Président', phone: '077222222' }, isAdmin: true, isInitiator: false, isValidator: false, isTreasurer: false }],
     transactions: [],
     vouchers: [],
 };
@@ -107,6 +107,26 @@ describe('Vaults', () => {
         expect(mockedApiFetch).toHaveBeenCalledWith(
             expect.stringContaining('/api/admin/vaults/v1/freeze'),
             expect.objectContaining({ method: 'POST', body: JSON.stringify({ reason: 'Litige signalé par un membre' }) })
+        );
+    });
+
+    it("modifier les rôles d'un membre : envoie son vrai userId (pas m.user.id, absent du payload serveur)", async () => {
+        mockedApiFetch
+            .mockResolvedValueOnce({ vaults: [sampleVault] })
+            .mockResolvedValueOnce({ vault: sampleDetail })
+            .mockResolvedValueOnce({ success: true, member: { id: 'm1', isAdmin: true } })
+            .mockResolvedValueOnce({ vault: sampleDetail })
+            .mockResolvedValueOnce({ vaults: [sampleVault] });
+
+        render(<Vaults token="tok" hasPerm={() => true} />);
+        fireEvent.click(await screen.findByText('Caisse Famille'));
+        fireEvent.click(await screen.findByText('Modifier'));
+        fireEvent.click(await screen.findByText('Enregistrer'));
+
+        expect(await screen.findByText('Rôles mis à jour.')).toBeInTheDocument();
+        expect(mockedApiFetch).toHaveBeenCalledWith(
+            expect.stringContaining('/api/admin/vaults/v1/members/u1/role'),
+            expect.objectContaining({ method: 'PUT' })
         );
     });
 });

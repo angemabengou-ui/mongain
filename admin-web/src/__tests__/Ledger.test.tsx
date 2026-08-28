@@ -50,6 +50,26 @@ describe('Ledger', () => {
         expect(screen.queryByText('Alice Sender')).not.toBeInTheDocument();
     });
 
+    it("ne plante pas en recherchant alors qu'une transaction de trésorerie (wallet sans utilisateur) est affichée", async () => {
+        // Wallet.userId est optionnel : le wallet d'une agence ou de la Trésorerie Centrale
+        // n'a aucun `user` associé. Une transaction MINT/ISSUANCE en implique toujours un —
+        // sans chaînage optionnel complet sur le filtre de recherche, taper quoi que ce soit
+        // ici levait une exception (`undefined.includes(...)`) et faisait planter tout l'écran.
+        const mintTx = {
+            id: 'tx-mint', createdAt: '2026-08-22T10:00:00Z', amount: 1000000, reference: 'MINT-001', status: 'COMPLETED',
+            senderWallet: { user: null },
+            receiverWallet: { user: null },
+        };
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([tx1, mintTx]) }));
+        render(<Ledger token="tok" hasPerm={() => true} />);
+        await screen.findByText('Alice Sender');
+
+        fireEvent.change(screen.getByPlaceholderText(/Rechercher par Numéro/), { target: { value: 'alice' } });
+
+        expect(screen.getByText('Alice Sender')).toBeInTheDocument();
+        expect(screen.getByText('Grand Livre (Ledger AML)')).toBeInTheDocument();
+    });
+
     it('affiche les boutons d\'export CSV et PDF', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([tx1]) }));
         render(<Ledger token="tok" hasPerm={() => true} />);

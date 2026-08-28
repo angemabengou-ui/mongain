@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { io, Socket } from 'socket.io-client';
-import { apiGetMe, apiGetSystemSettings, apiLogin, apiLogoutServer, apiRegister, apiUpdatePushToken, apiVerifyLoginOtp, BASE_URL, deleteRefreshToken, deleteToken, getToken, saveRefreshToken, saveToken, setUnauthorizedHandler, User } from '../services/api';
+import { apiGetMe, apiGetSystemSettings, apiLogin, apiLogoutServer, apiRegister, apiResetPIN, apiUpdatePushToken, apiVerifyLoginOtp, BASE_URL, deleteRefreshToken, deleteToken, getToken, saveRefreshToken, saveToken, setUnauthorizedHandler, User } from '../services/api';
 
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
@@ -62,6 +62,7 @@ interface AuthContextType {
     login: (phone: string, pin: string) => Promise<{ requireOtp?: boolean; success?: boolean }>;
     verifyLoginOtp: (phone: string, otpCode: string) => Promise<void>;
     register: (name: string, username: string, phone: string, pin: string, otpCode: string) => Promise<void>;
+    resetPin: (phone: string, otpCode: string, newPin: string) => Promise<void>;
     logout: () => Promise<void>;
     setUser: (user: User | null) => void;
     settings: any;
@@ -89,8 +90,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const newSocket = io(BASE_URL);
 
         newSocket.on('connect', () => {
-            console.log('🔗 WebSocket connecté, enregistrement:', user.phone);
-            newSocket.emit('register', user.phone);
+            console.log('🔗 WebSocket connecté, enregistrement pour', user.phone);
+            // Le serveur dérive désormais le numéro réel de ce token (jamais d'un numéro
+            // envoyé tel quel par le client) — voir backend/src/index.ts, socket.on('register').
+            newSocket.emit('register', token);
         });
 
         newSocket.on('payment_received', (data: { amount: number, from: string }) => {
@@ -120,7 +123,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return () => {
             newSocket.disconnect();
         };
-    }, [user?.phone]); // On re-connecte si le tel change
+        // `token` inclus : sans lui, une reconnexion automatique du socket après une simple
+        // coupure réseau ré-émettrait un token d'accès devenu expiré entre-temps (rafraîchi en
+        // silence ailleurs par la logique de /auth/refresh) — le serveur rejetterait alors
+        // silencieusement le 'register' et l'utilisateur cesserait de recevoir ses notifications
+        // de paiement en temps réel jusqu'au prochain redémarrage complet de l'app.
+    }, [user?.phone, token]);
 
     const logout = async () => {
         // Best-effort : révoque le refresh token côté serveur, mais la session locale
@@ -214,8 +222,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await fetchSettings();
     };
 
+    // Le backend renvoie une session complète en cas de succès (comme register/verifyLoginOtp),
+    // pas un simple message — autant reconnecter directement l'utilisateur plutôt que le
+    // renvoyer se reconnecter manuellement avec le PIN qu'il vient tout juste de définir.
+    const resetPin = async (phone: string, otpCode: string, newPin: string) => {
+        const { token: newToken, refreshToken, user: newUser } = await apiResetPIN(phone, otpCode, newPin);
+        await saveToken(newToken);
+        await saveRefreshToken(refreshToken);
+        setToken(newToken);
+        setUser(newUser);
+        await fetchSettings();
+    };
+
     return (
-        <AuthContext.Provider value={{ user, token, isLoading, login, verifyLoginOtp, register, logout, setUser, settings }}>
+        <AuthContext.Provider value={{ user, token, isLoading, login, verifyLoginOtp, register, resetPin, logout, setUser, settings }}>
             {children}
         </AuthContext.Provider>
     );

@@ -6,9 +6,29 @@ export default function Login({ setToken }: { setToken: (token: string, role: st
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [otpCode, setOtpCode] = useState('');
+
+    // 2FA — POST /corp/login ne délivre plus le token directement, il renvoie
+    // {requireOtp: true} après un mot de passe valide. Le token n'arrive qu'après
+    // vérification du code envoyé par SMS, comme côté client mobile (PIN + OTP).
+    const [step, setStep] = useState<'credentials' | 'otp'>('credentials');
 
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+
+    const finalizeLogin = (data: any) => {
+        if (!data.user || !data.user.role) {
+            throw new Error('Réponse serveur invalide.');
+        }
+
+        const allowedRoles = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER', 'BRANCH_MANAGER', 'TELLER'];
+        if (!allowedRoles.includes(data.user.role)) {
+            throw new Error(`Accès refusé. Expulsé par le portail Corporate.`);
+        }
+
+        // We pass the email back as the "identifier" (formerly phone)
+        setToken(data.token, data.user.role, data.user.name, data.user.email, !!data.user.mustChangePassword);
+    };
 
     const handleLoginSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -21,17 +41,29 @@ export default function Login({ setToken }: { setToken: (token: string, role: st
                 body: JSON.stringify({ email: email.trim(), password })
             });
 
-            if (!data.user || !data.user.role) {
-                throw new Error('Réponse serveur invalide.');
+            if (data.requireOtp) {
+                setStep('otp');
+            } else {
+                finalizeLogin(data);
             }
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
 
-            const allowedRoles = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER', 'BRANCH_MANAGER', 'TELLER'];
-            if (!allowedRoles.includes(data.user.role)) {
-                throw new Error(`Accès refusé. Expulsé par le portail Corporate.`);
-            }
-
-            // We pass the email back as the "identifier" (formerly phone)
-            setToken(data.token, data.user.role, data.user.name, data.user.email, !!data.user.mustChangePassword);
+    const handleOtpSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+        try {
+            const data = await apiFetch(API_URL + '/api/corp/verify-login-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email.trim(), otpCode })
+            });
+            finalizeLogin(data);
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -82,60 +114,101 @@ export default function Login({ setToken }: { setToken: (token: string, role: st
                     </div>
                 )}
 
-                <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <div>
-                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(255, 255, 255, 0.6)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Email Professionnel</label>
-                        <input
-                            type="email"
-                            value={email} onChange={e => setEmail(e.target.value)}
-                            placeholder="prenom.nom@mongain.com" autoComplete="username"
-                            required
-                            style={{
-                                width: '100%', padding: '14px 16px', borderRadius: '12px',
-                                background: 'rgba(0, 0, 0, 0.2)',
-                                border: '1px solid rgba(255, 255, 255, 0.1)', fontSize: '15px', color: '#fff',
-                                outline: 'none', transition: 'border-color 0.2s, background 0.2s'
-                            }}
-                            onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-                            onBlur={e => e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)'}
-                        />
-                    </div>
-                    <div style={{ position: 'relative' }}>
-                        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(255, 255, 255, 0.6)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Mot de Passe</label>
-                        <input
-                            value={password} onChange={e => setPassword(e.target.value)}
-                            type={showPassword ? 'text' : 'password'} placeholder="••••••••"
-                            autoComplete="current-password" required
-                            style={{
-                                width: '100%', padding: '14px 44px 14px 16px', borderRadius: '12px',
-                                background: 'rgba(0, 0, 0, 0.2)',
-                                border: '1px solid rgba(255, 255, 255, 0.1)', fontSize: '15px', color: '#fff',
-                                outline: 'none', transition: 'border-color 0.2s, background 0.2s'
-                            }}
-                            onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-                            onBlur={e => e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)'}
-                        />
-                        <button
-                            type="button" onClick={() => setShowPassword(v => !v)}
-                            style={{ position: 'absolute', right: 14, top: 35, background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.4)', fontSize: 18, transition: 'color 0.2s' }}
-                            onMouseOver={e => e.currentTarget.style.color = 'rgba(255,255,255,0.8)'}
-                            onMouseOut={e => e.currentTarget.style.color = 'rgba(255,255,255,0.4)'}
-                        >
-                            {showPassword ? '🙈' : '👁️'}
-                        </button>
-                    </div>
+                {step === 'credentials' ? (
+                    <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div>
+                            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(255, 255, 255, 0.6)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Email Professionnel</label>
+                            <input
+                                type="email"
+                                value={email} onChange={e => setEmail(e.target.value)}
+                                placeholder="prenom.nom@mongain.com" autoComplete="username"
+                                required
+                                style={{
+                                    width: '100%', padding: '14px 16px', borderRadius: '12px',
+                                    background: 'rgba(0, 0, 0, 0.2)',
+                                    border: '1px solid rgba(255, 255, 255, 0.1)', fontSize: '15px', color: '#fff',
+                                    outline: 'none', transition: 'border-color 0.2s, background 0.2s'
+                                }}
+                                onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+                                onBlur={e => e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)'}
+                            />
+                        </div>
+                        <div style={{ position: 'relative' }}>
+                            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(255, 255, 255, 0.6)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Mot de Passe</label>
+                            <input
+                                value={password} onChange={e => setPassword(e.target.value)}
+                                type={showPassword ? 'text' : 'password'} placeholder="••••••••"
+                                autoComplete="current-password" required
+                                style={{
+                                    width: '100%', padding: '14px 44px 14px 16px', borderRadius: '12px',
+                                    background: 'rgba(0, 0, 0, 0.2)',
+                                    border: '1px solid rgba(255, 255, 255, 0.1)', fontSize: '15px', color: '#fff',
+                                    outline: 'none', transition: 'border-color 0.2s, background 0.2s'
+                                }}
+                                onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+                                onBlur={e => e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)'}
+                            />
+                            <button
+                                type="button" onClick={() => setShowPassword(v => !v)}
+                                style={{ position: 'absolute', right: 14, top: 35, background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.4)', fontSize: 18, transition: 'color 0.2s' }}
+                                onMouseOver={e => e.currentTarget.style.color = 'rgba(255,255,255,0.8)'}
+                                onMouseOut={e => e.currentTarget.style.color = 'rgba(255,255,255,0.4)'}
+                            >
+                                {showPassword ? '🙈' : '👁️'}
+                            </button>
+                        </div>
 
-                    <button type="submit" disabled={loading || !email || !password} style={{
-                        width: '100%', padding: '16px',
-                        background: 'linear-gradient(135deg, var(--accent) 0%, #06b6d4 100%)',
-                        color: 'white', border: 'none', borderRadius: '12px', fontWeight: 700, fontSize: 15,
-                        cursor: loading || !email || !password ? 'not-allowed' : 'pointer',
-                        opacity: loading || !email || !password ? 0.5 : 1, transition: 'all 0.2s', marginTop: '12px',
-                        boxShadow: '0 8px 24px rgba(12, 133, 153, 0.25)'
-                    }}>
-                        {loading ? 'Vérification Habilitation...' : 'Accéder au Portail'}
-                    </button>
-                </form>
+                        <button type="submit" disabled={loading || !email || !password} style={{
+                            width: '100%', padding: '16px',
+                            background: 'linear-gradient(135deg, var(--accent) 0%, #06b6d4 100%)',
+                            color: 'white', border: 'none', borderRadius: '12px', fontWeight: 700, fontSize: 15,
+                            cursor: loading || !email || !password ? 'not-allowed' : 'pointer',
+                            opacity: loading || !email || !password ? 0.5 : 1, transition: 'all 0.2s', marginTop: '12px',
+                            boxShadow: '0 8px 24px rgba(12, 133, 153, 0.25)'
+                        }}>
+                            {loading ? 'Vérification Habilitation...' : 'Accéder au Portail'}
+                        </button>
+                    </form>
+                ) : (
+                    <form onSubmit={handleOtpSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div>
+                            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(255, 255, 255, 0.6)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Code de Sécurité</label>
+                            <p style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: 13, marginBottom: 12 }}>Un code à 4 chiffres a été envoyé par SMS au numéro enregistré pour ce compte.</p>
+                            <input
+                                value={otpCode} onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                                inputMode="numeric" placeholder="0000" maxLength={4} autoFocus
+                                style={{
+                                    width: '100%', padding: '14px 16px', borderRadius: '12px',
+                                    background: 'rgba(0, 0, 0, 0.2)',
+                                    border: '1px solid rgba(255, 255, 255, 0.1)', fontSize: '24px', fontWeight: 700, color: '#fff',
+                                    textAlign: 'center', letterSpacing: 8,
+                                    outline: 'none', transition: 'border-color 0.2s, background 0.2s'
+                                }}
+                                onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+                                onBlur={e => e.target.style.borderColor = 'rgba(255, 255, 255, 0.1)'}
+                            />
+                        </div>
+
+                        <button type="submit" disabled={loading || otpCode.length !== 4} style={{
+                            width: '100%', padding: '16px',
+                            background: 'linear-gradient(135deg, var(--accent) 0%, #06b6d4 100%)',
+                            color: 'white', border: 'none', borderRadius: '12px', fontWeight: 700, fontSize: 15,
+                            cursor: loading || otpCode.length !== 4 ? 'not-allowed' : 'pointer',
+                            opacity: loading || otpCode.length !== 4 ? 0.5 : 1, transition: 'all 0.2s', marginTop: '4px',
+                            boxShadow: '0 8px 24px rgba(12, 133, 153, 0.25)'
+                        }}>
+                            {loading ? 'Vérification...' : 'Confirmer'}
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => { setStep('credentials'); setOtpCode(''); setError(''); }}
+                            style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: 13, cursor: 'pointer', textAlign: 'center' }}
+                        >
+                            ← Retour
+                        </button>
+                    </form>
+                )}
             </div>
         </div>
     );

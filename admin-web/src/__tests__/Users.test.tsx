@@ -44,7 +44,7 @@ describe('UsersManagement', () => {
     let fetchMock: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
-        vi.spyOn(window, 'alert').mockImplementation(() => {});
+        vi.spyOn(window, 'alert').mockImplementation(() => { });
     });
 
     afterEach(() => {
@@ -56,7 +56,7 @@ describe('UsersManagement', () => {
         fetchMock = buildFetchMock();
         vi.stubGlobal('fetch', fetchMock);
 
-        render(<UsersManagement token={token} staffRole="SUPER_ADMIN" />);
+        render(<UsersManagement token={token} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
 
         expect(screen.getByText('Recherche dans la base de données...')).toBeInTheDocument();
 
@@ -69,7 +69,7 @@ describe('UsersManagement', () => {
         fetchMock = buildFetchMock({ customersOk: false, customersError: 'Accès à la liste des comptes refusé.' });
         vi.stubGlobal('fetch', fetchMock);
 
-        render(<UsersManagement token={token} staffRole="SUPPORT_MAKER" />);
+        render(<UsersManagement token={token} staffRole="SUPPORT_MAKER" hasPerm={() => true} />);
 
         await screen.findByText(/Accès à la liste des comptes refusé/);
     });
@@ -79,12 +79,12 @@ describe('UsersManagement', () => {
         vi.stubGlobal('fetch', fetchMock);
         const user = userEvent.setup();
 
-        render(<UsersManagement token={token} staffRole="SUPER_ADMIN" />);
+        render(<UsersManagement token={token} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
         await screen.findByText('Jean Dupont');
 
         const input = screen.getByPlaceholderText(/Recherche : Nom, Tel/);
         await user.type(input, 'Jean');
-        await user.click(screen.getByRole('button', { name: /Recherche globale/i }));
+        await user.click(screen.getByRole('button', { name: /Rechercher/i }));
 
         await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('q=Jean'), expect.anything()));
     });
@@ -94,7 +94,7 @@ describe('UsersManagement', () => {
         vi.stubGlobal('fetch', fetchMock);
         const user = userEvent.setup();
 
-        render(<UsersManagement token={token} staffRole="SUPER_ADMIN" />);
+        render(<UsersManagement token={token} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
         await screen.findByText('Jean Dupont');
 
         await user.click(screen.getByRole('button', { name: 'Marchands' }));
@@ -107,7 +107,7 @@ describe('UsersManagement', () => {
         vi.stubGlobal('fetch', fetchMock);
         const user = userEvent.setup();
 
-        render(<UsersManagement token={token} staffRole="SUPER_ADMIN" />);
+        render(<UsersManagement token={token} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
         await screen.findByText('Jean Dupont');
 
         await user.click(screen.getByRole('button', { name: /Créer Compte Marchand/i }));
@@ -134,7 +134,7 @@ describe('UsersManagement', () => {
         fetchMock = buildFetchMock();
         vi.stubGlobal('fetch', fetchMock);
 
-        render(<UsersManagement token={token} staffRole="SUPER_ADMIN" lockedRole="AGENT" />);
+        render(<UsersManagement token={token} staffRole="SUPER_ADMIN" hasPerm={() => true} lockedRole="AGENT" />);
 
         expect(screen.getByText(/Agents Mongain \(réseau historique\)/)).toBeInTheDocument();
         await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/admin/branches'), expect.anything()));
