@@ -1,4 +1,4 @@
-import { Activity, Banknote, ChevronDown, ChevronRight, LayoutDashboard, LogOut, MessageSquare, Server, Settings as SettingsIcon, Shield, ShieldAlert, ShieldCheck, ShoppingBag, Store, Users as UsersIcon } from 'lucide-react';
+import { Banknote, ChevronDown, ChevronRight, LayoutDashboard, LogOut, Shield, ShieldAlert, ShieldCheck, Store, Users as UsersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Accounts from './Accounts';
 import AgencyCenter from './AgencyCenter';
@@ -129,90 +129,83 @@ export default function App() {
     return reqPerms.some(p => permissions.has(p));
   };
 
-  // NOUVELLE CARTE DE NAVIGATION (Couplée au RBAC)
+  // ─── NAVIGATION SIDEBAR ────────────────────────────────────────────────────
+  // 7 sections logiques, de haut en bas : vue d'ensemble → gestion des comptes
+  // → produits → opérations terrain → finance → conformité → plateforme.
   const SIDEBAR_GROUPS: NavGroup[] = [
+
+    // 1. VUE D'ENSEMBLE — Tableaux de bord analytiques (SUPER_ADMIN / RISK)
     {
-      id: 'control-center', label: 'TABLEAU DE BORD', icon: <LayoutDashboard size={18} />,
+      id: 'control-center', label: 'VUE D\'ENSEMBLE', icon: <LayoutDashboard size={18} />,
       reqPerms: ['perm_analytics_view'],
       items: [
-        { id: 'dashboard', label: 'Vue Globale', reqPerms: ['perm_analytics_view'] },
-        { id: 'macro-stats', label: 'Analytique Globale', reqPerms: ['perm_analytics_view'] }
+        { id: 'dashboard', label: 'Dashboard Global', reqPerms: ['perm_analytics_view'] },
+        { id: 'macro-stats', label: 'Statistiques Macro', reqPerms: ['perm_analytics_view'] },
       ]
     },
+
+    // 2. CLIENTS & RÉSEAU — Tous les comptes humains + le réseau d'agences
     {
-      id: 'comptes', label: 'COMPTES', icon: <UsersIcon size={18} />,
-      reqPerms: ['perm_customer_view', 'perm_staff_view'],
-      items: [{ id: 'accounts', label: 'Clients, Personnel & Agences', reqPerms: ['perm_customer_view', 'perm_staff_view'] }]
+      id: 'comptes', label: 'CLIENTS & RÉSEAU', icon: <UsersIcon size={18} />,
+      reqPerms: ['perm_customer_view', 'perm_staff_view', 'perm_branch_manage'],
+      items: [
+        { id: 'accounts', label: 'Clients & Personnel', reqPerms: ['perm_customer_view', 'perm_staff_view'] },
+        { id: 'merchants', label: 'Comptes Marchands', reqPerms: ['perm_merchant_view'] },
+        { id: 'agency-center', label: 'Réseau d\'Agences', reqPerms: ['perm_branch_manage'] },
+      ]
     },
+
+    // 3. PRODUITS COLLECTIFS — Épargne & Tontines
     {
-      id: 'system-finance', label: 'COMPTES SYSTÈME', icon: <Server size={18} />,
-      reqPerms: ['perm_treasury_view'],
-      items: [{ id: 'system-accounts', label: 'Comptes Techniques & Réserves', reqPerms: ['perm_treasury_view'] }]
-    },
-    {
-      id: 'clients-comptes', label: 'PRODUITS COLLECTIFS', icon: <Shield size={18} />,
+      id: 'produits', label: 'PRODUITS COLLECTIFS', icon: <Shield size={18} />,
       reqPerms: ['perm_vault_view', 'perm_tontine_view'],
       items: [
         { id: 'vaults', label: 'Caisses Communes', reqPerms: ['perm_vault_view'] },
-        { id: 'tontines', label: 'Tontines', reqPerms: ['perm_tontine_view'] }
+        { id: 'tontines', label: 'Tontines', reqPerms: ['perm_tontine_view'] },
       ]
     },
+
+    // 4. OPÉRATIONS GUICHET — Caisse + supervision agence (TELLER / BRANCH_MANAGER)
     {
-      id: 'marchands', label: 'MARCHANDS', icon: <ShoppingBag size={18} />,
-      reqPerms: ['perm_merchant_view'],
-      items: [{ id: 'merchants', label: 'Comptes Marchands', reqPerms: ['perm_merchant_view'] }]
-    },
-    {
-      id: 'ops-agence', label: 'GUICHET & AGENCE', icon: <Store size={18} />,
-      reqPerms: ['perm_branch_view', 'perm_branch_manage', 'perm_cash_session_open', 'perm_cash_in', 'perm_cash_out'],
+      id: 'ops-agence', label: 'OPÉRATIONS GUICHET', icon: <Store size={18} />,
+      reqPerms: ['perm_branch_view', 'perm_cash_session_open', 'perm_cash_in', 'perm_cash_out'],
       items: [
         { id: 'branch-dash', label: 'Supervision Agence', reqPerms: ['perm_branch_view'] },
-        { id: 'teller-terminal', label: 'Opérations Guichet (Caisse)', reqPerms: ['perm_cash_session_open', 'perm_cash_in', 'perm_cash_out'] },
-        { id: 'agency-center', label: 'Réseau d\'Agences', reqPerms: ['perm_branch_manage'] }
+        { id: 'teller-terminal', label: 'Terminal Caissier', reqPerms: ['perm_cash_session_open', 'perm_cash_in', 'perm_cash_out'] },
       ]
     },
+
+    // 5. FINANCE & TRÉSORERIE — Ledger, Trésorerie, Comptes Système
     {
-      id: 'transactions', label: 'TRANSACTIONS & FINANCE', icon: <Activity size={18} />,
-      reqPerms: ['perm_transaction_view'],
-      items: [{ id: 'ledger', label: 'Grand Livre (Ledger)', reqPerms: ['perm_transaction_view'] }]
-    },
-    {
-      // Régression : COMPLIANCE_CHECKER n'a que perm_treasury_approve (RBAC.ts) — sans
-      // l'inclure ici, le Checker ne voyait jamais l'onglet Trésorerie où vivent
-      // Valider/Rejeter, alors que le backend l'autorise déjà pleinement à approuver.
-      id: 'tresorerie', label: 'TRÉSORERIE', icon: <Banknote size={18} />,
-      reqPerms: ['perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_approve'],
-      items: [{ id: 'treasury', label: 'Réserve & Injection Liquidité', reqPerms: ['perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_approve'] }]
-    },
-    {
-      id: 'risque', label: 'RISQUE & CONFORMITÉ', icon: <ShieldAlert size={18} />,
-      reqPerms: ['perm_customer_kyc_view', 'perm_customer_kyc_validate', 'perm_customer_flag'],
+      id: 'finance', label: 'FINANCE & TRÉSORERIE', icon: <Banknote size={18} />,
+      reqPerms: ['perm_transaction_view', 'perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_approve'],
       items: [
-        { id: 'kyc', label: 'Dossiers KYC / AML', reqPerms: ['perm_customer_kyc_view', 'perm_customer_kyc_validate'] }
+        { id: 'ledger', label: 'Grand Livre (Ledger)', reqPerms: ['perm_transaction_view'] },
+        { id: 'treasury', label: 'Réserve & Injection Liquidité', reqPerms: ['perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_approve'] },
+        { id: 'system-accounts', label: 'Comptes Techniques Internes', reqPerms: ['perm_treasury_view'] },
       ]
     },
+
+    // 6. RISQUE & CONFORMITÉ — KYC, AML, Litiges, Support
     {
-      // COMPLIANCE_CHECKER n'a que perm_ticket_resolve (pas ticket_view/support_note) — sans
-      // l'inclure, le Checker ne voyait jamais cette section alors qu'il peut résoudre des tickets.
-      id: 'litiges', label: 'LITIGES & SUPPORT', icon: <MessageSquare size={18} />,
-      reqPerms: ['perm_ticket_view', 'perm_support_note', 'perm_ticket_resolve'],
-      items: [{ id: 'reclamations', label: 'Support & Réclamations', reqPerms: ['perm_ticket_view', 'perm_ticket_resolve'] }]
-    },
-    {
-      // Même correctif que Trésorerie ci-dessus : COMPLIANCE_CHECKER n'a que
-      // perm_system_settings_approve, jamais _view, pour la file d'approbation Checker.
-      id: 'platform', label: 'PARAMÈTRES SYSTÈME', icon: <SettingsIcon size={18} />,
-      reqPerms: ['perm_system_settings_view', 'perm_system_settings_approve'],
-      items: [{ id: 'settings', label: 'Configuration & API', reqPerms: ['perm_system_settings_view', 'perm_system_settings_approve'] }]
-    },
-    {
-      id: 'securite', label: 'SÉCURITÉ', icon: <ShieldCheck size={18} />,
-      reqPerms: ['perm_audit_log_view'],
+      id: 'conformite', label: 'RISQUE & CONFORMITÉ', icon: <ShieldAlert size={18} />,
+      reqPerms: ['perm_customer_kyc_view', 'perm_customer_kyc_validate', 'perm_customer_flag', 'perm_ticket_view', 'perm_ticket_resolve', 'perm_support_note'],
       items: [
+        { id: 'kyc', label: 'Dossiers KYC / AML', reqPerms: ['perm_customer_kyc_view', 'perm_customer_kyc_validate', 'perm_customer_flag'] },
+        { id: 'reclamations', label: 'Support & Réclamations', reqPerms: ['perm_ticket_view', 'perm_ticket_resolve', 'perm_support_note'] },
+      ]
+    },
+
+    // 7. PLATEFORME & SÉCURITÉ — Paramètres, Audit, Logs
+    {
+      id: 'platform', label: 'PLATEFORME & SÉCURITÉ', icon: <ShieldCheck size={18} />,
+      reqPerms: ['perm_system_settings_view', 'perm_system_settings_approve', 'perm_audit_log_view'],
+      items: [
+        { id: 'settings', label: 'Configuration & API', reqPerms: ['perm_system_settings_view', 'perm_system_settings_approve'] },
         { id: 'audit', label: 'Centre d\'Audit', reqPerms: ['perm_audit_log_view'] },
-        { id: 'error-logs', label: 'Erreurs P0 & Exceptions', reqPerms: ['perm_audit_log_view'] }
+        { id: 'error-logs', label: 'Logs Erreurs P0', reqPerms: ['perm_audit_log_view'] },
       ]
-    }
+    },
   ];
 
   const ROLE_LABELS: Record<string, string> = {
