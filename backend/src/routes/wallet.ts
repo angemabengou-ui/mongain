@@ -9,6 +9,7 @@ import { prisma } from '../prisma';
 import { getCentralTreasury } from '../services/centralTreasury';
 import { getOrCreateMerchantCommissionWallet } from '../services/merchantService';
 import { initiatePvitPayment, initiatePvitTransfer, isPvitConfigured, toPvitCustomerAccountNumber } from '../services/pvit';
+import { getSystemAccount } from '../services/systemAccounts';
 import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
@@ -16,28 +17,13 @@ import { getSystemSettings } from './settings';
 
 const expo = new Expo();
 
-const CORPORATE_PHONE = process.env.CORPORATE_PHONE || '+2410000000';
-
 // Compte de revenus (frais de transactions) — distinct du compte Réserve/Voûte
 // (+24199999999, géré par la Trésorerie) qui ne doit contenir que la monnaie qui adosse
 // les soldes clients. Auto-guérison (même principe que treasury.ts pour la Réserve) : si le
 // compte n'existe pas encore en base, tout prélèvement de frais échouait silencieusement en
 // erreur 500 ("Compte corporate introuvable"), ce qui pouvait bloquer tous les transferts P2P.
 export async function getOrCreateCorporateWallet(tx: any) {
-    let corporate = await tx.user.findUnique({ where: { phone: CORPORATE_PHONE }, include: { wallet: true } });
-    if (!corporate || !corporate.wallet) {
-        corporate = await tx.user.create({
-            data: {
-                phone: CORPORATE_PHONE,
-                name: 'COMPTE CORPORATE (REVENUS)',
-                role: 'ADMIN',
-                pin: crypto.randomBytes(16).toString('hex'), // PIN non connaissable
-                wallet: { create: { balance: 0 } }
-            },
-            include: { wallet: true }
-        });
-    }
-    return corporate;
+    return getSystemAccount('CORPORATE', tx);
 }
 
 
@@ -862,20 +848,7 @@ router.post('/recharge', authMiddleware, async (req: AuthRequest, res) => {
         }
 
         // Compte système "Passerelle de Paiement" (Aggregator) pour simuler l'entrée d'argent externe
-        const gatewayPhone = '+24133333333';
-        let gateway = await prisma.user.findUnique({ where: { phone: gatewayPhone }, include: { wallet: true } });
-        if (!gateway) {
-            gateway = await prisma.user.create({
-                data: {
-                    phone: gatewayPhone,
-                    name: 'PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)',
-                    role: 'ADMIN',
-                    pin: await bcrypt.hash(crypto.randomBytes(8).toString('hex'), 10),
-                    wallet: { create: { balance: 999999999, currency: 'FCFA' } }
-                },
-                include: { wallet: true }
-            });
-        }
+        const gateway = await getSystemAccount('EXTERNAL_GATEWAY');
         if (!gateway.wallet) return res.status(500).json({ error: 'Compte passerelle introuvable.' });
 
         const ref = generateReference(`RECHARGE-${method}`);
@@ -952,20 +925,7 @@ router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
 
         // Compte passerelle simulé (même mécanisme que /recharge) : le crédit
         // client a toujours une contrepartie débitée, jamais créé "from thin air".
-        const gatewayPhone = '+24133333333';
-        let gateway = await prisma.user.findUnique({ where: { phone: gatewayPhone }, include: { wallet: true } });
-        if (!gateway) {
-            gateway = await prisma.user.create({
-                data: {
-                    phone: gatewayPhone,
-                    name: 'PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)',
-                    role: 'ADMIN',
-                    pin: await bcrypt.hash(crypto.randomBytes(8).toString('hex'), 10),
-                    wallet: { create: { balance: 999999999, currency: 'FCFA' } }
-                },
-                include: { wallet: true }
-            });
-        }
+        const gateway = await getSystemAccount('EXTERNAL_GATEWAY');
         if (!gateway.wallet) throw new Error('Compte passerelle introuvable.');
 
         const newBalance = await prisma.$transaction(async (tx) => {
@@ -1200,20 +1160,7 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
         const totalRequired = amount + fee;
 
         // Récupérer le compte passerelle pour équilibrer la comptabilité
-        const gatewayPhone = '+24133333333';
-        let gateway = await prisma.user.findUnique({ where: { phone: gatewayPhone }, include: { wallet: true } });
-        if (!gateway || !gateway.wallet) {
-            gateway = await prisma.user.create({
-                data: {
-                    phone: gatewayPhone,
-                    name: 'PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)',
-                    role: 'ADMIN',
-                    pin: await bcrypt.hash('gateWaySecret', 10),
-                    wallet: { create: { balance: 999999999, currency: 'FCFA' } }
-                },
-                include: { wallet: true }
-            });
-        }
+        const gateway = await getSystemAccount('EXTERNAL_GATEWAY');
 
         let senderWalletId = '';
         let corporateWalletId: string | null = null;

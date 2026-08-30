@@ -134,6 +134,9 @@ const settingsSchema = z.object({
     antiFractioningMaxCount: z.number().int().min(1).optional(),
     antiFractioningAction: z.enum(["ALLOW", "APPLY_FEE", "BLOCK", "ALERT"]).optional(),
 
+    // Pénalité de retard tontine (voir tontineService.ts, applyLatePenaltyIfDue)
+    tontineLatePenaltyRate: z.number().min(0).max(1).optional(),
+
     // Restriction réseau du portail personnel (voir middleware/adminIpAllowlist.ts)
     adminIpAllowlistEnabled: z.boolean().optional(),
     adminIpAllowlist: z.array(z.string().min(1)).optional(),

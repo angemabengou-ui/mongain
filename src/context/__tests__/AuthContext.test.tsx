@@ -19,6 +19,7 @@ jest.mock('expo-device', () => ({
     // Not a physical device in the test runner -> registerForPushNotificationsAsync
     // short-circuits before calling any Notifications permission APIs.
     isDevice: false,
+    isRootedExperimentalAsync: jest.fn(async () => false),
 }));
 
 jest.mock('expo-constants', () => ({
@@ -45,7 +46,8 @@ jest.mock('../../services/api', () => ({
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import React, { useState } from 'react';
-import { Text, TouchableOpacity } from 'react-native';
+import { Alert, Text, TouchableOpacity } from 'react-native';
+import * as Device from 'expo-device';
 import * as api from '../../services/api';
 import { AuthProvider, useAuth } from '../AuthContext';
 
@@ -111,6 +113,28 @@ describe('AuthContext', () => {
         expect(screen.getByTestId('user').props.children).toBe('none');
         expect(screen.getByTestId('token').props.children).toBe('none');
         expect(api.getToken).toHaveBeenCalled();
+    });
+
+    it('warns (without blocking) when Device.isRootedExperimentalAsync detects a rooted/jailbroken device', async () => {
+        const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+        (Device.isRootedExperimentalAsync as jest.Mock).mockResolvedValueOnce(true);
+
+        await renderWithProvider();
+
+        await waitFor(() => expect(alertSpy).toHaveBeenCalled());
+        // Non bloquant : la session se restaure normalement malgré l'avertissement.
+        expect(screen.getByTestId('loading').props.children).toBe('false');
+        alertSpy.mockRestore();
+    });
+
+    it('does not warn when the device is not detected as rooted/jailbroken', async () => {
+        const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+
+        await renderWithProvider();
+        await waitFor(() => expect(screen.getByTestId('loading').props.children).toBe('false'));
+
+        expect(alertSpy).not.toHaveBeenCalled();
+        alertSpy.mockRestore();
     });
 
     it('restores the session from a stored token on mount', async () => {

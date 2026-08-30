@@ -17,8 +17,14 @@ export default function Login({ setToken }: { setToken: (token: string, role: st
     const [loading, setLoading] = useState(false);
 
     const finalizeLogin = (data: any) => {
+        // Ce cas précis (succès HTTP mais ni `requireOtp` ni `user` exploitable) s'est déjà
+        // produit en pratique : le backend (Render) avait été redéployé avec le 2FA avant que
+        // ce portail (Vercel, déploiement séparé) ne le soit, donc une ancienne version de
+        // cet écran recevait {requireOtp: true} sans savoir le traiter et échouait ici. Le
+        // message oriente maintenant directement vers la cause la plus probable au lieu d'un
+        // diagnostic technique opaque.
         if (!data.user || !data.user.role) {
-            throw new Error('Réponse serveur invalide.');
+            throw new Error("Réponse du serveur inattendue pour cette version du portail. Rafraîchissez la page (Ctrl+Maj+R) ; si le problème persiste après ça, le portail et le serveur ne sont probablement pas sur la même version — contactez le support technique.");
         }
 
         const allowedRoles = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER', 'BRANCH_MANAGER', 'TELLER'];

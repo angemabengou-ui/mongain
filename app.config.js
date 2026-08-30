@@ -17,7 +17,7 @@ module.exports = () => ({
     scheme: 'mongain',
     userInterfaceStyle: 'automatic',
     ios: {
-      icon: './assets/expo.icon',
+      icon: './assets/images/logo-glow.png',
       bundleIdentifier: 'com.mongain.superapp',
     },
     android: {
@@ -34,7 +34,7 @@ module.exports = () => ({
       ],
       adaptiveIcon: {
         backgroundColor: '#130925',
-        foregroundImage: './assets/images/icon.png',
+        foregroundImage: './assets/images/logo-glow.png',
       },
     },
     web: {
@@ -47,8 +47,8 @@ module.exports = () => ({
         'expo-splash-screen',
         {
           backgroundColor: '#0a0a0f',
-          image: './assets/images/splash-icon.png',
-          imageWidth: 76,
+          image: './assets/images/logo-glow.png',
+          imageWidth: 200,
         },
       ],
       'expo-secure-store',
@@ -78,8 +78,9 @@ module.exports = () => ({
     },
     extra: {
       router: {},
+      owner: 'ange0808',
       eas: {
-        projectId: '4edb24ae-d377-4d55-bc51-5c46a2dff70b',
+        projectId: '67ca9078-22b1-4d3f-b9a4-15de1478e47c',
       },
     },
   },

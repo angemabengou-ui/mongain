@@ -16,6 +16,7 @@ jest.mock('../../prisma', () => ({
         staff: { findUnique: jest.fn() },
         branch: { findMany: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
         centralTreasury: { findFirst: jest.fn(), create: jest.fn() },
+        systemAccount: { findMany: jest.fn() },
         treasuryRequest: {
             count: jest.fn(),
             findMany: jest.fn(),
@@ -48,9 +49,9 @@ const BRANCH_MANAGER = { id: 'staff_1', role: 'BRANCH_MANAGER', isActive: true, 
 const CENTRAL_TREASURY = { id: 'ct_1', walletId: 'w_hq', wallet: { id: 'w_hq', balance: 10000000 } };
 
 beforeEach(() => {
-    // wallet.findMany est utilisé pour les comptes système (rôle ADMIN) dans /overview —
-    // valeur par défaut vide pour ne pas casser les tests qui ne testent pas ce détail.
-    (prisma.wallet.findMany as jest.Mock).mockResolvedValue([]);
+    // systemAccount.findMany est utilisé pour les comptes système dans /overview — valeur
+    // par défaut vide pour ne pas casser les tests qui ne testent pas ce détail.
+    (prisma.systemAccount.findMany as jest.Mock).mockResolvedValue([]);
 });
 
 describe('Treasury Routes', () => {
@@ -80,7 +81,7 @@ describe('Treasury Routes', () => {
             (prisma.treasuryRequest.count as jest.Mock).mockResolvedValue(3);
             (prisma.centralTreasury.findFirst as jest.Mock).mockResolvedValue({ id: 'ct_1', walletId: 'w_hq', wallet: { id: 'w_hq', balance: 1000 } });
             // Compte système (ex: Passerelle Externe) : exclu de clientWalletsBalance, compté à part.
-            (prisma.wallet.findMany as jest.Mock).mockResolvedValue([{ id: 'w_gateway', balance: 999999999 }]);
+            (prisma.systemAccount.findMany as jest.Mock).mockResolvedValue([{ wallet: { id: 'w_gateway', balance: 999999999 } }]);
             (prisma.wallet.aggregate as jest.Mock).mockResolvedValue({ _sum: { balance: 700 } });
 
             const res = await request(app).get('/treasury/overview');

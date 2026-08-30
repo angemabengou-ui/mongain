@@ -27,6 +27,7 @@ jest.mock('../../prisma', () => ({
         auditLog: { findMany: jest.fn(), create: jest.fn(), count: jest.fn() },
         riskFlag: { create: jest.fn(), count: jest.fn() },
         reclamation: { count: jest.fn(), findMany: jest.fn() },
+        tontineContribution: { count: jest.fn() },
         notification: { create: jest.fn() },
         settingsApproval: { findFirst: jest.fn(), create: jest.fn() },
         systemSettings: { findFirst: jest.fn() },
@@ -52,6 +53,7 @@ describe('Admin CRM360 Routes', () => {
         // attachAuditActors calls staff.findMany / user.findMany internally
         (prisma.staff as any).findMany = jest.fn().mockResolvedValue([]);
         (prisma.user as any).findMany = jest.fn().mockResolvedValue([]);
+        (prisma.tontineContribution.count as jest.Mock).mockResolvedValue(0);
     });
 
     describe('GET /admin/users/:id/360', () => {
@@ -101,6 +103,49 @@ describe('Admin CRM360 Routes', () => {
 
             expect(res.status).toBe(200);
             expect(res.body.recentTx).toEqual([]);
+            // TELLER n'a pas perm_tontine_view (voir admin.search.test.ts) — le score interne,
+            // usage RISK/gestion tontine, ne doit pas fuiter vers un rôle guichet.
+            expect(res.body.tontineReliability).toBeNull();
+            expect(prisma.tontineContribution.count).not.toHaveBeenCalled();
+        });
+
+        it('devrait calculer le score de fiabilité tontine pour un rôle avec perm_tontine_view', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+                id: 'u1', name: 'Jean', riskFlags: [], reclamations: []
+            });
+            (prisma.auditLog.findMany as jest.Mock).mockResolvedValue([]);
+            (prisma.riskFlag.count as jest.Mock).mockResolvedValue(0);
+            (prisma.reclamation.count as jest.Mock).mockResolvedValue(0);
+            // 10 cycles dus au total, 7 payés intégralement (status PAID), 2 pénalisés pour retard.
+            (prisma.tontineContribution.count as jest.Mock)
+                .mockResolvedValueOnce(10) // total
+                .mockResolvedValueOnce(7)  // PAID
+                .mockResolvedValueOnce(2); // pénalités
+
+            const res = await request(app).get('/admin/users/u1/360');
+
+            expect(res.status).toBe(200);
+            expect(res.body.tontineReliability).toEqual({
+                totalCycles: 10, paidCycles: 7, partialOrMissedCycles: 3, penaltiesCount: 2, scorePercent: 70,
+            });
+        });
+
+        it("devrait renvoyer scorePercent=null (pas 0%) quand le client n'a jamais participé à une tontine", async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+                id: 'u1', name: 'Jean', riskFlags: [], reclamations: []
+            });
+            (prisma.auditLog.findMany as jest.Mock).mockResolvedValue([]);
+            (prisma.riskFlag.count as jest.Mock).mockResolvedValue(0);
+            (prisma.reclamation.count as jest.Mock).mockResolvedValue(0);
+            (prisma.tontineContribution.count as jest.Mock).mockResolvedValue(0);
+
+            const res = await request(app).get('/admin/users/u1/360');
+
+            expect(res.status).toBe(200);
+            expect(res.body.tontineReliability.totalCycles).toBe(0);
+            expect(res.body.tontineReliability.scorePercent).toBeNull();
         });
     });
 

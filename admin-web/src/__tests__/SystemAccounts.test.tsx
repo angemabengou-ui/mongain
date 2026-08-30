@@ -9,7 +9,7 @@ const mockedApiFetch = vi.mocked(apiFetch);
 
 const sampleAccounts = [
     { id: 'treasury:ct_1', walletId: 'w_hq', name: 'Trésorerie Centrale Mongain', balance: 79840000, kind: 'CENTRAL_TREASURY' },
-    { id: 'user:u_gateway', walletId: 'w_gateway', name: 'PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)', phone: '+24133333333', balance: 1000000499, kind: 'SYSTEM_USER' },
+    { id: 'system:sa_gateway', walletId: 'w_gateway', name: 'PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)', balance: 1000000499, kind: 'EXTERNAL_GATEWAY' },
 ];
 
 const sampleTransactions = [

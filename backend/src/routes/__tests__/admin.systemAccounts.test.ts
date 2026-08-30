@@ -13,7 +13,7 @@ jest.mock('../../middleware/auth', () => ({
 jest.mock('../../prisma', () => ({
     prisma: {
         staff: { findUnique: jest.fn() },
-        user: { findMany: jest.fn() },
+        systemAccount: { findMany: jest.fn() },
         branch: { findFirst: jest.fn() },
         centralTreasury: { findFirst: jest.fn(), create: jest.fn() },
         transaction: { findMany: jest.fn() },
@@ -41,14 +41,13 @@ describe('Admin System Accounts Routes (lecture seule)', () => {
             expect(res.status).toBe(403);
         });
 
-        it('devrait retourner la Trésorerie Centrale et les comptes système (rôle ADMIN)', async () => {
+        it('devrait retourner la Trésorerie Centrale et les comptes système', async () => {
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
             (prisma.centralTreasury.findFirst as jest.Mock).mockResolvedValue({
                 id: 'ct_1', name: 'Trésorerie Centrale Mongain', walletId: 'w_ct', wallet: { id: 'w_ct', balance: 79840000 }
             });
-            (prisma.user.findMany as jest.Mock).mockResolvedValue([
-                { id: 'u_gateway', name: 'PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)', phone: '+24133333333', createdAt: new Date(), wallet: { id: 'w_gateway', balance: 1000000499 } },
-                { id: 'u_no_wallet', name: 'Compte orphelin', phone: '+241000', createdAt: new Date(), wallet: null }
+            (prisma.systemAccount.findMany as jest.Mock).mockResolvedValue([
+                { id: 'sa_gateway', kind: 'EXTERNAL_GATEWAY', name: 'PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)', createdAt: new Date(), wallet: { id: 'w_gateway', balance: 1000000499 } }
             ]);
 
             const res = await request(app).get('/admin/system-accounts');
@@ -56,7 +55,7 @@ describe('Admin System Accounts Routes (lecture seule)', () => {
             expect(res.status).toBe(200);
             expect(res.body.accounts).toHaveLength(2);
             expect(res.body.accounts[0]).toMatchObject({ kind: 'CENTRAL_TREASURY', balance: 79840000, walletId: 'w_ct' });
-            expect(res.body.accounts[1]).toMatchObject({ kind: 'SYSTEM_USER', balance: 1000000499, walletId: 'w_gateway', name: 'PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)' });
+            expect(res.body.accounts[1]).toMatchObject({ kind: 'EXTERNAL_GATEWAY', balance: 1000000499, walletId: 'w_gateway', name: 'PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)' });
         });
     });
 

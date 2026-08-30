@@ -11,6 +11,11 @@ const STATUS_LABELS: Record<string, string> = {
 };
 const statusLabel = (status: string) => STATUS_LABELS[status] || status;
 
+// Un wallet n'a pas toujours de `user` (Wallet.userId est optionnel) : agence, Trésorerie
+// Centrale, ou désormais compte système (SystemAccount) — chacun porte son nom sur sa
+// propre relation plutôt que sur `.user`.
+const counterpartyName = (wallet: any) => wallet?.user?.name || wallet?.systemAccount?.name || wallet?.branch?.name || 'Inconnu';
+
 export default function Ledger({ token, hasPerm }: { token: string; hasPerm: (perms: string[]) => boolean }) {
     const [transactions, setTransactions] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -94,16 +99,16 @@ export default function Ledger({ token, hasPerm }: { token: string; hasPerm: (pe
             tx.reference?.toLowerCase().includes(s) ||
             tx.senderWallet?.user?.phone?.includes(s) ||
             tx.receiverWallet?.user?.phone?.includes(s) ||
-            tx.senderWallet?.user?.name?.toLowerCase().includes(s) ||
-            tx.receiverWallet?.user?.name?.toLowerCase().includes(s)
+            counterpartyName(tx.senderWallet).toLowerCase().includes(s) ||
+            counterpartyName(tx.receiverWallet).toLowerCase().includes(s)
         );
     });
 
     const exportCSV = () => {
         const headers = ["Date", "Expediteur", "Beneficiaire", "Montant", "Reference", "Statut"];
         const rows = filteredTransactions.map(tx => {
-            const sender = `${tx.senderWallet?.user?.name || 'Inconnu'} (${tx.senderWallet?.user?.phone || '—'})`;
-            const receiver = `${tx.receiverWallet?.user?.name || 'Inconnu'} (${tx.receiverWallet?.user?.phone || '—'})`;
+            const sender = `${counterpartyName(tx.senderWallet)} (${tx.senderWallet?.user?.phone || '—'})`;
+            const receiver = `${counterpartyName(tx.receiverWallet)} (${tx.receiverWallet?.user?.phone || '—'})`;
             return [
                 new Date(tx.createdAt).toLocaleString('fr-FR'),
                 `"${sender}"`,
@@ -142,8 +147,8 @@ export default function Ledger({ token, hasPerm }: { token: string; hasPerm: (pe
         const tableColumn = ["Date", "Expediteur", "Beneficiaire", "Montant (FCFA)", "Reference", "Statut"];
         const tableRows = filteredTransactions.map(tx => [
             new Date(tx.createdAt).toLocaleString('fr-FR'),
-            (tx.senderWallet?.user?.name || 'Systeme') + ' (' + (tx.senderWallet?.user?.phone || '—') + ')',
-            (tx.receiverWallet?.user?.name || 'Systeme') + ' (' + (tx.receiverWallet?.user?.phone || '—') + ')',
+            counterpartyName(tx.senderWallet) + ' (' + (tx.senderWallet?.user?.phone || '—') + ')',
+            counterpartyName(tx.receiverWallet) + ' (' + (tx.receiverWallet?.user?.phone || '—') + ')',
             tx.amount.toString(),
             tx.reference || tx.id,
             statusLabel(tx.status)
@@ -204,9 +209,9 @@ export default function Ledger({ token, hasPerm }: { token: string; hasPerm: (pe
                         </thead>
                         <tbody>
                             {filteredTransactions.map(tx => {
-                                const senderName = tx.senderWallet?.user?.name || 'Inconnu';
+                                const senderName = counterpartyName(tx.senderWallet);
                                 const senderPhone = tx.senderWallet?.user?.phone || '—';
-                                const receiverName = tx.receiverWallet?.user?.name || 'Inconnu';
+                                const receiverName = counterpartyName(tx.receiverWallet);
                                 const receiverPhone = tx.receiverWallet?.user?.phone || '—';
 
                                 const isFee = tx.reference?.startsWith('FEE');

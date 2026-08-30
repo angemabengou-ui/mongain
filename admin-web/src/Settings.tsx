@@ -2,6 +2,7 @@ import { Activity, Calculator, CheckCircle, Clock, Copy, Database, Eye, Globe, K
 import { useEffect, useState } from 'react';
 import Modal from './components/Modal';
 import PageHeader from './components/PageHeader';
+import TabBar from './components/TabBar';
 import { API_URL } from './config';
 
 // ─── API MANAGEMENT TAB ────────────────────────────────────────────────────
@@ -403,17 +404,19 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
     };
 
     const tabs = [
-        { id: 'general', label: 'Général', icon: Globe },
-        { id: 'fees', label: 'Politique de Frais (Taxes)', icon: Activity },
-        { id: 'treasury', label: 'Trésorerie & Liquidité', icon: Wallet },
-        { id: 'limits', label: 'Plafonds & KYC', icon: Shield },
-        { id: 'antifraud', label: 'Anti-Fractionnement', icon: UserCheck },
-        { id: 'integrations', label: 'Intégrations (API)', icon: Database },
-        { id: 'gateways', label: 'Passerelles de Paiement', icon: Smartphone },
-        { id: 'breaker', label: 'Circuit Breaker', icon: Power },
-        { id: 'network', label: 'Sécurité Réseau', icon: Lock },
-        { id: 'approvals', label: 'Approbation (Checker) ' + (requests.filter(r => r.status === 'PENDING').length ? `(${requests.filter(r => r.status === 'PENDING').length})` : ''), icon: CheckCircle },
-        { id: 'history', label: 'Historique', icon: Clock }
+        { id: 'general', label: 'Général', icon: <Globe size={18} /> },
+        { id: 'fees', label: 'Politique de Frais (Taxes)', icon: <Activity size={18} /> },
+        { id: 'treasury', label: 'Trésorerie & Liquidité', icon: <Wallet size={18} /> },
+        { id: 'limits', label: 'Plafonds & KYC', icon: <Shield size={18} /> },
+        { id: 'antifraud', label: 'Anti-Fractionnement', icon: <UserCheck size={18} /> },
+        { id: 'integrations', label: 'Intégrations (API)', icon: <Database size={18} /> },
+        { id: 'gateways', label: 'Passerelles de Paiement', icon: <Smartphone size={18} /> },
+        // Rouge assumé, y compris inactif : coupe-circuit du système de paiement, pas un
+        // onglet comme les autres — le signal visuel d'alerte est intentionnel (voir TabBar.tsx).
+        { id: 'breaker', label: 'Circuit Breaker', icon: <Power size={18} />, activeBg: 'var(--danger)', activeColor: 'var(--btn-dark-text)' },
+        { id: 'network', label: 'Sécurité Réseau', icon: <Lock size={18} /> },
+        { id: 'approvals', label: 'Approbation (Checker) ' + (requests.filter(r => r.status === 'PENDING').length ? `(${requests.filter(r => r.status === 'PENDING').length})` : ''), icon: <CheckCircle size={18} /> },
+        { id: 'history', label: 'Historique', icon: <Clock size={18} /> }
     ];
 
     return (
@@ -434,18 +437,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
             {message && <div style={{ padding: 15, background: 'var(--success-bg)', color: 'var(--success)', borderRadius: 8, marginBottom: 20, border: '1px solid var(--success)', fontWeight: 600 }}>✓ {message}</div>}
             {error && <div style={{ padding: 15, background: 'var(--danger-bg)', color: 'var(--danger)', borderRadius: 8, marginBottom: 20, border: '1px solid var(--danger)', fontWeight: 600 }}>✕ {error}</div>}
 
-            {/* TAB NAVIGATION */}
-            <div style={{ display: 'flex', gap: 8, borderBottom: '2px solid var(--border)', paddingBottom: 15, marginBottom: 30, overflowX: 'auto' }}>
-                {tabs.map(t => (
-                    <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
-                        display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', background: activeTab === t.id ? (t.id === 'breaker' ? 'var(--danger)' : 'var(--btn-dark-bg)') : 'transparent',
-                        color: activeTab === t.id ? 'var(--btn-dark-text)' : (t.id === 'breaker' ? 'var(--danger)' : 'var(--text-secondary)'),
-                        border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 14, transition: '0.2s', whiteSpace: 'nowrap'
-                    }}>
-                        <t.icon size={18} /> {t.label}
-                    </button>
-                ))}
-            </div>
+            <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />
 
             {loading ? <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}><Activity size={24} className="spin" /></div> : (
                 <div style={{ display: 'flex', gap: 24 }}>
@@ -560,6 +552,18 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                     </div>
                                 </div>
                                 <button className="btn" style={{ marginTop: 24, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_ANTIFRAUD', ['antiFractioningWindowHours', 'antiFractioningMaxAmount', 'antiFractioningMaxCount', 'antiFractioningAction'])}>Déposer Changement (Maker)</button>
+
+                                <div style={{ marginTop: 24, borderTop: '1px solid var(--border)', paddingTop: 24 }}>
+                                    <h3>Pénalité de Retard — Tontine</h3>
+                                    <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
+                                        Pourcentage de la cotisation prélevé, en plus de celle-ci, à tout participant n'ayant pas complété son versement à l'échéance du tour. Désactivée tant que le taux reste à 0 — aucun utilisateur ne doit se voir prélever une pénalité qu'il n'a jamais acceptée sans qu'un opérateur l'active explicitement ici.
+                                    </p>
+                                    <div style={{ maxWidth: 320 }}>
+                                        <label>Taux de pénalité (%)</label>
+                                        <input className="input" type="number" step="0.01" min="0" max="100" value={(drafts.tontineLatePenaltyRate || 0) * 100} onChange={e => handlePercentFieldChange('tontineLatePenaltyRate', e.target.value)} />
+                                    </div>
+                                    <button className="btn" style={{ marginTop: 16, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_TONTINE_PENALTY', ['tontineLatePenaltyRate'])}>Déposer Changement (Maker)</button>
+                                </div>
                             </div>
                         )}
 

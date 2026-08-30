@@ -1,4 +1,4 @@
-import { Activity, Banknote, ChevronDown, ChevronRight, LayoutDashboard, LogOut, MessageSquare, Settings as SettingsIcon, Shield, ShieldAlert, ShieldCheck, ShoppingBag, Store, Users as UsersIcon } from 'lucide-react';
+import { Activity, Banknote, ChevronDown, ChevronRight, LayoutDashboard, LogOut, MessageSquare, Server, Settings as SettingsIcon, Shield, ShieldAlert, ShieldCheck, ShoppingBag, Store, Users as UsersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Accounts from './Accounts';
 import AgencyCenter from './AgencyCenter';
@@ -16,6 +16,7 @@ import MacroStats from './MacroStats';
 import Merchants from './Merchants';
 import Settings from './Settings';
 import SupportCenter from './SupportCenter';
+import SystemAccounts from './SystemAccounts';
 import TellerTerminal from './TellerTerminal';
 import Tontines from './Tontines';
 import Treasury from './Treasury';
@@ -140,8 +141,13 @@ export default function App() {
     },
     {
       id: 'comptes', label: 'COMPTES', icon: <UsersIcon size={18} />,
-      reqPerms: ['perm_customer_view', 'perm_staff_view'], // Accessible si vue Clients OU vue Staff autorisée
-      items: [{ id: 'accounts', label: 'Base Profils', reqPerms: ['perm_customer_view', 'perm_staff_view'] }]
+      reqPerms: ['perm_customer_view', 'perm_staff_view'],
+      items: [{ id: 'accounts', label: 'Clients, Personnel & Agences', reqPerms: ['perm_customer_view', 'perm_staff_view'] }]
+    },
+    {
+      id: 'system-finance', label: 'COMPTES SYSTÈME', icon: <Server size={18} />,
+      reqPerms: ['perm_treasury_view'],
+      items: [{ id: 'system-accounts', label: 'Comptes Techniques & Réserves', reqPerms: ['perm_treasury_view'] }]
     },
     {
       id: 'clients-comptes', label: 'PRODUITS COLLECTIFS', icon: <Shield size={18} />,
@@ -342,7 +348,7 @@ export default function App() {
           {/* PROTECTED ROUTES RENDERING (View gates based on explicitly validated permissions) */}
           {activeTab === 'dashboard' && hasPerm(['perm_analytics_view']) && <Dashboard />}
           {activeTab === 'macro-stats' && hasPerm(['perm_analytics_view']) && <MacroStats token={token} />}
-          {activeTab === 'accounts' && hasPerm(['perm_customer_view', 'perm_staff_view']) && <Accounts token={token} role={role} hasPerm={hasPerm} onAdjustSystemAccount={(walletId, name) => { setAdjustTarget({ walletId, name }); setActiveTab('treasury'); }} />}
+          {activeTab === 'accounts' && hasPerm(['perm_customer_view', 'perm_staff_view']) && <Accounts token={token} role={role} hasPerm={hasPerm} />}
 
           {/* Les sous-pages Customer 360 se branchent ici. users est activé par accounts ou global search */}
           {activeTab === 'users' && hasPerm(['perm_customer_360_basic', 'perm_customer_view']) && <Users token={token} staffRole={role} hasPerm={hasPerm} initialSelectedUserId={searchTarget?.tab === 'users' ? searchTarget.id : undefined} />}
@@ -358,6 +364,7 @@ export default function App() {
           {activeTab === 'kyc' && hasPerm(['perm_customer_kyc_view', 'perm_customer_kyc_validate']) && <KycMod token={token} />}
           {activeTab === 'ledger' && hasPerm(['perm_transaction_view']) && <Ledger token={token} hasPerm={hasPerm} />}
           {activeTab === 'treasury' && hasPerm(['perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_approve']) && <Treasury token={token} prefillAdjustTarget={adjustTarget} hasPerm={hasPerm} staffId={staffId} />}
+          {activeTab === 'system-accounts' && hasPerm(['perm_treasury_view']) && <SystemAccounts token={token} onAdjust={(walletId, name) => { setAdjustTarget({ walletId, name }); setActiveTab('treasury'); }} />}
           {activeTab === 'audit' && hasPerm(['perm_audit_log_view']) && <AuditLogs token={token} />}
           {activeTab === 'error-logs' && hasPerm(['perm_audit_log_view']) && <ErrorLogs token={token} />}
           {activeTab === 'settings' && hasPerm(['perm_system_settings_view', 'perm_system_settings_approve']) && <Settings token={token} hasPerm={hasPerm} staffId={staffId} />}
@@ -365,8 +372,8 @@ export default function App() {
           {/* FALLBACK IF NOT AUTHORIZED TO VIEW TAB */}
           {![
             'dashboard', 'macro-stats', 'accounts', 'users', 'vaults', 'tontines',
-            'reclamations', 'branch-dash', 'agency-center', 'teller-terminal', 'kyc', 'ledger',
-            'treasury', 'audit', 'error-logs', 'settings'
+            'merchants', 'reclamations', 'branch-dash', 'agency-center', 'teller-terminal', 'kyc', 'ledger',
+            'treasury', 'system-accounts', 'audit', 'error-logs', 'settings'
           ].includes(activeTab) && (
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Configuration demandée non disponible avec vos droits d'accès.</div>
             )}

@@ -1,4 +1,4 @@
-import { ArrowLeft, Landmark, Search, Server } from 'lucide-react';
+import { ArrowLeft, Building2, Landmark, Repeat, Search, Server, ShoppingBag } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import PageHeader from './components/PageHeader';
 import { API_URL } from './config';
@@ -14,11 +14,22 @@ import { apiFetch } from './utils/apiFetch';
 const fmt = (n: number) => n.toLocaleString('fr-FR') + ' FCFA';
 const fmtDate = (iso: string) => new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+const KIND_META: Record<string, { label: string; icon: any; color: string; bg: string }> = {
+    CENTRAL_TREASURY: { label: 'Trésorerie Centrale', icon: Landmark, color: 'var(--accent)', bg: 'var(--accent-bg)' },
+    CORPORATE: { label: 'Corporate (Revenus)', icon: Building2, color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' },
+    EXTERNAL_GATEWAY: { label: 'Passerelle Externe', icon: Repeat, color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' },
+    TONTINE_VAULT: { label: 'Coffre Tontine', icon: Server, color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' },
+    SERVICE_PARTNER_SEEG: { label: 'Service Partenaire (SEEG)', icon: ShoppingBag, color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' },
+    SERVICE_PARTNER_CANAL: { label: 'Service Partenaire (CANAL)', icon: ShoppingBag, color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' },
+    SERVICE_PARTNER_TELECOM: { label: 'Service Partenaire (Télécom)', icon: ShoppingBag, color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' },
+};
+
 function KindBadge({ kind }: { kind: string }) {
-    const isTreasury = kind === 'CENTRAL_TREASURY';
+    const meta = KIND_META[kind] || { label: 'Compte système', icon: Server, color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' };
+    const Icon = meta.icon;
     return (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 10, background: isTreasury ? 'var(--accent-bg)' : 'var(--bg-secondary)', color: isTreasury ? 'var(--accent)' : 'var(--text-secondary)' }}>
-            {isTreasury ? <Landmark size={11} /> : <Server size={11} />} {isTreasury ? 'Trésorerie Centrale' : 'Compte système'}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 10, background: meta.bg, color: meta.color }}>
+            <Icon size={11} /> {meta.label}
         </span>
     );
 }
@@ -65,7 +76,7 @@ export default function SystemAccounts({ token, onAdjust }: { token: string; onA
     const filteredAccounts = accounts.filter(a => {
         if (!search) return true;
         const s = search.toLowerCase();
-        return a.name?.toLowerCase().includes(s) || a.phone?.includes(s);
+        return a.name?.toLowerCase().includes(s);
     });
 
     if (selected) {
@@ -77,7 +88,7 @@ export default function SystemAccounts({ token, onAdjust }: { token: string; onA
 
                 <PageHeader
                     title={selected.name}
-                    subtitle={selected.phone ? `${selected.phone} · Compte technique (rôle ADMIN), pas un client.` : 'Contrepartie interne de la Trésorerie Centrale.'}
+                    subtitle={selected.kind === 'CENTRAL_TREASURY' ? 'Contrepartie interne de la Trésorerie Centrale.' : 'Compte technique interne — pas un client.'}
                     action={onAdjust && (
                         <button onClick={() => onAdjust(selected.walletId, selected.name)} style={{ padding: '10px 16px', background: 'var(--btn-dark-bg)', color: 'var(--btn-dark-text)', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
                             Créer un ajustement (Maker/Checker)
@@ -113,7 +124,7 @@ export default function SystemAccounts({ token, onAdjust }: { token: string; onA
                                         <td style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{fmtDate(tx.createdAt)}</td>
                                         <td style={{ color: isDebit ? 'var(--danger)' : 'var(--success)', fontWeight: 700 }}>{isDebit ? 'Débit' : 'Crédit'}</td>
                                         <td style={{ fontWeight: 700 }}>{fmt(tx.amount)}</td>
-                                        <td>{counterparty?.user?.name || '—'}<div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{counterparty?.user?.phone}</div></td>
+                                        <td>{counterparty?.user?.name || counterparty?.systemAccount?.name || counterparty?.branch?.name || '—'}<div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{counterparty?.user?.phone}</div></td>
                                         <td style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--text-secondary)' }}>{tx.reference || tx.id.slice(0, 8)}</td>
                                         <td style={{ color: 'var(--text-secondary)' }}>{tx.status}</td>
                                     </tr>
@@ -137,7 +148,7 @@ export default function SystemAccounts({ token, onAdjust }: { token: string; onA
                 <input
                     value={search}
                     onChange={e => setSearch(e.target.value)}
-                    placeholder="Rechercher un compte ou un numéro…"
+                    placeholder="Rechercher un compte…"
                     style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text-primary)', fontSize: 13 }}
                 />
             </div>
@@ -152,18 +163,17 @@ export default function SystemAccounts({ token, onAdjust }: { token: string; onA
             <div className="table-container">
                 <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, textAlign: 'left' }}>
                     <thead>
-                        <tr><th>Compte</th><th>Type</th><th>Téléphone</th><th>Solde</th></tr>
+                        <tr><th>Compte</th><th>Type</th><th>Solde</th></tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={4} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Chargement...</td></tr>
+                            <tr><td colSpan={3} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Chargement...</td></tr>
                         ) : filteredAccounts.length === 0 ? (
-                            <tr><td colSpan={4} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Aucun compte système.</td></tr>
+                            <tr><td colSpan={3} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Aucun compte système.</td></tr>
                         ) : filteredAccounts.map(a => (
                             <tr key={a.id} style={{ cursor: 'pointer' }} onClick={() => openAccount(a)}>
                                 <td style={{ fontWeight: 600 }}>{a.name}</td>
                                 <td><KindBadge kind={a.kind} /></td>
-                                <td style={{ color: 'var(--text-secondary)' }}>{a.phone || '—'}</td>
                                 <td style={{ fontWeight: 700 }}>{fmt(a.balance)}</td>
                             </tr>
                         ))}

@@ -2,6 +2,7 @@ import { Check, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { API_URL } from './config';
 import ImageLightbox from './components/ImageLightbox';
+import TabBar from './components/TabBar';
 
 export default function KycMod({ token }: { token: string }) {
     const [tab, setTab] = useState<'PENDING' | 'APPROVED'>('PENDING');
@@ -80,14 +81,14 @@ export default function KycMod({ token }: { token: string }) {
         <div className="card" style={{ maxWidth: '900px', margin: '0 auto' }}>
             <h2 style={{ fontSize: '24px', marginBottom: '20px', color: 'var(--accent)' }}>Base KYC & Identité</h2>
 
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-                <button onClick={() => setTab('PENDING')} style={{ padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', border: 'none', background: tab === 'PENDING' ? 'var(--accent)' : 'var(--bg-card)', color: tab === 'PENDING' ? '#fff' : 'var(--text-primary)', fontWeight: 'bold' }}>
-                    Dossiers en attente
-                </button>
-                <button onClick={() => setTab('APPROVED')} style={{ padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', border: 'none', background: tab === 'APPROVED' ? 'var(--success)' : 'var(--bg-card)', color: tab === 'APPROVED' ? '#fff' : 'var(--text-primary)', fontWeight: 'bold' }}>
-                    Identités Certifiées
-                </button>
-            </div>
+            <TabBar<'PENDING' | 'APPROVED'>
+                tabs={[
+                    { id: 'PENDING', label: 'Dossiers en attente' },
+                    { id: 'APPROVED', label: 'Identités Certifiées' },
+                ]}
+                active={tab}
+                onChange={setTab}
+            />
 
             <p style={{ color: 'var(--text-muted)', marginBottom: '20px' }}>
                 {tab === 'PENDING' ? 'Les dossiers ci-dessous requièrent une validation manuelle.' : 'Liste des clients dont l\'identité a été formellement validée par le siège.'}
@@ -117,6 +118,11 @@ export default function KycMod({ token }: { token: string }) {
                             <div>
                                 <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>{p.name}</h3>
                                 <p style={{ margin: '5px 0', color: 'var(--text-muted)' }}>{p.phone} - Soumis le {new Date(p.createdAt).toLocaleDateString('fr-FR')}</p>
+                                {p.kycVendorStatus && (
+                                    <p style={{ margin: '0 0 5px', fontSize: 12, color: 'var(--text-muted)' }}>
+                                        Vérification tierce : {p.kycVendorStatus === 'NOT_CONFIGURED' ? 'aucun prestataire configuré — décision 100% manuelle' : `${p.kycVendorProvider || '?'} — ${p.kycVendorStatus}`}
+                                    </p>
+                                )}
 
                                 <div style={{ display: 'flex', gap: '15px', marginTop: '15px' }}>
                                     <div style={{ position: 'relative' }}>

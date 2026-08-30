@@ -19,6 +19,20 @@ describe('KycMod', () => {
         expect(screen.getByRole('button', { name: /Approuver/i })).toBeInTheDocument();
     });
 
+    it("affiche que la décision reste manuelle quand aucun prestataire tiers n'est configuré", async () => {
+        const dossierWithVendorCheck = { ...pendingDossier, kycVendorProvider: null, kycVendorStatus: 'NOT_CONFIGURED', kycVendorCheckedAt: '2026-08-20T10:00:05Z' };
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([dossierWithVendorCheck]) }));
+        render(<KycMod token="tok" />);
+        expect(await screen.findByText(/aucun prestataire configuré — décision 100% manuelle/)).toBeInTheDocument();
+    });
+
+    it("n'affiche aucune mention de vérification tierce quand le champ est absent (dossiers historiques)", async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([pendingDossier]) }));
+        render(<KycMod token="tok" />);
+        await screen.findByText('Marie Client');
+        expect(screen.queryByText(/Vérification tierce/)).not.toBeInTheDocument();
+    });
+
     it("affiche un message quand aucun dossier n'est en attente", async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) }));
         render(<KycMod token="tok" />);

@@ -7,6 +7,7 @@ import { contributeNow, executeTontineCycle, getTontineVaultWallet, notifyUpcomi
 jest.mock('../../prisma', () => ({
     prisma: {
         user: { findUnique: jest.fn(), create: jest.fn() },
+        systemAccount: { upsert: jest.fn() },
         tontineGroup: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
         tontineParticipant: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn(), findMany: jest.fn() },
         tontineCycle: { upsert: jest.fn(), update: jest.fn(), findUnique: jest.fn() },
@@ -24,6 +25,7 @@ jest.mock('../../routes/settings', () => ({
 
 jest.mock('../../routes/wallet', () => ({
     sendPush: jest.fn(),
+    getOrCreateCorporateWallet: jest.fn().mockResolvedValue({ wallet: { id: 'w_corporate', balance: 0 } }),
 }));
 
 jest.mock('../LimitEngine', () => ({
@@ -37,30 +39,20 @@ describe('getTontineVaultWallet', () => {
         jest.clearAllMocks();
     });
 
-    it('devrait retourner le wallet du coffre tontine existant', async () => {
-        (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'vault_user', wallet: VAULT_WALLET });
+    it('devrait retourner le wallet du coffre tontine (upsert par kind, existant ou créé)', async () => {
+        (prisma.systemAccount.upsert as jest.Mock).mockResolvedValue({ id: 'sa_vault', kind: 'TONTINE_VAULT', wallet: VAULT_WALLET });
 
         const wallet = await getTontineVaultWallet();
 
         expect(wallet).toBe(VAULT_WALLET);
-        expect(prisma.user.create).not.toHaveBeenCalled();
-    });
-
-    it('devrait créer le compte coffre tontine s\'il n\'existe pas', async () => {
-        (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
-        (prisma.user.create as jest.Mock).mockResolvedValue({ id: 'vault_user_new', wallet: VAULT_WALLET });
-
-        const wallet = await getTontineVaultWallet();
-
-        expect(wallet).toBe(VAULT_WALLET);
-        expect(prisma.user.create).toHaveBeenCalledWith(expect.objectContaining({
-            data: expect.objectContaining({ phone: '+24155555555', role: 'ADMIN' }),
+        expect(prisma.systemAccount.upsert).toHaveBeenCalledWith(expect.objectContaining({
+            where: { kind: 'TONTINE_VAULT' },
+            create: expect.objectContaining({ kind: 'TONTINE_VAULT', name: 'COFFRE TONTINE (SYSTEME)' }),
         }));
     });
 
-    it('devrait lever une exception si le coffre créé n\'a pas de wallet associé', async () => {
-        (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'vault_user', wallet: null });
-        (prisma.user.create as jest.Mock).mockResolvedValue({ id: 'vault_user', wallet: null });
+    it('devrait lever une exception si le coffre n\'a pas de wallet associé', async () => {
+        (prisma.systemAccount.upsert as jest.Mock).mockResolvedValue({ id: 'sa_vault', wallet: null });
 
         await expect(getTontineVaultWallet()).rejects.toThrow('Coffre Tontine sans portefeuille associé.');
     });
@@ -88,7 +80,7 @@ describe('executeTontineCycle', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
-        (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'vault_user', wallet: VAULT_WALLET });
+        (prisma.systemAccount.upsert as jest.Mock).mockResolvedValue({ id: 'sa_vault', kind: 'TONTINE_VAULT', wallet: VAULT_WALLET });
         (getSystemSettings as jest.Mock).mockResolvedValue({});
         (LimitEngine.verifyAndIncrementConsumption as jest.Mock).mockResolvedValue(undefined);
         (prisma.$transaction as jest.Mock).mockImplementation((cb: any) => cb(buildDebitTx()));
@@ -253,6 +245,107 @@ describe('executeTontineCycle', () => {
         }));
     });
 
+    it("ne devrait appliquer aucune pénalité de retard si le taux configuré est à 0 (défaut)", async () => {
+        (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({
+            id: 'g1', name: 'Groupe A', currentCycle: 1, contribution: 5000,
+            participants: [{ id: 'p1', userId: 'u1', status: 'ACTIVE', payoutOrder: 2 }],
+        });
+        (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(null);
+        (prisma.wallet.findUnique as jest.Mock).mockResolvedValue({ id: 'wallet_u1' });
+        const failingTx = buildDebitTx();
+        failingTx.wallet.updateMany.mockResolvedValue({ count: 0 });
+        (prisma.$transaction as jest.Mock).mockImplementation((cb: any) => cb(failingTx));
+        // getSystemSettings() renvoie {} par défaut dans ce describe (voir beforeEach) —
+        // tontineLatePenaltyRate est donc undefined, pas 0 explicitement : le garde-fou doit
+        // traiter les deux cas de façon identique (voir le commentaire sur `!(x > 0)`).
+
+        const result = await executeTontineCycle('g1');
+
+        expect(result.failedCount).toBe(1);
+        // Un seul appel $transaction (le débit de cotisation, en échec) — aucune tentative de
+        // pénalité ne doit avoir ouvert une seconde transaction.
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it("devrait prélever la pénalité de retard quand le taux est configuré et que le solde le permet", async () => {
+        (getSystemSettings as jest.Mock).mockResolvedValue({ tontineLatePenaltyRate: 0.05 });
+        (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({
+            id: 'g1', name: 'Groupe A', currentCycle: 1, contribution: 5000,
+            participants: [{ id: 'p1', userId: 'u1', status: 'ACTIVE', payoutOrder: 2 }],
+        });
+        (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(null);
+        (prisma.wallet.findUnique as jest.Mock).mockResolvedValue({ id: 'wallet_u1' });
+        // Trois appels à prisma.tontineContribution.findUnique se succèdent ici : (1) la boucle
+        // principale calcule `remaining` avant d'appeler collectParticipantContribution, (2) le
+        // catch de collectParticipantContribution re-lit le total déjà versé après l'échec du
+        // débit (voir tontineService.ts ~L161), et seulement (3) applyLatePenaltyIfDue lit la
+        // ligne pour vérifier si une pénalité a déjà été appliquée. Oublier l'appel (2) décale
+        // silencieusement la queue de mocks et fait fuiter une valeur non consommée vers les
+        // tests suivants (déjà vécu une fois avec ce fichier).
+        (prisma.tontineContribution.findUnique as jest.Mock)
+            .mockResolvedValueOnce(null)
+            .mockResolvedValueOnce(null)
+            .mockResolvedValueOnce({ id: 'contrib_1', penaltyAppliedAt: null, penaltyAmount: 0 });
+
+        const failingContributionTx = buildDebitTx();
+        failingContributionTx.wallet.updateMany.mockResolvedValue({ count: 0 }); // Solde insuffisant pour la cotisation pleine.
+        const penaltyTx = {
+            wallet: { updateMany: jest.fn().mockResolvedValue({ count: 1 }), update: jest.fn().mockResolvedValue({}) },
+            transaction: { create: jest.fn().mockResolvedValue({}) },
+            tontineContribution: { update: jest.fn().mockResolvedValue({}) },
+            notification: { create: jest.fn().mockResolvedValue({}) },
+        };
+        (prisma.$transaction as jest.Mock)
+            .mockImplementationOnce((cb: any) => cb(failingContributionTx))
+            .mockImplementationOnce((cb: any) => cb(penaltyTx));
+
+        const result = await executeTontineCycle('g1');
+
+        expect(result.failedCount).toBe(1);
+        // 5000 * 5% = 250 FCFA de pénalité.
+        expect(penaltyTx.wallet.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+            where: { id: 'wallet_u1', balance: { gte: 250 } },
+        }));
+        expect(penaltyTx.transaction.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ amount: 250, reference: 'FEE-TLP-contrib_1', senderWalletId: 'wallet_u1' }),
+        }));
+        expect(penaltyTx.tontineContribution.update).toHaveBeenCalledWith({
+            where: { id: 'contrib_1' },
+            data: { penaltyAmount: 250, penaltyAppliedAt: expect.any(Date) },
+        });
+        expect(penaltyTx.notification.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ userId: 'u1', title: expect.stringContaining('Pénalité de retard') }),
+        }));
+    });
+
+    it("ne devrait pas re-facturer une pénalité déjà appliquée pour ce cycle (relance)", async () => {
+        (getSystemSettings as jest.Mock).mockResolvedValue({ tontineLatePenaltyRate: 0.05 });
+        (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({
+            id: 'g1', name: 'Groupe A', currentCycle: 1, contribution: 5000,
+            participants: [{ id: 'p1', userId: 'u1', status: 'ACTIVE', payoutOrder: 2 }],
+        });
+        (prisma.transaction.findFirst as jest.Mock).mockResolvedValue(null);
+        (prisma.wallet.findUnique as jest.Mock).mockResolvedValue({ id: 'wallet_u1' });
+        // Même séquence à trois appels que le test précédent (boucle principale, catch de
+        // collectParticipantContribution, puis applyLatePenaltyIfDue) — voir le commentaire
+        // détaillé plus haut. Le 3e appel renvoie ici une pénalité déjà appliquée.
+        (prisma.tontineContribution.findUnique as jest.Mock)
+            .mockResolvedValueOnce(null)
+            .mockResolvedValueOnce(null)
+            .mockResolvedValueOnce({ id: 'contrib_1', penaltyAppliedAt: new Date('2026-08-01'), penaltyAmount: 250 });
+
+        const failingContributionTx = buildDebitTx();
+        failingContributionTx.wallet.updateMany.mockResolvedValue({ count: 0 });
+        (prisma.$transaction as jest.Mock).mockImplementationOnce((cb: any) => cb(failingContributionTx));
+
+        const result = await executeTontineCycle('g1');
+
+        expect(result.failedCount).toBe(1);
+        // Une seule transaction ouverte (le débit de cotisation) — la pénalité déjà appliquée
+        // n'a pas rouvert de seconde transaction pour re-débiter.
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
     it('devrait verser la cagnotte au bénéficiaire du cycle courant', async () => {
         // Le bénéficiaire du cycle cotise aussi comme tout autre participant ACTIF :
         // la cagnotte versée est la somme des cotisations de TOUS les participants actifs,
@@ -363,7 +456,7 @@ describe('contributeNow', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
-        (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'vault_user', wallet: VAULT_WALLET });
+        (prisma.systemAccount.upsert as jest.Mock).mockResolvedValue({ id: 'sa_vault', kind: 'TONTINE_VAULT', wallet: VAULT_WALLET });
         (getSystemSettings as jest.Mock).mockResolvedValue({});
         (LimitEngine.verifyAndIncrementConsumption as jest.Mock).mockResolvedValue(undefined);
         (prisma.tontineCycle.upsert as jest.Mock).mockResolvedValue({ id: 'cycle_1', tontineGroupId: 'g1', cycleNumber: 1 });
@@ -514,7 +607,7 @@ describe('retryFailedContributions', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
-        (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'vault_user', wallet: VAULT_WALLET });
+        (prisma.systemAccount.upsert as jest.Mock).mockResolvedValue({ id: 'sa_vault', kind: 'TONTINE_VAULT', wallet: VAULT_WALLET });
         (getSystemSettings as jest.Mock).mockResolvedValue({});
         (prisma.tontineContribution.count as jest.Mock).mockResolvedValue(0);
         (prisma.tontineCycle.update as jest.Mock).mockResolvedValue({});

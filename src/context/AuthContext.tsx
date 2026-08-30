@@ -161,6 +161,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUnauthorizedHandler(logout);
     }, []);
 
+    // Détection root/jailbreak "best-effort" (Device.isRootedExperimentalAsync, expo-device —
+    // déjà une dépendance existante, aucun module natif supplémentaire requis). Explicitement
+    // documentée "experimental" côté Expo : contournable et capable de faux positifs sur
+    // certains appareils non modifiés. Pour une application financière, un avertissement NON
+    // bloquant est préféré à un blocage total : un faux positif bloquant priverait un
+    // utilisateur légitime de son argent, ce qui est pire que le risque résiduel d'un
+    // utilisateur rooté simplement averti (même logique de prudence que le report du certificate
+    // pinning, différé faute de pouvoir le valider sur un vrai appareil).
+    useEffect(() => {
+        Device.isRootedExperimentalAsync()
+            .then(isRooted => {
+                if (isRooted) {
+                    Alert.alert(
+                        '⚠️ Appareil non sécurisé détecté',
+                        "Votre téléphone semble avoir été débridé (root/jailbreak). Cela peut exposer vos données bancaires à des applications malveillantes installées sur cet appareil. Nous vous recommandons vivement de ne pas utiliser Mongain ici tant que ce n'est pas résolu.",
+                        [{ text: "J'ai compris" }]
+                    );
+                }
+            })
+            .catch(() => {
+                // Best-effort : une erreur de détection ne doit jamais empêcher le démarrage de l'app.
+            });
+    }, []);
+
     // Restaurer la session complète au démarrage
     useEffect(() => {
         const restoreSession = async () => {

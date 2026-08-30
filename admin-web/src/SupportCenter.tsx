@@ -2,6 +2,7 @@ import { AlertTriangle, ArrowUpCircle, BarChart2, CheckCircle, Clock, Filter, Me
 import { useCallback, useEffect, useState } from 'react';
 import KpiCard from './components/KpiCard';
 import PageHeader from './components/PageHeader';
+import TabBar from './components/TabBar';
 import { API_URL } from './config';
 import { apiFetch } from './utils/apiFetch';
 
@@ -261,23 +262,16 @@ export default function SupportCenter({ token, hasPerm }: SupportCenterProps) {
             <div style={{ marginBottom: 20 }}>
                 <PageHeader title="Support & Réclamations" subtitle="Centre unifié de gestion des tickets, fraudes et remboursements clients." />
             </div>
-            {/* Header Tabs */}
-            <div style={{ display: 'flex', gap: 4, padding: '0 0 16px 0', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
-                {[
-                    { key: 'dashboard', icon: <BarChart2 size={15} />, label: 'Tableau de Bord' },
-                    { key: 'inbox', icon: <MessageSquare size={15} />, label: 'Boîte de Réception' },
-                    { key: 'fraud', icon: <ShieldAlert size={15} />, label: 'Fraudes' },
-                    { key: 'refunds', icon: <ArrowUpCircle size={15} />, label: 'Remboursements' },
-                ].map(t => (
-                    <button key={t.key} onClick={() => setTab(t.key as any)} style={{
-                        display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 8,
-                        background: tab === t.key ? 'var(--accent)' : 'var(--bg-card)',
-                        color: tab === t.key ? '#fff' : 'var(--text-muted)',
-                        border: tab === t.key ? 'none' : '1px solid var(--border)',
-                        cursor: 'pointer', fontWeight: tab === t.key ? 700 : 500, fontSize: 13, transition: 'all .15s'
-                    }}>{t.icon} {t.label}</button>
-                ))}
-            </div>
+            <TabBar<'dashboard' | 'inbox' | 'fraud' | 'refunds'>
+                tabs={[
+                    { id: 'dashboard', icon: <BarChart2 size={15} />, label: 'Tableau de Bord' },
+                    { id: 'inbox', icon: <MessageSquare size={15} />, label: 'Boîte de Réception' },
+                    { id: 'fraud', icon: <ShieldAlert size={15} />, label: 'Fraudes' },
+                    { id: 'refunds', icon: <ArrowUpCircle size={15} />, label: 'Remboursements' },
+                ]}
+                active={tab}
+                onChange={setTab}
+            />
 
             {error && <div style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger-bg)', borderRadius: 8, padding: '8px 14px', marginBottom: 12, fontSize: 13 }}>{error} <button onClick={() => setError('')} style={{ marginLeft: 8, background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}>✕</button></div>}
 

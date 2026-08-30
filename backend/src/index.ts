@@ -1,12 +1,10 @@
-import bcrypt from 'bcryptjs';
 import cors from 'cors';
-import crypto from 'crypto';
 import express from 'express';
 import helmet from 'helmet';
 import http from 'http';
 import { Server } from 'socket.io';
 import { initCronJobs } from './cron';
-import { prisma } from './prisma';
+import { getSystemAccount } from './services/systemAccounts';
 import { resolveSocketRoom } from './sockets/socketAuth';
 import adminRoutes from './routes/admin';
 import adminMerchantsRoutes from './routes/admin.merchants';
@@ -169,7 +167,17 @@ app.use('/api/services', circuitBreakerMiddleware, servicesRoutes);
 app.use('/api/agency', adminIpAllowlistMiddleware, circuitBreakerMiddleware, agencyRoutes);
 
 // Health check
-app.get('/health', (_req, res) => res.json({ status: 'ok', app: 'Mongain Backend', socket: true }));
+// `RENDER_GIT_COMMIT` est posée automatiquement par Render à chaque déploiement — bien plus
+// utile que la version statique de package.json pour diagnostiquer un décalage entre deux
+// services déployés séparément (ex: admin-web sur Vercel en retard sur ce backend, ou
+// l'inverse) : ce champ permet de vérifier en un coup d'œil quel commit tourne réellement,
+// au lieu de devoir tester chaque route à la main pour deviner si le déploiement a pris.
+app.get('/health', (_req, res) => res.json({
+    status: 'ok',
+    app: 'Mongain Backend',
+    socket: true,
+    commit: process.env.RENDER_GIT_COMMIT || null,
+}));
 
 // Filet de sécurité : capture toute exception qu'un handler de route n'a pas déjà attrapée
 // dans son propre try/catch (Express 5 route les rejets de promesse async ici automatiquement).
@@ -224,28 +232,11 @@ server.listen(PORT, () => {
 initCronJobs();
 
 async function seedCorporateAccount() {
-    const corpPhone = '+2410000000';
     try {
-        const existing = await withDbRetry(() => prisma.user.findUnique({ where: { phone: corpPhone } }));
-        if (!existing) {
-            // PIN aléatoire non journalisé (cohérent avec getOrCreateCorporateWallet dans
-            // wallet.ts) — ce compte est un portefeuille technique, jamais censé être utilisé
-            // pour se connecter. Un PIN "0000" fixe et documenté en dur était un accès admin
-            // total trivialement devinable dès que l'OTP est en mode démo (voir auth.ts).
-            const hashedPin = await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10);
-            await prisma.user.create({
-                data: {
-                    name: 'Mongain Corporate',
-                    phone: corpPhone,
-                    pin: hashedPin,
-                    role: 'ADMIN',
-                    wallet: { create: { balance: 0, currency: 'FCFA' } }
-                }
-            });
-            console.log('✅ Admin Corporate Account Created.');
-        }
+        await withDbRetry(() => getSystemAccount('CORPORATE'));
     } catch (e) {
-        // Non bloquant : ce seed est idempotent et se retentera au prochain redémarrage.
+        // Non bloquant : getSystemAccount est idempotent (upsert par kind) et se retentera
+        // au prochain redémarrage, ou au premier prélèvement de frais qui l'appelle aussi.
         console.error('⚠️  Échec de la vérification/création du compte Corporate (non bloquant) :', e);
     }
 }

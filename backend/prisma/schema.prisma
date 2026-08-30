@@ -54,6 +54,18 @@ model User {
   idCardBack  String?
   selfie      String?
 
+  // Emplacement réservé pour un futur prestataire externe de vérification d'identité /
+  // détection de fraude (ex : Smile Identity, Onfido, Sumsub — courants en Afrique). Aucun
+  // prestataire n'est intégré à ce jour : voir services/kycVendorCheck.ts, dont
+  // l'implémentation actuelle est un no-op tant qu'aucune clé d'API n'est configurée
+  // (kycVendorStatus reste alors "NOT_CONFIGURED", sans aucun appel réseau ni coût). Ces
+  // champs ne conditionnent jamais la décision KYC elle-même, qui reste humaine
+  // (perm_customer_kyc_validate) — ils ne font qu'afficher un signal complémentaire une fois
+  // un vrai prestataire branché.
+  kycVendorProvider  String?
+  kycVendorStatus    String?   // null (jamais vérifié), NOT_CONFIGURED, PASS, FAIL, REVIEW
+  kycVendorCheckedAt DateTime?
+
   // Nouveaux Champs: Limites Personnalisées (PROMPT 03)
   customDailyLimit     Float?
   customMonthlyLimit   Float?
@@ -153,6 +165,7 @@ model Wallet {
   receivedTransactions Transaction[] @relation("ReceiverWallet")
   branch               Branch?
   centralTreasury      CentralTreasury?
+  systemAccount        SystemAccount?
   merchantCommissionOf User?             @relation("MerchantCommissionWallet")
 }
 
@@ -197,6 +210,25 @@ model CentralTreasury {
   walletId  String   @unique
   wallet    Wallet   @relation(fields: [walletId], references: [id])
   createdAt DateTime @default(now())
+}
+
+// Comptes techniques internes (contreparties de double-écriture) — Corporate (revenus de
+// frais), Passerelle Externe (agrégateur Mobile Money/carte), Coffre Tontine, Services
+// Partenaires (SEEG/CANAL/Télécom). Remplace l'ancien bricolage où chacun de ces comptes
+// était une ligne User{role:"ADMIN"} recréée indépendamment (avec PIN inutile, parfois même
+// en clair) à 8 endroits différents du code. Même forme que CentralTreasury ci-dessus
+// (une seule table dédiée, un wallet propre par ligne via walletId) — CentralTreasury reste
+// séparée volontairement : c'est un singleton avec sa propre logique de bascule historique
+// (voir getCentralTreasury()), pas un compte technique de plus.
+model SystemAccount {
+  id        String   @id @default(uuid())
+  kind      String   @unique // CORPORATE, EXTERNAL_GATEWAY, TONTINE_VAULT, SERVICE_PARTNER_SEEG, SERVICE_PARTNER_CANAL, SERVICE_PARTNER_TELECOM
+  name      String
+  walletId  String   @unique
+  wallet    Wallet   @relation(fields: [walletId], references: [id])
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Transaction {
@@ -350,6 +382,13 @@ model SystemSettings {
   adminIpAllowlistEnabled Boolean  @default(false)
   adminIpAllowlist        String[] @default([])
 
+  // Pénalité de retard tontine (voir tontineService.ts, executeTontineCycle) — pourcentage
+  // de group.contribution prélevé, en plus de la cotisation, à quiconque n'a pas complété
+  // son versement à l'échéance du cycle. Désactivée par défaut (0) : une plateforme ne doit
+  // jamais se mettre à prélever une pénalité que ses utilisateurs n'ont jamais acceptée sans
+  // qu'un opérateur l'active explicitement.
+  tontineLatePenaltyRate Float @default(0)
+
   updatedAt DateTime @updatedAt
 }
 
@@ -491,6 +530,15 @@ model TontineContribution {
   amount        Float
   status        String             @default("PAID") // PAID (amount >= contribution), PARTIAL (0 < amount < contribution), FAILED (legacy — cycles antérieurs au dépôt libre, 0 collecté)
   createdAt     DateTime           @default(now())
+
+  // Pénalité de retard (voir SystemSettings.tontineLatePenaltyRate) — appliquée UNE SEULE
+  // FOIS par cycle manqué, au moment de l'échéance (executeTontineCycle), jamais lors d'un
+  // rattrapage ultérieur (contributeNow/retryFailedContributions) : `penaltyAppliedAt` sert
+  // de garde contre une double pénalité si l'admin relance la collecte plusieurs fois pour
+  // le même cycle. `penaltyAmount` reste à 0 tant qu'aucune pénalité n'a pu être prélevée
+  // (taux à 0, ou solde insuffisant au moment de la tentative).
+  penaltyAmount   Float     @default(0)
+  penaltyAppliedAt DateTime?
 
   @@unique([cycleId, participantId])
   @@index([participantId])

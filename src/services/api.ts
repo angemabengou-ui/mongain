@@ -127,7 +127,17 @@ const tryRefreshSession = async (): Promise<boolean> => {
 };
 
 // ─── Client HTTP de base ───────────────────────────────────────────
-const request = async (method: string, path: string, body?: object, auth = false, _isRetry = false): Promise<any> => {
+// Réveil à froid du backend (plan gratuit Render, mis en veille après inactivité) : la TOUTE
+// PREMIÈRE requête suivant une veille échoue au niveau connexion (le conteneur n'écoute pas
+// encore) — mesuré en pratique : ~20s sans aucune réponse, puis tout redevient normal en
+// dessous de la seconde. Sans retry, l'utilisateur voyait "Vous êtes hors ligne" au premier
+// essai alors que le serveur (et ses données) était parfaitement sain une poignée de secondes
+// plus tard, et devait relancer l'action lui-même pour que ça marche.
+const WAKEUP_MAX_RETRIES = 2;
+const WAKEUP_RETRY_DELAY_MS = 2000;
+const REQUEST_TIMEOUT_MS = 15000;
+
+const request = async (method: string, path: string, body?: object, auth = false, _isRetry = false, _wakeupAttempt = 0): Promise<any> => {
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Bypass-Tunnel-Reminder': 'true',
@@ -139,11 +149,15 @@ const request = async (method: string, path: string, body?: object, auth = false
         if (token) headers['Authorization'] = `Bearer ${token}`;
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
     try {
         const res = await fetch(`${BASE_URL}${path}`, {
             method,
             headers,
             body: body ? JSON.stringify(body) : undefined,
+            signal: controller.signal,
         });
 
         // Token expiré : on tente un renouvellement silencieux une seule fois avant
@@ -173,10 +187,28 @@ const request = async (method: string, path: string, body?: object, auth = false
         if (!res.ok) throw new Error(data.message || data.error || 'Une erreur est survenue.');
         return data;
     } catch (e: any) {
-        if (e.message.includes('Failed to fetch') || e.message.includes('Network request failed')) {
+        const isConnectionFailure = e.name === 'AbortError' || e.message.includes('Failed to fetch') || e.message.includes('Network request failed');
+
+        // Nouvelle tentative silencieuse réservée à un échec de CONNEXION (jamais une réponse
+        // HTTP d'erreur déjà reçue) sur GET ou /api/auth/* — jamais sur une écriture financière
+        // (/wallet, /merchant, /vaults, /tontine, /services) : là, on ne peut pas distinguer
+        // "le serveur n'a rien reçu" de "le serveur a bien traité la demande mais la réponse
+        // s'est perdue", et renvoyer silencieusement risquerait un double transfert/retrait.
+        const allowConnectionRetry = method === 'GET' || path.startsWith('/api/auth/');
+        if (isConnectionFailure && allowConnectionRetry && _wakeupAttempt < WAKEUP_MAX_RETRIES) {
+            await new Promise(r => setTimeout(r, WAKEUP_RETRY_DELAY_MS));
+            return request(method, path, body, auth, _isRetry, _wakeupAttempt + 1);
+        }
+
+        if (e.name === 'AbortError') {
+            throw new Error('Le serveur met trop de temps à répondre (il est peut-être en train de redémarrer). Veuillez réessayer dans un instant.');
+        }
+        if (isConnectionFailure) {
             throw new Error('Vous êtes hors ligne 📡. Veuillez vérifier votre connexion internet.');
         }
         throw e;
+    } finally {
+        clearTimeout(timeoutId);
     }
 };
 
@@ -301,8 +333,8 @@ export const apiMarkAsRead = (id?: string) =>
 export const apiGetBalance = () =>
     request('GET', '/api/wallet/balance', undefined, true) as Promise<{ balance: number; currency: string }>;
 
-export const apiGetTransactions = () =>
-    request('GET', '/api/wallet/transactions', undefined, true) as Promise<Transaction[]>;
+export const apiGetTransactions = (limit?: number) =>
+    request('GET', `/api/wallet/transactions${limit ? `?limit=${limit}` : ''}`, undefined, true) as Promise<Transaction[]>;
 
 export const apiTransfer = (receiverPhone: string, amount: number, pin: string) =>
     request('POST', '/api/wallet/transfer', { receiverPhone, amount, pin }, true) as Promise<{

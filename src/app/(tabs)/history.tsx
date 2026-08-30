@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
 import { useTabBarHeight } from '../../hooks/useTabBarHeight';
 import { Transaction, apiGetTransactions } from '../../services/api';
+import { getTransactionTitle } from '../../utils/transactionLabels';
 
 function formatAmount(tx: Transaction) {
     const prefix = tx.type === 'outgoing' ? '- ' : '+ ';
@@ -203,22 +204,6 @@ function StatusPill({ status, styles }: { status: string; styles: any }) {
         );
     }
     return null;
-}
-
-// Sans ce libellé dérivé de la référence, un dépôt de caisse commune, une cotisation de
-// tontine ou un reversement marchand apparaissaient tous ici comme un "Transfert" générique
-// identique à un vrai transfert P2P — impossible de distinguer, dans son propre historique,
-// pourquoi une somme précise est sortie ou entrée sans aller rouvrir chaque module séparément.
-function getTransactionTitle(tx: any): string {
-    const ref: string = tx.reference || '';
-    if (ref.startsWith('VAULT_DEP_')) return 'Dépôt Caisse Commune';
-    if (ref.startsWith('VAULT_OUT_')) return 'Retrait Caisse Commune';
-    if (ref.startsWith('VAULT_VOUCHER_')) return 'Bon Caisse Commune dépensé';
-    if (ref.startsWith('TONT_DBT_')) return 'Cotisation Tontine';
-    if (ref.startsWith('TONT_PAY_')) return 'Cagnotte Tontine reçue';
-    if (ref.startsWith('TONT_EXIT_')) return 'Règlement dette Tontine';
-    if (ref.startsWith('MPAYOUT-')) return 'Reversement marchand';
-    return tx.type === 'outgoing' ? 'Transfert envoyé' : 'Transfert reçu';
 }
 
 const TransactionItem = ({ tx, styles, colors }: any) => {

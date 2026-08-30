@@ -14,6 +14,7 @@ async function main() {
             password: hashed,
             role: 'SUPER_ADMIN',
             name: 'Super Admin Test',
+            phone: '+24100000000',
             isActive: true,
             status: 'APPROVED'
         },
@@ -22,6 +23,7 @@ async function main() {
             password: hashed,
             role: 'SUPER_ADMIN',
             name: 'Super Admin Test',
+            phone: '+24100000000',
             isActive: true,
             status: 'APPROVED'
         }

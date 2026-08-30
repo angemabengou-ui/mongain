@@ -1,29 +1,15 @@
-import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { prisma } from '../prisma';
 import { getSystemSettings } from '../routes/settings';
 import { LimitEngine } from './LimitEngine';
-
-const TONTINE_VAULT_PHONE = '+24155555555';
+import { getSystemAccount } from './systemAccounts';
 
 // Compte système "Coffre Tontine" — les cotisations y transitent réellement (au lieu
 // d'un identifiant de wallet fictif "VAULT_TONTINE_xxx" qui violait la contrainte de
 // clé étrangère de Transaction à chaque cycle et faisait échouer TOUT le cycle en cours,
 // empêchant historiquement le moindre prélèvement/versement de tontine).
 export async function getTontineVaultWallet() {
-    let vault = await prisma.user.findUnique({ where: { phone: TONTINE_VAULT_PHONE }, include: { wallet: true } });
-    if (!vault) {
-        vault = await prisma.user.create({
-            data: {
-                phone: TONTINE_VAULT_PHONE,
-                name: 'COFFRE TONTINE (SYSTEME)',
-                role: 'ADMIN',
-                pin: await bcrypt.hash(crypto.randomBytes(8).toString('hex'), 10),
-                wallet: { create: { balance: 0, currency: 'FCFA' } }
-            },
-            include: { wallet: true }
-        });
-    }
+    const vault = await getSystemAccount('TONTINE_VAULT');
     if (!vault.wallet) throw new Error('Coffre Tontine sans portefeuille associé.');
     return vault.wallet;
 }
@@ -160,6 +146,86 @@ export async function collectParticipantContribution(
         });
         const existing = await prisma.tontineContribution.findUnique({ where: { cycleId_participantId: { cycleId, participantId } } });
         return { success: false, totalPaid: existing?.amount || 0 };
+    }
+}
+
+// Pénalité de retard (voir SystemSettings.tontineLatePenaltyRate, désactivée par défaut) —
+// appliquée UNE SEULE FOIS par cycle manqué, uniquement depuis executeTontineCycle (jamais
+// depuis contributeNow ni retryFailedContributions, qui n'appellent pas cette fonction : une
+// cotisation volontaire ou un rattrapage administratif avant l'échéance ne doit jamais être
+// pénalisé). `executeTontineCycle` peut se relancer plusieurs fois pour un même cycle tant
+// que son versement échoue (voir plus bas) : `penaltyAppliedAt` empêche de re-facturer un
+// participant déjà pénalisé pour ce cycle, mais une tentative simplement insolvable (solde
+// insuffisant) n'est PAS marquée comme appliquée — un futur passage retentera, comme pour la
+// cotisation elle-même.
+async function applyLatePenaltyIfDue(
+    userId: string,
+    cycleId: string,
+    participantId: string,
+    settings: Awaited<ReturnType<typeof getSystemSettings>>,
+    fullContributionAmount: number
+): Promise<number> {
+    // `!(x > 0)` plutôt que `x <= 0` : si `settings` provient d'un objet incomplet (mock de
+    // test, cache obsolète), `tontineLatePenaltyRate` vaut `undefined` — `undefined <= 0` est
+    // FAUX en JavaScript (comparaison numérique via NaN), donc ce garde-fou ne se
+    // déclencherait jamais et laisserait NaN se propager jusqu'au filtre Prisma `gte`
+    // plus bas. `!(undefined > 0)` vaut correctement `true` dans ce même cas.
+    if (!(settings.tontineLatePenaltyRate > 0)) return 0;
+
+    const contribution = await prisma.tontineContribution.findUnique({ where: { cycleId_participantId: { cycleId, participantId } } });
+    if (!contribution || contribution.penaltyAppliedAt) return contribution?.penaltyAmount || 0;
+
+    const wallet = await prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) return 0;
+
+    // Basée sur le montant PLEIN de la cotisation, pas sur ce qui a pu être collecté malgré
+    // le retard — la pénalité sanctionne le fait d'être en retard, pas son ampleur.
+    const penalty = Math.round(fullContributionAmount * settings.tontineLatePenaltyRate);
+    if (penalty <= 0) return 0;
+
+    try {
+        return await prisma.$transaction(async (tx) => {
+            const debited = await tx.wallet.updateMany({
+                where: { id: wallet.id, balance: { gte: penalty } },
+                data: { balance: { decrement: penalty } }
+            });
+            if (debited.count === 0) return 0; // Solde insuffisant — pas d'échec bloquant, juste non recouvré pour l'instant.
+
+            const { getOrCreateCorporateWallet } = await import('../routes/wallet');
+            const corporate = await getOrCreateCorporateWallet(tx);
+            await tx.wallet.update({ where: { id: corporate.wallet.id }, data: { balance: { increment: penalty } } });
+
+            // Transaction fantôme "FEE-" — même convention que wallet.ts/vault.ts : sans elle,
+            // ce revenu de pénalité resterait invisible des graphiques de revenu admin, qui
+            // n'agrègent que les références préfixées "FEE".
+            await tx.transaction.create({
+                data: {
+                    amount: penalty,
+                    senderWalletId: wallet.id,
+                    receiverWalletId: corporate.wallet.id,
+                    status: 'COMPLETED',
+                    reference: `FEE-TLP-${contribution.id}`
+                }
+            });
+
+            await tx.tontineContribution.update({
+                where: { id: contribution.id },
+                data: { penaltyAmount: penalty, penaltyAppliedAt: new Date() }
+            });
+
+            await tx.notification.create({
+                data: {
+                    userId,
+                    title: 'Pénalité de retard tontine ⏰',
+                    body: `Vous n'avez pas complété votre cotisation à temps pour ce tour — une pénalité de ${penalty.toLocaleString('fr-FR')} FCFA a été prélevée.`,
+                    type: 'ALERT'
+                }
+            });
+
+            return penalty;
+        });
+    } catch {
+        return 0;
     }
 }
 
@@ -320,6 +386,7 @@ export async function executeTontineCycle(groupId: string) {
             debitedCount++;
         } else {
             failedCount++;
+            await applyLatePenaltyIfDue(p.userId, cycle.id, p.id, settings, group.contribution);
         }
     }
 

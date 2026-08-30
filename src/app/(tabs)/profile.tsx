@@ -136,6 +136,7 @@ export default function ProfileScreen() {
                         <Text style={styles.sectionTitle}>Compte</Text>
                         <MenuItem icon="person-outline" label="Informations personnelles" onPress={() => router.push('/profile-edit')} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
                         <MenuItem icon="qr-code-outline" label="Mon code QR" sublabel="Pour recevoir un paiement" onPress={() => router.push('/receive-qr' as any)} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
+                        <MenuItem icon="pie-chart-outline" label="Aperçu des dépenses" sublabel="Vos dépenses par catégorie ce mois-ci" onPress={() => router.push('/insights' as any)} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
                         <MenuItem icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications' as any)} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
                     </View>
 

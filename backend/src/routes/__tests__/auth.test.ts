@@ -143,4 +143,43 @@ describe('Auth Routes', () => {
             });
         });
     });
+
+    describe('PUT /auth/profile', () => {
+        const accessToken = jwt.sign({ userId: 'u1', jwtVersion: 0 }, JWT_SECRET, { expiresIn: '30m' });
+
+        beforeEach(() => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1', isActive: true, jwtVersion: 0 });
+        });
+
+        it('stamps un résultat NOT_CONFIGURED (services/kycVendorCheck.ts) quand le dossier KYC complet (3 documents) est soumis', async () => {
+            (prisma.user.update as jest.Mock).mockResolvedValue({ id: 'u1', name: 'Jean', kycStatus: 'PENDING', kycLevel: 0, wallet: null });
+
+            const res = await request(app).put('/auth/profile').set('Authorization', `Bearer ${accessToken}`).send({
+                name: 'Jean', idCardFront: 'front.jpg', idCardBack: 'back.jpg', selfie: 'selfie.jpg',
+            });
+
+            expect(res.status).toBe(200);
+            expect(prisma.user.update).toHaveBeenCalledWith({
+                where: { id: 'u1' },
+                data: expect.objectContaining({
+                    kycStatus: 'PENDING',
+                    kycVendorProvider: null,
+                    kycVendorStatus: 'NOT_CONFIGURED',
+                    kycVendorCheckedAt: expect.any(Date),
+                }),
+                include: { wallet: true },
+            });
+        });
+
+        it('ne touche pas aux champs de vérification tierce pour une mise à jour partielle sans dossier KYC complet', async () => {
+            (prisma.user.update as jest.Mock).mockResolvedValue({ id: 'u1', name: 'Jean', kycStatus: 'UNVERIFIED', kycLevel: 0, wallet: null });
+
+            const res = await request(app).put('/auth/profile').set('Authorization', `Bearer ${accessToken}`).send({ name: 'Jean' });
+
+            expect(res.status).toBe(200);
+            const updateCall = (prisma.user.update as jest.Mock).mock.calls[0][0];
+            expect(updateCall.data).not.toHaveProperty('kycVendorStatus');
+            expect(updateCall.data).not.toHaveProperty('kycStatus');
+        });
+    });
 });

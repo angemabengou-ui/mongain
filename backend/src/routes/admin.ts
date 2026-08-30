@@ -5,8 +5,10 @@ import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { getCentralTreasury } from '../services/centralTreasury';
+import { runKycVendorCheck } from '../services/kycVendorCheck';
 import { hasPermission } from '../services/RBAC';
 import { sendSms } from '../services/sms';
+import { getSystemAccount } from '../services/systemAccounts';
 import { friendlyErrorMessage } from '../utils/errors';
 
 const router = express.Router();
@@ -38,10 +40,8 @@ router.get('/stats', authMiddleware, async (req: AuthRequest, res) => {
         const agentsCount = await prisma.user.count({ where: { role: 'AGENT', isActive: true } });
         const merchantsCount = await prisma.user.count({ where: { role: 'MERCHANT', isActive: true } });
 
-        // `select` scopé : seul le solde sert (revenue ci-dessous) — la requête précédente
-        // rapatriait la ligne User complète du compte corporate (photos KYC comprises,
-        // bien qu'inutilisées sur ce compte système) à chaque ouverture du dashboard.
-        const company = await prisma.user.findUnique({ where: { phone: '+2410000000' }, select: { wallet: { select: { balance: true } } } });
+        // Compte Corporate : source du KPI `revenue` ci-dessous.
+        const company = await getSystemAccount('CORPORATE');
 
         const circulatingWallets = await prisma.wallet.aggregate({
             where: { user: { role: { notIn: ['ADMIN'] } } },
@@ -838,8 +838,8 @@ router.get('/ledger', authMiddleware, async (req: AuthRequest, res) => {
             orderBy: { createdAt: 'desc' },
             take: 2000,
             include: {
-                senderWallet: { include: { user: { select: { id: true, name: true, phone: true, role: true } } } },
-                receiverWallet: { include: { user: { select: { id: true, name: true, phone: true, role: true } } } },
+                senderWallet: { include: { user: { select: { id: true, name: true, phone: true, role: true } }, systemAccount: { select: { name: true } }, branch: { select: { name: true } } } },
+                receiverWallet: { include: { user: { select: { id: true, name: true, phone: true, role: true } }, systemAccount: { select: { name: true } }, branch: { select: { name: true } } } },
             }
         });
 
@@ -908,7 +908,7 @@ router.get('/users/kyc', authMiddleware, async (req: AuthRequest, res) => {
         const filter = req.query.status as string || 'PENDING';
         const pendingList = await (prisma.user as any).findMany({
             where: { kycStatus: filter },
-            select: { id: true, name: true, phone: true, kycStatus: true, idCardFront: true, idCardBack: true, selfie: true, createdAt: true }
+            select: { id: true, name: true, phone: true, kycStatus: true, idCardFront: true, idCardBack: true, selfie: true, createdAt: true, kycVendorProvider: true, kycVendorStatus: true, kycVendorCheckedAt: true }
         });
 
         res.json(pendingList);
@@ -1912,7 +1912,33 @@ router.get('/users/:id/360', authMiddleware, async (req: AuthRequest, res) => {
             prisma.reclamation.count({ where: { userId: customerId } })
         ]);
 
-        res.json({ user, recentTx, auditLogs, openRiskFlagsCount, reclamationsCount });
+        // Score de fiabilité tontine — usage interne UNIQUEMENT (aide à la décision d'un
+        // opérateur avant d'accepter ce client dans un nouveau groupe, ou pour prioriser un
+        // rappel amiable). Ceci n'est PAS un score de crédit et ne doit JAMAIS servir à décider
+        // d'un prêt ou d'une ligne de crédit — le microcrédit est une activité réglementée hors
+        // du périmètre décidé pour cette fonctionnalité (voir la validation utilisateur :
+        // "Juste calculer un score interne, sans prêter"). Gatée par perm_tontine_view comme le
+        // reste de la lecture admin des tontines (admin.tontines.ts).
+        let tontineReliability: { totalCycles: number; paidCycles: number; partialOrMissedCycles: number; penaltiesCount: number; scorePercent: number | null } | null = null;
+        if (hasPermission(staff, 'perm_tontine_view')) {
+            const [totalCycles, paidCycles, penaltiesCount] = await Promise.all([
+                prisma.tontineContribution.count({ where: { participant: { userId: customerId } } }),
+                prisma.tontineContribution.count({ where: { participant: { userId: customerId }, status: 'PAID' } }),
+                prisma.tontineContribution.count({ where: { participant: { userId: customerId }, penaltyAppliedAt: { not: null } } }),
+            ]);
+            tontineReliability = {
+                totalCycles,
+                paidCycles,
+                partialOrMissedCycles: totalCycles - paidCycles,
+                penaltiesCount,
+                // null tant qu'aucun historique n'existe — distinct de 0%, qui affirmerait
+                // à tort une mauvaise fiabilité pour un client n'ayant simplement jamais
+                // participé à une tontine.
+                scorePercent: totalCycles > 0 ? Math.round((paidCycles / totalCycles) * 100) : null,
+            };
+        }
+
+        res.json({ user, recentTx, auditLogs, openRiskFlagsCount, reclamationsCount, tontineReliability });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }

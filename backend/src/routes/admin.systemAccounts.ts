@@ -25,10 +25,9 @@ router.get('/system-accounts', authMiddleware, async (req: AuthRequest, res) => 
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
         if (!staff || !hasPermission(staff, 'perm_treasury_view')) return res.status(403).json({ error: 'Accès refusé.' });
 
-        const [users, centralTreasury] = await Promise.all([
-            prisma.user.findMany({
-                where: { role: 'ADMIN' },
-                select: { id: true, name: true, phone: true, createdAt: true, wallet: { select: { id: true, balance: true } } },
+        const [systemAccounts, centralTreasury] = await Promise.all([
+            prisma.systemAccount.findMany({
+                include: { wallet: { select: { id: true, balance: true } } },
                 orderBy: { createdAt: 'asc' }
             }),
             getCentralTreasury()
@@ -42,14 +41,13 @@ router.get('/system-accounts', authMiddleware, async (req: AuthRequest, res) => 
                 balance: centralTreasury.wallet.balance,
                 kind: 'CENTRAL_TREASURY'
             },
-            ...users.filter(u => u.wallet).map(u => ({
-                id: `user:${u.id}`,
-                walletId: u.wallet!.id,
-                name: u.name,
-                phone: u.phone,
-                balance: u.wallet!.balance,
-                kind: 'SYSTEM_USER',
-                createdAt: u.createdAt
+            ...systemAccounts.map(a => ({
+                id: `system:${a.id}`,
+                walletId: a.wallet.id,
+                name: a.name,
+                balance: a.wallet.balance,
+                kind: a.kind,
+                createdAt: a.createdAt
             }))
         ];
 
@@ -70,8 +68,8 @@ router.get('/system-accounts/:walletId/transactions', authMiddleware, async (req
             orderBy: { createdAt: 'desc' },
             take: 200,
             include: {
-                senderWallet: { include: { user: { select: { name: true, phone: true } } } },
-                receiverWallet: { include: { user: { select: { name: true, phone: true } } } }
+                senderWallet: { include: { user: { select: { name: true, phone: true } }, systemAccount: { select: { name: true } }, branch: { select: { name: true } } } },
+                receiverWallet: { include: { user: { select: { name: true, phone: true } }, systemAccount: { select: { name: true } }, branch: { select: { name: true } } } }
             }
         });
 

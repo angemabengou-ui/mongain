@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import ImageLightbox from './components/ImageLightbox';
+import TabBar from './components/TabBar';
 import { API_URL } from './config';
 
 const fmt = (n: number) => n?.toLocaleString('fr-FR') + ' FCFA';
@@ -352,7 +353,7 @@ export default function Customer360({ token, userId, onBack, staffRole, hasPerm 
     );
     if (!data) return null;
 
-    const { user, recentTx, auditLogs, openRiskFlagsCount, reclamationsCount } = data;
+    const { user, recentTx, auditLogs, openRiskFlagsCount, reclamationsCount, tontineReliability } = data;
 
     const card = (children: any, extra?: any) => (
         <div className="card" style={{ padding: 28, ...extra }}>{children}</div>
@@ -396,22 +397,11 @@ export default function Customer360({ token, userId, onBack, staffRole, hasPerm 
 
     // ── TAB NAV ───────────────────────────────────────────────
     const TabNav = () => (
-        <div style={{ display: 'flex', gap: 4, borderBottom: '2px solid var(--border)', marginBottom: 24, flexWrap: 'wrap' }}>
-            {TABS.map(t => {
-                const Icon = t.icon;
-                return (
-                    <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
-                        padding: '10px 14px', border: 'none', background: 'transparent', cursor: 'pointer',
-                        borderBottom: activeTab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-                        color: activeTab === t.id ? 'var(--accent)' : 'var(--text-muted)',
-                        fontWeight: activeTab === t.id ? 700 : 400,
-                        fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, marginBottom: -2, transition: 'all 0.2s'
-                    }}>
-                        <Icon size={14} />{t.label}
-                    </button>
-                );
-            })}
-        </div>
+        <TabBar
+            tabs={TABS.map(t => ({ id: t.id, label: t.label, icon: <t.icon size={14} /> }))}
+            active={activeTab}
+            onChange={setActiveTab}
+        />
     );
 
     // ── OVERVIEW ──────────────────────────────────────────────
@@ -425,10 +415,21 @@ export default function Customer360({ token, userId, onBack, staffRole, hasPerm 
                     { label: 'Solde', value: canViewWallet ? fmt(user?.wallet?.balance || 0) : '••••• FCFA' },
                     { label: 'RiskFlags actifs', value: openRiskFlagsCount ?? 0 },
                     { label: 'Réclamations', value: reclamationsCount ?? 0 },
+                    ...(tontineReliability ? [{
+                        label: 'Fiabilité Tontine',
+                        value: tontineReliability.scorePercent === null
+                            ? 'Aucun historique'
+                            : `${tontineReliability.scorePercent}% (${tontineReliability.paidCycles}/${tontineReliability.totalCycles} tours, ${tontineReliability.penaltiesCount} pénalité(s))`,
+                    }] : []),
                 ].map(({ label, value }) => (
                     <div key={label} className="stat-card" style={{ padding: 20 }}>
                         <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 8 }}>{label}</div>
                         <div style={{ fontWeight: 700, fontSize: 16 }}>{value}</div>
+                        {label === 'Fiabilité Tontine' && (
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400, marginTop: 6 }}>
+                                Usage interne uniquement — jamais un score de crédit.
+                            </div>
+                        )}
                     </div>
                 ))}
             </div>

@@ -9,6 +9,7 @@ jest.mock('../../prisma', () => ({
     prisma: {
         user: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn(), create: jest.fn() },
         wallet: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn(), create: jest.fn() },
+        systemAccount: { upsert: jest.fn() },
         transaction: { create: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
         notification: { create: jest.fn() },
         systemSettings: { findFirst: jest.fn() },
@@ -55,7 +56,6 @@ const pvit = require('../../services/pvit');
 const { getSystemSettings } = require('../settings');
 const { getCentralTreasury } = require('../../services/centralTreasury');
 const { LimitEngine } = require('../../services/LimitEngine');
-const CORPORATE_PHONE = process.env.CORPORATE_PHONE || '+2410000000';
 
 // Setup d'une mini-app Express avec nos routes
 const app = express();
@@ -156,7 +156,6 @@ describe('Wallet Routes', () => {
         const mockSenderAndGateway = () => {
             (prisma.user.findUnique as jest.Mock).mockImplementation(async (args: any) => {
                 if (args.select?.jwtVersion) return { id: 'user123', isActive: true, jwtVersion: 0 };
-                if (args.where?.phone === '+24133333333') return { id: 'gateway_id', wallet: { id: 'w_gateway', balance: 999999999 } };
                 if (args.where?.id === 'user123') {
                     return {
                         id: 'user123', pin: 'hashed-pin', failedPinAttempts: 0, lockedUntil: null,
@@ -165,6 +164,7 @@ describe('Wallet Routes', () => {
                 }
                 return null;
             });
+            (prisma.systemAccount.upsert as jest.Mock).mockResolvedValue({ wallet: { id: 'w_gateway', balance: 999999999 } });
             (bcrypt.compare as jest.Mock).mockResolvedValue(true);
             (prisma.wallet.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
             (prisma.wallet.update as jest.Mock).mockResolvedValue({});
@@ -248,9 +248,9 @@ describe('Wallet Routes', () => {
             (prisma.user.findUnique as jest.Mock).mockImplementation(async (args: any) => {
                 if (args.select?.jwtVersion) return { id: 'user123', isActive: true, jwtVersion: 0 };
                 if (args.where?.id === 'user123') return { id: 'user123', phone: '077000000', wallet: { id: 'w_sender', balance: 1000 } };
-                if (args.where?.phone === '+24133333333') return { id: 'gateway_id', wallet: { id: 'w_gateway', balance: 999999999 } };
                 return null;
             });
+            (prisma.systemAccount.upsert as jest.Mock).mockResolvedValue({ wallet: { id: 'w_gateway', balance: 999999999 } });
             (pvit.initiatePvitPayment as jest.Mock).mockResolvedValue({ message: 'ok' });
             (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: 'tx1' });
 
@@ -279,14 +279,12 @@ describe('Wallet Routes', () => {
                 if (args.where?.id === 'user123' && args.include?.wallet) {
                     return { id: 'user123', name: 'Client', wallet: { id: 'w_client', balance: 100000 } };
                 }
-                if (args.where?.phone === CORPORATE_PHONE) {
-                    return { id: 'corporate_id', wallet: { id: 'w_corporate', balance: 0 } };
-                }
                 if (args.where?.id === receiver.id && args.include?.commissionWallet) {
                     return { id: receiver.id, commissionWallet };
                 }
                 return null;
             });
+            (prisma.systemAccount.upsert as jest.Mock).mockResolvedValue({ wallet: { id: 'w_corporate', balance: 0 } });
             (prisma.user.findFirst as jest.Mock).mockResolvedValue(receiver);
             (bcrypt.compare as jest.Mock).mockResolvedValue(true);
             (prisma.wallet.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
@@ -445,11 +443,9 @@ describe('Wallet Routes', () => {
                 if (args.where?.id === 'user123' && args.include?.wallet) {
                     return { id: 'user123', role: 'USER', wallet: { id: 'w_sender', balance: 100000 } };
                 }
-                if (args.where?.phone === CORPORATE_PHONE) {
-                    return { id: 'corporate_id', wallet: { id: 'w_corporate', balance: 0 } };
-                }
                 return null;
             });
+            (prisma.systemAccount.upsert as jest.Mock).mockResolvedValue({ wallet: { id: 'w_corporate', balance: 0 } });
             (prisma.user.findFirst as jest.Mock).mockResolvedValue({ id: 'user456', role: 'USER', wallet: { id: 'w_receiver', balance: 0 } });
             (bcrypt.compare as jest.Mock).mockResolvedValue(true);
             (getSystemSettings as jest.Mock).mockResolvedValue({ taxP2P: 0 });

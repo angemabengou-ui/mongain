@@ -32,7 +32,7 @@ router.get('/overview', authMiddleware, async (req: AuthRequest, res) => {
             // sans cette exclusion, ils gonflaient silencieusement "Portefeuilles Clients"
             // (ex: la Passerelle Externe est pré-provisionnée à ~1 milliard FCFA à sa
             // création, indissociable d'un vrai solde client dans le calcul précédent).
-            prisma.wallet.findMany({ where: { user: { role: 'ADMIN' } }, select: { id: true, balance: true } })
+            prisma.systemAccount.findMany({ select: { wallet: { select: { id: true, balance: true } } } })
         ]);
 
         const reserveBalance = centralTreasury.wallet.balance;
@@ -42,13 +42,13 @@ router.get('/overview', authMiddleware, async (req: AuthRequest, res) => {
         const totalAgencyElectronic = branches.reduce((acc, b) => acc + (b.wallet?.balance || 0), 0);
         const totalPhysicalVault = branches.reduce((acc, b) => acc + (b.balance || 0), 0);
 
-        const systemAccountsBalance = systemWallets.reduce((acc, w) => acc + (w.balance || 0), 0);
+        const systemAccountsBalance = systemWallets.reduce((acc, a) => acc + (a.wallet.balance || 0), 0);
 
         // Sum of all wallets excluding Central Treasury, Branch wallets and system accounts
         const exclusions = [
             ...branches.map(b => b.walletId).filter(Boolean),
             centralTreasury.walletId,
-            ...systemWallets.map(w => w.id)
+            ...systemWallets.map(a => a.wallet.id)
         ];
 
         const clientWalletsAgg = await prisma.wallet.aggregate({

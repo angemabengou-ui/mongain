@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { ACCESS_TOKEN_TTL, AuthRequest, JWT_SECRET, REFRESH_TOKEN_TTL_MS, authMiddleware, generateRefreshToken, hashRefreshToken } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { runKycVendorCheck } from '../services/kycVendorCheck';
 import { sendSms } from '../services/sms';
 import { friendlyErrorMessage, isDbConnectivityError, withDbRetry } from '../utils/errors';
 import logger from '../utils/logger';
@@ -517,6 +518,15 @@ router.put('/profile', authMiddleware, async (req: AuthRequest, res) => {
             updates.idCardBack = idCardBack;
             updates.selfie = selfie;
             updates.kycStatus = 'PENDING';
+
+            // Signal complémentaire best-effort (voir services/kycVendorCheck.ts) — reste en
+            // pratique un no-op tant qu'aucun prestataire n'est configuré (NOT_CONFIGURED),
+            // mais place le point d'extension là où un vrai vendor déclencherait sa
+            // vérification : à la soumission du dossier, pas seulement à la revue manuelle.
+            const vendorCheck = await runKycVendorCheck({ id: req.userId as string, idCardFront, idCardBack, selfie });
+            updates.kycVendorProvider = vendorCheck.provider;
+            updates.kycVendorStatus = vendorCheck.status;
+            updates.kycVendorCheckedAt = vendorCheck.checkedAt;
         } else {
             if (idCardFront) updates.idCardFront = idCardFront;
             if (idCardBack) updates.idCardBack = idCardBack;

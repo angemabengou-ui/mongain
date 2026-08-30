@@ -72,6 +72,24 @@ describe('Customer360', () => {
         expect(screen.getByText('ACCOUNT_VIEWED')).toBeInTheDocument();
     });
 
+    it('affiche le score de fiabilité tontine quand le backend le fournit (perm_tontine_view)', async () => {
+        setupFetch({ main: { ...mainData, tontineReliability: { totalCycles: 10, paidCycles: 7, partialOrMissedCycles: 3, penaltiesCount: 2, scorePercent: 70 } } });
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
+        await screen.findByText('Sophie Ndong');
+
+        expect(screen.getByText('Fiabilité Tontine')).toBeInTheDocument();
+        expect(screen.getByText('70% (7/10 tours, 2 pénalité(s))')).toBeInTheDocument();
+        expect(screen.getByText('Usage interne uniquement — jamais un score de crédit.')).toBeInTheDocument();
+    });
+
+    it("n'affiche pas la carte de fiabilité tontine quand le backend ne la fournit pas (rôle sans perm_tontine_view)", async () => {
+        setupFetch();
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="TELLER" hasPerm={() => false} />);
+        await screen.findByText('Sophie Ndong');
+
+        expect(screen.queryByText('Fiabilité Tontine')).not.toBeInTheDocument();
+    });
+
     it('appelle onBack et alerte en cas d\'échec du chargement principal', async () => {
         (global.fetch as any) = vi.fn(async () => jsonResponse({ error: 'Client introuvable.' }, false, 404));
         render(<Customer360 token="tok" userId="unknown-user" onBack={onBack} staffRole="SUPER_ADMIN" hasPerm={() => true} />);

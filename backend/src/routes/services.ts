@@ -1,11 +1,11 @@
 import { friendlyErrorMessage } from '../utils/errors';
-import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import express from 'express';
 import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { LimitEngine } from '../services/LimitEngine';
+import { getSystemAccount } from '../services/systemAccounts';
 import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
 import { getSystemSettings } from './settings';
@@ -44,21 +44,7 @@ router.post('/pay-bill', authMiddleware, async (req: AuthRequest, res) => {
         if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         // Trouver ou créer le portefeuille du Service (SEEG / CANAL)
-        const servicePhone = service === 'SEEG' ? '+24188888888' : '+24177777777';
-        let serviceUser = await prisma.user.findUnique({ where: { phone: servicePhone }, include: { wallet: true } });
-
-        if (!serviceUser) {
-            serviceUser = await prisma.user.create({
-                data: {
-                    phone: servicePhone,
-                    name: `SERVICE PARTENAIRE - ${service}`,
-                    role: 'ADMIN',
-                    pin: await bcrypt.hash(crypto.randomBytes(8).toString('hex'), 10),
-                    wallet: { create: { balance: 0, currency: 'FCFA' } }
-                },
-                include: { wallet: true }
-            });
-        }
+        const serviceUser = await getSystemAccount(service === 'SEEG' ? 'SERVICE_PARTNER_SEEG' : 'SERVICE_PARTNER_CANAL');
         if (!serviceUser.wallet) return res.status(500).json({ error: 'Portefeuille service introuvable.' });
 
         // Simuler un appel API vers SEEG/Edan ou Canal+
@@ -141,21 +127,7 @@ router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
         const pinCheck = await verifyUserPin(user, pin);
         if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
-        const telecomPhone = '+24166666666'; // MOCK AGGREGATOR WALLET
-        let telecomUser = await prisma.user.findUnique({ where: { phone: telecomPhone }, include: { wallet: true } });
-
-        if (!telecomUser) {
-            telecomUser = await prisma.user.create({
-                data: {
-                    phone: telecomPhone,
-                    name: `SERVICE PARTENAIRE - TELECOM`,
-                    role: 'ADMIN',
-                    pin: await bcrypt.hash(crypto.randomBytes(8).toString('hex'), 10),
-                    wallet: { create: { balance: 0, currency: 'FCFA' } }
-                },
-                include: { wallet: true }
-            });
-        }
+        const telecomUser = await getSystemAccount('SERVICE_PARTNER_TELECOM');
         if (!telecomUser.wallet) return res.status(500).json({ error: 'Portefeuille service introuvable.' });
 
         // Simulate third party Telecom API

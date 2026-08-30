@@ -275,15 +275,18 @@ describe('api service', () => {
             await expect(apiLogin('+24177000000', '0000')).rejects.toThrow('Réponse inattendue du serveur (500)');
         });
 
+        // /api/auth/* retente automatiquement 2 fois (réveil à froid Render, voir request()
+        // dans api.ts) avant d'abandonner — d'où le délai réel (~4s) couvert par le timeout
+        // explicite ci-dessous, au-delà des 5000ms par défaut de Jest.
         it('translates a fetch network failure into a friendly offline message', async () => {
             mockFetch(() => Promise.reject(new Error('Network request failed')));
             await expect(apiLogin('+24177000000', '0000')).rejects.toThrow('Vous êtes hors ligne');
-        });
+        }, 10000);
 
         it('translates a "Failed to fetch" error into a friendly offline message', async () => {
             mockFetch(() => Promise.reject(new Error('Failed to fetch')));
             await expect(apiLogin('+24177000000', '0000')).rejects.toThrow('Vous êtes hors ligne');
-        });
+        }, 10000);
 
         it('triggers the unauthorized handler and rejects on a 401 response when there is no refresh token to try', async () => {
             const onUnauthorized = jest.fn();
