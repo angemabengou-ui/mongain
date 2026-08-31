@@ -43,16 +43,16 @@ export default function ProfileScreen() {
     );
 
     const [limits, setLimits] = useState<any>(null);
-    const [appLockEnabled, setAppLockEnabled] = useState(false);
+    const [appLockEnabled, setAppLockEnabled] = useState(true);
 
     useEffect(() => {
         if (user && user.role === 'USER') {
             apiGetDailyLimits().then(data => setLimits(data)).catch(console.error);
         }
-        // Charger la préférence AppLock (OFF par défaut)
+        // Charger la préférence AppLock (ON par défaut)
         if (Platform.OS !== 'web') {
             SecureStore.getItemAsync('appLockEnabled').then(val => {
-                setAppLockEnabled(val === 'true');
+                setAppLockEnabled(val !== 'false');
             }).catch(e => console.log("SecureStore error:", e));
         }
     }, [user]);

@@ -14,7 +14,10 @@ const statusLabel = (status: string) => STATUS_LABELS[status] || status;
 // Un wallet n'a pas toujours de `user` (Wallet.userId est optionnel) : agence, Trésorerie
 // Centrale, ou désormais compte système (SystemAccount) — chacun porte son nom sur sa
 // propre relation plutôt que sur `.user`.
-const counterpartyName = (wallet: any) => wallet?.user?.name || wallet?.systemAccount?.name || wallet?.branch?.name || 'Inconnu';
+const counterpartyName = (wallet: any, txType?: string, isSender?: boolean) => {
+    if (!wallet && isSender && txType === 'ISSUANCE') return "Création Monétaire";
+    return wallet?.user?.name || wallet?.systemAccount?.name || wallet?.branch?.name || (wallet?.centralTreasury ? "Réserve Centrale" : 'Inconnu');
+};
 
 export default function Ledger({ token, hasPerm }: { token: string; hasPerm: (perms: string[]) => boolean }) {
     const [transactions, setTransactions] = useState<any[]>([]);
@@ -99,7 +102,7 @@ export default function Ledger({ token, hasPerm }: { token: string; hasPerm: (pe
             tx.reference?.toLowerCase().includes(s) ||
             tx.senderWallet?.user?.phone?.includes(s) ||
             tx.receiverWallet?.user?.phone?.includes(s) ||
-            counterpartyName(tx.senderWallet).toLowerCase().includes(s) ||
+            counterpartyName(tx.senderWallet, tx.type, true).toLowerCase().includes(s) ||
             counterpartyName(tx.receiverWallet).toLowerCase().includes(s)
         );
     });
@@ -107,7 +110,8 @@ export default function Ledger({ token, hasPerm }: { token: string; hasPerm: (pe
     const exportCSV = () => {
         const headers = ["Date", "Expediteur", "Beneficiaire", "Montant", "Reference", "Statut"];
         const rows = filteredTransactions.map(tx => {
-            const sender = `${counterpartyName(tx.senderWallet)} (${tx.senderWallet?.user?.phone || '—'})`;
+            const senderName = counterpartyName(tx.senderWallet, tx.type, true);
+            const sender = `${senderName} (${tx.senderWallet?.user?.phone || '—'})`;
             const receiver = `${counterpartyName(tx.receiverWallet)} (${tx.receiverWallet?.user?.phone || '—'})`;
             return [
                 new Date(tx.createdAt).toLocaleString('fr-FR'),
@@ -145,14 +149,17 @@ export default function Ledger({ token, hasPerm }: { token: string; hasPerm: (pe
         doc.setTextColor(100);
         doc.text("Rapport financier general. Genere le : " + new Date().toLocaleString('fr-FR'), 14, 32);
         const tableColumn = ["Date", "Expediteur", "Beneficiaire", "Montant (FCFA)", "Reference", "Statut"];
-        const tableRows = filteredTransactions.map(tx => [
-            new Date(tx.createdAt).toLocaleString('fr-FR'),
-            counterpartyName(tx.senderWallet) + ' (' + (tx.senderWallet?.user?.phone || '—') + ')',
-            counterpartyName(tx.receiverWallet) + ' (' + (tx.receiverWallet?.user?.phone || '—') + ')',
-            tx.amount.toString(),
-            tx.reference || tx.id,
-            statusLabel(tx.status)
-        ]);
+        const tableRows = filteredTransactions.map(tx => {
+            const senderName = counterpartyName(tx.senderWallet, tx.type, true);
+            return [
+                new Date(tx.createdAt).toLocaleString('fr-FR'),
+                senderName + ' (' + (tx.senderWallet?.user?.phone || '—') + ')',
+                counterpartyName(tx.receiverWallet) + ' (' + (tx.receiverWallet?.user?.phone || '—') + ')',
+                tx.amount.toString(),
+                tx.reference || tx.id,
+                statusLabel(tx.status)
+            ];
+        });
         autoTable(doc, { head: [tableColumn], body: tableRows, startY: 40, theme: 'grid', styles: { fontSize: 10, cellPadding: 4 }, headStyles: { fillColor: [41, 128, 185], textColor: 255 } });
         doc.save('Mongain_Ledger_' + new Date().toISOString().split('T')[0] + '.pdf');
     };
@@ -209,13 +216,13 @@ export default function Ledger({ token, hasPerm }: { token: string; hasPerm: (pe
                         </thead>
                         <tbody>
                             {filteredTransactions.map(tx => {
-                                const senderName = counterpartyName(tx.senderWallet);
+                                const senderName = counterpartyName(tx.senderWallet, tx.type, true);
                                 const senderPhone = tx.senderWallet?.user?.phone || '—';
                                 const receiverName = counterpartyName(tx.receiverWallet);
                                 const receiverPhone = tx.receiverWallet?.user?.phone || '—';
 
                                 const isFee = tx.reference?.startsWith('FEE');
-                                const isMint = tx.reference?.startsWith('MINT');
+                                const isMint = tx.reference?.startsWith('ISS') || tx.reference?.startsWith('MINT');
                                 const isDeposit = tx.reference?.startsWith('DEPOSIT') || tx.reference?.startsWith('CIN') || tx.reference?.startsWith('PULL');
 
                                 return (

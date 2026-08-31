@@ -160,48 +160,44 @@ function ApiManagementTab({ token }: { token: string }) {
 
             {/* Integrations Table */}
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                {loading ? <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Chargement...</div> :
-                    integrations.length === 0 ? <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Aucune intégration API configurée.</div> :
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                {loading ? <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)', fontWeight: 600 }}>Chargement...</div> :
+                    integrations.length === 0 ? <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)', fontWeight: 600 }}>Aucune intégration API configurée.</div> :
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                             <thead>
                                 <tr style={{ background: 'var(--bg-secondary)', textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
-                                    <th style={{ padding: '12px 16px' }}>App / Marchand</th>
-                                    <th style={{ padding: '12px 16px' }}>Environnement</th>
-                                    <th style={{ padding: '12px 16px' }}>Public Key</th>
-                                    <th style={{ padding: '12px 16px' }}>Secret</th>
-                                    <th style={{ padding: '12px 16px' }}>Permissions</th>
-                                    <th style={{ padding: '12px 16px' }}>Statut</th>
-                                    <th style={{ padding: '12px 16px' }}>Actions</th>
+                                    {['App / Marchand', 'Environnement', 'Public Key', 'Secret', 'Permissions', 'Statut', 'Actions'].map((h, i) => (
+                                        <th key={i} style={{ padding: '16px 20px', color: 'var(--text-muted)', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                                    ))}
                                 </tr>
                             </thead>
                             <tbody>
                                 {integrations.map(intg => (
-                                    <tr key={intg.id} style={{ borderBottom: '1px solid var(--border)', opacity: intg.isActive ? 1 : 0.5 }}>
-                                        <td style={{ padding: '12px 16px' }}>
-                                            <div style={{ fontWeight: 700 }}>{intg.appName}</div>
-                                            <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>{intg.merchant?.name} — {intg.merchant?.phone}</div>
+                                    <tr key={intg.id} style={{ borderBottom: '1px solid var(--border)', opacity: intg.isActive ? 1 : 0.5, transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                        <td style={{ padding: '16px 20px' }}>
+                                            <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{intg.appName}</div>
+                                            <div style={{ color: 'var(--text-secondary)', fontSize: 12, marginTop: 4 }}>{intg.merchant?.name} — {intg.merchant?.phone}</div>
                                         </td>
-                                        <td style={{ padding: '12px 16px' }}>{envBadge(intg.environment)}</td>
-                                        <td style={{ padding: '12px 16px' }}>
-                                            <code style={{ fontSize: 11, wordBreak: 'break-all' }}>{intg.publicKey?.substring(0, 24)}...</code>
+                                        <td style={{ padding: '16px 20px' }}>{envBadge(intg.environment)}</td>
+                                        <td style={{ padding: '16px 20px' }}>
+                                            <code style={{ fontSize: 12, wordBreak: 'break-all', color: 'var(--text-primary)' }}>{intg.publicKey?.substring(0, 24)}...</code>
                                         </td>
-                                        <td style={{ padding: '12px 16px' }}>
-                                            <code style={{ fontSize: 11, color: 'var(--text-muted)' }}>••••••••••••••••</code>
+                                        <td style={{ padding: '16px 20px' }}>
+                                            <code style={{ fontSize: 12, color: 'var(--text-muted)' }}>••••••••••••••••</code>
                                         </td>
-                                        <td style={{ padding: '12px 16px' }}>
-                                            <span style={{ fontSize: 11, background: '#eff6ff', color: '#3b82f6', padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>{intg.permissions}</span>
+                                        <td style={{ padding: '16px 20px' }}>
+                                            <span style={{ fontSize: 11, background: '#eff6ff', color: '#3b82f6', padding: '4px 10px', borderRadius: 6, fontWeight: 700 }}>{intg.permissions}</span>
                                         </td>
-                                        <td style={{ padding: '12px 16px' }}>
-                                            <span style={{ padding: '4px 10px', borderRadius: 6, background: intg.isActive ? 'var(--success-bg)' : 'var(--danger-bg)', color: intg.isActive ? 'var(--success)' : 'var(--danger)', fontWeight: 700, fontSize: 12 }}>
+                                        <td style={{ padding: '16px 20px' }}>
+                                            <span style={{ padding: '4px 10px', borderRadius: 6, background: intg.isActive ? 'var(--success-bg)' : 'var(--danger-bg)', color: intg.isActive ? 'var(--success)' : 'var(--danger)', fontWeight: 800, fontSize: 11, letterSpacing: '0.05em' }}>
                                                 {intg.isActive ? 'ACTIVE' : 'INACTIVE'}
                                             </span>
                                         </td>
-                                        <td style={{ padding: '12px 16px' }}>
-                                            <div style={{ display: 'flex', gap: 6 }}>
-                                                <button onClick={() => handleToggle(intg.id, intg.isActive)} style={{ padding: '4px 8px', background: intg.isActive ? 'var(--danger-bg)' : 'var(--success-bg)', color: intg.isActive ? 'var(--danger)' : 'var(--success)', border: `1px solid ${intg.isActive ? 'var(--danger)' : '#6ee7b7'}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+                                        <td style={{ padding: '16px 20px' }}>
+                                            <div style={{ display: 'flex', gap: 8 }}>
+                                                <button onClick={() => handleToggle(intg.id, intg.isActive)} style={{ padding: '6px 12px', background: intg.isActive ? 'var(--danger-bg)' : 'var(--success-bg)', color: intg.isActive ? 'var(--danger)' : 'var(--success)', border: `1px solid ${intg.isActive ? 'var(--danger)' : '#6ee7b7'}`, borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 800 }}>
                                                     {intg.isActive ? 'Désactiver' : 'Activer'}
                                                 </button>
-                                                <button onClick={() => handleRotate(intg.id)} style={{ padding: '4px 8px', background: 'var(--warning-bg)', color: '#92400e', border: '1px solid var(--warning)', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+                                                <button onClick={() => handleRotate(intg.id)} style={{ padding: '6px 12px', background: 'var(--warning-bg)', color: '#92400e', border: '1px solid var(--warning)', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 800 }}>
                                                     Rotation
                                                 </button>
                                             </div>
@@ -240,7 +236,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
 
     useEffect(() => {
         fetch(API_URL + '/api/settings/my-ip', { headers: { 'Authorization': `Bearer ${token}` } })
-            .then(r => r.json()).then(d => setMyIp(d.ip || null)).catch(() => {});
+            .then(r => r.json()).then(d => setMyIp(d.ip || null)).catch(() => { });
     }, [token]);
 
     const fetchSettings = async () => {
@@ -610,63 +606,63 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                 </div>
 
                                 <div className="card" style={{ padding: 24 }}>
-                                <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={20} /> PVit — Dépôt Mobile Money (Airtel/Moov)</h3>
-                                <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: -8, marginBottom: 20 }}>
-                                    Identifiants de l'agrégateur de paiement PVit (mypvit.pro), utilisés par le backend pour initier un dépôt Mobile Money réel. Valeurs disponibles dans ton tableau de bord PVit : Paramétrages → APIs (clé secrète, code URL "REST"), Comptes (compte d'opération), Urls (code de callback).
-                                </p>
+                                    <h3 style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Smartphone size={20} /> PVit — Dépôt Mobile Money (Airtel/Moov)</h3>
+                                    <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginTop: -8, marginBottom: 20 }}>
+                                        Identifiants de l'agrégateur de paiement PVit (mypvit.pro), utilisés par le backend pour initier un dépôt Mobile Money réel. Valeurs disponibles dans ton tableau de bord PVit : Paramétrages → APIs (clé secrète, code URL "REST"), Comptes (compte d'opération), Urls (code de callback).
+                                    </p>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                                    <div>
-                                        <label>Clé secrète (X-Secret)</label>
-                                        <input className="input" type="password" placeholder={settings.pvitSecretKey || 'Non configurée'} value={drafts.pvitSecretKey === settings.pvitSecretKey ? '' : (drafts.pvitSecretKey || '')} onChange={e => handleFieldChange('pvitSecretKey', e.target.value)} />
-                                    </div>
-                                    <div>
-                                        <label>Code URL de paiement (endpoint REST)</label>
-                                        <input className="input" value={drafts.pvitCodeUrlPayment || ''} onChange={e => handleFieldChange('pvitCodeUrlPayment', e.target.value)} placeholder="ex: 5OPBYBDCK1ZGH681" />
-                                    </div>
-                                    <div>
-                                        <label>Compte d'opération marchand</label>
-                                        <input className="input" value={drafts.pvitMerchantOperationAccountCode || ''} onChange={e => handleFieldChange('pvitMerchantOperationAccountCode', e.target.value)} placeholder="ex: ACC_XXXXXXXXXXXX" />
-                                    </div>
-                                    <div>
-                                        <label>Code de l'URL de callback</label>
-                                        <input className="input" value={drafts.pvitCallbackUrlCode || ''} onChange={e => handleFieldChange('pvitCallbackUrlCode', e.target.value)} placeholder="ex: GW7O6" />
-                                    </div>
-                                </div>
-
-                                <div style={{ marginTop: 20 }}>
-                                    <label>Clé de webhook (à mettre dans l'URL enregistrée sur PVit)</label>
-                                    <div style={{ display: 'flex', gap: 8 }}>
-                                        <input className="input" type="password" style={{ flex: 1 }} placeholder={settings.pvitWebhookSecret || 'Non configurée'} value={drafts.pvitWebhookSecret === settings.pvitWebhookSecret ? '' : (drafts.pvitWebhookSecret || '')} onChange={e => handleFieldChange('pvitWebhookSecret', e.target.value)} />
-                                        <button
-                                            type="button"
-                                            onClick={() => handleFieldChange('pvitWebhookSecret', Array.from(crypto.getRandomValues(new Uint8Array(24))).map(b => b.toString(16).padStart(2, '0')).join(''))}
-                                            style={{ padding: '0 14px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-                                        >
-                                            <RefreshCw size={14} /> Générer
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {drafts.pvitWebhookSecret && drafts.pvitWebhookSecret !== settings.pvitWebhookSecret && (
-                                    <div style={{ marginTop: 16, padding: 14, background: 'var(--accent-bg)', borderRadius: 10, border: '1px solid var(--accent)' }}>
-                                        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', marginBottom: 6 }}>URL À ENREGISTRER SUR PVIT (section "Urls") UNE FOIS CE CHANGEMENT DÉPOSÉ ET APPROUVÉ</div>
-                                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                            <code style={{ flex: 1, padding: '8px 12px', background: 'var(--bg-card)', borderRadius: 8, fontSize: 12, wordBreak: 'break-all' }}>
-                                                https://mongain-backend.onrender.com/api/webhooks/pvit-status?key={drafts.pvitWebhookSecret}
-                                            </code>
-                                            <button type="button" onClick={() => navigator.clipboard.writeText(`https://mongain-backend.onrender.com/api/webhooks/pvit-status?key=${drafts.pvitWebhookSecret}`)} style={{ padding: '8px 12px', background: 'var(--btn-dark-bg)', color: 'var(--btn-dark-text)', border: 'none', borderRadius: 8, cursor: 'pointer' }}><Copy size={14} /></button>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                                        <div>
+                                            <label>Clé secrète (X-Secret)</label>
+                                            <input className="input" type="password" placeholder={settings.pvitSecretKey || 'Non configurée'} value={drafts.pvitSecretKey === settings.pvitSecretKey ? '' : (drafts.pvitSecretKey || '')} onChange={e => handleFieldChange('pvitSecretKey', e.target.value)} />
+                                        </div>
+                                        <div>
+                                            <label>Code URL de paiement (endpoint REST)</label>
+                                            <input className="input" value={drafts.pvitCodeUrlPayment || ''} onChange={e => handleFieldChange('pvitCodeUrlPayment', e.target.value)} placeholder="ex: 5OPBYBDCK1ZGH681" />
+                                        </div>
+                                        <div>
+                                            <label>Compte d'opération marchand</label>
+                                            <input className="input" value={drafts.pvitMerchantOperationAccountCode || ''} onChange={e => handleFieldChange('pvitMerchantOperationAccountCode', e.target.value)} placeholder="ex: ACC_XXXXXXXXXXXX" />
+                                        </div>
+                                        <div>
+                                            <label>Code de l'URL de callback</label>
+                                            <input className="input" value={drafts.pvitCallbackUrlCode || ''} onChange={e => handleFieldChange('pvitCallbackUrlCode', e.target.value)} placeholder="ex: GW7O6" />
                                         </div>
                                     </div>
-                                )}
 
-                                <div style={{ marginTop: 20, padding: 14, background: 'var(--bg-secondary)', borderRadius: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
-                                    Statut actuel : {settings.pvitSecretKey && settings.pvitCodeUrlPayment && settings.pvitMerchantOperationAccountCode && settings.pvitCallbackUrlCode
-                                        ? <span style={{ color: 'var(--success)', fontWeight: 700 }}>✓ Configuré — le dépôt Mobile Money est actif.</span>
-                                        : <span style={{ color: 'var(--warning)', fontWeight: 700 }}>⚠ Incomplet — le dépôt Mobile Money reste désactivé tant que les 4 champs ci-dessus ne sont pas remplis.</span>}
-                                </div>
+                                    <div style={{ marginTop: 20 }}>
+                                        <label>Clé de webhook (à mettre dans l'URL enregistrée sur PVit)</label>
+                                        <div style={{ display: 'flex', gap: 8 }}>
+                                            <input className="input" type="password" style={{ flex: 1 }} placeholder={settings.pvitWebhookSecret || 'Non configurée'} value={drafts.pvitWebhookSecret === settings.pvitWebhookSecret ? '' : (drafts.pvitWebhookSecret || '')} onChange={e => handleFieldChange('pvitWebhookSecret', e.target.value)} />
+                                            <button
+                                                type="button"
+                                                onClick={() => handleFieldChange('pvitWebhookSecret', Array.from(crypto.getRandomValues(new Uint8Array(24))).map(b => b.toString(16).padStart(2, '0')).join(''))}
+                                                style={{ padding: '0 14px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                                            >
+                                                <RefreshCw size={14} /> Générer
+                                            </button>
+                                        </div>
+                                    </div>
 
-                                <button className="btn" style={{ marginTop: 20, width: '100%' }} onClick={() => handleSaveGroup('CONFIGURE_PVIT', ['pvitSecretKey', 'pvitCodeUrlPayment', 'pvitMerchantOperationAccountCode', 'pvitCallbackUrlCode', 'pvitWebhookSecret'])}>Déposer Changement (Maker)</button>
+                                    {drafts.pvitWebhookSecret && drafts.pvitWebhookSecret !== settings.pvitWebhookSecret && (
+                                        <div style={{ marginTop: 16, padding: 14, background: 'var(--accent-bg)', borderRadius: 10, border: '1px solid var(--accent)' }}>
+                                            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', marginBottom: 6 }}>URL À ENREGISTRER SUR PVIT (section "Urls") UNE FOIS CE CHANGEMENT DÉPOSÉ ET APPROUVÉ</div>
+                                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                                <code style={{ flex: 1, padding: '8px 12px', background: 'var(--bg-card)', borderRadius: 8, fontSize: 12, wordBreak: 'break-all' }}>
+                                                    https://mongain-backend.onrender.com/api/webhooks/pvit-status?key={drafts.pvitWebhookSecret}
+                                                </code>
+                                                <button type="button" onClick={() => navigator.clipboard.writeText(`https://mongain-backend.onrender.com/api/webhooks/pvit-status?key=${drafts.pvitWebhookSecret}`)} style={{ padding: '8px 12px', background: 'var(--btn-dark-bg)', color: 'var(--btn-dark-text)', border: 'none', borderRadius: 8, cursor: 'pointer' }}><Copy size={14} /></button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div style={{ marginTop: 20, padding: 14, background: 'var(--bg-secondary)', borderRadius: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
+                                        Statut actuel : {settings.pvitSecretKey && settings.pvitCodeUrlPayment && settings.pvitMerchantOperationAccountCode && settings.pvitCallbackUrlCode
+                                            ? <span style={{ color: 'var(--success)', fontWeight: 700 }}>✓ Configuré — le dépôt Mobile Money est actif.</span>
+                                            : <span style={{ color: 'var(--warning)', fontWeight: 700 }}>⚠ Incomplet — le dépôt Mobile Money reste désactivé tant que les 4 champs ci-dessus ne sont pas remplis.</span>}
+                                    </div>
+
+                                    <button className="btn" style={{ marginTop: 20, width: '100%' }} onClick={() => handleSaveGroup('CONFIGURE_PVIT', ['pvitSecretKey', 'pvitCodeUrlPayment', 'pvitMerchantOperationAccountCode', 'pvitCallbackUrlCode', 'pvitWebhookSecret'])}>Déposer Changement (Maker)</button>
                                 </div>
                             </div>
                         )}
@@ -772,37 +768,45 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                         {/* TAB: APPROVALS */}
                         {activeTab === 'approvals' && (
                             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                                <div style={{ padding: 20, borderBottom: '1px solid var(--border)' }}><h3 style={{ margin: 0 }}>Centre d'Approbation (Checker)</h3></div>
+                                <div style={{ padding: 24, borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)' }}><h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: 'var(--text-primary)' }}>Centre d'Approbation (Checker)</h3></div>
                                 {requests.filter(r => r.status === 'PENDING').length === 0 ? (
-                                    <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Aucun paramètre en attente d'approbation.</div>
+                                    <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)', fontWeight: 600 }}>Aucun paramètre en attente d'approbation.</div>
                                 ) : (
                                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-                                        <thead><tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', textAlign: 'left' }}><th style={{ padding: 16 }}>Maker</th><th style={{ padding: 16 }}>Action</th><th style={{ padding: 16 }}>Motif</th><th style={{ padding: 16 }}>Actions Checker</th></tr></thead>
+                                        <thead>
+                                            <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
+                                                {['Maker', 'Action', 'Motif', 'Actions Checker'].map((h, i) => (
+                                                    <th key={i} style={{ padding: '16px 20px', color: 'var(--text-muted)', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
                                         <tbody>
                                             {requests.filter(r => r.status === 'PENDING').map(r => {
-                                                // `PlatformConfig` n'était auparavant jamais gaté sur perm_system_settings_approve
-                                                // (App.tsx la monte dès perm_system_settings_view OU _approve) : un Maker, qui n'a
-                                                // que _view, voyait ces boutons alors que le serveur les refuse systématiquement.
                                                 const canApprove = hasPerm ? hasPerm(['perm_system_settings_approve']) : true;
-                                                const isOwnRequest = !!staffId && r.maker?.id === staffId;
+                                                const isSuperAdmin = hasPerm ? hasPerm(['perm_staff_permissions_edit']) : false;
+                                                const isOwnRequest = !!staffId && r.maker?.id === staffId && !isSuperAdmin;
+
                                                 return (
-                                                <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                    <td style={{ padding: 16 }}>{r.maker.name}<br /><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.maker.role}</span></td>
-                                                    <td style={{ padding: 16, fontWeight: 700 }}>{r.action}</td>
-                                                    <td style={{ padding: 16 }}>{r.reason}</td>
-                                                    <td style={{ padding: 16 }}>
-                                                        {!canApprove ? (
-                                                            <span style={{ color: 'var(--text-muted)' }}>En attente d'approbation...</span>
-                                                        ) : isOwnRequest ? (
-                                                            <span style={{ color: 'var(--text-muted)' }} title="Vous ne pouvez pas approuver votre propre demande.">Votre propre demande</span>
-                                                        ) : (
-                                                            <>
-                                                                <button onClick={() => handleApprove(r.id)} style={{ padding: '8px 16px', background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, marginRight: 8 }}>Valider</button>
-                                                                <button onClick={() => handleReject(r.id)} style={{ padding: '8px 16px', background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>Rejeter</button>
-                                                            </>
-                                                        )}
-                                                    </td>
-                                                </tr>
+                                                    <tr key={r.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                                        <td style={{ padding: '16px 20px' }}>
+                                                            <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{r.maker.name}</div>
+                                                            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{r.maker.role}</div>
+                                                        </td>
+                                                        <td style={{ padding: '16px 20px', fontWeight: 800, color: 'var(--text-primary)' }}>{r.action}</td>
+                                                        <td style={{ padding: '16px 20px', color: 'var(--text-secondary)' }}>{r.reason}</td>
+                                                        <td style={{ padding: '16px 20px' }}>
+                                                            {!canApprove ? (
+                                                                <span style={{ color: 'var(--text-muted)', fontWeight: 600, fontSize: 12 }}>En attente d'approbation...</span>
+                                                            ) : isOwnRequest ? (
+                                                                <span style={{ color: 'var(--text-muted)', fontWeight: 700, fontSize: 12 }} title="Vous ne pouvez pas approuver votre propre demande.">Votre propre demande (Bloqué)</span>
+                                                            ) : (
+                                                                <div style={{ display: 'flex', gap: 8 }}>
+                                                                    <button onClick={() => handleApprove(r.id)} style={{ padding: '8px 16px', background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success)', borderRadius: 8, cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>Valider</button>
+                                                                    <button onClick={() => handleReject(r.id)} style={{ padding: '8px 16px', background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)', borderRadius: 8, cursor: 'pointer', fontWeight: 800, fontSize: 12 }}>Rejeter</button>
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                    </tr>
                                                 );
                                             })}
                                         </tbody>
@@ -814,23 +818,35 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                         {/* TAB: HISTORY */}
                         {activeTab === 'history' && (
                             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                                <div style={{ padding: 20, borderBottom: '1px solid var(--border)' }}><h3 style={{ margin: 0 }}>Historique des modifications appliquées</h3></div>
+                                <div style={{ padding: 24, borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)' }}>
+                                    <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: 'var(--text-primary)' }}>Historique des Modifications Système</h3>
+                                    <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: 13 }}>Piste d'audit de chaque changement de paramètre majeur.</p>
+                                </div>
                                 {history.length === 0 ? (
-                                    <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Aucune modification appliquée pour l'instant.</div>
+                                    <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)', fontWeight: 600 }}>Aucune modification enregistrée.</div>
                                 ) : (
-                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                                        <thead><tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-                                            <th style={{ padding: 14 }}>Date</th><th style={{ padding: 14 }}>Paramètre</th><th style={{ padding: 14 }}>Ancienne → Nouvelle valeur</th><th style={{ padding: 14 }}>Auteur</th><th style={{ padding: 14 }}>Validé par</th><th style={{ padding: 14 }}>Motif</th>
-                                        </tr></thead>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                                        <thead>
+                                            <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
+                                                {['Date', 'Paramètre', 'Changement', 'Auteurs'].map((h, i) => (
+                                                    <th key={i} style={{ padding: '16px 20px', color: 'var(--text-muted)', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
                                         <tbody>
                                             {history.map(h => (
-                                                <tr key={h.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                                                    <td style={{ padding: 14, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(h.createdAt).toLocaleString('fr-FR')}</td>
-                                                    <td style={{ padding: 14, fontWeight: 700 }}>{h.parameter}</td>
-                                                    <td style={{ padding: 14 }}><code style={{ color: 'var(--danger)' }}>{h.oldValue}</code> → <code style={{ color: 'var(--success)' }}>{h.newValue}</code></td>
-                                                    <td style={{ padding: 14 }}>{h.author?.name}</td>
-                                                    <td style={{ padding: 14 }}>{h.checker?.name || '—'}</td>
-                                                    <td style={{ padding: 14, color: 'var(--text-muted)' }}>{h.reason}</td>
+                                                <tr key={h.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                                    <td style={{ padding: '16px 20px', fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap', fontWeight: 600 }}>{new Date(h.createdAt).toLocaleString()}</td>
+                                                    <td style={{ padding: '16px 20px', fontWeight: 800, color: 'var(--text-primary)' }}>{h.parameter}</td>
+                                                    <td style={{ padding: '16px 20px', fontSize: 13 }}>
+                                                        <div style={{ color: 'var(--danger)', textDecoration: 'line-through', marginBottom: 2 }}>{h.oldValue || '∅'}</div>
+                                                        <div style={{ color: 'var(--success)', fontWeight: 700 }}>{h.newValue || '∅'}</div>
+                                                        <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', marginTop: 4 }}>"{h.reason}"</div>
+                                                    </td>
+                                                    <td style={{ padding: '16px 20px', fontSize: 12 }}>
+                                                        <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Maker : <span style={{ fontWeight: 600 }}>{h.author?.name || 'Inconnu'}</span></div>
+                                                        <div style={{ fontWeight: 700, color: 'var(--success)', marginTop: 4 }}>Validé par : <span style={{ fontWeight: 600 }}>{h.checker?.name || 'Inconnu'}</span></div>
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -838,7 +854,6 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                 )}
                             </div>
                         )}
-
                     </div>
                 </div>
             )}

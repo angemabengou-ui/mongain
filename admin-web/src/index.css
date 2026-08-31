@@ -142,12 +142,21 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3, h4, .sidebar-logo, .nav-item, button, .stat-value {
+h1,
+h2,
+h3,
+h4,
+.sidebar-logo,
+.nav-item,
+button,
+.stat-value {
   font-family: var(--font-heading);
 }
 
 /* Les montants FCFA s'alignent en colonnes plutôt que de danser au fil des chiffres. */
-.stat-value, td, .receiptValue {
+.stat-value,
+td,
+.receiptValue {
   font-variant-numeric: tabular-nums;
 }
 
@@ -225,10 +234,12 @@ h1, h2, h3, h4, .sidebar-logo, .nav-item, button, .stat-value {
 
 .card {
   background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  padding: 24px;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+  padding: 28px;
 }
 
 
@@ -389,13 +400,15 @@ h1, h2, h3, h4, .sidebar-logo, .nav-item, button, .stat-value {
 
 .stat-card {
   background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: 16px;
   padding: 32px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
@@ -514,9 +527,11 @@ button {
 /* Tables (CRM Data) */
 .table-container {
   background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
   overflow: hidden;
 }
 

@@ -53,8 +53,8 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
             return;
         }
         const lockPref = await SecureStore.getItemAsync('appLockEnabled');
-        // SECURITY UPDATE: AppLock is OFF by default (Opt-in)
-        if (lockPref === 'true') {
+        // SECURITY UPDATE: AppLock is ON by default (Opt-out)
+        if (lockPref !== 'false') {
             setIsLocked(true);
             setTimeout(() => handleUnlock(), 500);
         } else {
@@ -89,7 +89,7 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
                 if (token) {
                     const lockPref = await SecureStore.getItemAsync('appLockEnabled');
                     const timeAway = Date.now() - lastInteractionTime;
-                    if (lockPref === 'true' && timeAway > BACKGROUND_LIMIT_MS && !SecurityFlags.bypassAppLock) {
+                    if (lockPref !== 'false' && timeAway > BACKGROUND_LIMIT_MS && !SecurityFlags.bypassAppLock) {
                         setIsLocked(true);
                         setRequiresPinFallback(false);
                         handleUnlock();
@@ -114,7 +114,7 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
 
             if (timeAway > INACTIVITY_LIMIT_MS) {
                 const lockPref = await SecureStore.getItemAsync('appLockEnabled');
-                if (lockPref === 'true') {
+                if (lockPref !== 'false') {
                     setIsLocked(true);
                     setRequiresPinFallback(false);
                     handleUnlock();

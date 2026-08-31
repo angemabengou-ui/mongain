@@ -79,56 +79,56 @@ export default function ErrorLogs({ token }: { token: string }) {
                 </div>
             )}
 
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16 }}>
-                <select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 20, background: 'var(--bg-card)', padding: '12px 16px', borderRadius: 12, border: '1px solid var(--border)' }}>
+                <select value={sourceFilter} onChange={e => { setSourceFilter(e.target.value); setPage(1); }} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}>
                     <option value="">Toutes les sources</option>
                     {sources.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-                <select value={resolvedFilter} onChange={e => { setResolvedFilter(e.target.value as any); setPage(1); }} style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <select value={resolvedFilter} onChange={e => { setResolvedFilter(e.target.value as any); setPage(1); }} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}>
                     <option value="unresolved">Non résolues</option>
                     <option value="resolved">Résolues</option>
                     <option value="all">Toutes</option>
                 </select>
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{total} erreur{total !== 1 ? 's' : ''}</div>
+                <div style={{ flex: 1 }}></div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 700 }}>{total} erreur{total !== 1 ? 's' : ''} au total</div>
             </div>
 
-            <div className="table-container">
-                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, textAlign: 'left' }}>
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 14 }}>
                     <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Source</th>
-                            <th>Message</th>
-                            <th style={{ textAlign: 'right' }}>Action</th>
+                        <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                            {['Date', 'Source', 'Message', 'Action'].map((h, i) => (
+                                <th key={i} style={{ padding: '16px 20px', color: 'var(--text-muted)', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: h === 'Action' ? 'right' : 'left' }}>{h}</th>
+                            ))}
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={4} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Chargement...</td></tr>
+                            <tr><td colSpan={4} style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontWeight: 600 }}>Chargement...</td></tr>
                         ) : logs.length === 0 ? (
-                            <tr><td colSpan={4} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>
+                            <tr><td colSpan={4} style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontWeight: 600 }}>
                                 {resolvedFilter === 'unresolved' ? 'Aucune erreur non résolue. 🎉' : resolvedFilter === 'resolved' ? 'Aucune erreur résolue pour l\'instant.' : 'Aucune erreur enregistrée.'}
                             </td></tr>
                         ) : logs.map(log => (
                             <Fragment key={log.id}>
-                                <tr style={{ cursor: 'pointer' }} onClick={() => setExpandedId(expandedId === log.id ? null : log.id)}>
-                                    <td style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{formatDate(log.createdAt)}</td>
-                                    <td>
-                                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 10, background: 'var(--accent-bg)', color: 'var(--accent)' }}>{log.source}</span>
+                                <tr style={{ cursor: 'pointer', borderBottom: '1px solid var(--border)', transition: 'background 0.2s', backgroundColor: expandedId === log.id ? 'var(--bg-secondary)' : 'transparent' }} onClick={() => setExpandedId(expandedId === log.id ? null : log.id)} onMouseEnter={e => { if (expandedId !== log.id) e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'; }} onMouseLeave={e => { if (expandedId !== log.id) e.currentTarget.style.backgroundColor = 'transparent'; }}>
+                                    <td style={{ padding: '16px 20px', fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap', fontWeight: 600 }}>{formatDate(log.createdAt)}</td>
+                                    <td style={{ padding: '16px 20px' }}>
+                                        <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 8, background: 'var(--accent-bg)', color: 'var(--accent)' }}>{log.source}</span>
                                     </td>
-                                    <td style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                        <ChevronDown size={14} style={{ transform: expandedId === log.id ? 'rotate(180deg)' : 'none', transition: '0.15s', flexShrink: 0 }} />
-                                        <AlertTriangle size={14} color="var(--warning)" style={{ flexShrink: 0 }} />
+                                    <td style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 10, fontWeight: 700, color: 'var(--text-primary)' }}>
+                                        <ChevronDown size={16} style={{ transform: expandedId === log.id ? 'rotate(180deg)' : 'none', transition: '0.2s ease', flexShrink: 0, color: 'var(--text-muted)' }} />
+                                        <AlertTriangle size={16} color="var(--warning)" style={{ flexShrink: 0 }} />
                                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 420 }}>{log.message}</span>
                                     </td>
-                                    <td style={{ textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                                    <td style={{ padding: '16px 20px', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
                                         {log.resolved ? (
-                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 700, color: 'var(--success)' }}><CheckCircle size={14} /> Résolue</span>
+                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, color: 'var(--success)' }}><CheckCircle size={15} /> Résolue</span>
                                         ) : (
                                             <button
                                                 onClick={() => handleResolve(log.id)}
                                                 disabled={savingId === log.id}
-                                                style={{ padding: '6px 12px', background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success)', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
+                                                style={{ padding: '8px 14px', background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success)', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 800 }}
                                             >
                                                 {savingId === log.id ? '...' : 'Marquer résolue'}
                                             </button>
@@ -136,10 +136,10 @@ export default function ErrorLogs({ token }: { token: string }) {
                                     </td>
                                 </tr>
                                 {expandedId === log.id && (
-                                    <tr>
-                                        <td colSpan={4} style={{ background: 'var(--bg-secondary)', padding: '14px 20px' }}>
-                                            {log.path && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Route : <code>{log.path}</code></div>}
-                                            <pre style={{ margin: 0, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: 'var(--text-primary)', fontFamily: 'monospace' }}>
+                                    <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                                        <td colSpan={4} style={{ padding: '20px 24px', boxShadow: 'inset 0 4px 6px -4px rgba(0,0,0,0.05)' }}>
+                                            {log.path && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12, fontWeight: 700 }}>Route : <code style={{ padding: '2px 6px', background: 'var(--bg-card)', borderRadius: 4, color: 'var(--text-primary)' }}>{log.path}</code></div>}
+                                            <pre style={{ margin: 0, padding: 16, background: '#1e293b', borderRadius: 12, fontSize: 13, whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: '#f8fafc', fontFamily: 'monospace', border: '1px solid #334155' }}>
                                                 {log.details ? (() => { try { return JSON.stringify(JSON.parse(log.details), null, 2); } catch { return log.details; } })() : 'Aucun détail supplémentaire.'}
                                             </pre>
                                         </td>
@@ -152,13 +152,13 @@ export default function ErrorLogs({ token }: { token: string }) {
             </div>
 
             {pages > 1 && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 16 }}>
-                    <button onClick={() => setPage(p => p - 1)} disabled={page <= 1} style={{ padding: 8, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, cursor: page <= 1 ? 'not-allowed' : 'pointer', color: page <= 1 ? 'var(--text-muted)' : 'var(--text-primary)' }}>
-                        <ChevronLeft size={16} />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 24, paddingBottom: 24 }}>
+                    <button onClick={() => setPage(p => p - 1)} disabled={page <= 1} style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, cursor: page <= 1 ? 'not-allowed' : 'pointer', color: page <= 1 ? 'var(--text-muted)' : 'var(--text-primary)', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                        <ChevronLeft size={18} />
                     </button>
-                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Page {page} / {pages} · {total} au total</span>
-                    <button onClick={() => setPage(p => p + 1)} disabled={page >= pages} style={{ padding: 8, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, cursor: page >= pages ? 'not-allowed' : 'pointer', color: page >= pages ? 'var(--text-muted)' : 'var(--text-primary)' }}>
-                        <ChevronRight size={16} />
+                    <span style={{ fontSize: 14, color: 'var(--text-secondary)', fontWeight: 700 }}>Page <span style={{ color: 'var(--text-primary)' }}>{page}</span> sur {pages}</span>
+                    <button onClick={() => setPage(p => p + 1)} disabled={page >= pages} style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, cursor: page >= pages ? 'not-allowed' : 'pointer', color: page >= pages ? 'var(--text-muted)' : 'var(--text-primary)', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                        <ChevronRight size={18} />
                     </button>
                 </div>
             )}

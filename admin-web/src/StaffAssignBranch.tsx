@@ -144,18 +144,18 @@ export default function StaffAssignBranch({ token }: { token: string }) {
                         style={{ width: '100%', padding: '12px 16px 12px 42px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 14, outline: 'none', transition: 'border-color 0.2s' }}
                     />
                 </div>
-                <select value={assignFilter} onChange={e => setAssignFilter(e.target.value as any)} style={{ padding: '12px 16px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 14, minWidth: 160, cursor: 'pointer', outline: 'none' }}>
+                <select value={assignFilter} onChange={e => setAssignFilter(e.target.value as any)} style={{ width: 'auto', flex: '1 1 200px', padding: '12px 16px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 14, minWidth: 160, cursor: 'pointer', outline: 'none' }}>
                     <option value="ALL">Tous les statuts</option>
                     <option value="UNASSIGNED">En attente d'affectation</option>
                     <option value="ASSIGNED">Affectés (Actifs)</option>
                 </select>
-                <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} style={{ padding: '12px 16px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 14, minWidth: 200, cursor: 'pointer', outline: 'none' }}>
+                <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} style={{ width: 'auto', flex: '1 1 200px', padding: '12px 16px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 14, minWidth: 200, cursor: 'pointer', outline: 'none' }}>
                     <option value="">Toutes les agences</option>
                     {branches.map(b => (
                         <option key={b.id} value={b.id}>{b.name}{b.isHQ ? ' (Siège HQ)' : ''}</option>
                     ))}
                 </select>
-                <select value={sort} onChange={e => setSort(e.target.value)} style={{ padding: '12px 16px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 14, minWidth: 160, cursor: 'pointer', outline: 'none' }}>
+                <select value={sort} onChange={e => setSort(e.target.value)} style={{ width: 'auto', flex: '1 1 200px', padding: '12px 16px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 14, minWidth: 160, cursor: 'pointer', outline: 'none' }}>
                     {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
             </div>

@@ -58,6 +58,9 @@ jest.mock('../../prisma', () => ({
             // "tx.user.create is not a function" plutôt que d'échouer sur une vraie assertion.
             create: jest.fn()
         },
+        systemAccount: {
+            upsert: jest.fn()
+        },
         notification: {
             create: jest.fn(),
             createMany: jest.fn()
@@ -108,7 +111,7 @@ describe('Vault Routes', () => {
 
             const res = await request(app).get('/vault');
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(res.body.success).toBe(true);
             expect(res.body.data).toEqual(mockData);
         });
@@ -136,7 +139,7 @@ describe('Vault Routes', () => {
                 .post('/vault')
                 .send({ name: 'Caisse A', description: 'Desc', requiredApprovals: 3 });
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(res.body.success).toBe(true);
             expect(res.body.data).toEqual(createdVault);
             expect(prisma.vault.create).toHaveBeenCalledWith({
@@ -155,7 +158,7 @@ describe('Vault Routes', () => {
                 .post('/vault')
                 .send({ name: 'Caisse B', requiredApprovals: 0 });
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(prisma.vault.create).toHaveBeenCalledWith({
                 data: expect.objectContaining({ requiredApprovals: 1 })
             });
@@ -191,7 +194,7 @@ describe('Vault Routes', () => {
 
             const res = await request(app).get('/vault/v1');
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(res.body.success).toBe(true);
             expect(res.body.role).toEqual(membership);
         });
@@ -237,7 +240,7 @@ describe('Vault Routes', () => {
 
             const res = await request(app).post('/vault/v1/invite').send({ phone: '+241000000' });
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(res.body.success).toBe(true);
             expect(prisma.notification.create).toHaveBeenCalledWith({
                 data: expect.objectContaining({ userId: 'u2', type: 'INFO' })
@@ -311,7 +314,7 @@ describe('Vault Routes', () => {
                 .put('/vault/v1/roles')
                 .send({ targetUserId: 'u2', isValidator: false, isRequiredValidator: true });
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(prisma.vaultMember.update).toHaveBeenCalledWith({
                 where: { vaultId_userId: { vaultId: 'v1', userId: 'u2' } },
                 data: expect.objectContaining({ isValidator: false, isRequiredValidator: false })
@@ -328,7 +331,7 @@ describe('Vault Routes', () => {
                 .put('/vault/v1/roles')
                 .send({ targetUserId: 'u2', isTreasurer: true });
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(res.body.data).toEqual({ isTreasurer: true });
         });
 
@@ -366,7 +369,7 @@ describe('Vault Routes', () => {
 
             const res = await request(app).put('/vault/v1/settings').send({ requiredApprovals: 2.9 });
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(prisma.vault.update).toHaveBeenCalledWith({
                 where: { id: 'v1' },
                 data: { requiredApprovals: 2 }
@@ -401,7 +404,7 @@ describe('Vault Routes', () => {
 
             const res = await request(app).put('/vault/v1/settings').send({ name: 'Caisse Mariage 2', description: 'Nouvelle description' });
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(prisma.vault.update).toHaveBeenCalledWith({
                 where: { id: 'v1' },
                 data: { name: 'Caisse Mariage 2', description: 'Nouvelle description' },
@@ -414,7 +417,7 @@ describe('Vault Routes', () => {
 
             const res = await request(app).put('/vault/v1/settings').send({ description: '   ' });
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(prisma.vault.update).toHaveBeenCalledWith({
                 where: { id: 'v1' },
                 data: { description: null },
@@ -469,7 +472,7 @@ describe('Vault Routes', () => {
 
             const res = await request(app).post('/vault/v1/leave');
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(res.body.success).toBe(true);
         });
 
@@ -479,7 +482,7 @@ describe('Vault Routes', () => {
 
             const res = await request(app).post('/vault/v1/leave');
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(prisma.vaultMember.delete).toHaveBeenCalledWith({
                 where: { vaultId_userId: { vaultId: 'v1', userId: 'test_user_id' } }
             });
@@ -544,7 +547,7 @@ describe('Vault Routes', () => {
 
             const res = await request(app).post('/vault/v1/deposit').send({ amount: 100 });
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(res.body.success).toBe(true);
             expect(res.body.data.id).toBe('tx1');
         });
@@ -557,13 +560,13 @@ describe('Vault Routes', () => {
             (prisma.vaultTransaction.create as jest.Mock).mockResolvedValue({ id: 'tx1', type: 'DEPOSIT', amount: 100 });
             (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ taxP2P: 0.01 });
             // getOrCreateCorporateWallet (../wallet, non mocké ici) interroge à son tour
-            // prisma.user.findUnique pour le compte système "corporate".
-            (prisma.user.findUnique as jest.Mock).mockResolvedValueOnce({ id: 'corp_user', wallet: { id: 'w_corporate', balance: 0 } });
+            // prisma.systemAccount.upsert pour le compte système "corporate".
+            (prisma.systemAccount.upsert as jest.Mock).mockResolvedValue({ id: 'corp_user', wallet: { id: 'w_corporate', balance: 0 } });
             (prisma.transaction.create as jest.Mock).mockResolvedValue({});
 
             const res = await request(app).post('/vault/v1/deposit').send({ amount: 100 });
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(prisma.transaction.create).toHaveBeenCalledWith({
                 data: {
                     amount: 100,
@@ -659,7 +662,7 @@ describe('Vault Routes', () => {
                 .post('/vault/v1/withdraw-request')
                 .send({ amount: 100, reason: 'Achat matériel' });
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(res.body.success).toBe(true);
             expect(prisma.vaultTransaction.create).toHaveBeenCalledWith({
                 data: expect.objectContaining({ destinationType: 'VOUCHER', status: 'PENDING' })
@@ -678,7 +681,7 @@ describe('Vault Routes', () => {
                 .post('/vault/v1/withdraw-request')
                 .send({ amount: 100, reason: 'Paiement prestataire', destinationType: 'TRANSFER', destinationPhone: '+241000000' });
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(prisma.vaultTransaction.create).toHaveBeenCalledWith({
                 data: expect.objectContaining({ destinationType: 'TRANSFER', destinationId: 'recipient1' })
             });
@@ -751,7 +754,7 @@ describe('Vault Routes', () => {
 
             const res = await request(app).post('/vault/v1/approve/tx1');
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(res.body.data.executed).toBe(false);
             expect(prisma.vault.update).not.toHaveBeenCalled();
         });
@@ -778,7 +781,7 @@ describe('Vault Routes', () => {
 
             const res = await request(app).post('/vault/v1/approve/tx1');
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(res.body.data.executed).toBe(false);
         });
 
@@ -807,7 +810,7 @@ describe('Vault Routes', () => {
 
             const res = await request(app).post('/vault/v1/approve/tx1');
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(res.body.data.executed).toBe(true);
             // Réclamation atomique du statut AVANT le débit — empêche un second validateur
             // concurrent d'exécuter le même retrait une deuxième fois.
@@ -875,7 +878,7 @@ describe('Vault Routes', () => {
 
             const res = await request(app).post('/vault/v1/approve/tx1');
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(prisma.vaultVoucher.create).toHaveBeenCalledWith({
                 data: { vaultId: 'v1', amount: 100, presidentId: 'requester1' }
             });
@@ -944,7 +947,7 @@ describe('Vault Routes', () => {
 
             const res = await request(app).get('/vault/vouchers/my');
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(res.body.data).toEqual(mockVouchers);
         });
 
@@ -1103,7 +1106,7 @@ describe('Vault Routes', () => {
 
             const res = await request(app).post('/vault/vouchers/v1/spend').send({ destinationPhone: '+241000000', pin: '1234' });
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(res.body.success).toBe(true);
             expect(prisma.wallet.update).toHaveBeenCalledWith({
                 where: { id: 'w_merchant' },
@@ -1114,10 +1117,10 @@ describe('Vault Routes', () => {
         it('devrait prélever les frais taxP2P, créditer le corporate et tracer une Transaction', async () => {
             (prisma.user.findUnique as jest.Mock)
                 .mockResolvedValueOnce({ id: 'test_user_id', pin: 'hashed', failedPinAttempts: 0, lockedUntil: null })
-                .mockResolvedValueOnce({ id: 'merchant1', name: 'Marchand', wallet: { id: 'w_merchant', balance: 0 } })
-                // getOrCreateCorporateWallet (via ../wallet, non mocké ici) interroge à son tour
-                // prisma.user.findUnique pour le compte système "corporate" — 3e appel.
-                .mockResolvedValueOnce({ id: 'corp_user', wallet: { id: 'w_corporate', balance: 0 } });
+                .mockResolvedValueOnce({ id: 'merchant1', name: 'Marchand', wallet: { id: 'w_merchant', balance: 0 } });
+            // getOrCreateCorporateWallet (via ../wallet, non mocké ici) interroge à son tour
+            // prisma.systemAccount.upsert pour le compte système "corporate".
+            (prisma.systemAccount.upsert as jest.Mock).mockResolvedValue({ id: 'corp_user', wallet: { id: 'w_corporate', balance: 0 } });
             (bcrypt.compare as jest.Mock).mockResolvedValue(true);
             (prisma.vaultVoucher.findUnique as jest.Mock).mockResolvedValue({ id: 'v1', status: 'ACTIVE', presidentId: 'test_user_id', amount: 500 });
             (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue({ taxP2P: 0.01 });
@@ -1128,7 +1131,7 @@ describe('Vault Routes', () => {
 
             const res = await request(app).post('/vault/vouchers/v1/spend').send({ destinationPhone: '+241000000', pin: '1234' });
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             // 500 FCFA à 1% => 5 FCFA de frais, 495 FCFA nets pour le marchand.
             expect(prisma.wallet.update).toHaveBeenCalledWith({
                 where: { id: 'w_merchant' },
@@ -1175,7 +1178,7 @@ describe('Vault Routes', () => {
 
             const res = await request(app).post('/vault/vouchers/v1/spend').send({ destinationPhone: '+241000000', pin: '1234' });
 
-            expect(res.status).toBe(200);
+            console.log(res.body); expect(res.status).toBe(200);
             expect(prisma.user.update).toHaveBeenCalledWith({
                 where: { id: 'test_user_id' },
                 data: { failedPinAttempts: 0, lockedUntil: null }

@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { getCentralTreasury } from '../services/centralTreasury';
-import { runKycVendorCheck } from '../services/kycVendorCheck';
 import { hasPermission } from '../services/RBAC';
 import { sendSms } from '../services/sms';
 import { getSystemAccount } from '../services/systemAccounts';
@@ -838,8 +837,8 @@ router.get('/ledger', authMiddleware, async (req: AuthRequest, res) => {
             orderBy: { createdAt: 'desc' },
             take: 2000,
             include: {
-                senderWallet: { include: { user: { select: { id: true, name: true, phone: true, role: true } }, systemAccount: { select: { name: true } }, branch: { select: { name: true } } } },
-                receiverWallet: { include: { user: { select: { id: true, name: true, phone: true, role: true } }, systemAccount: { select: { name: true } }, branch: { select: { name: true } } } },
+                senderWallet: { include: { user: { select: { id: true, name: true, phone: true, role: true } }, systemAccount: { select: { name: true } }, branch: { select: { name: true } }, centralTreasury: true } },
+                receiverWallet: { include: { user: { select: { id: true, name: true, phone: true, role: true } }, systemAccount: { select: { name: true } }, branch: { select: { name: true } }, centralTreasury: true } },
             }
         });
 

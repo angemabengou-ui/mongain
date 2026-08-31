@@ -16,20 +16,20 @@ const fmtDate = (iso: string) => new Date(iso).toLocaleString('fr-FR', { day: '2
 
 const KIND_META: Record<string, { label: string; icon: any; color: string; bg: string }> = {
     CENTRAL_TREASURY: { label: 'Trésorerie Centrale', icon: Landmark, color: 'var(--accent)', bg: 'var(--accent-bg)' },
-    CORPORATE: { label: 'Corporate (Revenus)', icon: Building2, color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' },
-    EXTERNAL_GATEWAY: { label: 'Passerelle Externe', icon: Repeat, color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' },
-    TONTINE_VAULT: { label: 'Coffre Tontine', icon: Server, color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' },
-    SERVICE_PARTNER_SEEG: { label: 'Service Partenaire (SEEG)', icon: ShoppingBag, color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' },
-    SERVICE_PARTNER_CANAL: { label: 'Service Partenaire (CANAL)', icon: ShoppingBag, color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' },
-    SERVICE_PARTNER_TELECOM: { label: 'Service Partenaire (Télécom)', icon: ShoppingBag, color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' },
+    CORPORATE: { label: 'Corporate (Revenus)', icon: Building2, color: 'var(--text-primary)', bg: 'var(--bg-secondary)' },
+    EXTERNAL_GATEWAY: { label: 'Passerelle Externe', icon: Repeat, color: 'var(--text-primary)', bg: 'var(--bg-secondary)' },
+    TONTINE_VAULT: { label: 'Coffre Tontine', icon: Server, color: 'var(--text-primary)', bg: 'var(--bg-secondary)' },
+    SERVICE_PARTNER_SEEG: { label: 'Service Partenaire (SEEG)', icon: ShoppingBag, color: 'var(--text-primary)', bg: 'var(--bg-secondary)' },
+    SERVICE_PARTNER_CANAL: { label: 'Service Partenaire (CANAL)', icon: ShoppingBag, color: 'var(--text-primary)', bg: 'var(--bg-secondary)' },
+    SERVICE_PARTNER_TELECOM: { label: 'Service Partenaire (Télécom)', icon: ShoppingBag, color: 'var(--text-primary)', bg: 'var(--bg-secondary)' },
 };
 
 function KindBadge({ kind }: { kind: string }) {
-    const meta = KIND_META[kind] || { label: 'Compte système', icon: Server, color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' };
+    const meta = KIND_META[kind] || { label: 'Compte système', icon: Server, color: 'var(--text-primary)', bg: 'var(--bg-secondary)' };
     const Icon = meta.icon;
     return (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 10, background: meta.bg, color: meta.color }}>
-            <Icon size={11} /> {meta.label}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 8, background: meta.bg, color: meta.color }}>
+            <Icon size={12} /> {meta.label}
         </span>
     );
 }
@@ -82,51 +82,62 @@ export default function SystemAccounts({ token, onAdjust }: { token: string; onA
     if (selected) {
         return (
             <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-                <button onClick={() => { setSelected(null); setTransactions([]); }} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13, marginBottom: 16, padding: 0 }}>
-                    <ArrowLeft size={15} /> Retour aux comptes système
+                <button onClick={() => { setSelected(null); setTransactions([]); }} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13, marginBottom: 16, padding: 0, fontWeight: 700 }}>
+                    <ArrowLeft size={16} /> Retour aux comptes système
                 </button>
 
                 <PageHeader
                     title={selected.name}
                     subtitle={selected.kind === 'CENTRAL_TREASURY' ? 'Contrepartie interne de la Trésorerie Centrale.' : 'Compte technique interne — pas un client.'}
                     action={onAdjust && (
-                        <button onClick={() => onAdjust(selected.walletId, selected.name)} style={{ padding: '10px 16px', background: 'var(--btn-dark-bg)', color: 'var(--btn-dark-text)', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
-                            Créer un ajustement (Maker/Checker)
+                        <button onClick={() => onAdjust(selected.walletId, selected.name)} style={{ padding: '10px 20px', background: 'var(--btn-dark-bg)', color: 'var(--btn-dark-text)', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 800, fontSize: 13, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                            Ajustement Manuel
                         </button>
                     )}
                 />
 
-                <div style={{ display: 'flex', gap: 16, margin: '20px 0 28px' }}>
-                    <div className="table-container" style={{ padding: 16, flex: '1 1 240px' }}>
-                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 6 }}>Solde actuel</div>
-                        <div style={{ fontSize: 22, fontWeight: 800 }}>{fmt(selected.balance)}</div>
+                <div style={{ display: 'flex', gap: 16, margin: '20px 0 32px' }}>
+                    <div className="card" style={{ padding: 24, flex: '1 1 240px' }}>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 6, fontWeight: 800 }}>Solde actuel</div>
+                        <div style={{ fontSize: 26, fontWeight: 900, color: 'var(--text-primary)' }}>{fmt(selected.balance)}</div>
                     </div>
-                    <div className="table-container" style={{ padding: 16, flex: '1 1 240px' }}>
-                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 6 }}>Type</div>
-                        <div style={{ marginTop: 4 }}><KindBadge kind={selected.kind} /></div>
+                    <div className="card" style={{ padding: 24, flex: '1 1 240px' }}>
+                        <div style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 6, fontWeight: 800 }}>Type</div>
+                        <div style={{ marginTop: 8 }}><KindBadge kind={selected.kind} /></div>
                     </div>
                 </div>
 
-                <h3 style={{ fontSize: 16, marginBottom: 12 }}>Historique des mouvements ({transactions.length})</h3>
-                <div className="table-container">
-                    <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, textAlign: 'left' }}>
-                        <thead><tr><th>Date</th><th>Sens</th><th>Montant</th><th>Contrepartie</th><th>Référence</th><th>Statut</th></tr></thead>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <h3 style={{ fontSize: 18, fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>Historique des mouvements ({transactions.length})</h3>
+                </div>
+                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 14 }}>
+                        <thead>
+                            <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                                {['Date', 'Sens', 'Montant', 'Contrepartie', 'Référence', 'Statut'].map((h, i) => (
+                                    <th key={i} style={{ padding: '16px 20px', color: 'var(--text-muted)', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                                ))}
+                            </tr>
+                        </thead>
                         <tbody>
                             {detailLoading ? (
-                                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Chargement...</td></tr>
+                                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontWeight: 600 }}>Chargement...</td></tr>
                             ) : transactions.length === 0 ? (
-                                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Aucun mouvement.</td></tr>
+                                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontWeight: 600 }}>Aucun mouvement.</td></tr>
                             ) : transactions.map((tx: any) => {
                                 const isDebit = tx.senderWallet && tx.senderWallet.id === selected.walletId;
                                 const counterparty = isDebit ? tx.receiverWallet : tx.senderWallet;
                                 return (
-                                    <tr key={tx.id}>
-                                        <td style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{fmtDate(tx.createdAt)}</td>
-                                        <td style={{ color: isDebit ? 'var(--danger)' : 'var(--success)', fontWeight: 700 }}>{isDebit ? 'Débit' : 'Crédit'}</td>
-                                        <td style={{ fontWeight: 700 }}>{fmt(tx.amount)}</td>
-                                        <td>{counterparty?.user?.name || counterparty?.systemAccount?.name || counterparty?.branch?.name || '—'}<div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{counterparty?.user?.phone}</div></td>
-                                        <td style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--text-secondary)' }}>{tx.reference || tx.id.slice(0, 8)}</td>
-                                        <td style={{ color: 'var(--text-secondary)' }}>{tx.status}</td>
+                                    <tr key={tx.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                        <td style={{ padding: '16px 20px', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>{fmtDate(tx.createdAt)}</td>
+                                        <td style={{ padding: '16px 20px', color: isDebit ? 'var(--danger)' : 'var(--success)', fontWeight: 800 }}>{isDebit ? 'DÉBIT' : 'CRÉDIT'}</td>
+                                        <td style={{ padding: '16px 20px', fontWeight: 900, color: 'var(--text-primary)' }}>{fmt(tx.amount)}</td>
+                                        <td style={{ padding: '16px 20px' }}>
+                                            <div style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{counterparty?.user?.name || counterparty?.systemAccount?.name || counterparty?.branch?.name || '—'}</div>
+                                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{counterparty?.user?.phone}</div>
+                                        </td>
+                                        <td style={{ padding: '16px 20px', fontFamily: 'monospace', fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>{tx.reference || tx.id.slice(0, 8)}</td>
+                                        <td style={{ padding: '16px 20px', color: 'var(--text-secondary)', fontWeight: 700 }}>{tx.status}</td>
                                     </tr>
                                 );
                             })}
@@ -143,38 +154,42 @@ export default function SystemAccounts({ token, onAdjust }: { token: string; onA
                 <PageHeader title="Comptes Système" subtitle="Comptes techniques internes (Trésorerie Centrale, Passerelle Externe, Corporate, Coffre Tontine) — leur solde n'appartient à aucun client, mais il pèse dans les totaux de Trésorerie. Lecture seule ; toute correction passe par le circuit Ajustement (Maker/Checker)." />
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', maxWidth: 360 }}>
-                <Search size={15} color="var(--text-muted)" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 16px', maxWidth: 360 }}>
+                <Search size={16} color="var(--text-muted)" />
                 <input
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                     placeholder="Rechercher un compte…"
-                    style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text-primary)', fontSize: 13 }}
+                    style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}
                 />
             </div>
 
             {error && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--danger)', background: 'var(--danger-bg)', padding: '10px 16px', borderRadius: 8, marginBottom: 20 }}>
-                    <span style={{ flex: 1 }}>{error}</span>
-                    <button onClick={fetchList} style={{ padding: '6px 12px', background: 'var(--btn-dark-bg)', color: 'var(--btn-dark-text)', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Réessayer</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--danger)', background: 'var(--danger-bg)', padding: '10px 16px', borderRadius: 10, marginBottom: 20 }}>
+                    <span style={{ flex: 1, fontWeight: 600 }}>{error}</span>
+                    <button onClick={fetchList} style={{ padding: '6px 12px', background: 'var(--btn-dark-bg)', color: 'var(--btn-dark-text)', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Réessayer</button>
                 </div>
             )}
 
-            <div className="table-container">
-                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, textAlign: 'left' }}>
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 14 }}>
                     <thead>
-                        <tr><th>Compte</th><th>Type</th><th>Solde</th></tr>
+                        <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                            {['Compte', 'Type', 'Solde'].map((h, i) => (
+                                <th key={i} style={{ padding: '16px 20px', color: 'var(--text-muted)', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                            ))}
+                        </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={3} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Chargement...</td></tr>
+                            <tr><td colSpan={3} style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontWeight: 600 }}>Chargement...</td></tr>
                         ) : filteredAccounts.length === 0 ? (
-                            <tr><td colSpan={3} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Aucun compte système.</td></tr>
+                            <tr><td colSpan={3} style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontWeight: 600 }}>Aucun compte système trouvé.</td></tr>
                         ) : filteredAccounts.map(a => (
-                            <tr key={a.id} style={{ cursor: 'pointer' }} onClick={() => openAccount(a)}>
-                                <td style={{ fontWeight: 600 }}>{a.name}</td>
-                                <td><KindBadge kind={a.kind} /></td>
-                                <td style={{ fontWeight: 700 }}>{fmt(a.balance)}</td>
+                            <tr key={a.id} style={{ cursor: 'pointer', borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }} onClick={() => openAccount(a)} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                <td style={{ padding: '16px 20px', fontWeight: 800, color: 'var(--text-primary)' }}>{a.name}</td>
+                                <td style={{ padding: '16px 20px' }}><KindBadge kind={a.kind} /></td>
+                                <td style={{ padding: '16px 20px', fontWeight: 900, color: 'var(--text-primary)' }}>{fmt(a.balance)}</td>
                             </tr>
                         ))}
                     </tbody>

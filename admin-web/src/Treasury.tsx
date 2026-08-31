@@ -344,7 +344,7 @@ export default function Treasury({ token, hasPerm, prefillAdjustTarget, staffId 
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                                 <thead>
                                     <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
-                                        {['Référence', 'Opération', 'Montant', 'Destinataire', 'Généré par (Maker)', 'Audité par (Checker)', 'Statut', 'Actions (Checker)'].map((h, i) => (
+                                        {['Réf / Date', 'Opération', 'Montant', 'Trajectoire (Origine → Dest.)', 'Créé par', 'Validation (Checker)', 'Statut', 'Actions'].map((h, i) => (
                                             <th key={i} style={{ textAlign: 'left', padding: '14px 16px', color: 'var(--text-muted)', fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>{h}</th>
                                         ))}
                                     </tr>
@@ -360,14 +360,41 @@ export default function Treasury({ token, hasPerm, prefillAdjustTarget, staffId 
                                             </td>
                                             <td style={{ padding: '14px 16px', fontWeight: 900, color: 'var(--text-primary)' }}>{fmt(r.amount)}</td>
                                             <td style={{ padding: '14px 16px' }}>
-                                                {r.type === 'ISSUANCE' ? <span style={{ color: 'var(--success)', fontWeight: 600 }}>Réserve Centrale</span> : (r.targetBranch ? `${r.targetBranch.name} (${r.targetBranch.code})` : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Wallet {r.targetWalletId || 'Inconnu'}</span>)}
+                                                {r.type === 'ISSUANCE' ? (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                                                        <span style={{ color: 'var(--text-muted)' }}>Externe</span>
+                                                        <ArrowRight size={12} color="var(--text-muted)" />
+                                                        <span style={{ color: 'var(--success)', fontWeight: 800 }}>Réserve Centrale</span>
+                                                    </div>
+                                                ) : r.type === 'ALLOCATION' ? (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                                                        <span style={{ color: 'var(--accent)', fontWeight: 800 }}>Réserve Centrale</span>
+                                                        <ArrowRight size={12} color="var(--text-muted)" />
+                                                        <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{r.targetBranch ? `${r.targetBranch.name} (${r.targetBranch.code})` : `Wallet ${r.targetWalletId}`}</span>
+                                                    </div>
+                                                ) : r.type === 'RETURN' ? (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+                                                        <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{r.targetBranch ? `${r.targetBranch.name} (${r.targetBranch.code})` : `Wallet ${r.targetWalletId}`}</span>
+                                                        <ArrowRight size={12} color="var(--text-muted)" />
+                                                        <span style={{ color: 'var(--accent)', fontWeight: 800 }}>Réserve Centrale</span>
+                                                    </div>
+                                                ) : (
+                                                    <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Opération Système</span>
+                                                )}
                                             </td>
                                             <td style={{ padding: '14px 16px' }}>
                                                 <div style={{ fontWeight: 600 }}>{r.maker.name}</div>
                                                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.maker.role}</div>
                                             </td>
                                             <td style={{ padding: '14px 16px' }}>
-                                                {r.checker ? <><div style={{ fontWeight: 600 }}>{r.checker.name}</div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.checker.role}</div></> : <span style={{ color: 'var(--text-muted)' }}>En attente</span>}
+                                                {r.checker ? (
+                                                    <><div style={{ fontWeight: 600 }}>{r.checker.name}</div><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.checker.role}</div></>
+                                                ) : r.status === 'PENDING' ? (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                                        <span style={{ color: 'var(--warning)', fontWeight: 800, fontSize: 12 }}>En attente d'audit</span>
+                                                        <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Niveau requis: <strong style={{ color: 'inherit' }}>SUPER_ADMIN</strong> ou <strong style={{ color: 'inherit' }}>ADMIN</strong></span>
+                                                    </div>
+                                                ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                                                 {r.rejectionReason && <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4, fontStyle: 'italic' }}>Rejeté: {r.rejectionReason}</div>}
                                             </td>
                                             <td style={{ padding: '14px 16px' }}><StatusBadge status={r.status} /></td>
