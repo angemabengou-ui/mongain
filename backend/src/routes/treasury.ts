@@ -210,9 +210,9 @@ router.post('/requests/:id/approve', authMiddleware, async (req: AuthRequest, re
 
             if (!request) throw new Error('Demande introuvable.');
 
-            // ANTI-AUTO APPROVAL STRICT (sauf SUPER_ADMIN, autorité ultime — évite une
+            // ANTI-AUTO APPROVAL STRICT (sauf SUPER_ADMIN et ADMIN, autorités ultimes — évite une
             // impasse totale si un seul compte staff actif existe dans le système)
-            if (request.makerId === checker.id && checker.role !== 'SUPER_ADMIN') {
+            if (request.makerId === checker.id && checker.role !== 'SUPER_ADMIN' && checker.role !== 'ADMIN') {
                 throw new Error('Principe de sûreté enfreint : Un Maker ne peut pas s\'approuver.');
             }
 
