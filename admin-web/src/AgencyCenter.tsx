@@ -542,25 +542,25 @@ export default function AgencyCenter({ token, hasPerm }: { token: string; hasPer
 
     return (
         <div style={{ maxWidth: 1100, margin: '0 auto', paddingBottom: 60 }}>
-            <div style={{ marginBottom: 24 }}>
+            <div style={{ marginBottom: 32 }}>
                 <PageHeader
                     title="Réseau d'Agences"
                     subtitle={`${total} agence${total !== 1 ? 's' : ''} dans le réseau Mongain`}
                     action={isAdmin && (
-                        <button onClick={() => setShowCreate(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: 'var(--btn-dark-bg)', color: 'var(--btn-dark-text)', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>
+                        <button onClick={() => setShowCreate(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: 'linear-gradient(135deg, var(--accent) 0%, rgba(139, 92, 246, 0.8) 100%)', color: '#fff', border: 'none', borderRadius: 12, cursor: 'pointer', fontWeight: 800, fontSize: 13, boxShadow: '0 4px 12px rgba(139, 92, 246, 0.25)', transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'} onMouseLeave={e => e.currentTarget.style.transform = 'none'}>
                             <Plus size={18} /> Nouvelle Agence
                         </button>
                     )}
                 />
             </div>
 
-            {/* Filters */}
-            <div className="card" style={{ padding: '14px 20px', marginBottom: 20, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
-                    <Search size={16} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                    <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Rechercher par nom, code, ville, responsable..." style={{ width: '100%', padding: '8px 8px 8px 34px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14 }} />
+            {/* ── FILTRES (Glassmorphism/Sleek) ── */}
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', padding: 20, background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }}>
+                <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 200 }}>
+                    <Search size={18} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Rechercher par nom, code, ville, responsable..." style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px 12px 42px', color: 'var(--text-primary)', fontSize: 14, outline: 'none', transition: 'border-color 0.2s' }} />
                 </div>
-                <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1); }} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14 }}>
+                <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1); }} style={{ flex: '0 0 160px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px', color: 'var(--text-primary)', fontSize: 14, outline: 'none', cursor: 'pointer' }}>
                     <option value="">Tous statuts</option>
                     <option value="ACTIVE">Active</option>
                     <option value="SUSPENDED">Suspendue</option>
@@ -568,53 +568,68 @@ export default function AgencyCenter({ token, hasPerm }: { token: string; hasPer
                     <option value="CONFIGURED">Configurée</option>
                     <option value="CLOSED">Fermée</option>
                 </select>
-                <input placeholder="Ville..." value={filterCity} onChange={e => { setFilterCity(e.target.value); setPage(1); }} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, width: 130 }} />
-                <button onClick={() => { setPage(1); fetchBranches(); }} style={{ padding: '8px 14px', background: 'var(--btn-dark-bg)', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
-                    <Filter size={14} />
+                <div style={{ position: 'relative', flex: '0 0 160px' }}>
+                    <MapPin size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input placeholder="Ville..." value={filterCity} onChange={e => { setFilterCity(e.target.value); setPage(1); }} style={{ width: '100%', padding: '12px 16px 12px 38px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 14, outline: 'none' }} />
+                </div>
+                <button onClick={() => { setPage(1); fetchBranches(); }} style={{ padding: '12px 18px', background: 'var(--btn-dark-bg)', color: 'var(--btn-dark-text)', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Filter size={16} /> Ajuster
                 </button>
             </div>
 
-            {/* Error */}
-            {error && <div style={{ padding: 16, background: 'var(--danger-bg)', color: 'var(--danger)', borderRadius: 10, marginBottom: 16, fontWeight: 600 }}>{error}</div>}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, padding: '0 8px' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)' }}>Annuaire des agences</span>
+            </div>
 
-            {/* Table */}
+            {error && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--danger)', background: 'var(--danger-bg)', padding: '16px 20px', borderRadius: 12, marginBottom: 24, fontWeight: 600 }}>
+                    <span style={{ flex: 1 }}>{error}</span>
+                </div>
+            )}
+
+            {/* ── TABLEAU ── */}
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 {loading ? (
-                    <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}><RefreshCw size={24} style={{ animation: 'spin 1s linear infinite' }} /></div>
+                    <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)', fontWeight: 600 }}><RefreshCw size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: 10 }} /><br />Chargement du réseau...</div>
                 ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-                        <thead><tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary)' }}>
-                            {['Agence', 'Code', 'Ville', 'Responsable', 'Staff', 'Coffre', 'Statut', 'Action'].map(h => <th key={h} style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 700, color: 'var(--text-muted)', fontSize: 12 }}>{h}</th>)}
-                        </tr></thead>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 14 }}>
+                        <thead>
+                            <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                                {['Agence', 'Code', 'Ville', 'Responsable', 'Staff', 'Coffre', 'Statut', 'Action'].map(h => <th key={h} style={{ padding: '16px 20px', color: 'var(--text-muted)', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>)}
+                            </tr>
+                        </thead>
                         <tbody>
                             {branches.map(b => (
-                                <tr key={b.id} style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer', transition: 'background 0.15s' }}
-                                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-secondary)')}
-                                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                                    <td style={{ padding: '14px 16px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                            <div style={{ width: 36, height: 36, borderRadius: 10, background: b.isHQ ? '#7c3aed20' : 'var(--accent-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: b.isHQ ? '#7c3aed' : 'var(--accent)' }}><Building2 size={18} /></div>
+                                <tr key={b.id} style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer', transition: 'background 0.2s' }}
+                                    onClick={(e) => { if ((e.target as HTMLElement).tagName !== 'BUTTON') open360(b); }}
+                                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                    <td style={{ padding: '16px 20px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                            <div style={{ width: 40, height: 40, borderRadius: 10, background: b.isHQ ? 'rgba(124, 58, 237, 0.15)' : 'var(--accent-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: b.isHQ ? '#7c3aed' : 'var(--accent)' }}>
+                                                <Building2 size={20} />
+                                            </div>
                                             <div>
-                                                <div style={{ fontWeight: 700 }}>{b.name} {b.isHQ && <span style={{ fontSize: 10, background: '#7c3aed20', color: '#7c3aed', padding: '1px 6px', borderRadius: 10, fontWeight: 800 }}>SIÈGE</span>}</div>
+                                                <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--text-primary)', marginBottom: 2 }}>{b.name} {b.isHQ && <span style={{ fontSize: 10, background: 'rgba(124, 58, 237, 0.15)', color: '#7c3aed', padding: '2px 8px', borderRadius: 10, fontWeight: 900, marginLeft: 6 }}>SIÈGE</span>}</div>
                                                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{b.city || '—'} {b.region ? `• ${b.region}` : ''}</div>
                                             </div>
                                         </div>
                                     </td>
-                                    <td style={{ padding: '14px 16px' }}><code style={{ fontSize: 12, background: 'var(--bg-secondary)', padding: '2px 8px', borderRadius: 6 }}>{b.code}</code></td>
-                                    <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}><MapPin size={13} style={{ marginRight: 4 }} />{b.city || '—'}</td>
-                                    <td style={{ padding: '14px 16px', color: 'var(--text-secondary)' }}>{b.manager?.name || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Non assigné</span>}</td>
-                                    <td style={{ padding: '14px 16px' }}><div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Users size={14} style={{ color: 'var(--text-muted)' }} /><span style={{ fontWeight: 600 }}>{b._count?.staff || 0}</span></div></td>
-                                    <td style={{ padding: '14px 16px', fontWeight: 700 }}>{b.wallet ? fmt(b.balance) : '—'}</td>
-                                    <td style={{ padding: '14px 16px' }}><StatusBadge status={b.status} /></td>
-                                    <td style={{ padding: '14px 16px' }}>
-                                        <button onClick={() => open360(b)} style={{ padding: '6px 14px', background: 'var(--btn-dark-bg)', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
-                                            <Eye size={13} /> 360°
+                                    <td style={{ padding: '16px 20px' }}><code style={{ fontSize: 12, background: 'var(--bg-secondary)', border: '1px solid var(--border)', padding: '4px 8px', borderRadius: 8, color: 'var(--text-secondary)' }}>{b.code}</code></td>
+                                    <td style={{ padding: '16px 20px', color: 'var(--text-secondary)', fontWeight: 600 }}><MapPin size={14} style={{ marginRight: 6, verticalAlign: -2 }} />{b.city || '—'}</td>
+                                    <td style={{ padding: '16px 20px', color: 'var(--text-secondary)' }}>{b.manager?.name ? <span style={{ fontWeight: 600 }}>{b.manager.name}</span> : <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: 13 }}>Non assigné</span>}</td>
+                                    <td style={{ padding: '16px 20px' }}><div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, color: 'var(--text-secondary)' }}><Users size={16} />{b._count?.staff || 0}</div></td>
+                                    <td style={{ padding: '16px 20px', fontWeight: 900, color: 'var(--text-primary)' }}>{b.wallet ? fmt(b.balance) : '—'}</td>
+                                    <td style={{ padding: '16px 20px' }}><StatusBadge status={b.status} /></td>
+                                    <td style={{ padding: '16px 20px' }}>
+                                        <button onClick={(e) => { e.stopPropagation(); open360(b); }} style={{ padding: '8px 14px', background: 'var(--btn-dark-bg)', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, transition: '0.2s' }} onMouseEnter={e => e.currentTarget.style.opacity = '0.8'} onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
+                                            <Eye size={14} /> 360°
                                         </button>
                                     </td>
                                 </tr>
                             ))}
                             {branches.length === 0 && !loading && (
-                                <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Aucune agence trouvée.</td></tr>
+                                <tr><td colSpan={8} style={{ padding: 80, textAlign: 'center', color: 'var(--text-muted)', fontWeight: 600, fontSize: 15 }}>Aucune agence trouvée dans le réseau.</td></tr>
                             )}
                         </tbody>
                     </table>
@@ -623,10 +638,14 @@ export default function AgencyCenter({ token, hasPerm }: { token: string; hasPer
 
             {/* Pagination */}
             {pages > 1 && (
-                <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'center', alignItems: 'center' }}>
-                    <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'none', cursor: 'pointer' }}><ChevronLeft size={16} /></button>
-                    <span style={{ padding: '8px 14px', fontWeight: 600 }}>Page {page} / {pages}</span>
-                    <button disabled={page >= pages} onClick={() => setPage(p => p + 1)} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'none', cursor: 'pointer' }}><ChevronRight size={16} /></button>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 24 }}>
+                    <button onClick={() => setPage(p => p - 1)} disabled={page <= 1} style={{ padding: 10, background: 'var(--bg-secondary)', border: 'none', borderRadius: 10, cursor: page <= 1 ? 'not-allowed' : 'pointer', color: page <= 1 ? 'var(--text-muted)' : 'var(--text-primary)', transition: '0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+                        <ChevronLeft size={18} />
+                    </button>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', padding: '6px 16px', borderRadius: 20 }}>Page {page} / {pages}</span>
+                    <button onClick={() => setPage(p => p + 1)} disabled={page >= pages} style={{ padding: 10, background: 'var(--bg-secondary)', border: 'none', borderRadius: 10, cursor: page >= pages ? 'not-allowed' : 'pointer', color: page >= pages ? 'var(--text-muted)' : 'var(--text-primary)', transition: '0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+                        <ChevronRight size={18} />
+                    </button>
                 </div>
             )}
 
