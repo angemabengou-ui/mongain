@@ -1,5 +1,6 @@
-import { AlertTriangle, Briefcase, Search, Store, User, Users as UsersIcon } from 'lucide-react';
+import { AlertTriangle, Briefcase, ChevronLeft, ChevronRight, Search, Store, User, Users as UsersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import PageHeader from './components/PageHeader';
 import { API_URL } from './config';
 import Customer360 from './Customer360';
 
@@ -152,38 +153,37 @@ export default function UsersManagement({ token, staffRole, hasPerm, lockedRole,
     };
 
     return (
-        <div className="dashboard-content" style={{ position: 'relative' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                <div>
-                    <h2>{isAgentView ? 'Agents Mongain (réseau historique)' : 'Comptes Clients & Marchands (C-360)'}</h2>
-                    <p style={{ color: 'var(--text-secondary)' }}>
-                        {isAgentView
-                            ? "Comptes Agent créés avant le système d'agences. Pour un nouvel agent rattaché à une agence avec les droits opérationnels complets (session de caisse, coffre), utilisez Organisation Interne > Gestion du Personnel."
-                            : "Comptes auto-inscrits depuis l'app mobile (clients) ou créés ici (marchands) — retrouvez, identifiez et analysez-les grâce à la vue 360."}
-                    </p>
-                </div>
-                {staffRole === 'SUPER_ADMIN' && !isAgentView && (
-                    <button onClick={() => setShowCreatePro(true)} className="btn-primary" style={{ width: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <Briefcase size={18} /> Créer Compte Marchand
-                    </button>
-                )}
+        <div style={{ maxWidth: 1100, margin: '0 auto', paddingBottom: 60, position: 'relative' }}>
+            <div style={{ marginBottom: 32 }}>
+                <PageHeader
+                    title={isAgentView ? 'Agents Mongain (réseau historique)' : 'Comptes Clients & Marchands (C-360)'}
+                    subtitle={isAgentView
+                        ? "Comptes Agent créés avant le système d'agences. Pour un nouvel agent rattaché à une agence avec les droits opérationnels complets, utilisez Organisation Interne > Gestion du Personnel."
+                        : "Comptes auto-inscrits depuis l'app mobile (clients) ou créés ici (marchands) — retrouvez, identifiez et analysez-les grâce à la vue 360."}
+                    action={staffRole === 'SUPER_ADMIN' && !isAgentView && (
+                        <button onClick={() => setShowCreatePro(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: 'linear-gradient(135deg, var(--accent) 0%, rgba(139, 92, 246, 0.8) 100%)', color: '#fff', border: 'none', borderRadius: 12, cursor: 'pointer', fontWeight: 800, fontSize: 13, boxShadow: '0 4px 12px rgba(139, 92, 246, 0.25)', transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'} onMouseLeave={e => e.currentTarget.style.transform = 'none'}>
+                            <Briefcase size={18} /> Créer Compte Marchand
+                        </button>
+                    )}
+                />
             </div>
 
             {!isAgentView && (
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
                     {[
-                        { val: 'USER', label: 'Clients' },
-                        { val: 'MERCHANT', label: 'Marchands' },
-                        { val: 'ALL', label: 'Tous' },
+                        { val: 'USER', label: 'Clients B2C' },
+                        { val: 'MERCHANT', label: 'Marchands B2B' },
+                        { val: 'ALL', label: 'Tout Vue' },
                     ].map(seg => (
                         <button
                             key={seg.val}
                             onClick={() => { setRoleFilter(seg.val as any); setCurrentPage(1); }}
                             style={{
-                                padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-                                border: `1px solid ${roleFilter === seg.val ? 'var(--accent)' : 'var(--border)'}`,
-                                background: roleFilter === seg.val ? 'var(--accent)' : 'var(--bg-card)',
-                                color: roleFilter === seg.val ? '#fff' : 'var(--text-primary)',
+                                padding: '10px 20px', borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: 'pointer', letterSpacing: '0.03em',
+                                border: roleFilter === seg.val ? 'none' : '1px solid var(--border)',
+                                background: roleFilter === seg.val ? 'var(--bg-primary)' : 'var(--bg-card)',
+                                color: roleFilter === seg.val ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                boxShadow: roleFilter === seg.val ? '0 4px 12px rgba(0,0,0,0.1) inset' : 'none',
                             }}
                         >
                             {seg.label}
@@ -192,60 +192,55 @@ export default function UsersManagement({ token, staffRole, hasPerm, lockedRole,
                 </div>
             )}
 
-            <div style={{
-                display: 'flex',
-                gap: '16px',
-                marginBottom: '24px',
-                flexWrap: 'wrap',
-                alignItems: 'center'
-            }}>
-                <div style={{ display: 'flex', gap: '8px', flex: '1 1 300px', maxWidth: '500px' }}>
+            {/* ── FILTRES (Glassmorphism/Sleek) ── */}
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', padding: 20, background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }}>
+                <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 260 }}>
+                    <Search size={18} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                     <input
                         type="text"
-                        placeholder="Recherche : Nom, Tel, ID Client, Réf TX..."
+                        placeholder="Chercher Nom, Tel, ID, Réf TX..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                        style={{ flex: 1, padding: '10px 16px', borderRadius: '8px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}
+                        style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px 12px 42px', color: 'var(--text-primary)', fontSize: 14, outline: 'none', transition: 'border-color 0.2s' }}
                     />
-                    <button onClick={handleSearch} className="btn-primary" style={{ width: 'auto', padding: '0 20px', display: 'flex', gap: '8px', alignItems: 'center', whiteSpace: 'nowrap' }}>
-                        <Search size={18} /> <span className="hide-mobile">Rechercher</span>
-                    </button>
                 </div>
 
-                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', flex: '1 1 auto' }}>
-                    <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ flex: '1 1 180px', maxWidth: '250px', padding: '10px 16px', borderRadius: '8px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', cursor: 'pointer' }}>
-                        <option value="">Tous les Statuts</option>
-                        <option value="ACTIVE">Actif</option>
-                        <option value="SUSPENDED">Suspendu</option>
-                        <option value="FROZEN">Gelé (Freeze)</option>
-                        <option value="CLOSED">Clôturé</option>
-                    </select>
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ flex: '0 0 160px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px', color: 'var(--text-primary)', fontSize: 14, outline: 'none', cursor: 'pointer' }}>
+                    <option value="">Tous les Statuts</option>
+                    <option value="ACTIVE">Actif</option>
+                    <option value="SUSPENDED">Suspendu</option>
+                    <option value="FROZEN">Gelé (Freeze)</option>
+                    <option value="CLOSED">Clôturé</option>
+                </select>
 
-                    <select value={kycFilter} onChange={(e) => setKycFilter(e.target.value)} style={{ flex: '1 1 180px', maxWidth: '250px', padding: '10px 16px', borderRadius: '8px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', cursor: 'pointer' }}>
-                        <option value="">Tous les Niveaux KYC</option>
-                        <option value="UNVERIFIED">Non Vérifié (Tier 0)</option>
-                        <option value="PENDING">En Revue KYC</option>
-                        <option value="APPROVED">Vérifié (Tier 1/2)</option>
-                        <option value="REJECTED">Rejeté</option>
-                    </select>
-                </div>
+                <select value={kycFilter} onChange={(e) => setKycFilter(e.target.value)} style={{ flex: '0 0 160px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px', color: 'var(--text-primary)', fontSize: 14, outline: 'none', cursor: 'pointer' }}>
+                    <option value="">Tous Niveaux KYC</option>
+                    <option value="UNVERIFIED">Non Vérifié (T0)</option>
+                    <option value="PENDING">En Revue KYC</option>
+                    <option value="APPROVED">Vérifié (T1/2)</option>
+                    <option value="REJECTED">Rejeté</option>
+                </select>
+                <button onClick={handleSearch} style={{ padding: '12px 18px', background: 'var(--btn-dark-bg)', color: 'var(--btn-dark-text)', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Search size={16} /> Rechercher
+                </button>
             </div>
 
-            <div className="stat-card" style={{ padding: 0, overflow: 'hidden', overflowX: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, padding: '0 8px' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)' }}>Annuaire des profils inscrits</span>
+            </div>
+
+            {/* ── TABLEAU ── */}
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 {loading ? (
-                    <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>Recherche dans la base de données...</div>
+                    <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)', fontWeight: 600 }}>Recherche dans la base de données centrale...</div>
                 ) : (
-                    <table style={{ width: '100%', minWidth: '900px', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 14 }}>
                         <thead>
-                            <tr style={{ backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border)' }}>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: 600 }}>{isAgentView ? 'Identité Agent' : 'Identité Client'}</th>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: 600 }}>Téléphone</th>
-                                {isAgentView && <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: 600 }}>Agence</th>}
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: 600 }}>Statut KYC</th>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: 600 }}>Activité Réc.</th>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: 600 }}>Risque</th>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: 600 }}>Statut Compte</th>
+                            <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                                {['Identité Utilisateur', 'Coordonnées', isAgentView ? 'Agence' : '', 'Statut KYC', 'Activité Réc.', 'Risque', 'Statut'].filter(Boolean).map((h, i) => (
+                                    <th key={i} style={{ padding: '16px 20px', color: 'var(--text-muted)', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                                ))}
                             </tr>
                         </thead>
                         <tbody>
@@ -258,26 +253,31 @@ export default function UsersManagement({ token, staffRole, hasPerm, lockedRole,
                                         opacity: u.accountStatus !== 'ACTIVE' ? 0.6 : 1,
                                         borderBottom: '1px solid var(--border)'
                                     }}
-                                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-primary)'}
-                                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'}
+                                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
                                 >
-                                    <td style={{ padding: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                        <div style={{ width: '40px', height: '40px', borderRadius: '20px', backgroundColor: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            {getRoleIcon(u.role)}
-                                        </div>
-                                        <div>
-                                            <div style={{ fontWeight: 'bold' }}>{u.name}</div>
-                                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>ID: {u.id.substring(0, 8)}</div>
+                                    <td style={{ padding: '16px 20px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                            <div style={{ width: 40, height: 40, borderRadius: '50%', backgroundColor: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                {getRoleIcon(u.role)}
+                                            </div>
+                                            <div>
+                                                <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--text-primary)', marginBottom: 2 }}>{u.name}</div>
+                                                <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'monospace' }}>ID: {u.id.substring(0, 8)}</div>
+                                            </div>
                                         </div>
                                     </td>
-                                    <td style={{ padding: '16px' }}><div style={{ color: 'var(--accent)', fontWeight: 'bold', fontFamily: 'monospace' }}>{u.accountNumber || 'Non assigné'}</div><div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{u.phone}</div></td>
+                                    <td style={{ padding: '16px 20px' }}>
+                                        <div style={{ color: 'var(--accent)', fontWeight: 800, fontFamily: 'monospace', marginBottom: 2 }}>{u.accountNumber || 'Non assigné'}</div>
+                                        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{u.phone}</div>
+                                    </td>
 
                                     {isAgentView && (
-                                        <td style={{ padding: '16px' }} onClick={e => e.stopPropagation()}>
+                                        <td style={{ padding: '16px 20px' }} onClick={e => e.stopPropagation()}>
                                             <select
                                                 value={u.branchId || ''}
                                                 onChange={e => assignBranch(u.id, e.target.value)}
-                                                style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', color: u.branchId ? 'var(--text-primary)' : 'var(--warning)', fontSize: '13px' }}
+                                                style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--bg-card)', border: '1px solid var(--border)', color: u.branchId ? 'var(--text-primary)' : 'var(--warning)', fontSize: 13, outline: 'none' }}
                                             >
                                                 <option value="">— Non rattaché —</option>
                                                 {branches.map(b => (
@@ -287,37 +287,35 @@ export default function UsersManagement({ token, staffRole, hasPerm, lockedRole,
                                         </td>
                                     )}
 
-                                    <td style={{ padding: '16px' }}>
+                                    <td style={{ padding: '16px 20px' }}>
                                         <span style={{
-                                            padding: '4px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: 'bold',
-                                            backgroundColor: u.kycStatus === 'UNVERIFIED' ? '#334155' : u.kycStatus === 'APPROVED' ? 'var(--success-bg)' : 'var(--warning-bg)',
-                                            color: u.kycStatus === 'UNVERIFIED' ? '#94a3b8' : u.kycStatus === 'APPROVED' ? 'var(--success)' : 'var(--warning)',
-                                            border: '1px solid var(--border)'
+                                            padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 900, textTransform: 'uppercase',
+                                            backgroundColor: u.kycStatus === 'UNVERIFIED' ? 'var(--bg-secondary)' : u.kycStatus === 'APPROVED' ? 'var(--success-bg)' : 'var(--warning-bg)',
+                                            color: u.kycStatus === 'UNVERIFIED' ? 'var(--text-muted)' : u.kycStatus === 'APPROVED' ? 'var(--success)' : 'var(--warning)',
                                         }}>
                                             {KYC_STATUS_LABELS[u.kycStatus] || u.kycStatus}
                                         </span>
                                     </td>
 
-                                    <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>
-                                        {u.wallet?.updatedAt ? new Date(u.wallet.updatedAt).toLocaleDateString('fr-FR') : '—'}
+                                    <td style={{ padding: '16px 20px', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600 }}>
+                                        {u.wallet?.updatedAt ? new Date(u.wallet.updatedAt).toLocaleDateString('fr-GA') : '—'}
                                     </td>
 
-                                    <td style={{ padding: '16px' }}>
+                                    <td style={{ padding: '16px 20px' }}>
                                         {u._count?.riskFlags > 0 ? (
-                                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--danger)', fontWeight: 600, fontSize: '13px' }}>
-                                                <AlertTriangle size={14} /> {u._count.riskFlags} Flag(s)
+                                            <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--danger)', fontWeight: 800, fontSize: 13 }}>
+                                                <AlertTriangle size={14} /> {u._count.riskFlags} Flag{u._count.riskFlags > 1 ? 's' : ''}
                                             </span>
                                         ) : (
-                                            <span style={{ color: 'var(--success)', fontSize: '13px', fontWeight: 600 }}>Propre</span>
+                                            <span style={{ color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}>Propre</span>
                                         )}
                                     </td>
 
-                                    <td style={{ padding: '16px' }}>
+                                    <td style={{ padding: '16px 20px' }}>
                                         <span style={{
-                                            padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold',
+                                            padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 900,
                                             backgroundColor: u.accountStatus === 'ACTIVE' ? 'var(--success-bg)' : 'var(--danger-bg)',
                                             color: u.accountStatus === 'ACTIVE' ? 'var(--success)' : 'var(--danger)',
-                                            border: u.accountStatus !== 'ACTIVE' ? '1px solid var(--danger-bg)' : 'none'
                                         }}>
                                             {u.accountStatus === 'ACTIVE' ? 'ACTIF' : u.accountStatus}
                                         </span>
@@ -326,9 +324,9 @@ export default function UsersManagement({ token, staffRole, hasPerm, lockedRole,
                             ))}
                             {users.length === 0 && (
                                 <tr>
-                                    <td colSpan={isAgentView ? 7 : 6} style={{ padding: '60px', textAlign: 'center', color: error ? 'var(--danger)' : 'var(--text-secondary)' }}>
-                                        <User size={48} style={{ opacity: 0.2, marginBottom: '16px' }} />
-                                        <div>{error ? `⚠️ ${error}` : isAgentView ? 'Aucun agent correspondant.' : 'Aucun client correspondant trouvé sur la plateforme.'}</div>
+                                    <td colSpan={isAgentView ? 7 : 6} style={{ padding: 80, textAlign: 'center', color: error ? 'var(--danger)' : 'var(--text-secondary)' }}>
+                                        <UsersIcon size={48} style={{ opacity: 0.2, marginBottom: 16 }} />
+                                        <div style={{ fontWeight: 600, fontSize: 15 }}>{error ? `⚠️ ${error}` : isAgentView ? 'Aucun agent correspondant.' : 'Aucun client ne correspond à vos critères de recherche.'}</div>
                                     </td>
                                 </tr>
                             )}
@@ -338,24 +336,14 @@ export default function UsersManagement({ token, staffRole, hasPerm, lockedRole,
             </div>
 
             {total > limit && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', padding: '0 8px' }}>
-                    <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-                        Affichage de {((currentPage - 1) * limit) + 1} à {Math.min(currentPage * limit, total)} sur {total} clients (Page {currentPage})
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                            disabled={currentPage === 1}
-                            style={{ padding: '8px 16px', backgroundColor: 'var(--bg-card)', color: currentPage === 1 ? 'var(--text-muted)' : 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '8px', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontWeight: '600' }}>
-                            Précédent
-                        </button>
-                        <button
-                            onClick={() => setCurrentPage(p => Math.min(Math.ceil(total / limit), p + 1))}
-                            disabled={currentPage >= Math.ceil(total / limit)}
-                            style={{ padding: '8px 16px', backgroundColor: 'var(--bg-card)', color: currentPage >= Math.ceil(total / limit) ? 'var(--text-muted)' : 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: '8px', cursor: currentPage >= Math.ceil(total / limit) ? 'not-allowed' : 'pointer', fontWeight: '600' }}>
-                            Suivant
-                        </button>
-                    </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16, marginTop: 24 }}>
+                    <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage <= 1} style={{ padding: 10, background: 'var(--bg-secondary)', border: 'none', borderRadius: 10, cursor: currentPage <= 1 ? 'not-allowed' : 'pointer', color: currentPage <= 1 ? 'var(--text-muted)' : 'var(--text-primary)', transition: '0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+                        <ChevronLeft size={18} />
+                    </button>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--bg-secondary)', padding: '6px 16px', borderRadius: 20 }}>Page {currentPage} / {Math.ceil(total / limit)}</span>
+                    <button onClick={() => setCurrentPage(p => Math.min(Math.ceil(total / limit), p + 1))} disabled={currentPage >= Math.ceil(total / limit)} style={{ padding: 10, background: 'var(--bg-secondary)', border: 'none', borderRadius: 10, cursor: currentPage >= Math.ceil(total / limit) ? 'not-allowed' : 'pointer', color: currentPage >= Math.ceil(total / limit) ? 'var(--text-muted)' : 'var(--text-primary)', transition: '0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+                        <ChevronRight size={18} />
+                    </button>
                 </div>
             )}
             {showCreatePro && (
