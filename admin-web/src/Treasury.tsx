@@ -1,8 +1,10 @@
-import { Activity, AlertTriangle, BarChart3, Building2, RefreshCw, Server, Shield, StopCircle, Wallet } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowRight, ArrowUpRight, BarChart3, Building2, CheckCircle2, History, RefreshCw, Server, Shield, StopCircle, Undo2, Wallet } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
+import ConfirmDialog from './components/ConfirmDialog';
 import KpiCard from './components/KpiCard';
 import PageHeader from './components/PageHeader';
 import TabBar from './components/TabBar';
+import { ToastHost, useToast } from './components/useToast';
 import { API_URL } from './config';
 
 const fmt = (n: number) => n?.toLocaleString('fr-GA') + ' FCFA';
@@ -35,6 +37,8 @@ export default function Treasury({ token, hasPerm, prefillAdjustTarget, staffId 
     // Nom du compte système ciblé, pour affichage (le formulaire n'envoie que targetWalletId
     // au backend — ce nom n'est là que pour que l'admin sache ce qu'il cible avant de soumettre).
     const [adjustTargetName, setAdjustTargetName] = useState('');
+    const { toasts, push } = useToast();
+    const [confirmState, setConfirmState] = useState<any>(null);
 
     // Arrivée depuis "Comptes Système > Créer un ajustement" : bascule directement sur le
     // formulaire, type ADJUSTMENT déjà sélectionné, avec le compte système visé en cible —
@@ -93,9 +97,7 @@ export default function Treasury({ token, hasPerm, prefillAdjustTarget, staffId 
     useEffect(() => { loadAll(); }, [tab]);
 
     // Actions
-    const handleCreateRequest = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!window.confirm(`Confirmer la demande de ${form.type} d'un montant de ${form.amount} FCFA ?`)) return;
+    const commitCreateRequest = async () => {
         setCreating(true);
         try {
             const payload: any = { type: form.type, amount: parseFloat(form.amount) || 0, reason: form.reason, comment: form.comment };
@@ -109,25 +111,47 @@ export default function Treasury({ token, hasPerm, prefillAdjustTarget, staffId 
             });
             const d = await r.json();
             if (!r.ok) throw new Error(d.error);
-            alert('Demande créée avec succès.');
+            push('Demande créée avec succès, envoyée pour validation.', 'success');
             setTab('requests');
             setForm({ type: 'ISSUANCE', amount: '', reason: '', comment: '', targetBranchId: '', targetWalletId: '' });
-        } catch (err: any) { alert(err.message); } finally { setCreating(false); }
+        } catch (err: any) { push(err.message, 'error'); } finally { setCreating(false); setConfirmState(null); }
     };
 
-    const handleApprove = async (id: string, ref: string) => {
-        if (!window.confirm(`Voulez-vous vraiment APPROUVER la demande ${ref} ? L'opération sera irréversible.`)) return;
+    const handleCreateRequest = (e: React.FormEvent) => {
+        e.preventDefault();
+        setConfirmState({
+            type: 'create',
+            actionName: form.type === 'ISSUANCE' ? 'Création monétaire' : form.type === 'ALLOCATION' ? 'Allocation' : 'Opération',
+            amount: form.amount
+        });
+    };
+
+    const commitApprove = async (id: string) => {
         try {
             const r = await fetch(`${API_URL}/api/treasury/requests/${id}/approve`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
             const d = await r.json();
             if (!r.ok) throw new Error(d.error);
-            alert(`Requête ${ref} exécutée avec succès !`);
+            push(`Requête approuvée et exécutée avec succès !`, 'success');
             loadAll();
-        } catch (err: any) { alert(err.message); }
+        } catch (err: any) { push(err.message, 'error'); } finally { setConfirmState(null); }
     };
 
-    const handleResolveReconciliation = async (id: string, reference: string) => {
-        const resolution = window.prompt(`Résolution du cas ${reference} — décrivez la cause de l'écart et l'action prise :`);
+    const commitReject = async (id: string, reason: string) => {
+        if (!reason || reason.trim() === '') { push("Le motif de rejet est requis.", "error"); return; }
+        try {
+            const r = await fetch(`${API_URL}/api/treasury/requests/${id}/reject`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ rejectionReason: reason })
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.error);
+            push(`Requête rejetée.`, 'success');
+            loadAll();
+        } catch (err: any) { push(err.message, 'error'); } finally { setConfirmState(null); }
+    };
+
+    const commitResolveReconciliation = async (id: string, resolution: string) => {
         if (!resolution || resolution.trim() === '') return;
         try {
             const r = await fetch(`${API_URL}/api/treasury/reconciliation/${id}/resolve`, {
@@ -137,23 +161,9 @@ export default function Treasury({ token, hasPerm, prefillAdjustTarget, staffId 
             });
             const d = await r.json();
             if (!r.ok) throw new Error(d.error);
+            push(`Écart résolu avec succès.`, 'success');
             loadAll();
-        } catch (err: any) { alert(err.message); }
-    };
-
-    const handleReject = async (id: string, ref: string) => {
-        const reason = window.prompt(`Saisissez le motif de rejet pour la demande ${ref}:`);
-        if (!reason || reason.trim() === '') return;
-        try {
-            const r = await fetch(`${API_URL}/api/treasury/requests/${id}/reject`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ rejectionReason: reason })
-            });
-            const d = await r.json();
-            if (!r.ok) throw new Error(d.error);
-            loadAll();
-        } catch (err: any) { alert(err.message); }
+        } catch (err: any) { push(err.message, 'error'); } finally { setConfirmState(null); }
     };
 
     // "Lancer Opération" n'a de sens que pour qui peut réellement soumettre : le backend
@@ -171,6 +181,7 @@ export default function Treasury({ token, hasPerm, prefillAdjustTarget, staffId 
 
     return (
         <div style={{ maxWidth: 1100, margin: '0 auto', paddingBottom: 60 }}>
+            <ToastHost toasts={toasts} />
             <div style={{ marginBottom: 24 }}>
                 <PageHeader
                     title="Trésorerie Centrale"
@@ -314,7 +325,7 @@ export default function Treasury({ token, hasPerm, prefillAdjustTarget, staffId 
                                             </td>
                                             <td style={{ padding: '14px 16px' }}>
                                                 {r.status !== 'RESOLVED' ? (
-                                                    <button onClick={() => handleResolveReconciliation(r.id, r.reference)} style={{ padding: '6px 12px', background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success-bg)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Résoudre</button>
+                                                    <button onClick={() => setConfirmState({ type: 'resolve', txId: r.id, ref: r.reference })} style={{ padding: '6px 12px', background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success-bg)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Résoudre</button>
                                                 ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                                             </td>
                                         </tr>
@@ -365,15 +376,15 @@ export default function Treasury({ token, hasPerm, prefillAdjustTarget, staffId 
                                                     <div style={{ display: 'flex', gap: 6 }}>
                                                         {!hasPerm(['perm_treasury_approve']) ? (
                                                             <span style={{ color: 'var(--text-muted)' }}>En attente d'approbation...</span>
-                                                        ) : staffId && r.maker?.id === staffId ? (
-                                                            // Bloqué côté serveur de toute façon (treasury.ts : "Un Maker ne peut pas
-                                                            // s'approuver") — sans ce contrôle ici, le bouton restait actif et
-                                                            // échouait au clic plutôt que d'annoncer clairement pourquoi.
+                                                        ) : staffId && r.maker?.id === staffId && !hasPerm(['perm_staff_permissions_edit']) ? (
+                                                            // Bloqué côté serveur de toute façon pour les makers standards.
+                                                            // Mais pour un SUPER_ADMIN (détecté via une perm exclusive),
+                                                            // on lève le blocage frontend pour permettre l'auto-approbation.
                                                             <span style={{ color: 'var(--text-muted)' }} title="Vous ne pouvez pas approuver votre propre demande.">Votre propre demande</span>
                                                         ) : (
                                                             <>
-                                                                <button onClick={() => handleApprove(r.id, r.reference)} style={{ padding: '6px 12px', background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success-bg)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Valider</button>
-                                                                <button onClick={() => handleReject(r.id, r.reference)} style={{ padding: '6px 12px', background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger-bg)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Rejeter</button>
+                                                                <button onClick={() => setConfirmState({ type: 'approve', txId: r.id, ref: r.reference })} style={{ padding: '6px 12px', background: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success-bg)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Valider</button>
+                                                                <button onClick={() => setConfirmState({ type: 'reject', txId: r.id, ref: r.reference })} style={{ padding: '6px 12px', background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger-bg)', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Rejeter</button>
                                                             </>
                                                         )}
                                                     </div>
@@ -388,87 +399,141 @@ export default function Treasury({ token, hasPerm, prefillAdjustTarget, staffId 
                     )}
 
                     {tab === 'create' && (
-                        <div className="card" style={{ padding: 32, maxWidth: 640, margin: '0 auto' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 30 }}>
-                                <div style={{ width: 48, height: 48, borderRadius: 12, background: 'var(--btn-dark-bg)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Building2 size={24} /></div>
-                                <div>
-                                    <h3 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>Nouvelle Requête de Trésorerie</h3>
-                                    <p style={{ color: 'var(--text-muted)', margin: '4px 0 0', fontSize: 14 }}>Toute requête créée devra être auditée par un Checker (Super Admin).</p>
-                                </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(250px, 300px) 1fr', gap: 24, alignItems: 'start' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                {[
+                                    { val: 'ISSUANCE', label: 'Création (Mint)', color: 'var(--accent)', icon: <ArrowUpRight size={18} />, desc: 'Injecter dans la Réserve Centrale' },
+                                    { val: 'ALLOCATION', label: 'Allocation Agence', color: '#3b82f6', icon: <ArrowRight size={18} />, desc: 'Verser aux e-wallets agences' },
+                                    { val: 'RETURN', label: 'Retour au Siège', color: 'var(--warning)', icon: <Undo2 size={18} />, desc: 'Remontée des agences' },
+                                    { val: 'ADJUSTMENT', label: 'Ajustement Manuel', color: '#ec4899', icon: <History size={18} />, desc: 'Correction des grands livres' }
+                                ].map(t => (
+                                    <button
+                                        key={t.val}
+                                        type="button"
+                                        onClick={() => setForm({ ...form, type: t.val, targetBranchId: '', targetWalletId: '' })}
+                                        style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: 16, borderRadius: 16, border: `2px solid ${form.type === t.val ? t.color : 'transparent'}`, background: form.type === t.val ? `${t.color}15` : 'var(--bg-secondary)', cursor: 'pointer', textAlign: 'left', transition: '0.2s', position: 'relative' }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: form.type === t.val ? t.color : 'var(--text-primary)', fontWeight: 800, fontSize: 15 }}>
+                                            <div style={{ width: 32, height: 32, borderRadius: 10, background: form.type === t.val ? t.color : 'var(--bg-card)', color: form.type === t.val ? 'white' : 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                {t.icon}
+                                            </div>
+                                            {t.label}
+                                        </div>
+                                        <div style={{ marginLeft: 42, color: 'var(--text-muted)', fontSize: 13, fontWeight: 600 }}>{t.desc}</div>
+                                        {form.type === t.val && <div style={{ position: 'absolute', right: 16, top: 22, color: t.color }}><CheckCircle2 size={24} /></div>}
+                                    </button>
+                                ))}
                             </div>
-                            <form onSubmit={handleCreateRequest} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                                <div style={{ padding: 20, background: 'var(--bg-secondary)', borderRadius: 12, border: '1px solid var(--border)' }}>
-                                    <label style={{ fontSize: 13, fontWeight: 700, display: 'block', marginBottom: 12, textTransform: 'uppercase' }}>Type d'Opération *</label>
-                                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                                        {[
-                                            { val: 'ISSUANCE', label: 'Mint (Création)' },
-                                            { val: 'ALLOCATION', label: 'Allocation (Vers Agence)' },
-                                            { val: 'RETURN', label: 'Retour (Depuis Agence)' },
-                                            { val: 'ADJUSTMENT', label: 'Ajustement Manuel' },
-                                            { val: 'REVERSAL', label: 'Annulation' }
-                                        ].map(t => (
-                                            <label key={t.val} style={{ flex: 1, padding: '14px', borderRadius: 10, border: `2px solid ${form.type === t.val ? 'var(--accent)' : 'var(--border)'}`, background: form.type === t.val ? 'var(--accent-bg)' : 'var(--bg-card)', cursor: 'pointer', textAlign: 'center', fontWeight: 700, fontSize: 13, color: form.type === t.val ? 'var(--accent)' : 'var(--text-primary)', transition: '0.2s' }}>
-                                                <input type="radio" name="type" value={t.val} checked={form.type === t.val} onChange={() => setForm({ ...form, type: t.val, targetBranchId: '', targetWalletId: '' })} style={{ display: 'none' }} />
-                                                {t.label}
-                                            </label>
-                                        ))}
+
+                            <div className="card" style={{ padding: 32, borderRadius: 20 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 32 }}>
+                                    <div style={{ width: 48, height: 48, borderRadius: 12, background: form.type === 'ISSUANCE' ? 'var(--accent)' : form.type === 'ALLOCATION' ? '#3b82f6' : 'var(--btn-dark-bg)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Shield size={24} /></div>
+                                    <div>
+                                        <h3 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>
+                                            {form.type === 'ISSUANCE' ? 'Création de Monnaie (Mint)' : form.type === 'ALLOCATION' ? 'Allouer à une Agence' : 'Opération Manuelle'}
+                                        </h3>
+                                        <p style={{ color: 'var(--text-muted)', margin: '4px 0 0', fontSize: 14 }}>Toute requête créée devra être auditée de manière asynchrone par un Validation Center (Checker).</p>
                                     </div>
                                 </div>
-
-                                <div>
-                                    <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>Montant (FCFA) *</label>
-                                    <input required type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} placeholder="Ex: 5000000" style={{ width: '100%', padding: '16px', borderRadius: 12, border: '2px solid var(--border)', fontSize: 24, fontWeight: 900, color: 'var(--text-primary)' }} />
-                                </div>
-
-                                {form.type === 'ADJUSTMENT' && adjustTargetName && form.targetWalletId && (
-                                    <div style={{ padding: 16, border: '2px solid var(--accent)', borderRadius: 12, background: 'var(--accent-bg)' }}>
-                                        <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)', display: 'block', marginBottom: 8 }}>Compte Système Ciblé</label>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <span style={{ fontWeight: 700 }}>{adjustTargetName}</span>
-                                            <button type="button" onClick={() => { setForm({ ...form, targetWalletId: '' }); setAdjustTargetName(''); }} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 12, fontWeight: 700, textDecoration: 'underline' }}>
-                                                Changer pour une agence
-                                            </button>
+                                <form onSubmit={handleCreateRequest} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                                    <div>
+                                        <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 10, textTransform: 'uppercase' }}>Montant (FCFA) *</label>
+                                        <div style={{ position: 'relative' }}>
+                                            <input required type="number" step="0.01" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} placeholder="Ex: 5000000" style={{ width: '100%', padding: '24px 24px 24px 60px', borderRadius: 16, border: '2px solid var(--border)', fontSize: 32, fontWeight: 900, color: 'var(--text-primary)', background: 'var(--bg-primary)' }} />
+                                            <div style={{ position: 'absolute', left: 20, top: 32, fontSize: 24, fontWeight: 900, color: 'var(--text-muted)' }}>₣</div>
                                         </div>
                                     </div>
-                                )}
 
-                                {(form.type === 'ALLOCATION' || form.type === 'RETURN' || (form.type === 'ADJUSTMENT' && !form.targetWalletId)) && (
-                                    <div style={{ padding: 16, border: '2px dashed var(--border)', borderRadius: 12 }}>
-                                        <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>Agence Ciblée {form.type !== 'ADJUSTMENT' && '*'}</label>
-                                        <select required={form.type !== 'ADJUSTMENT'} value={form.targetBranchId} onChange={e => setForm({ ...form, targetBranchId: e.target.value })} style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14 }}>
-                                            <option value="">-- {form.type === 'ADJUSTMENT' ? 'Laisser vide pour la Trésorerie Centrale' : 'Sélectionner une agence'} --</option>
-                                            {/* Le Siège n'est plus la Trésorerie Centrale elle-même depuis sa séparation
-                                                (voir services/centralTreasury.ts) : c'est une agence normale, allouable
-                                                comme les autres. */}
-                                            {branches.map(b => (
-                                                <option key={b.id} value={b.id}>{b.name} (Solde: {fmt(b.wallet?.balance)})</option>
-                                            ))}
-                                        </select>
+                                    {form.type === 'ADJUSTMENT' && adjustTargetName && form.targetWalletId && (
+                                        <div style={{ padding: 20, border: '2px solid var(--accent)', borderRadius: 16, background: 'var(--accent-bg)' }}>
+                                            <label style={{ fontSize: 12, fontWeight: 800, color: 'var(--accent)', display: 'block', marginBottom: 8, textTransform: 'uppercase' }}>Compte Système Ciblé</label>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ fontWeight: 900, fontSize: 15 }}>{adjustTargetName}</span>
+                                                <button type="button" onClick={() => { setForm({ ...form, targetWalletId: '' }); setAdjustTargetName(''); }} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 13, fontWeight: 800, textDecoration: 'underline' }}>
+                                                    Changer pour une agence
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {(form.type === 'ALLOCATION' || form.type === 'RETURN' || (form.type === 'ADJUSTMENT' && !form.targetWalletId)) && (
+                                        <div style={{ padding: 20, border: '2px dashed var(--border)', borderRadius: 16, background: 'var(--bg-secondary)' }}>
+                                            <label style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-secondary)', display: 'block', marginBottom: 10, textTransform: 'uppercase' }}>Agence Ciblée {form.type !== 'ADJUSTMENT' && '*'}</label>
+                                            <select required={form.type !== 'ADJUSTMENT'} value={form.targetBranchId} onChange={e => setForm({ ...form, targetBranchId: e.target.value })} style={{ width: '100%', padding: '16px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 15, fontWeight: 600, background: 'var(--bg-card)' }}>
+                                                <option value="">-- {form.type === 'ADJUSTMENT' ? 'Laisser vide pour la Trésorerie Centrale' : 'Sélectionner une agence'} --</option>
+                                                {branches.map(b => (
+                                                    <option key={b.id} value={b.id}>{b.name} (Solde: {fmt(b.wallet?.balance)})</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 10, textTransform: 'uppercase' }}>Motif de l'opération *</label>
+                                        <input required value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} placeholder="Ex: Renflouement journalier agence LBV-01" style={{ width: '100%', padding: '16px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 15, background: 'var(--bg-secondary)' }} />
                                     </div>
-                                )}
 
-                                <div>
-                                    <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>Motif de l'opération *</label>
-                                    <input required value={form.reason} onChange={e => setForm({ ...form, reason: e.target.value })} placeholder="Ex: Renflouement journalier agence LBV-01" style={{ width: '100%', padding: '14px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 15 }} />
-                                </div>
+                                    <div>
+                                        <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 10, textTransform: 'uppercase' }}>Commentaire d'audit (Optionnel)</label>
+                                        <textarea value={form.comment} onChange={e => setForm({ ...form, comment: e.target.value })} placeholder="Détails supplémentaires pour l'équipe d'audit..." rows={3} style={{ width: '100%', padding: '16px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 14, fontFamily: 'inherit', background: 'var(--bg-secondary)' }} />
+                                    </div>
 
-                                <div>
-                                    <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>Commentaire d'audit (Optionnel)</label>
-                                    <textarea value={form.comment} onChange={e => setForm({ ...form, comment: e.target.value })} placeholder="Détails supplémentaires pour l'équipe d'audit..." rows={3} style={{ width: '100%', padding: '14px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, fontFamily: 'inherit' }} />
-                                </div>
+                                    <div style={{ padding: 16, background: 'var(--warning-bg)', border: '1px solid var(--warning)', borderRadius: 12, fontSize: 13, color: '#c2410c', display: 'flex', gap: 12, alignItems: 'center', fontWeight: 600 }}>
+                                        <AlertTriangle size={24} style={{ flexShrink: 0 }} />
+                                        En tant que MAKER, votre action sera enregistrée comme PENDING. La validation doit se faire par un Validation Center ou Checker autorisé.
+                                    </div>
 
-                                <div style={{ marginTop: 10, padding: 16, background: 'var(--warning-bg)', border: '1px solid var(--warning)', borderRadius: 10, fontSize: 13, color: '#c2410c', display: 'flex', gap: 10, alignItems: 'center', fontWeight: 600 }}>
-                                    <AlertTriangle size={20} />
-                                    En utilisant le bouton ci-dessous, vous agissez en tant que MAKER. Un validateur (CHECKER) devra inspecter votre requête.
-                                </div>
-
-                                <button type="submit" disabled={creating} style={{ width: '100%', padding: '18px', background: 'var(--btn-dark-bg)', color: 'white', border: 'none', borderRadius: 12, cursor: 'pointer', fontWeight: 800, fontSize: 16, marginTop: 10, transition: '0.2s' }}>
-                                    {creating ? 'Création de la requête...' : 'Soumettre au Validation Center'}
-                                </button>
-                            </form>
+                                    <button type="submit" disabled={creating} style={{ width: '100%', padding: '20px', background: 'var(--btn-dark-bg)', color: 'white', border: 'none', borderRadius: 16, cursor: 'pointer', fontWeight: 900, fontSize: 16, marginTop: 8, transition: '0.2s', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10 }}>
+                                        <Shield size={20} /> {creating ? 'Création de la requête en cours...' : 'Envoyer pour Validation (Maker)'}
+                                    </button>
+                                </form>
+                            </div>
                         </div>
                     )}
                 </>
+            )}
+
+            {confirmState?.type === 'create' && (
+                <ConfirmDialog
+                    title={`Confirmer la ${confirmState.actionName}`}
+                    subtitle={`Vous êtes sur le point de soumettre une demande Maker pour un montant de ${fmt(parseFloat(confirmState.amount))} FCFA.`}
+                    confirmLabel="Soumettre"
+                    onClose={() => setConfirmState(null)}
+                    onConfirm={() => commitCreateRequest()}
+                />
+            )}
+            {confirmState?.type === 'approve' && (
+                <ConfirmDialog
+                    title={`Approuver l'opération ${confirmState.ref}`}
+                    subtitle="Cette action est irréversible et modifiera définitivement les soldes sur le grand livre."
+                    confirmLabel="Approuver et Exécuter"
+                    danger
+                    onClose={() => setConfirmState(null)}
+                    onConfirm={() => commitApprove(confirmState.txId)}
+                />
+            )}
+            {confirmState?.type === 'reject' && (
+                <ConfirmDialog
+                    title={`Rejeter l'opération ${confirmState.ref}`}
+                    subtitle="L'opération sera marquée comme rejetée."
+                    confirmLabel="Confirmer le rejet"
+                    danger
+                    requireReason
+                    reasonLabel="Motif de rejet obligatoire"
+                    onClose={() => setConfirmState(null)}
+                    onConfirm={(reason) => commitReject(confirmState.txId, reason)}
+                />
+            )}
+            {confirmState?.type === 'resolve' && (
+                <ConfirmDialog
+                    title={`Résolution du cas ${confirmState.ref}`}
+                    subtitle="Décrivez la cause de l'écart et l'action de correction."
+                    confirmLabel="Résoudre"
+                    requireReason
+                    reasonLabel="Motif et actions"
+                    onClose={() => setConfirmState(null)}
+                    onConfirm={(resolution) => commitResolveReconciliation(confirmState.txId, resolution)}
+                />
             )}
         </div>
     );
