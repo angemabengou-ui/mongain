@@ -1,4 +1,4 @@
-import { ArrowLeft, Ban, Lock, Shield, Unlock, Users as UsersIcon } from 'lucide-react';
+import { ArrowLeft, Ban, Lock, Search, Shield, Unlock, Users as UsersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import ConfirmDialog from './components/ConfirmDialog';
 import PageHeader from './components/PageHeader';
@@ -359,58 +359,74 @@ export default function Vaults({ token, hasPerm, initialSelectedId }: { token: s
     });
 
     return (
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', paddingBottom: 60 }}>
             <ToastHost toasts={toasts} />
-            <div style={{ marginBottom: 24 }}>
-                <PageHeader title="Caisses Communes" subtitle={canManage ? "Vue d'ensemble des coffres collectifs multi-signatures — geler, débloquer un retrait contesté, réassigner un rôle." : "Vue d'ensemble des coffres collectifs multi-signatures — lecture seule."} />
+            <div style={{ marginBottom: 32 }}>
+                <PageHeader title="Caisses Communes (Tontines)" subtitle={canManage ? "Gérez les coffres collectifs multi-signatures du réseau : consultez les soldes, forcez le déblocage en cas de litige, ou gelez une caisse suspecte." : "Vue d'ensemble des coffres collectifs en lecture seule."} />
             </div>
 
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-                <input
-                    placeholder="🔍 Rechercher une caisse ou un président…"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    style={{ width: '100%', maxWidth: 360, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-primary)', fontSize: 13 }}
-                />
-                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-primary)', fontSize: 13 }}>
-                    <option value="all">Toutes</option>
-                    <option value="frozen">Gelées uniquement</option>
+            {/* ── FILTRES (Glassmorphism/Sleek) ── */}
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', padding: 20, background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }}>
+                <div style={{ flex: '1 1 300px', minWidth: 260, position: 'relative' }}>
+                    <Search size={18} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input
+                        placeholder="Rechercher une caisse ou le nom d'un président…"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px 12px 42px', color: 'var(--text-primary)', fontSize: 14, outline: 'none', transition: 'border-color 0.2s' }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
+                    />
+                </div>
+                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} style={{ flex: '0 0 200px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px', color: 'var(--text-primary)', fontSize: 14, outline: 'none', cursor: 'pointer' }}>
+                    <option value="all">Toutes les caisses</option>
+                    <option value="frozen">Caisses gelées uniquement</option>
                 </select>
             </div>
 
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, padding: '0 8px' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)' }}>Ouvrir une fiche pour gérer ses paramètres ({filteredVaults.length} au total)</span>
+            </div>
+
             {error && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--danger)', background: 'var(--danger-bg)', padding: '10px 16px', borderRadius: 8, marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--danger)', background: 'var(--danger-bg)', padding: '16px 20px', borderRadius: 12, marginBottom: 24, fontWeight: 600 }}>
                     <span style={{ flex: 1 }}>{error}</span>
-                    <button onClick={fetchList} style={{ padding: '6px 12px', background: 'var(--btn-dark-bg)', color: 'var(--btn-dark-text)', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Réessayer</button>
+                    <button onClick={fetchList} style={{ padding: '8px 16px', background: 'var(--danger)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 800, fontSize: 13, transition: '0.2s' }}>Réessayer</button>
                 </div>
             )}
 
-            <div className="table-container">
-                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, textAlign: 'left' }}>
+            {/* ── TABLE ── */}
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 14 }}>
                     <thead>
-                        <tr>
-                            <th>Caisse</th><th>Créé par</th><th>Membres</th><th>Solde</th><th>Seuil</th><th>En attente</th>
+                        <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                            {['Caisse', 'Créé par', 'Membres', 'Solde', 'Seuil', 'En attente'].map((h, i) => (
+                                <th key={i} style={{ padding: '16px 20px', color: 'var(--text-muted)', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                            ))}
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={6} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Chargement...</td></tr>
+                            <tr><td colSpan={6} style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontWeight: 600 }}>Chargement des données...</td></tr>
                         ) : filteredVaults.length === 0 ? (
-                            <tr><td colSpan={6} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>{vaults.length === 0 ? "Aucune caisse commune créée pour l'instant." : 'Aucune caisse ne correspond à la recherche.'}</td></tr>
+                            <tr><td colSpan={6} style={{ textAlign: 'center', padding: 80, color: 'var(--text-muted)', fontWeight: 600, fontSize: 15 }}>{vaults.length === 0 ? "Aucune caisse commune créée pour l'instant." : 'Aucune caisse ne correspond à la recherche.'}</td></tr>
                         ) : filteredVaults.map(v => (
-                            <tr key={v.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedId(v.id)}>
-                                <td style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600 }}>
-                                    {v.isFrozen ? <Lock size={14} color="var(--danger)" /> : <Shield size={14} color="var(--accent)" />} {v.name}
+                            <tr key={v.id} style={{ cursor: 'pointer', borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'} onClick={() => setSelectedId(v.id)}>
+                                <td style={{ padding: '16px 20px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 800, fontSize: 15, color: 'var(--text-primary)' }}>
+                                        {v.isFrozen ? <div style={{ display: 'flex', padding: 6, background: 'var(--danger-bg)', borderRadius: 8 }}><Lock size={16} color="var(--danger)" /></div> : <div style={{ display: 'flex', padding: 6, background: 'rgba(59, 130, 246, 0.15)', borderRadius: 8 }}><Shield size={16} color="#3b82f6" /></div>}
+                                        {v.name}
+                                    </div>
                                 </td>
-                                <td style={{ color: 'var(--text-secondary)' }}>{v.admin?.name}</td>
-                                <td style={{ color: 'var(--text-secondary)' }}><UsersIcon size={12} style={{ marginRight: 4, verticalAlign: -1 }} />{v._count.members}</td>
-                                <td style={{ fontWeight: 700 }}>{fmt(v.balance)}</td>
-                                <td style={{ color: 'var(--text-secondary)' }}>{v.requiredApprovals}</td>
-                                <td>
+                                <td style={{ padding: '16px 20px', color: 'var(--text-secondary)' }}>{v.admin?.name || 'Inconnu'}</td>
+                                <td style={{ padding: '16px 20px', color: 'var(--text-secondary)', fontWeight: 600 }}><UsersIcon size={14} style={{ marginRight: 6, verticalAlign: -2 }} />{v._count.members}</td>
+                                <td style={{ padding: '16px 20px', fontWeight: 900, color: 'var(--text-primary)', fontSize: 15 }}>{fmt(v.balance)}</td>
+                                <td style={{ padding: '16px 20px', color: 'var(--text-secondary)' }}>{v.requiredApprovals}</td>
+                                <td style={{ padding: '16px 20px' }}>
                                     {v.isFrozen ? (
-                                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 10, background: 'var(--danger-bg)', color: 'var(--danger)' }}>Gelée</span>
+                                        <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 20, background: 'var(--danger-bg)', color: 'var(--danger)' }}>GELÉE</span>
                                     ) : v._count.transactions > 0 ? (
-                                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 10, background: 'var(--warning-bg)', color: 'var(--warning)' }}>
+                                        <span style={{ fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 20, background: 'var(--warning-bg)', color: 'var(--warning)', boxShadow: '0 0 0 1px var(--warning) inset' }}>
                                             {v._count.transactions} en attente
                                         </span>
                                     ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
