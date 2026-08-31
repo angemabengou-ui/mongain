@@ -158,53 +158,53 @@ export default function Ledger({ token, hasPerm }: { token: string; hasPerm: (pe
     };
 
     return (
-        <div className="dashboard-content">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                <div>
-                    <h2>Grand Livre (Ledger AML)</h2>
-                    <p style={{ color: 'var(--text-secondary)' }}>Surveillance en temps réel de tous les flux financiers de la plateforme.</p>
-                </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                    <button onClick={exportCSV} style={{ padding: '12px 20px', backgroundColor: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
-                        <Download size={18} />
-                        CSV
-                    </button>
-                    <button onClick={exportPDF} style={{ padding: '12px 20px', backgroundColor: 'var(--danger)', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
-                        <FileText size={18} />
-                        Télécharger PDF
-                    </button>
+        <div style={{ maxWidth: 1100, margin: '0 auto', paddingBottom: 60, position: 'relative' }}>
+            <div style={{ marginBottom: 32 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <h2 style={{ fontSize: 24, fontWeight: 900, color: 'var(--text-primary)', marginBottom: 4, letterSpacing: '-0.02em' }}>Grand Livre (Ledger AML)</h2>
+                        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Surveillance en temps réel de tous les flux financiers de la plateforme.</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 12 }}>
+                        <button onClick={exportCSV} style={{ padding: '10px 18px', background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 13, transition: '0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'} onMouseLeave={e => e.currentTarget.style.transform = 'none'}>
+                            <Download size={16} /> CSV
+                        </button>
+                        <button onClick={exportPDF} style={{ padding: '10px 18px', background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 13, transition: '0.2s', boxShadow: '0 4px 12px rgba(220, 38, 38, 0.25)' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'} onMouseLeave={e => e.currentTarget.style.transform = 'none'}>
+                            <FileText size={16} /> Rapport PDF
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            <div style={{ marginBottom: '24px', position: 'relative', maxWidth: '600px' }}>
-                <Search size={20} color="var(--text-secondary)" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
-                <input
-                    type="text"
-                    placeholder="Rechercher par Numéro, Référence ou Nom..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    style={{
-                        width: '100%', padding: '16px 16px 16px 48px',
-                        borderRadius: '12px', backgroundColor: 'var(--bg-secondary)',
-                        border: '1px solid var(--border)', color: 'var(--text-primary)',
-                        fontSize: '15px'
-                    }}
-                />
+            {/* ── FILTRES ── */}
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 24, padding: 20, background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }}>
+                <div style={{ position: 'relative', flex: 1, maxWidth: 500 }}>
+                    <Search size={18} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input
+                        type="text"
+                        placeholder="Rechercher par Numéro, Référence ou Nom..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px 12px 42px', color: 'var(--text-primary)', fontSize: 14, outline: 'none', transition: 'border-color 0.2s' }}
+                    />
+                </div>
             </div>
 
-            <div className="stat-card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, padding: '0 8px' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)' }}>Registre des transactions ({filteredTransactions.length})</span>
+            </div>
+
+            {/* ── TABLEAU ── */}
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 {loading ? (
-                    <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Chargement du Ledger...</div>
+                    <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)', fontWeight: 600 }}>Chargement du Ledger...</div>
                 ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 14 }}>
                         <thead>
-                            <tr style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Date</th>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Flux (De / Vers)</th>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Montant</th>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)' }}>Référence</th>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)', textAlign: 'right' }}>Statut</th>
-                                <th style={{ padding: '16px', color: 'var(--text-secondary)', textAlign: 'right' }}>Actions</th>
+                            <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                                {['Date', 'Flux (De / Vers)', 'Montant', 'Référence', 'Statut', 'Actions'].map((h, i) => (
+                                    <th key={i} style={{ padding: '16px 20px', color: 'var(--text-muted)', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: (h === 'Statut' || h === 'Actions') ? 'right' : 'left' }}>{h}</th>
+                                ))}
                             </tr>
                         </thead>
                         <tbody>
@@ -216,60 +216,64 @@ export default function Ledger({ token, hasPerm }: { token: string; hasPerm: (pe
 
                                 const isFee = tx.reference?.startsWith('FEE');
                                 const isMint = tx.reference?.startsWith('MINT');
-                                // CIN = cash-in guichet (CashOperationService), PULL = dépôt Mobile Money PVit
-                                // (backend/src/routes/wallet.ts POST /pull) — aucune écriture ne génère plus
-                                // de préfixe "DEPOSIT" à ce jour, mais on le garde pour compat avec d'anciennes
-                                // transactions historiques.
                                 const isDeposit = tx.reference?.startsWith('DEPOSIT') || tx.reference?.startsWith('CIN') || tx.reference?.startsWith('PULL');
 
                                 return (
-                                    <tr key={tx.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                                        <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                                    <tr key={tx.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                        <td style={{ padding: '16px 20px', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600 }}>
                                             {new Date(tx.createdAt).toLocaleString('fr-FR')}
                                         </td>
-                                        <td style={{ padding: '16px' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)' }}>
-                                                    <ArrowUpRight size={16} />
-                                                    <span style={{ fontWeight: 'bold' }}>{senderName}</span>
-                                                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>({senderPhone})</span>
+                                        <td style={{ padding: '16px 20px' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <div style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--danger-bg)', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        <ArrowUpRight size={12} />
+                                                    </div>
+                                                    <span style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 13 }}>{senderName}</span>
+                                                    <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>({senderPhone})</span>
                                                 </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)' }}>
-                                                    <ArrowDownLeft size={16} />
-                                                    <span style={{ fontWeight: 'bold' }}>{receiverName}</span>
-                                                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>({receiverPhone})</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <div style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--success-bg)', color: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        <ArrowDownLeft size={12} />
+                                                    </div>
+                                                    <span style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 13 }}>{receiverName}</span>
+                                                    <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>({receiverPhone})</span>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td style={{ padding: '16px', fontWeight: 'bold', fontSize: '16px' }}>
-                                            {tx.amount.toLocaleString('fr-FR')} FCFA
+                                        <td style={{ padding: '16px 20px' }}>
+                                            <div style={{ fontWeight: 900, fontSize: 15, color: 'var(--text-primary)' }}>{tx.amount.toLocaleString('fr-FR')} FCFA</div>
                                         </td>
-                                        <td style={{ padding: '16px', fontFamily: 'monospace', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                                            {isFee && <span style={{ color: 'var(--warning)', fontWeight: 'bold', marginRight: '4px' }}>[FEE]</span>}
-                                            {isMint && <span style={{ color: 'var(--accent)', fontWeight: 'bold', marginRight: '4px' }}>[MINT]</span>}
-                                            {isDeposit && <span style={{ color: '#1DC5E9', fontWeight: 'bold', marginRight: '4px' }}>[CASH-IN]</span>}
-                                            {tx.reference || tx.id.substring(0, 8)}
+                                        <td style={{ padding: '16px 20px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                {isFee && <span style={{ padding: '2px 6px', background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', borderRadius: 6, fontSize: 10, fontWeight: 900 }}>FEE</span>}
+                                                {isMint && <span style={{ padding: '2px 6px', background: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed', borderRadius: 6, fontSize: 10, fontWeight: 900 }}>MINT</span>}
+                                                {isDeposit && <span style={{ padding: '2px 6px', background: 'rgba(29, 197, 233, 0.1)', color: '#1DC5E9', borderRadius: 6, fontSize: 10, fontWeight: 900 }}>CASH-IN</span>}
+                                                <code style={{ fontSize: 12, background: 'none', padding: 0, color: 'var(--text-secondary)', fontWeight: 600 }}>{tx.reference || tx.id.substring(0, 8)}</code>
+                                            </div>
                                         </td>
-                                        <td style={{ padding: '16px', textAlign: 'right' }}>
+                                        <td style={{ padding: '16px 20px', textAlign: 'right' }}>
                                             <span style={{
-                                                padding: '4px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold',
+                                                padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 900, textTransform: 'uppercase',
                                                 backgroundColor: tx.status === 'COMPLETED' ? 'var(--success-bg)' : tx.status === 'REFUNDED' ? 'var(--danger-bg)' : 'var(--warning-bg)',
                                                 color: tx.status === 'COMPLETED' ? 'var(--success)' : tx.status === 'REFUNDED' ? 'var(--danger)' : 'var(--warning)'
                                             }}>
                                                 {statusLabel(tx.status)}
                                             </span>
                                         </td>
-                                        <td style={{ padding: '16px', textAlign: 'right' }}>
+                                        <td style={{ padding: '16px 20px', textAlign: 'right' }}>
                                             {tx.status === 'COMPLETED' && !isMint && !isFee && !isDeposit && hasPerm(['perm_refund_request']) && (
                                                 <button
                                                     onClick={() => handleRefund(tx)}
                                                     style={{
-                                                        padding: '4px 8px', backgroundColor: 'transparent',
+                                                        padding: '6px 12px', backgroundColor: 'transparent',
                                                         color: 'var(--danger)', border: '1px solid var(--danger-bg)',
-                                                        borderRadius: '6px', cursor: 'pointer',
-                                                        display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 'bold'
-                                                    }}>
-                                                    <RotateCcw size={14} /> Rembourser
+                                                        borderRadius: 8, cursor: 'pointer',
+                                                        display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 12, transition: '0.2s'
+                                                    }}
+                                                    onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--danger-bg)'}
+                                                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                                    <RotateCcw size={14} /> Annuler
                                                 </button>
                                             )}
                                         </td>
@@ -279,8 +283,9 @@ export default function Ledger({ token, hasPerm }: { token: string; hasPerm: (pe
 
                             {filteredTransactions.length === 0 && (
                                 <tr>
-                                    <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: error ? 'var(--danger)' : 'var(--text-secondary)' }}>
-                                        {error ? `⚠️ ${error}` : 'Aucune transaction trouvée.'}
+                                    <td colSpan={6} style={{ padding: 80, textAlign: 'center', color: error ? 'var(--danger)' : 'var(--text-secondary)' }}>
+                                        <FileText size={48} style={{ opacity: 0.2, marginBottom: 16 }} />
+                                        <div style={{ fontWeight: 600, fontSize: 15 }}>{error ? `⚠️ ${error}` : 'Aucune transaction ne correspond à cette recherche.'}</div>
                                     </td>
                                 </tr>
                             )}

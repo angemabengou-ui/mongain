@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarClock, Pause, Play, RefreshCw, Users as UsersIcon } from 'lucide-react';
+import { ArrowLeft, CalendarClock, Pause, Play, RefreshCw, Search, Users as UsersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import ConfirmDialog from './components/ConfirmDialog';
 import PageHeader from './components/PageHeader';
@@ -170,96 +170,106 @@ export default function Tontines({ token, hasPerm, initialSelectedId }: { token:
                         )}
 
                         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', margin: '20px 0 28px' }}>
-                            <div className="table-container" style={{ padding: 16, flex: '1 1 200px' }}>
-                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 6 }}>Cotisation</div>
-                                <div style={{ fontSize: 22, fontWeight: 800 }}>{fmt(detail.contribution)}</div>
+                            <div className="card" style={{ padding: 24, flex: '1 1 200px' }}>
+                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 6, fontWeight: 800 }}>Cotisation</div>
+                                <div style={{ fontSize: 26, fontWeight: 900, color: 'var(--text-primary)' }}>{fmt(detail.contribution)}</div>
                             </div>
-                            <div className="table-container" style={{ padding: 16, flex: '1 1 200px' }}>
-                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 6 }}>Fréquence</div>
-                                <div style={{ fontSize: 22, fontWeight: 800 }}>{FREQUENCY_LABELS[detail.frequency] || detail.frequency}</div>
+                            <div className="card" style={{ padding: 24, flex: '1 1 200px' }}>
+                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 6, fontWeight: 800 }}>Fréquence</div>
+                                <div style={{ fontSize: 26, fontWeight: 900, color: 'var(--text-primary)' }}>{FREQUENCY_LABELS[detail.frequency] || detail.frequency}</div>
                             </div>
-                            <div className="table-container" style={{ padding: 16, flex: '1 1 200px' }}>
-                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 6 }}>Cycle actuel</div>
-                                <div style={{ fontSize: 22, fontWeight: 800 }}>{detail.currentCycle}</div>
+                            <div className="card" style={{ padding: 24, flex: '1 1 200px' }}>
+                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 6, fontWeight: 800 }}>Cycle actuel</div>
+                                <div style={{ fontSize: 26, fontWeight: 900, color: 'var(--text-primary)' }}>{detail.currentCycle}</div>
                             </div>
-                            <div className="table-container" style={{ padding: 16, flex: '1 1 200px' }}>
-                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 6 }}>Statut</div>
-                                <div style={{ fontSize: 22, fontWeight: 800 }}><StatusPill status={detail.status} labels={STATUS_LABELS} /></div>
+                            <div className="card" style={{ padding: 24, flex: '1 1 200px' }}>
+                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: 6, fontWeight: 800 }}>Statut</div>
+                                <div style={{ fontSize: 26, fontWeight: 900, color: 'var(--text-primary)' }}><StatusPill status={detail.status} labels={STATUS_LABELS} /></div>
                             </div>
                         </div>
 
-                        <h3 style={{ fontSize: 16, marginBottom: 12 }}>Participants ({detail.participants.length})</h3>
-                        <div className="table-container" style={{ marginBottom: 28 }}>
-                            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, textAlign: 'left' }}>
-                                <thead><tr><th>Nom</th><th>Téléphone</th><th>Ordre de versement</th><th>Statut</th><th>Ponctualité</th><th>Cagnotte reçue</th>{canManage && <th></th>}</tr></thead>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                            <h3 style={{ fontSize: 18, fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>Participants ({detail.participants.length})</h3>
+                        </div>
+                        <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 32 }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 14 }}>
+                                <thead>
+                                    <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                                        {['Nom', 'Téléphone', 'Ordre de versement', 'Statut', 'Ponctualité', 'Cagnotte reçue', ...(canManage ? ['Actions'] : [])].map((h, i) => (
+                                            <th key={i} style={{ padding: '16px 20px', color: 'var(--text-muted)', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: h === 'Actions' ? 'right' : 'left' }}>{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
                                 <tbody>
                                     {detail.participants.map((p: any) => {
                                         const rel = computeReliability(p.id, cycles);
                                         return (
-                                        <tr key={p.id}>
-                                            <td>{p.user.name}</td>
-                                            <td style={{ color: 'var(--text-secondary)' }}>{p.user.phone}</td>
-                                            <td>{p.payoutOrder}</td>
-                                            <td><StatusPill status={p.status} labels={PARTICIPANT_STATUS_LABELS} /></td>
-                                            <td style={{ color: rel.total === 0 ? 'var(--text-muted)' : rel.paid === rel.total ? 'var(--success)' : 'var(--warning)', fontWeight: 700, fontSize: 13 }}>
-                                                {rel.total === 0 ? 'Pas encore d’historique' : `${rel.paid}/${rel.total} cycles`}
-                                            </td>
-                                            <td>{p.hasReceivedPayout ? '✅ Oui' : '—'}</td>
-                                            {canManage && (
-                                                <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                                                    {p.status === 'PAUSED' ? (
-                                                        <ActionButton onClick={() => setConfirmState({ type: 'resume-participant', userId: p.userId, name: p.user.name })}>Reprendre</ActionButton>
-                                                    ) : (
-                                                        <ActionButton danger onClick={() => setConfirmState({ type: 'pause-participant', userId: p.userId, name: p.user.name })}>Mettre en pause</ActionButton>
-                                                    )}
-                                                    {detail.status === 'ACTIVE' && p.status === 'ACTIVE' && !p.hasReceivedPayout && (
-                                                        <ActionButton onClick={() => setConfirmState({ type: 'emergency-payout', userId: p.userId, name: p.user.name })}>Paiement d'urgence</ActionButton>
-                                                    )}
+                                            <tr key={p.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                                <td style={{ padding: '16px 20px', fontWeight: 800, color: 'var(--text-primary)' }}>{p.user.name}</td>
+                                                <td style={{ padding: '16px 20px', color: 'var(--text-secondary)', fontWeight: 600 }}>{p.user.phone}</td>
+                                                <td style={{ padding: '16px 20px', fontWeight: 800 }}>#{p.payoutOrder}</td>
+                                                <td style={{ padding: '16px 20px' }}><StatusPill status={p.status} labels={PARTICIPANT_STATUS_LABELS} /></td>
+                                                <td style={{ padding: '16px 20px', color: rel.total === 0 ? 'var(--text-muted)' : rel.paid === rel.total ? 'var(--success)' : 'var(--warning)', fontWeight: 800, fontSize: 13 }}>
+                                                    {rel.total === 0 ? 'Pas encore historique' : `${rel.paid}/${rel.total} cycles`}
                                                 </td>
-                                            )}
-                                        </tr>
+                                                <td style={{ padding: '16px 20px', fontWeight: 700 }}>{p.hasReceivedPayout ? '✅ Oui' : '—'}</td>
+                                                {canManage && (
+                                                    <td style={{ padding: '16px 20px', textAlign: 'right', display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                                                        {p.status === 'PAUSED' ? (
+                                                            <ActionButton onClick={() => setConfirmState({ type: 'resume-participant', userId: p.userId, name: p.user.name })}>Reprendre</ActionButton>
+                                                        ) : (
+                                                            <ActionButton danger onClick={() => setConfirmState({ type: 'pause-participant', userId: p.userId, name: p.user.name })}>Mettre en pause</ActionButton>
+                                                        )}
+                                                        {detail.status === 'ACTIVE' && p.status === 'ACTIVE' && !p.hasReceivedPayout && (
+                                                            <ActionButton onClick={() => setConfirmState({ type: 'emergency-payout', userId: p.userId, name: p.user.name })}>Urgence</ActionButton>
+                                                        )}
+                                                    </td>
+                                                )}
+                                            </tr>
                                         );
                                     })}
                                 </tbody>
                             </table>
                         </div>
 
-                        <h3 style={{ fontSize: 16, marginBottom: 12 }}>Historique des cycles ({cycles.length})</h3>
-                        <div className="table-container" style={{ marginBottom: 28 }}>
-                            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, textAlign: 'left' }}>
-                                <thead><tr><th>Cycle</th><th>Exécuté le</th><th>Attendu</th><th>Collecté</th><th>Statut</th><th>Détail des échecs</th>{canManage && <th></th>}</tr></thead>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                            <h3 style={{ fontSize: 18, fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>Historique des cycles ({cycles.length})</h3>
+                        </div>
+                        <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 32 }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 14 }}>
+                                <thead>
+                                    <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                                        {['Cycle', 'Exécuté le', 'Attendu', 'Collecté', 'Statut', 'Détail des échecs', ...(canManage ? ['Actions'] : [])].map((h, i) => (
+                                            <th key={i} style={{ padding: '16px 20px', color: 'var(--text-muted)', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: h === 'Actions' ? 'right' : 'left' }}>{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
                                 <tbody>
                                     {cycles.length === 0 ? (
-                                        <tr><td colSpan={canManage ? 7 : 6} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Aucun cycle enregistré dans le grand livre structuré (groupe créé avant sa mise en place, ou aucun cycle exécuté) — voir « Mouvements » ci-dessous.</td></tr>
+                                        <tr><td colSpan={canManage ? 7 : 6} style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontWeight: 600 }}>Aucun cycle enregistré dans le grand livre structuré (groupe créé avant sa mise en place, ou aucun cycle exécuté) — voir « Mouvements » ci-dessous.</td></tr>
                                     ) : cycles.map((c: any) => {
-                                        // PARTIAL : cotisation incomplète (dépôts libres, voir tontineService.ts) —
-                                        // FAILED : statut hérité des cycles antérieurs à leur introduction (0 collecté).
                                         const incomplete = (c.contributions || []).filter((ct: any) => ct.status === 'PARTIAL' || ct.status === 'FAILED');
                                         return (
-                                            <tr key={c.id}>
-                                                <td style={{ fontWeight: 700 }}>#{c.cycleNumber}</td>
-                                                <td style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{fmtDate(c.executedAt)}</td>
-                                                <td>{fmt(c.totalExpected)}</td>
-                                                <td style={{ fontWeight: 700 }}>{fmt(c.totalCollected)}</td>
-                                                <td><StatusPill status={c.status} labels={CYCLE_STATUS_LABELS} /></td>
-                                                <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                            <tr key={c.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                                <td style={{ padding: '16px 20px', fontWeight: 900, color: 'var(--text-primary)' }}>#{c.cycleNumber}</td>
+                                                <td style={{ padding: '16px 20px', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>{fmtDate(c.executedAt)}</td>
+                                                <td style={{ padding: '16px 20px', fontWeight: 700 }}>{fmt(c.totalExpected)}</td>
+                                                <td style={{ padding: '16px 20px', fontWeight: 900, color: 'var(--text-primary)' }}>{fmt(c.totalCollected)}</td>
+                                                <td style={{ padding: '16px 20px' }}><StatusPill status={c.status} labels={CYCLE_STATUS_LABELS} /></td>
+                                                <td style={{ padding: '16px 20px', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>
                                                     {c.status === 'PAYOUT_FAILED'
                                                         ? 'Cotisations OK — le versement de la cagnotte a échoué'
                                                         : incomplete.length === 0 ? '—' : incomplete.map((ct: any) => {
                                                             const name = ct.participant?.user?.name;
-                                            // Pour FAILED (statut hérité, voir tontineService.ts), `ct.amount` vaut déjà
-                                            // `detail.contribution` (figé dès le premier cycle exécuté — PUT /settings
-                                            // refuse tout changement de cotisation après coup) : les deux écritures sont
-                                            // équivalentes, celle-ci étant juste plus directe à lire.
-                                            const owed = ct.status === 'FAILED' ? detail.contribution : Math.max(0, detail.contribution - ct.amount);
+                                                            const owed = ct.status === 'FAILED' ? detail.contribution : Math.max(0, detail.contribution - ct.amount);
                                                             return name ? `${name} (doit ${fmt(owed)})` : null;
                                                         }).filter(Boolean).join(', ')}
                                                 </td>
                                                 {canManage && (
-                                                    <td>
+                                                    <td style={{ padding: '16px 20px', textAlign: 'right' }}>
                                                         {(c.status === 'PARTIAL' || c.status === 'PAYOUT_FAILED') && (
                                                             <ActionButton onClick={() => setConfirmState({ type: 'retry-cycle', cycleId: c.id, cycleNumber: c.cycleNumber })}>
-                                                                <RefreshCw size={11} style={{ verticalAlign: -1, marginRight: 3 }} />Réessayer
+                                                                <RefreshCw size={11} style={{ verticalAlign: -1, marginRight: 4 }} />Réessayer
                                                             </ActionButton>
                                                         )}
                                                     </td>
@@ -271,24 +281,35 @@ export default function Tontines({ token, hasPerm, initialSelectedId }: { token:
                             </table>
                         </div>
 
-                        <h3 style={{ fontSize: 16, marginBottom: 12 }}>Mouvements ({transactions.length})</h3>
-                        <div className="table-container">
-                            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, textAlign: 'left' }}>
-                                <thead><tr><th>Date</th><th>Type</th><th>Montant</th><th>Frais</th><th>Participant</th><th>Statut</th></tr></thead>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                            <h3 style={{ fontSize: 18, fontWeight: 900, color: 'var(--text-primary)', margin: 0 }}>Mouvements ({transactions.length})</h3>
+                        </div>
+                        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 14 }}>
+                                <thead>
+                                    <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                                        {['Date', 'Type', 'Montant', 'Frais', 'Participant', 'Statut'].map((h, i) => (
+                                            <th key={i} style={{ padding: '16px 20px', color: 'var(--text-muted)', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
                                 <tbody>
                                     {transactions.length === 0 ? (
-                                        <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Aucun mouvement.</td></tr>
+                                        <tr><td colSpan={6} style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontWeight: 600 }}>Aucun mouvement enregistré.</td></tr>
                                     ) : transactions.map((tx: any) => {
                                         const isPayout = tx.reference?.includes('_PAY_');
                                         const participant = isPayout ? tx.receiverWallet?.user : tx.senderWallet?.user;
                                         return (
-                                            <tr key={tx.id}>
-                                                <td style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{fmtDate(tx.createdAt)}</td>
-                                                <td>{isPayout ? '🎉 Versement de cagnotte' : '💸 Cotisation'}</td>
-                                                <td style={{ fontWeight: 700 }}>{fmt(tx.amount)}</td>
-                                                <td style={{ color: 'var(--text-secondary)' }}>{tx.fee ? fmt(tx.fee) : '—'}</td>
-                                                <td>{participant?.name || '—'}<div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{participant?.phone}</div></td>
-                                                <td><StatusPill status={tx.status} labels={TX_STATUS_LABELS} /></td>
+                                            <tr key={tx.id} style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                                <td style={{ padding: '16px 20px', fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600, whiteSpace: 'nowrap' }}>{fmtDate(tx.createdAt)}</td>
+                                                <td style={{ padding: '16px 20px', fontWeight: 700 }}>{isPayout ? '🎉 Versement de cagnotte' : '💸 Cotisation'}</td>
+                                                <td style={{ padding: '16px 20px', fontWeight: 900, color: 'var(--text-primary)' }}>{fmt(tx.amount)}</td>
+                                                <td style={{ padding: '16px 20px', color: 'var(--text-secondary)', fontWeight: 600 }}>{tx.fee ? fmt(tx.fee) : '—'}</td>
+                                                <td style={{ padding: '16px 20px' }}>
+                                                    <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: 13 }}>{participant?.name || '—'}</div>
+                                                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{participant?.phone}</div>
+                                                </td>
+                                                <td style={{ padding: '16px 20px' }}><StatusPill status={tx.status} labels={TX_STATUS_LABELS} /></td>
                                             </tr>
                                         );
                                     })}
@@ -383,56 +404,76 @@ export default function Tontines({ token, hasPerm, initialSelectedId }: { token:
     });
 
     return (
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', paddingBottom: 60, position: 'relative' }}>
             <ToastHost toasts={toasts} />
-            <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <PageHeader title="Tontines" subtitle={canManage ? "Vue d'ensemble des clubs de tontine — mettre en pause, relancer un cycle en échec." : "Vue d'ensemble des clubs de tontine — lecture seule."} />
-                <button onClick={fetchList} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>
-                    <RefreshCw size={14} /> Rafraîchir
-                </button>
+
+            <div style={{ marginBottom: 32 }}>
+                <PageHeader
+                    title="Tontines"
+                    subtitle={canManage ? "Vue d'ensemble des clubs de tontine — gérer, mettre en pause, relancer." : "Vue d'ensemble des clubs de tontine — lecture seule."}
+                    action={
+                        <button onClick={fetchList} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', background: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, transition: '0.2s', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'} onMouseLeave={e => e.currentTarget.style.transform = 'none'}>
+                            <RefreshCw size={16} /> Rafraîchir
+                        </button>
+                    }
+                />
             </div>
 
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
-                <input
-                    placeholder="🔍 Rechercher une tontine ou un créateur…"
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    style={{ width: '100%', maxWidth: 360, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-primary)', fontSize: 13 }}
-                />
-                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', color: 'var(--text-primary)', fontSize: 13 }}>
-                    <option value="all">Toutes</option>
+            {/* ── FILTRES ── */}
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 24, padding: 20, background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border)', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }}>
+                <div style={{ position: 'relative', flex: 1, maxWidth: 400 }}>
+                    <Search size={18} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input
+                        placeholder="Rechercher une tontine ou créateur…"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px 12px 42px', color: 'var(--text-primary)', fontSize: 14, outline: 'none' }}
+                    />
+                </div>
+                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} style={{ flex: '0 0 200px', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px', color: 'var(--text-primary)', fontSize: 14, outline: 'none', cursor: 'pointer' }}>
+                    <option value="all">Toutes les tontines</option>
                     <option value="paused">En pause uniquement</option>
                 </select>
             </div>
 
             {error && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--danger)', background: 'var(--danger-bg)', padding: '10px 16px', borderRadius: 8, marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--danger)', background: 'var(--danger-bg)', padding: '16px 20px', borderRadius: 12, marginBottom: 24, fontWeight: 600 }}>
                     <span style={{ flex: 1 }}>{error}</span>
-                    <button onClick={fetchList} style={{ padding: '6px 12px', background: 'var(--btn-dark-bg)', color: 'var(--btn-dark-text)', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>Réessayer</button>
+                    <button onClick={fetchList} style={{ padding: '8px 14px', background: 'var(--btn-dark-bg)', color: 'var(--btn-dark-text)', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>Réessayer</button>
                 </div>
             )}
 
-            <div className="table-container">
-                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, textAlign: 'left' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, padding: '0 8px' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)' }}>Groupes ({filteredGroups.length})</span>
+            </div>
+
+            {/* ── TABLEAU ── */}
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: 14 }}>
                     <thead>
-                        <tr>
-                            <th>Tontine</th><th>Créateur</th><th>Membres</th><th>Cotisation</th><th>Fréquence</th><th>Cycle</th><th>Statut</th>
+                        <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border)' }}>
+                            {['Tontine', 'Créateur', 'Membres', 'Cotisation', 'Fréquence', 'Cycle', 'Statut'].map((h, i) => (
+                                <th key={i} style={{ padding: '16px 20px', color: 'var(--text-muted)', fontWeight: 800, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                            ))}
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
-                            <tr><td colSpan={7} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Chargement...</td></tr>
+                            <tr><td colSpan={7} style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontWeight: 600 }}>Chargement...</td></tr>
                         ) : filteredGroups.length === 0 ? (
-                            <tr><td colSpan={7} style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>{groups.length === 0 ? "Aucune tontine créée pour l'instant." : 'Aucune tontine ne correspond à la recherche.'}</td></tr>
+                            <tr><td colSpan={7} style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontWeight: 600 }}>{groups.length === 0 ? "Aucune tontine créée pour l'instant." : 'Aucune tontine ne correspond à la recherche.'}</td></tr>
                         ) : filteredGroups.map(g => (
-                            <tr key={g.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedId(g.id)}>
-                                <td style={{ fontWeight: 600 }}>{g.name}{g.isPaused && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: 'var(--danger-bg)', color: 'var(--danger)' }}>En pause</span>}</td>
-                                <td style={{ color: 'var(--text-secondary)' }}>{g.creator?.name}</td>
-                                <td style={{ color: 'var(--text-secondary)' }}><UsersIcon size={12} style={{ marginRight: 4, verticalAlign: -1 }} />{g._count.participants}</td>
-                                <td style={{ fontWeight: 700 }}>{fmt(g.contribution)}</td>
-                                <td style={{ color: 'var(--text-secondary)' }}>{FREQUENCY_LABELS[g.frequency] || g.frequency}</td>
-                                <td style={{ color: 'var(--text-secondary)' }}>{g.currentCycle}</td>
-                                <td><StatusPill status={g.status} labels={STATUS_LABELS} /></td>
+                            <tr key={g.id} style={{ cursor: 'pointer', borderBottom: '1px solid var(--border)', transition: 'background 0.2s' }} onClick={() => setSelectedId(g.id)} onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'} onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                <td style={{ padding: '16px 20px', fontWeight: 800, color: 'var(--text-primary)', fontSize: 14 }}>
+                                    {g.name}
+                                    {g.isPaused && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 900, textTransform: 'uppercase', padding: '2px 8px', borderRadius: 10, background: 'var(--danger-bg)', color: 'var(--danger)' }}>En pause</span>}
+                                </td>
+                                <td style={{ padding: '16px 20px', color: 'var(--text-secondary)', fontWeight: 600 }}>{g.creator?.name}</td>
+                                <td style={{ padding: '16px 20px', color: 'var(--text-secondary)', fontWeight: 600 }}><UsersIcon size={14} style={{ marginRight: 6, verticalAlign: -2 }} />{g._count.participants}</td>
+                                <td style={{ padding: '16px 20px', fontWeight: 800, fontSize: 15, color: 'var(--text-primary)' }}>{fmt(g.contribution)}</td>
+                                <td style={{ padding: '16px 20px', color: 'var(--text-secondary)', fontWeight: 600 }}>{FREQUENCY_LABELS[g.frequency] || g.frequency}</td>
+                                <td style={{ padding: '16px 20px', color: 'var(--text-secondary)', fontWeight: 800 }}>#{g.currentCycle}{g.totalCycles ? ` / ${g.totalCycles}` : ''}</td>
+                                <td style={{ padding: '16px 20px' }}><StatusPill status={g.status} labels={STATUS_LABELS} /></td>
                             </tr>
                         ))}
                     </tbody>
