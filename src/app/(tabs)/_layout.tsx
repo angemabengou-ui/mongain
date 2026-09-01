@@ -102,6 +102,15 @@ export default function TabLayout() {
                     ),
                 }}
             />
+            <Tabs.Screen
+                name="pay"
+                options={{
+                    title: 'Payer',
+                    tabBarIcon: ({ color, size, focused }) => (
+                        <Ionicons name={focused ? 'qr-code' : 'qr-code-outline'} size={size} color={color} />
+                    ),
+                }}
+            />
         </Tabs>
     );
 }
