@@ -1,5 +1,6 @@
 import { Expo } from 'expo-server-sdk';
 import express from 'express';
+import { io } from '../index';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { hasPermission } from '../services/RBAC';
@@ -28,7 +29,7 @@ router.post('/broadcast', authMiddleware, async (req: AuthRequest, res) => {
             query.accountStatus = 'FROZEN';
         } // 'ALL' leaves query alone
 
-        const users = await prisma.user.findMany({ where: query, select: { pushToken: true } });
+        const users = await prisma.user.findMany({ where: query, select: { pushToken: true, phone: true } });
 
         let messages = [];
         for (let user of users) {
@@ -41,6 +42,8 @@ router.post('/broadcast', authMiddleware, async (req: AuthRequest, res) => {
                     data: { withSome: 'data' },
                 });
             }
+            // SOCKET.IO FALLBACK: Emit local push instruction directly to the connected device!
+            io.to(`user_${user.phone}`).emit('global_push', { title, body: message });
         }
 
         let chunks = expo.chunkPushNotifications(messages as any);

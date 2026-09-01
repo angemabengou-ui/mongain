@@ -104,6 +104,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             );
         });
 
+        // SOCKET.IO FALLBACK: Bypass firebase restriction using local Native OS notifications
+        newSocket.on('global_push', async (data: { title: string, body: string }) => {
+            try {
+                await Notifications.scheduleNotificationAsync({
+                    content: { title: data.title, body: data.body, sound: true },
+                    trigger: null // déclenche immédiatement !
+                });
+            } catch (e) { console.error('Local Push error:', e); }
+        });
+
         setSocket(newSocket);
 
         // Enregistrer le push token en arrière-plan
@@ -116,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 // consigner cet échec via console.error ne faisait qu'afficher un écran
                 // d'erreur rouge alarmant pour un enregistrement de notification par
                 // ailleurs sans conséquence (retenté à la prochaine connexion).
-                apiUpdatePushToken(token).catch(() => {});
+                apiUpdatePushToken(token).catch(() => { });
             }
         });
 

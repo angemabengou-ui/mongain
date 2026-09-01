@@ -83,7 +83,7 @@ function isOriginAllowed(origin: string | undefined): boolean {
     return false;
 }
 
-const io = new Server(server, {
+export const io = new Server(server, {
     cors: {
         origin: (origin, callback) => {
             if (isOriginAllowed(origin)) return callback(null, true);
