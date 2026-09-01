@@ -76,7 +76,6 @@ export default function CryptoScreen() {
                     <ActivityIndicator size="large" color="#ffffff" style={{ marginTop: 40 }} />
                 ) : (
                     <View>
-                        {/* Portefeuille Global Crypto */}
                         <BlurView intensity={50} tint="dark" style={styles.portfolioGlass}>
                             <Text style={styles.portfolioLabel}>VALEUR DU PORTEFEUILLE</Text>
                             <Text style={styles.portfolioValue}>
@@ -87,7 +86,6 @@ export default function CryptoScreen() {
                             </Text>
                         </BlurView>
 
-                        {/* Marché en Direct */}
                         <Text style={styles.sectionTitle}>Marché en direct</Text>
 
                         {market.map((m, i) => {
@@ -121,7 +119,7 @@ export default function CryptoScreen() {
                                         />
                                         <TouchableOpacity style={[styles.btn, { backgroundColor: '#10B981' }]} onPress={() => handleBuy(m.asset)} disabled={actionLoading}>
                                             <Ionicons name="arrow-down" color="#fff" size={16} />
-                                            <Text style={styles.btnText}>Acheter (XAF)</Text>
+                                            <Text style={styles.btnText}>Acheter</Text>
                                         </TouchableOpacity>
 
                                         <TouchableOpacity style={[styles.btn, { backgroundColor: '#EF4444' }]} onPress={() => handleSell(m.asset)} disabled={actionLoading}>
@@ -159,5 +157,3 @@ const styles = StyleSheet.create({
     btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 12, gap: 8, paddingHorizontal: 16 },
     btnText: { color: '#fff', fontWeight: 'bold', fontSize: 12 }
 });
-
-
