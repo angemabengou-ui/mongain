@@ -302,15 +302,15 @@ export default function SupportCenter({ token, hasPerm }: SupportCenterProps) {
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
                             <input placeholder="🔍 Rechercher…" value={searchQuery} onChange={e => { setSearchQuery(e.target.value) }} onKeyDown={e => e.key === 'Enter' && fetchTickets()}
                                 style={{ flex: 1, minWidth: 200, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 12px', color: 'var(--text-primary)', fontSize: 13 }} />
-                            <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); }} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-primary)', fontSize: 12 }}>
+                            <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); }} style={{ width: 'auto', flex: '1 1 200px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-primary)', fontSize: 12 }}>
                                 <option value="">Tous statuts</option>
                                 {STATUSES.map(s => <option key={s} value={s}>{TICKET_STATUS_LABELS[s] || s}</option>)}
                             </select>
-                            <select value={priorityFilter} onChange={e => { setPriorityFilter(e.target.value); }} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-primary)', fontSize: 12 }}>
+                            <select value={priorityFilter} onChange={e => { setPriorityFilter(e.target.value); }} style={{ width: 'auto', flex: '1 1 200px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-primary)', fontSize: 12 }}>
                                 <option value="">Toutes prios</option>
                                 {['LOW', 'NORMAL', 'HIGH', 'CRITICAL'].map(p => <option key={p} value={p}>{PRIORITY_LABELS[p] || p}</option>)}
                             </select>
-                            <select value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); }} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-primary)', fontSize: 12 }}>
+                            <select value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); }} style={{ width: 'auto', flex: '1 1 200px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, padding: '6px 10px', color: 'var(--text-primary)', fontSize: 12 }}>
                                 <option value="">Toutes catégories</option>
                                 {CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_LABELS[c] || c}</option>)}
                             </select>

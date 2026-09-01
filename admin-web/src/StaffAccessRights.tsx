@@ -230,7 +230,7 @@ export default function StaffAccessRights({ token }: { token: string }) {
                         value={search}
                         onChange={e => { setSearch(e.target.value); }}
                         placeholder="Rechercher nom, matricule, email..."
-                        style={{ width: '100%', padding: '12px 12px 12px 38px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 14 }}
+                        style={{ width: 'auto', flex: '1 1 200px', width: '100%', padding: '12px 12px 12px 38px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 14 }}
                     />
                 </div>
             </div>
