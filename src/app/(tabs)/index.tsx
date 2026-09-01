@@ -182,7 +182,8 @@ export default function DashboardScreen() {
           <View style={styles.contentContainer}>
             {/* Actions */}
             <View style={styles.actionsCard}>
-              <ActionItem icon="send" label="Envoyer" color="#4F46E5" onPress={() => router.push('/transfer')} styles={styles} />
+              <ActionItem icon="pie-chart" label="Diviser" color="#F43F5E" onPress={() => router.push('/split' as any)} styles={styles} />
+                <ActionItem icon="send" label="Envoyer" color="#4F46E5" onPress={() => router.push('/transfer')} styles={styles} />
               <ActionItem icon="scan" label="Scan & Payer" color="#F59E0B" onPress={() => router.push('/qr?mode=scanOnly&intent=pay')} styles={styles} />
               <ActionItem icon="card" label="Recharger" color="#10B981" onPress={() => router.push('/recharge' as any)} styles={styles} />
               <ActionItem icon="wallet" label="Retrait" color="#E11D48" onPress={() => router.push('/withdraw' as any)} styles={styles} />
@@ -461,3 +462,5 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
   txAmount: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
   txDate: { fontSize: 12, color: COLORS.textSecondary },
 });
+
+

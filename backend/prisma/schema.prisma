@@ -11,6 +11,8 @@ datasource db {
 }
 
 model User {
+  splitRequestsSent SplitRequest[] @relation("SplitRequester")
+  splitRequestsReceived SplitRequest[] @relation("SplitTarget")
   loyaltyPoints Float @default(0)
   id                String    @id @default(uuid())
   username          String?   @unique // Secondary auth identifier (Anti-SIM recycle)
@@ -1001,3 +1003,16 @@ model CryptoTransaction {
   createdAt       DateTime    @default(now())
 }
 
+
+
+model SplitRequest {
+  id String @id @default(uuid())
+  amount Float
+  requesterId String
+  requester User @relation("SplitRequester", fields: [requesterId], references: [id])
+  targetPhone String
+  targetId String?
+  target User? @relation("SplitTarget", fields: [targetId], references: [id])
+  status String @default("PENDING") // PENDING, PAID, CANCELLED
+  createdAt DateTime @default(now())
+}
