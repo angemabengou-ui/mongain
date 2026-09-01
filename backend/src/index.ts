@@ -14,6 +14,7 @@ import agencyRoutes from './routes/agency';
 import authRoutes from './routes/auth';
 import cardsRoutes from './routes/cards';
 import corpRoutes from './routes/corp';
+import cryptoRoutes from './routes/crypto';
 import merchantRoutes from './routes/merchant';
 import notificationRoutes from './routes/notifications';
 import pushRoutes from './routes/push';
@@ -166,6 +167,7 @@ app.use('/api/webhooks', webhookRoutes);
 // ==========================================
 app.use('/api/wallet', circuitBreakerMiddleware, walletRoutes);
 app.use('/api/wallet/cards', circuitBreakerMiddleware, cardsRoutes);
+app.use('/api/crypto', circuitBreakerMiddleware, cryptoRoutes);
 app.use('/api/merchant', circuitBreakerMiddleware, merchantRoutes);
 app.use('/api/vaults', circuitBreakerMiddleware, vaultRoutes);
 app.use('/api/tontine', circuitBreakerMiddleware, tontineRoutes);

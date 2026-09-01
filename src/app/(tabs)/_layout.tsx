@@ -1,3 +1,4 @@
+
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { Tabs } from 'expo-router';
@@ -83,8 +84,19 @@ export default function TabLayout() {
                     ),
                 }}
             />
+            <Tabs.Screen
+                name="crypto"
+                options={{
+                    title: 'Crypto V8',
+                    tabBarIcon: ({ color, size, focused }) => (
+                        <Ionicons name={focused ? 'trending-up' : 'trending-up-outline'} size={size} color={color} />
+                    ),
+                }}
+            />
         </Tabs>
     );
 }
+
+
 
 

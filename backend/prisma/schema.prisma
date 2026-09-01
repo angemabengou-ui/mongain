@@ -95,6 +95,7 @@ model User {
   approvedVaultTransactions  VaultApproval[]    @relation("ApprovedVaultTransactions")
   vaultVouchers              VaultVoucher[]     @relation("VaultVouchers")
   virtualCards               VirtualCard[]
+  cryptoWallets              CryptoWallet[]
 }
 
 model Reclamation {
@@ -975,4 +976,26 @@ model VirtualCard {
   status            String    @default("ACTIVE")
   spendingLimit     Float     @default(0)
   balance           Float     @default(0)
+}
+
+model CryptoWallet {
+  id              String      @id @default(uuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  asset           String      // "BTC", "ETH", "USDT"
+  balance         Float       @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model CryptoTransaction {
+  id              String      @id @default(uuid())
+  userId          String
+  type            String      // "BUY", "SELL"
+  asset           String      // e.g "BTC"
+  amountCrypto    Float       
+  amountFiat      Float       // XAF equivalent
+  exchangeRate    Float
+  fee             Float
+  createdAt       DateTime    @default(now())
 }

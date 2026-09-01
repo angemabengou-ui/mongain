@@ -7,6 +7,7 @@ import BranchDashboard from './BranchDashboard';
 import ChangePassword from './ChangePassword';
 import GlobalSearch from './components/GlobalSearch';
 import { API_URL } from './config';
+import CryptoAdmin from './CryptoAdmin';
 import Dashboard from './Dashboard';
 import ErrorLogs from './ErrorLogs';
 import KycMod from './KycMod';
@@ -220,6 +221,7 @@ export default function App() {
         { id: 'push-center', label: 'Notifications Push', reqPerms: ['perm_analytics_view'] },
         { id: 'risk-scoring', label: 'Scoring & Risques', reqPerms: ['perm_analytics_view'] },
         { id: 'virtual-cards', label: 'Cartes Virtuelles', reqPerms: ['perm_analytics_view'] },
+        { id: 'crypto-desk', label: 'Crypto & Assets (V8)', reqPerms: ['perm_analytics_view'] },
       ]
     }
   ];
@@ -383,6 +385,7 @@ export default function App() {
           {activeTab === 'push-center' && hasPerm(['perm_analytics_view']) && <PushCenter token={token} />}
           {activeTab === 'risk-scoring' && hasPerm(['perm_analytics_view']) && <RiskScoring token={token} />}
           {activeTab === 'virtual-cards' && hasPerm(['perm_analytics_view']) && <VirtualCardsAdmin token={token} />}
+          {activeTab === 'crypto-desk' && hasPerm(['perm_analytics_view']) && <CryptoAdmin token={token} />}
 
           {/* FALLBACK IF NOT AUTHORIZED TO VIEW TAB */}
           {![
