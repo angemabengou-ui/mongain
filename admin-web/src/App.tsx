@@ -1,4 +1,4 @@
-import { Banknote, ChevronDown, ChevronRight, LayoutDashboard, LogOut, Shield, ShieldAlert, ShieldCheck, Store, Users as UsersIcon } from 'lucide-react';
+import { Banknote, ChevronDown, ChevronRight, LayoutDashboard, LogOut, Rocket, Shield, ShieldAlert, ShieldCheck, Store, Users as UsersIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Accounts from './Accounts';
 import AgencyCenter from './AgencyCenter';
@@ -14,9 +14,12 @@ import Ledger from './Ledger';
 import Login from './Login';
 import MacroStats from './MacroStats';
 import Merchants from './Merchants';
+import PushCenter from './PushCenter';
+import RiskScoring from './RiskScoring';
 import Settings from './Settings';
 import SupportCenter from './SupportCenter';
 import SystemAccounts from './SystemAccounts';
+import SystemMonitor from './SystemMonitor';
 import TellerTerminal from './TellerTerminal';
 import Tontines from './Tontines';
 import Treasury from './Treasury';
@@ -206,6 +209,17 @@ export default function App() {
         { id: 'error-logs', label: 'Logs Erreurs P0', reqPerms: ['perm_audit_log_view'] },
       ]
     },
+
+    // 8. MONGAIN V6 INNOVATION
+    {
+      id: 'innovation-v6', label: 'INNOVATION V6', icon: <Rocket size={18} />,
+      reqPerms: ['perm_analytics_view'],
+      items: [
+        { id: 'system-monitor', label: 'Santé Système', reqPerms: ['perm_analytics_view'] },
+        { id: 'push-center', label: 'Notifications Push', reqPerms: ['perm_analytics_view'] },
+        { id: 'risk-scoring', label: 'Scoring & Risques', reqPerms: ['perm_analytics_view'] },
+      ]
+    }
   ];
 
   const ROLE_LABELS: Record<string, string> = {
@@ -361,6 +375,11 @@ export default function App() {
           {activeTab === 'audit' && hasPerm(['perm_audit_log_view']) && <AuditLogs token={token} />}
           {activeTab === 'error-logs' && hasPerm(['perm_audit_log_view']) && <ErrorLogs token={token} />}
           {activeTab === 'settings' && hasPerm(['perm_system_settings_view', 'perm_system_settings_approve']) && <Settings token={token} hasPerm={hasPerm} staffId={staffId} />}
+
+          {/* V6 INNOVATION ROUTES */}
+          {activeTab === 'system-monitor' && hasPerm(['perm_analytics_view']) && <SystemMonitor token={token} />}
+          {activeTab === 'push-center' && hasPerm(['perm_analytics_view']) && <PushCenter token={token} />}
+          {activeTab === 'risk-scoring' && hasPerm(['perm_analytics_view']) && <RiskScoring token={token} />}
 
           {/* FALLBACK IF NOT AUTHORIZED TO VIEW TAB */}
           {![
