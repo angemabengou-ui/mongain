@@ -11,28 +11,28 @@ datasource db {
 }
 
 model User {
-  splitRequestsSent SplitRequest[] @relation("SplitRequester")
+  splitRequestsSent     SplitRequest[] @relation("SplitRequester")
   splitRequestsReceived SplitRequest[] @relation("SplitTarget")
-  loyaltyPoints Float @default(0)
-  id                String    @id @default(uuid())
-  username          String?   @unique // Secondary auth identifier (Anti-SIM recycle)
-  email             String?   @unique // Optional tertiary auth and recovery
-  accountNumber     String?   @unique // MONG-ID — identifiant de compte alternatif au téléphone (voir wallet.ts lookups, auth.ts register, migrate-mong-id.ts)
-  name              String
-  phone             String    @unique
-  pin               String // hashed pin code
-  failedPinAttempts Int       @default(0)
-  lockedUntil       DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  role              String    @default("USER") // USER, AGENT, ADMIN, MERCHANT
-  isActive          Boolean   @default(true) // Legacy fallback
-  accountStatus     String    @default("ACTIVE") // ACTIVE, SUSPENDED, FROZEN, CLOSED
-  freezeReason      String?   
-  frozenUntil       DateTime? 
-  
-  jwtVersion        Int       @default(0) // Invalidates sessions when logged in elsewhere
-  pushToken         String?
+  loyaltyPoints         Float          @default(0)
+  id                    String         @id @default(uuid())
+  username              String?        @unique // Secondary auth identifier (Anti-SIM recycle)
+  email                 String?        @unique // Optional tertiary auth and recovery
+  accountNumber         String?        @unique // MONG-ID — identifiant de compte alternatif au téléphone (voir wallet.ts lookups, auth.ts register, migrate-mong-id.ts)
+  name                  String
+  phone                 String         @unique
+  pin                   String // hashed pin code
+  failedPinAttempts     Int            @default(0)
+  lockedUntil           DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  role                  String         @default("USER") // USER, AGENT, ADMIN, MERCHANT
+  isActive              Boolean        @default(true) // Legacy fallback
+  accountStatus         String         @default("ACTIVE") // ACTIVE, SUSPENDED, FROZEN, CLOSED
+  freezeReason          String?
+  frozenUntil           DateTime?
+
+  jwtVersion Int     @default(0) // Invalidates sessions when logged in elsewhere
+  pushToken  String?
 
   // Refresh token (session longue durée) : un seul actif à la fois par utilisateur,
   // cohérent avec le single-device enforcement déjà en place via jwtVersion — une
@@ -50,12 +50,12 @@ model User {
   branchId String?
 
   // Nouveaux Champs KYC
-  kycLevel    Int     @default(0) // 0: Standard, 1: Vérifié, 2: Premium
-  kycStatus   String  @default("UNVERIFIED") // UNVERIFIED, PENDING, APPROVED, REJECTED
+  kycLevel        Int     @default(0) // 0: Standard, 1: Vérifié, 2: Premium
+  kycStatus       String  @default("UNVERIFIED") // UNVERIFIED, PENDING, APPROVED, REJECTED
   kycRejectReason String? // Motif du dernier rejet, saisi par le compliance officer
-  idCardFront String?
-  idCardBack  String?
-  selfie      String?
+  idCardFront     String?
+  idCardBack      String?
+  selfie          String?
 
   // Emplacement réservé pour un futur prestataire externe de vérification d'identité /
   // détection de fraude (ex : Smile Identity, Onfido, Sumsub — courants en Afrique). Aucun
@@ -66,7 +66,7 @@ model User {
   // (perm_customer_kyc_validate) — ils ne font qu'afficher un signal complémentaire une fois
   // un vrai prestataire branché.
   kycVendorProvider  String?
-  kycVendorStatus    String?   // null (jamais vérifié), NOT_CONFIGURED, PASS, FAIL, REVIEW
+  kycVendorStatus    String? // null (jamais vérifié), NOT_CONFIGURED, PASS, FAIL, REVIEW
   kycVendorCheckedAt DateTime?
 
   // Nouveaux Champs: Limites Personnalisées (PROMPT 03)
@@ -75,22 +75,22 @@ model User {
   customPerTxLimit     Float?
   customLimitExpiresAt DateTime?
 
-  wallet                Wallet?
+  wallet                 Wallet?
   // Solde de commission d'un marchand (role=MERCHANT), séparé du wallet principal
   // (ventes/paiements) — même convention qu'une Branch/CentralTreasury : un Wallet
   // orphelin (userId null) référencé par une colonne @unique dédiée, pas un second
   // Wallet.userId (contrainte @unique sur ce champ, un seul par utilisateur).
-  commissionWalletId    String?              @unique
-  commissionWallet      Wallet?              @relation("MerchantCommissionWallet", fields: [commissionWalletId], references: [id])
+  commissionWalletId     String?                 @unique
+  commissionWallet       Wallet?                 @relation("MerchantCommissionWallet", fields: [commissionWalletId], references: [id])
   merchantPayoutRequests MerchantPayoutRequest[] @relation("MerchantPayoutRequests")
-  reclamations          Reclamation[]
-  notifications         Notification[]
-  riskFlags             RiskFlag[]           // ( PROMPT 08 CRM )
-  fraudCases            FraudCase[]          // ( PROMPT 09 )
-  refundRequests        RefundRequest[]      // ( PROMPT 09 )
-  tontineParticipations TontineParticipant[]
-  createdTontines       TontineGroup[]       @relation("GroupCreator")
-  apiIntegrations       ApiIntegration[]     @relation("MerchantAPI")
+  reclamations           Reclamation[]
+  notifications          Notification[]
+  riskFlags              RiskFlag[] // ( PROMPT 08 CRM )
+  fraudCases             FraudCase[] // ( PROMPT 09 )
+  refundRequests         RefundRequest[] // ( PROMPT 09 )
+  tontineParticipations  TontineParticipant[]
+  createdTontines        TontineGroup[]          @relation("GroupCreator")
+  apiIntegrations        ApiIntegration[]        @relation("MerchantAPI")
 
   adminOfVaults              Vault[]            @relation("AdminVault")
   vaultMemberships           VaultMember[]      @relation("VaultMembership")
@@ -99,6 +99,7 @@ model User {
   vaultVouchers              VaultVoucher[]     @relation("VaultVouchers")
   virtualCards               VirtualCard[]
   cryptoWallets              CryptoWallet[]
+  loans                      Loan[]
 }
 
 model Reclamation {
@@ -117,16 +118,16 @@ model Reclamation {
   tellerId      String?
   staffId       String? // Caissier ou agent impliqué
 
-  assigneeId   String?
-  assignee     Staff?   @relation("ReclamationAssignee", fields: [assigneeId], references: [id])
+  assigneeId String?
+  assignee   Staff?  @relation("ReclamationAssignee", fields: [assigneeId], references: [id])
 
   // SLA
-  slaDeadline  DateTime?
-  slaBreached  Boolean  @default(false)
+  slaDeadline DateTime?
+  slaBreached Boolean   @default(false)
 
   // Escalade
-  escalatedTo  String?   // COMPLIANCE, RISK, FINANCE, OPERATIONS
-  escalatedAt  DateTime?
+  escalatedTo String? // COMPLIANCE, RISK, FINANCE, OPERATIONS
+  escalatedAt DateTime?
 
   resolvedAt DateTime?
   closedAt   DateTime?
@@ -134,7 +135,7 @@ model Reclamation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  notes ReclamationNote[]
+  notes          ReclamationNote[]
   refundRequests RefundRequest[]
 }
 
@@ -166,13 +167,13 @@ model Wallet {
   updatedAt           DateTime @updatedAt
 
   // Relations inverses pour les transactions
-  sentTransactions     Transaction[] @relation("SenderWallet")
-  receivedTransactions Transaction[] @relation("ReceiverWallet")
+  sentTransactions     Transaction[]    @relation("SenderWallet")
+  receivedTransactions Transaction[]    @relation("ReceiverWallet")
   branch               Branch?
   centralTreasury      CentralTreasury?
   systemAccount        SystemAccount?
-  merchantCommissionOf User?             @relation("MerchantCommissionWallet")
-  virtualCards         VirtualCard[]     @relation("FundingWalletVirtualCards")
+  merchantCommissionOf User?            @relation("MerchantCommissionWallet")
+  virtualCards         VirtualCard[]    @relation("FundingWalletVirtualCards")
 }
 
 // Solde de commission d'un marchand — séparé du Wallet principal (ventes/paiements).
@@ -242,7 +243,7 @@ model Transaction {
   amount    Float
   fee       Float    @default(0.0)
   status    String   @default("COMPLETED") // PENDING, COMPLETED, FAILED
-  type      String   @default("TRANSFER")  // TRANSFER, CASH_IN, CASH_OUT, REFUND, ALLOCATION
+  type      String   @default("TRANSFER") // TRANSFER, CASH_IN, CASH_OUT, REFUND, ALLOCATION
   reference String   @unique @default(cuid())
   createdAt DateTime @default(now())
 
@@ -250,8 +251,8 @@ model Transaction {
   idempotencyKey String? @unique
 
   // Agency rapprochement
-  branchId  String?
-  tellerId  String?
+  branchId String?
+  tellerId String?
 
   // Relations
   senderWalletId   String?
@@ -368,16 +369,16 @@ model SystemSettings {
   webhookRetry  Int     @default(3)
 
   // Anti-Fraud & Cash Operations (V6)
-  antiFractioningWindowHours Int @default(24) // Fenêtre glissante en heures
-  antiFractioningMaxAmount   Float @default(100000.0) // Seuil maximum de retraits cumulés sans alerte
-  antiFractioningMaxCount    Int @default(3) // Nombre d'opérations maximum sur la fenêtre
+  antiFractioningWindowHours Int    @default(24) // Fenêtre glissante en heures
+  antiFractioningMaxAmount   Float  @default(100000.0) // Seuil maximum de retraits cumulés sans alerte
+  antiFractioningMaxCount    Int    @default(3) // Nombre d'opérations maximum sur la fenêtre
   antiFractioningAction      String @default("APPLY_FEE") // ALLOW, APPLY_FEE, BLOCK, ALERT
 
   // Treasury & Liquidity Policies (V6)
-  maxMintAmount                Float @default(1000000000.0) // Max 1 Milliard par requête Mint
-  treasuryApprovalThreshold    Float @default(5000000.0) // Au-delà, requiert SUPER_ADMIN spécifiquement
-  agencyLowLiquidityThreshold  Float @default(15000000.0) // Alerte orange
-  agencyCriticalLiquidity      Float @default(5000000.0) // Alerte rouge
+  maxMintAmount               Float @default(1000000000.0) // Max 1 Milliard par requête Mint
+  treasuryApprovalThreshold   Float @default(5000000.0) // Au-delà, requiert SUPER_ADMIN spécifiquement
+  agencyLowLiquidityThreshold Float @default(15000000.0) // Alerte orange
+  agencyCriticalLiquidity     Float @default(5000000.0) // Alerte rouge
 
   // Restriction réseau du portail personnel (équivalent applicatif d'un VPN pour la jambe
   // admin-web ↔ backend) — désactivée par défaut : le personnel travaille depuis des réseaux
@@ -399,22 +400,22 @@ model SystemSettings {
 }
 
 model SettingHistory {
-  id          String   @id @default(uuid())
-  category    String   // FEES, LIMITS, SECURITY, MAINTENANCE...
-  parameter   String   // La clé (ex: taxP2P)
-  oldValue    String
-  newValue    String
-  
-  authorId    String
-  author      Staff    @relation("HistoryMaker", fields: [authorId], references: [id])
-  
-  checkerId   String?
-  checker     Staff?   @relation("HistoryChecker", fields: [checkerId], references: [id])
-  
-  reason      String
-  status      String   @default("APPLIED") // APPLIED, REJECTED
-  
-  createdAt   DateTime @default(now())
+  id        String @id @default(uuid())
+  category  String // FEES, LIMITS, SECURITY, MAINTENANCE...
+  parameter String // La clé (ex: taxP2P)
+  oldValue  String
+  newValue  String
+
+  authorId String
+  author   Staff  @relation("HistoryMaker", fields: [authorId], references: [id])
+
+  checkerId String?
+  checker   Staff?  @relation("HistoryChecker", fields: [checkerId], references: [id])
+
+  reason String
+  status String @default("APPLIED") // APPLIED, REJECTED
+
+  createdAt DateTime @default(now())
 }
 
 model SettingsApproval {
@@ -445,16 +446,16 @@ model Notification {
 }
 
 model TontineGroup {
-  id             String    @id @default(uuid())
-  creatorId      String
-  creator        User      @relation("GroupCreator", fields: [creatorId], references: [id])
-  name           String
-  contribution   Float
-  frequency      String    @default("MONTHLY") // WEEKLY, MONTHLY
-  startDate      DateTime  @default(now())
-  status         String    @default("ACTIVE") // ACTIVE, PENDING_RENEWAL, COMPLETED, CANCELLED
-  currentCycle   Int       @default(1)
-  lastPayoutDate DateTime? // Date du dernier paiement, pour rattrapage CRON si crash
+  id              String    @id @default(uuid())
+  creatorId       String
+  creator         User      @relation("GroupCreator", fields: [creatorId], references: [id])
+  name            String
+  contribution    Float
+  frequency       String    @default("MONTHLY") // WEEKLY, MONTHLY
+  startDate       DateTime  @default(now())
+  status          String    @default("ACTIVE") // ACTIVE, PENDING_RENEWAL, COMPLETED, CANCELLED
+  currentCycle    Int       @default(1)
+  lastPayoutDate  DateTime? // Date du dernier paiement, pour rattrapage CRON si crash
   // Sondage de relance en fin de boucle (status PENDING_RENEWAL) : chaque participant vote
   // via TontineParticipant.renewalVote avant cette date. Passé ce délai (ou dès que tout le
   // monde a répondu), resolveRenewalPoll (tontineService.ts) tranche — voir son commentaire.
@@ -462,36 +463,36 @@ model TontineGroup {
   // Mise en pause admin (litige, enquête) : le CRON saute executeTontineCycle tant que
   // isPaused=true, sans altérer currentCycle/lastPayoutDate — la tontine reprend exactement
   // où elle en était à la levée de la pause.
-  isPaused       Boolean   @default(false)
-  pausedReason   String?
+  isPaused        Boolean   @default(false)
+  pausedReason    String?
   // Rejoignable librement via /tontine/discover + POST /tontine/join si true — sinon
   // (par défaut, et pour tous les groupes créés avant ce champ) invitation uniquement.
   // /tontine/join ne vérifiait auparavant AUCUNE condition de visibilité : n'importe
   // quel utilisateur authentifié connaissant un groupId pouvait rejoindre n'importe
   // quelle tontine, y compris une tontine que son créateur pensait invitation-only.
-  isPublic       Boolean   @default(false)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  isPublic        Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   participants TontineParticipant[]
   cycles       TontineCycle[]
 }
 
 model TontineParticipant {
-  id             String       @id @default(uuid())
-  userId         String
-  user           User         @relation(fields: [userId], references: [id])
-  tontineGroupId String
-  group          TontineGroup @relation(fields: [tontineGroupId], references: [id])
-  status         String       @default("ACTIVE") // ACTIVE, PAUSED, LEFT
-  joinedAt       DateTime     @default(now())
-  payoutOrder    Int          @default(0)
+  id                String       @id @default(uuid())
+  userId            String
+  user              User         @relation(fields: [userId], references: [id])
+  tontineGroupId    String
+  group             TontineGroup @relation(fields: [tontineGroupId], references: [id])
+  status            String       @default("ACTIVE") // ACTIVE, PAUSED, LEFT
+  joinedAt          DateTime     @default(now())
+  payoutOrder       Int          @default(0)
   // Empêche un participant (typiquement le créateur, seul habilité à réordonner via
   // POST /tontine/reorder) de se réattribuer indéfiniment la cagnotte en réassignant son
   // propre payoutOrder au cycle courant avant chaque exécution — voir tontineService.ts,
   // executeTontineCycle : un participant déjà payé n'est plus jamais sélectionné comme
   // bénéficiaire, quelle que soit la valeur de payoutOrder au moment du cycle.
-  hasReceivedPayout Boolean    @default(false)
+  hasReceivedPayout Boolean      @default(false)
   // Réponse au sondage de relance (group.status PENDING_RENEWAL) : null (pas encore
   // répondu), 'YES', 'NO'. Remis à null par resolveRenewalPoll au démarrage de chaque
   // nouvelle boucle — un vote ne vaut que pour la boucle qui vient de se terminer.
@@ -543,7 +544,7 @@ model TontineContribution {
   // de garde contre une double pénalité si l'admin relance la collecte plusieurs fois pour
   // le même cycle. `penaltyAmount` reste à 0 tant qu'aucune pénalité n'a pu être prélevée
   // (taux à 0, ou solde insuffisant au moment de la tentative).
-  penaltyAmount   Float     @default(0)
+  penaltyAmount    Float     @default(0)
   penaltyAppliedAt DateTime?
 
   @@unique([cycleId, participantId])
@@ -560,8 +561,8 @@ model Branch {
   name    String  @unique
   address String?
   city    String?
-  region  String?  // Ex: Estuaire, Ogooué-Maritime
-  phone   String?  // Téléphone de l'agence
+  region  String? // Ex: Estuaire, Ogooué-Maritime
+  phone   String? // Téléphone de l'agence
   status  String  @default("DRAFT") // DRAFT, CONFIGURED, ACTIVE, SUSPENDED, CLOSED
 
   balance     Float     @default(0.0) // Physical Cash Float (Coffre)
@@ -577,8 +578,8 @@ model Branch {
   managerId String? @unique
   manager   Staff?  @relation("BranchManager", fields: [managerId], references: [id])
 
-  staff       Staff[]            @relation("BranchStaff")
-  sessions    CashSession[]
+  staff                  Staff[]              @relation("BranchStaff")
+  sessions               CashSession[]
   targetTreasuryRequests TreasuryRequest[]
   reconciliationCases    ReconciliationCase[]
 }
@@ -605,55 +606,53 @@ model CashSession {
 }
 
 model TreasuryRequest {
-  id              String   @id @default(uuid())
-  reference       String   @unique // ex: TR-20260816-0001
-  type            String   // ISSUANCE, ALLOCATION, RETURN
-  amount          Float
-  currency        String   @default("FCFA")
-  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED, EXECUTED
-  reason          String
-  comment         String?
-  documentUrl     String?
+  id          String  @id @default(uuid())
+  reference   String  @unique // ex: TR-20260816-0001
+  type        String // ISSUANCE, ALLOCATION, RETURN
+  amount      Float
+  currency    String  @default("FCFA")
+  status      String  @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED, EXECUTED
+  reason      String
+  comment     String?
+  documentUrl String?
 
-  makerId         String
-  maker           Staff    @relation("TreasuryMaker", fields: [makerId], references: [id])
-  
+  makerId String
+  maker   Staff  @relation("TreasuryMaker", fields: [makerId], references: [id])
+
   checkerId       String?
-  checker         Staff?   @relation("TreasuryChecker", fields: [checkerId], references: [id])
+  checker         Staff?  @relation("TreasuryChecker", fields: [checkerId], references: [id])
   rejectionReason String?
 
-  targetBranchId  String?
-  targetBranch    Branch?  @relation(fields: [targetBranchId], references: [id])
-  
-  targetWalletId  String?
+  targetBranchId String?
+  targetBranch   Branch? @relation(fields: [targetBranchId], references: [id])
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  executedAt      DateTime?
+  targetWalletId String?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  executedAt DateTime?
 }
-
 
 model ReconciliationCase {
-  id              String   @id @default(uuid())
-  reference       String   @unique // ex: REC-20260816-001
-  
-  branchId        String
-  branch          Branch   @relation(fields: [branchId], references: [id])
-  
-  expectedAmount  Float
-  reportedAmount  Float
-  difference      Float
-  
-  status          String   @default("UNDER_REVIEW") // MATCHED, MISMATCH, UNDER_REVIEW, RESOLVED
-  investigation   String?
-  resolution      String?
-  
-  managerId       String?
-  
-  createdAt       DateTime @default(now())
-  resolvedAt      DateTime?
-}
+  id        String @id @default(uuid())
+  reference String @unique // ex: REC-20260816-001
 
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id])
+
+  expectedAmount Float
+  reportedAmount Float
+  difference     Float
+
+  status        String  @default("UNDER_REVIEW") // MATCHED, MISMATCH, UNDER_REVIEW, RESOLVED
+  investigation String?
+  resolution    String?
+
+  managerId String?
+
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+}
 
 model Staff {
   id       String @id @default(uuid())
@@ -665,8 +664,8 @@ model Staff {
   // RBAC: liste granulaire des permissions accordées à cet employé.
   // Si null → les droits sont hérités du rôle par défaut (voir RBAC.ts).
   // Si renseigné → les droits du rôle sont ignorés, on utilise cette liste personnalisée.
-  permissions            Json?    // string[] — ex: ["perm_customer_kyc_view", "perm_cash_session_open"]
-  permissionsCustomized  Boolean  @default(false) // true si un SUPER_ADMIN a configuré des droits personnalisés
+  permissions           Json? // string[] — ex: ["perm_customer_kyc_view", "perm_cash_session_open"]
+  permissionsCustomized Boolean @default(false) // true si un SUPER_ADMIN a configuré des droits personnalisés
 
   // Bank-Grade Corporate Identity
   matricule      String? @unique
@@ -677,8 +676,8 @@ model Staff {
   gender         String?
   emergencyPhone String?
 
-  status String @default("ACTIVE") // PENDING, ACTIVE, SUSPENDED
-  createdById String? // Maker (recruteur) — interdit l'auto-approbation à l'onboarding
+  status             String  @default("ACTIVE") // PENDING, ACTIVE, SUSPENDED
+  createdById        String? // Maker (recruteur) — interdit l'auto-approbation à l'onboarding
   mustChangePassword Boolean @default(false) // Forcé à true pour tout nouveau compte créé via l'onboarding
 
   isActive Boolean @default(true) // Legacy fallback
@@ -699,17 +698,17 @@ model Staff {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  makerRequests        SettingsApproval[] @relation("MakerRequests")
-  checkerRequests      SettingsApproval[] @relation("CheckerRequests")
-  reclamationsAssigned Reclamation[]      @relation("ReclamationAssignee")
-  treasuryMakerRequests    TreasuryRequest[] @relation("TreasuryMaker")
-  treasuryCheckerRequests  TreasuryRequest[] @relation("TreasuryChecker")
-  settingHistoryMade       SettingHistory[]   @relation("HistoryMaker")
-  settingHistoryChecked    SettingHistory[]   @relation("HistoryChecker")
-  riskFlagsReported        RiskFlag[]         @relation("RiskAuthor")
-  fraudCasesAnalyzed       FraudCase[]        @relation("FraudAnalyst")
-  refundRequestsMade       RefundRequest[]    @relation("RefundRequester")
-  refundRequestsApproved   RefundRequest[]    @relation("RefundApprover")
+  makerRequests            SettingsApproval[]      @relation("MakerRequests")
+  checkerRequests          SettingsApproval[]      @relation("CheckerRequests")
+  reclamationsAssigned     Reclamation[]           @relation("ReclamationAssignee")
+  treasuryMakerRequests    TreasuryRequest[]       @relation("TreasuryMaker")
+  treasuryCheckerRequests  TreasuryRequest[]       @relation("TreasuryChecker")
+  settingHistoryMade       SettingHistory[]        @relation("HistoryMaker")
+  settingHistoryChecked    SettingHistory[]        @relation("HistoryChecker")
+  riskFlagsReported        RiskFlag[]              @relation("RiskAuthor")
+  fraudCasesAnalyzed       FraudCase[]             @relation("FraudAnalyst")
+  refundRequestsMade       RefundRequest[]         @relation("RefundRequester")
+  refundRequestsApproved   RefundRequest[]         @relation("RefundApprover")
   merchantPayoutsProcessed MerchantPayoutRequest[] @relation("MerchantPayoutProcessor")
   verificationCode         StaffVerificationCode?
 }
@@ -738,44 +737,44 @@ model StaffVerificationCode {
 // ==========================================
 
 model FraudCase {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  analystId   String?
-  analyst     Staff?   @relation("FraudAnalyst", fields: [analystId], references: [id])
+  id        String  @id @default(uuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id])
+  analystId String?
+  analyst   Staff?  @relation("FraudAnalyst", fields: [analystId], references: [id])
 
-  type        String   @default("SUSPICIOUS_ACTIVITY") // SUSPICIOUS_ACTIVITY, ACCOUNT_TAKEOVER, MONEY_LAUNDERING, IDENTITY_THEFT
-  riskLevel   String   @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
-  status      String   @default("OPEN") // OPEN, INVESTIGATION, CONFIRMED, FALSE_POSITIVE, CLOSED
+  type        String  @default("SUSPICIOUS_ACTIVITY") // SUSPICIOUS_ACTIVITY, ACCOUNT_TAKEOVER, MONEY_LAUNDERING, IDENTITY_THEFT
+  riskLevel   String  @default("MEDIUM") // LOW, MEDIUM, HIGH, CRITICAL
+  status      String  @default("OPEN") // OPEN, INVESTIGATION, CONFIRMED, FALSE_POSITIVE, CLOSED
   description String
-  decision    String?  // VALID, INVALID, FRAUD, TECHNICAL_ERROR
+  decision    String? // VALID, INVALID, FRAUD, TECHNICAL_ERROR
 
-  linkedTransactionIds String   @default("[]")
-  reclamationId String?
+  linkedTransactionIds String  @default("[]")
+  reclamationId        String?
 
-  closedAt    DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model RefundRequest {
-  id              String   @id @default(uuid())
-  transactionId   String   @unique  // Contrainte anti-double-refund atomique
-  userId          String
-  user            User     @relation(fields: [userId], references: [id])
-  requesterId     String
-  requester       Staff    @relation("RefundRequester", fields: [requesterId], references: [id])
-  approverId      String?
-  approver        Staff?   @relation("RefundApprover", fields: [approverId], references: [id])
+  id            String  @id @default(uuid())
+  transactionId String  @unique // Contrainte anti-double-refund atomique
+  userId        String
+  user          User    @relation(fields: [userId], references: [id])
+  requesterId   String
+  requester     Staff   @relation("RefundRequester", fields: [requesterId], references: [id])
+  approverId    String?
+  approver      Staff?  @relation("RefundApprover", fields: [approverId], references: [id])
 
-  amount          Float
-  refundType      String   @default("FULL") // FULL, PARTIAL
-  reason          String
-  description     String
-  reclamationId   String?
-  reclamation     Reclamation? @relation(fields: [reclamationId], references: [id])
+  amount        Float
+  refundType    String       @default("FULL") // FULL, PARTIAL
+  reason        String
+  description   String
+  reclamationId String?
+  reclamation   Reclamation? @relation(fields: [reclamationId], references: [id])
 
-  status          String   @default("REQUESTED") // REQUESTED, UNDER_REVIEW, APPROVED, EXECUTED, REJECTED
+  status          String    @default("REQUESTED") // REQUESTED, UNDER_REVIEW, APPROVED, EXECUTED, REJECTED
   rejectionReason String?
   executedAt      DateTime?
 
@@ -784,17 +783,17 @@ model RefundRequest {
 }
 
 model RiskFlag {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  type        String   @default("SUSPICIOUS_ACTIVITY") // SUSPICIOUS_ACTIVITY, AML_ALERT, FRAUD_REPORT, IDENTITY_THEFT, ANTI_FRACTIONING
-  status      String   @default("OPEN") // OPEN, INVESTIGATING, RESOLVED, DISMISSED
-  
-  authorId    String
-  author      Staff    @relation("RiskAuthor", fields: [authorId], references: [id])
-  
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  type   String @default("SUSPICIOUS_ACTIVITY") // SUSPICIOUS_ACTIVITY, AML_ALERT, FRAUD_REPORT, IDENTITY_THEFT, ANTI_FRACTIONING
+  status String @default("OPEN") // OPEN, INVESTIGATING, RESOLVED, DISMISSED
+
+  authorId String
+  author   Staff  @relation("RiskAuthor", fields: [authorId], references: [id])
+
   description String
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
   resolvedAt  DateTime?
 }
 
@@ -807,12 +806,12 @@ model ApiIntegration {
   merchantId  String
   merchant    User     @relation("MerchantAPI", fields: [merchantId], references: [id])
   appName     String
-  environment String   @default("TEST")        // TEST, LIVE
+  environment String   @default("TEST") // TEST, LIVE
   publicKey   String   @unique @default(uuid()) // Displayed freely
-  secretHash  String                            // bcrypt hash — NEVER returned in API responses
+  secretHash  String // bcrypt hash — NEVER returned in API responses
   webhookUrl  String?
   isActive    Boolean  @default(true)
-  permissions String   @default("PAYMENTS")    // Comma-separated: PAYMENTS, REFUNDS, REPORTS
+  permissions String   @default("PAYMENTS") // Comma-separated: PAYMENTS, REFUNDS, REPORTS
   description String?
   rotatedAt   DateTime @default(now())
   createdAt   DateTime @default(now())
@@ -824,13 +823,13 @@ model ApiIntegration {
 }
 
 model ApiLog {
-  id               String         @id @default(uuid())
-  integrationId    String
-  integration      ApiIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
-  action           String         // GENERATE, ROTATE, ACTIVATE, DEACTIVATE, ENV_CHANGE
-  actorId          String         // Staff ID who performed the action
-  ipAddress        String?
-  createdAt        DateTime       @default(now())
+  id            String         @id @default(uuid())
+  integrationId String
+  integration   ApiIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  action        String // GENERATE, ROTATE, ACTIVATE, DEACTIVATE, ENV_CHANGE
+  actorId       String // Staff ID who performed the action
+  ipAddress     String?
+  createdAt     DateTime       @default(now())
 }
 
 // Journal technique des erreurs backend (intégrations externes, exceptions non gérées) —
@@ -838,7 +837,7 @@ model ApiLog {
 // logs Render à chaque fois qu'un test échoue. Distinct des Reclamation (signalements client).
 model ErrorLog {
   id        String   @id @default(uuid())
-  source    String   // ex: PVIT_PAYMENT, PVIT_WEBHOOK, UNCAUGHT
+  source    String // ex: PVIT_PAYMENT, PVIT_WEBHOOK, UNCAUGHT
   message   String
   details   String? // contexte brut (corps de réponse, stack, paramètres) — jamais de secrets
   path      String?
@@ -873,8 +872,8 @@ model Vault {
   frozenReason String?
   frozenAt     DateTime?
 
-  adminId     String
-  admin       User     @relation("AdminVault", fields: [adminId], references: [id])
+  adminId String
+  admin   User   @relation("AdminVault", fields: [adminId], references: [id])
 
   members      VaultMember[]
   transactions VaultTransaction[]
@@ -882,49 +881,49 @@ model Vault {
 }
 
 model VaultMember {
-  id          String   @id @default(uuid())
-  vaultId     String
-  userId      String
+  id      String @id @default(uuid())
+  vaultId String
+  userId  String
 
-  vault       Vault    @relation(fields: [vaultId], references: [id], onDelete: Cascade)
-  user        User     @relation("VaultMembership", fields: [userId], references: [id])
-  
+  vault Vault @relation(fields: [vaultId], references: [id], onDelete: Cascade)
+  user  User  @relation("VaultMembership", fields: [userId], references: [id])
+
   // Roles
-  isAdmin     Boolean  @default(false)
-  isInitiator Boolean  @default(false) // Responsable
-  isValidator Boolean  @default(false) // Peut approuver
-  isTreasurer Boolean  @default(false) // Trésorier désigné
+  isAdmin             Boolean @default(false)
+  isInitiator         Boolean @default(false) // Responsable
+  isValidator         Boolean @default(false) // Peut approuver
+  isTreasurer         Boolean @default(false) // Trésorier désigné
   // Son approbation est obligatoire pour TOUT retrait, en plus du seuil numérique
   // Vault.requiredApprovals — répond au besoin de désigner des personnes précises (pas
   // juste "N validateurs au hasard parmi le pool"). Toujours false si isValidator=false
   // (voir PUT /:id/roles, qui force la cohérence).
   isRequiredValidator Boolean @default(false)
 
-  joinedAt    DateTime @default(now())
+  joinedAt DateTime @default(now())
 
   @@unique([vaultId, userId])
 }
 
 model VaultTransaction {
-  id              String   @id @default(uuid())
-  vaultId         String
-  vault           Vault    @relation(fields: [vaultId], references: [id], onDelete: Cascade)
-  
-  type            String   // DEPOSIT, WITHDRAW_REQUEST
-  amount          Float
-  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED, COMPLETED
+  id      String @id @default(uuid())
+  vaultId String
+  vault   Vault  @relation(fields: [vaultId], references: [id], onDelete: Cascade)
 
-  destinationType String?  // TREASURER, VOUCHER (Physical Agency/Merchant), TRANSFER (envoi direct)
-  destinationId   String?  // The User ID of the Treasurer, President, or destinataire TRANSFER
+  type   String // DEPOSIT, WITHDRAW_REQUEST
+  amount Float
+  status String @default("PENDING") // PENDING, APPROVED, REJECTED, COMPLETED
+
+  destinationType String? // TREASURER, VOUCHER (Physical Agency/Merchant), TRANSFER (envoi direct)
+  destinationId   String? // The User ID of the Treasurer, President, or destinataire TRANSFER
   // Motif obligatoire sur une demande de retrait — donne aux commissaires de quoi
   // juger la légitimité d'une sortie de fonds avant d'approuver, notamment pour un
   // envoi direct vers un tiers qui n'est pas membre de la caisse.
   reason          String?
-  
-  requestedById   String
-  requestedBy     User     @relation("RequestedVaultTransactions", fields: [requestedById], references: [id])
 
-  createdAt       DateTime @default(now())
+  requestedById String
+  requestedBy   User   @relation("RequestedVaultTransactions", fields: [requestedById], references: [id])
+
+  createdAt DateTime @default(now())
 
   // Seuil et liste des commissaires obligatoires figés au moment de la CRÉATION de la
   // demande (routes/vault.ts, POST /:id/withdraw-request), plutôt que recalculés à chaque
@@ -936,83 +935,95 @@ model VaultTransaction {
   requiredApprovalsSnapshot    Int?
   requiredValidatorIdsSnapshot String[] @default([])
 
-  approvals       VaultApproval[]
+  approvals VaultApproval[]
 }
 
 model VaultApproval {
-  id             String           @id @default(uuid())
-  transactionId  String
-  transaction    VaultTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  
-  userId         String
-  user           User             @relation("ApprovedVaultTransactions", fields: [userId], references: [id])
-  
-  approvedAt     DateTime         @default(now())
+  id            String           @id @default(uuid())
+  transactionId String
+  transaction   VaultTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation("ApprovedVaultTransactions", fields: [userId], references: [id])
+
+  approvedAt DateTime @default(now())
 
   @@unique([transactionId, userId])
 }
 
 model VaultVoucher {
-  id              String   @id @default(uuid())
-  vaultId         String
-  vault           Vault    @relation(fields: [vaultId], references: [id], onDelete: Cascade)
-  
-  amount          Float
-  status          String   @default("ACTIVE") // ACTIVE, USED, VOID (annulé par un admin — litige/erreur)
-  voidReason      String?
+  id      String @id @default(uuid())
+  vaultId String
+  vault   Vault  @relation(fields: [vaultId], references: [id], onDelete: Cascade)
 
-  presidentId     String
-  president       User     @relation("VaultVouchers", fields: [presidentId], references: [id])
+  amount     Float
+  status     String  @default("ACTIVE") // ACTIVE, USED, VOID (annulé par un admin — litige/erreur)
+  voidReason String?
 
-  usedAt          DateTime?
-  createdAt       DateTime @default(now())
+  presidentId String
+  president   User   @relation("VaultVouchers", fields: [presidentId], references: [id])
+
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 }
+
 model VirtualCard {
-  id                String    @id @default(uuid())
-  userId            String
-  user              User      @relation(fields: [userId], references: [id])
-  fundingWalletId   String
-  fundingWallet     Wallet    @relation("FundingWalletVirtualCards", fields: [fundingWalletId], references: [id])
-  cardNumber        String    @unique
-  cvv               String
-  expiryDate        String
-  status            String    @default("ACTIVE")
-  spendingLimit     Float     @default(0)
-  balance           Float     @default(0)
+  id              String @id @default(uuid())
+  userId          String
+  user            User   @relation(fields: [userId], references: [id])
+  fundingWalletId String
+  fundingWallet   Wallet @relation("FundingWalletVirtualCards", fields: [fundingWalletId], references: [id])
+  cardNumber      String @unique
+  cvv             String
+  expiryDate      String
+  status          String @default("ACTIVE")
+  spendingLimit   Float  @default(0)
+  balance         Float  @default(0)
 }
 
 model CryptoWallet {
-  id              String      @id @default(uuid())
-  userId          String
-  user            User        @relation(fields: [userId], references: [id])
-  asset           String      // "BTC", "ETH", "USDT"
-  balance         Float       @default(0)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  asset     String // "BTC", "ETH", "USDT"
+  balance   Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model CryptoTransaction {
-  id              String      @id @default(uuid())
-  userId          String
-  type            String      // "BUY", "SELL"
-  asset           String      // e.g "BTC"
-  amountCrypto    Float       
-  amountFiat      Float       // XAF equivalent
-  exchangeRate    Float
-  fee             Float
-  createdAt       DateTime    @default(now())
+  id           String   @id @default(uuid())
+  userId       String
+  type         String // "BUY", "SELL"
+  asset        String // e.g "BTC"
+  amountCrypto Float
+  amountFiat   Float // XAF equivalent
+  exchangeRate Float
+  fee          Float
+  createdAt    DateTime @default(now())
 }
 
-
-
 model SplitRequest {
-  id String @id @default(uuid())
-  amount Float
+  id          String   @id @default(uuid())
+  amount      Float
   requesterId String
-  requester User @relation("SplitRequester", fields: [requesterId], references: [id])
+  requester   User     @relation("SplitRequester", fields: [requesterId], references: [id])
   targetPhone String
-  targetId String?
-  target User? @relation("SplitTarget", fields: [targetId], references: [id])
-  status String @default("PENDING") // PENDING, PAID, CANCELLED
-  createdAt DateTime @default(now())
+  targetId    String?
+  target      User?    @relation("SplitTarget", fields: [targetId], references: [id])
+  status      String   @default("PENDING") // PENDING, PAID, CANCELLED
+  createdAt   DateTime @default(now())
+}
+
+model Loan {
+  id           String   @id @default(uuid())
+  userId       String
+  amount       Float
+  interestRate Float    @default(0.05)
+  totalOwed    Float
+  status       String   @default("ACTIVE") // ACTIVE, PAID, DEFAULTED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
 }
