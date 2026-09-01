@@ -647,14 +647,14 @@ export default function Customer360({ token, userId, onBack, staffRole, hasPerm 
     const Transactions = () => (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', gap: 12 }}>
-                <select style={{ width: 'auto', ...inputStyle, width: 160 }} value={txFilter.type} onChange={e => setTxFilter(f => ({ ...f, type: e.target.value }))}>
+                <select style={{ ...inputStyle, width: 160 }} value={txFilter.type} onChange={e => setTxFilter(f => ({ ...f, type: e.target.value }))}>
                     <option value="">Tous types</option>
                     <option value="TRANSFER">P2P</option>
                     <option value="CASH_IN">Cash-In</option>
                     <option value="CASH_OUT">Cash-Out</option>
                     <option value="REFUND">Remboursement</option>
                 </select>
-                <select style={{ width: 'auto', ...inputStyle, width: 160 }} value={txFilter.status} onChange={e => setTxFilter(f => ({ ...f, status: e.target.value }))}>
+                <select style={{ ...inputStyle, width: 160 }} value={txFilter.status} onChange={e => setTxFilter(f => ({ ...f, status: e.target.value }))}>
                     <option value="">Tous statuts</option>
                     <option value="COMPLETED">Complétée</option>
                     <option value="PENDING">En attente</option>

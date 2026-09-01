@@ -160,7 +160,7 @@ export default function SystemAccounts({ token, onAdjust }: { token: string; onA
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                     placeholder="Rechercher un compte…"
-                    style={{ width: 'auto', flex: '1 1 200px', flex: 1, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}
+                    style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}
                 />
             </div>
 

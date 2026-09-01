@@ -141,7 +141,7 @@ export default function StaffAssignBranch({ token }: { token: string }) {
                         value={q}
                         onChange={e => setQ(e.target.value)}
                         placeholder="Rechercher par nom, email ou matricule..."
-                        style={{ width: 'auto', flex: '1 1 200px', width: '100%', padding: '12px 16px 12px 42px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 14, outline: 'none', transition: 'border-color 0.2s' }}
+                        style={{ flex: '1 1 200px', width: '100%', padding: '12px 16px 12px 42px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 14, outline: 'none', transition: 'border-color 0.2s' }}
                     />
                 </div>
                 <select value={assignFilter} onChange={e => setAssignFilter(e.target.value as any)} style={{ width: 'auto', flex: '1 1 200px', padding: '12px 16px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 14, minWidth: 160, cursor: 'pointer', outline: 'none' }}>

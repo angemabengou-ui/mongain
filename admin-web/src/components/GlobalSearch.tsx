@@ -67,7 +67,7 @@ export default function GlobalSearch({ token, onNavigate }: { token: string; onN
                     onFocus={() => setOpen(true)}
                     onKeyDown={e => { if (e.key === 'Escape') { setOpen(false); (e.target as HTMLInputElement).blur(); } }}
                     placeholder="Rechercher un client, une caisse, une tontine…"
-                    style={{ width: 'auto', flex: '1 1 200px', flex: 1, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text-primary)', fontSize: 13 }}
+                    style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text-primary)', fontSize: 13 }}
                 />
             </div>
 
