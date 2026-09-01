@@ -8,7 +8,7 @@
  * shell du serveur.
  *
  * Usage :
- *   npx ts-node merge-admins.ts
+ *   npx ts-node backend/scripts/merge-admins.ts
  */
 import { PrismaClient } from '@prisma/client';
 

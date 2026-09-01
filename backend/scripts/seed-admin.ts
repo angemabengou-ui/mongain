@@ -2,7 +2,7 @@
  * Seed Script — Créer le compte Super Admin Mongain
  * 
  * Usage (sur Render Shell ou local) :
- *   npx ts-node seed-admin.ts
+ *   npx ts-node backend/scripts/seed-admin.ts
  */
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';

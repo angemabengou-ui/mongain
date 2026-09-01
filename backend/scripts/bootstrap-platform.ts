@@ -3,7 +3,7 @@
  * Crée : Agence Principale (Siège/HQ), Comptes Système (Corporate, Passerelle, Coffre Tontine, etc.)
  * et les Paramètres Système s'ils n'existent pas encore.
  *
- * Usage: npx ts-node backend/bootstrap-platform.ts
+ * Usage: npx ts-node backend/scripts/bootstrap-platform.ts
  * Idempotent — peut être relancé sans dupliquer les données.
  */
 

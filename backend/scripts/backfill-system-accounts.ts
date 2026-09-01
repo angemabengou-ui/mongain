@@ -16,10 +16,10 @@
  *   - Sinon (compte jamais encore utilisé), il est créé à froid via getSystemAccount.
  *
  * Usage (une fois, après avoir appliqué la migration Prisma) :
- *   npx ts-node backend/backfill-system-accounts.ts
+ *   npx ts-node backend/scripts/backfill-system-accounts.ts
  */
 import { PrismaClient } from '@prisma/client';
-import { getSystemAccount, SystemAccountKind } from './src/services/systemAccounts';
+import { getSystemAccount, SystemAccountKind } from '../src/services/systemAccounts';
 
 const prisma = new PrismaClient();
 
