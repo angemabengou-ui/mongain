@@ -93,6 +93,15 @@ export default function TabLayout() {
                     ),
                 }}
             />
+            <Tabs.Screen
+                name="assistant"
+                options={{
+                    title: 'Assistant IA',
+                    tabBarIcon: ({ color, size, focused }) => (
+                        <Ionicons name={focused ? 'chatbubbles' : 'chatbubbles-outline'} size={size} color={color} />
+                    ),
+                }}
+            />
         </Tabs>
     );
 }
