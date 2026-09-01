@@ -49,3 +49,20 @@ node_modules/
 .claude
 .agent
 .gemini
+
+# portable node toolchains / archives accidentally downloaded into the repo
+.node/
+.node22/
+.node22-new/
+**/node-v*-win-x64/
+*.zip
+
+# debug/compile logs and ad hoc command output dumps
+*.log
+*-log.txt
+*_log.txt
+*_errors.txt
+*_errors_utf8.txt
+*out.txt
+*output.txt
+*.out
