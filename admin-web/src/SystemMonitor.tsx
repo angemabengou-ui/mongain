@@ -1,23 +1,29 @@
 import { useEffect, useState } from 'react';
+import { API_URL } from './config';
+import { apiFetch } from './utils/apiFetch';
 
 export default function SystemMonitor({ token: _token }: { token: string }) {
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Will fetch /api/v6/system/health later
-        setTimeout(() => {
-            setStats({
-                redis: { status: 'mocked_online', operations: 15320, hitRate: '98.5%' },
-                server: { uptime: '12d 4h', memory: '184 MB / 512 MB', cpu: '12%' },
-                errors: [
-                    { time: '10:42 AM', type: 'Database Timeout (Simulated)', count: 2 },
-                    { time: '09:15 AM', type: 'Redis Disconnect (Simulated)', count: 1 }
-                ]
+        apiFetch(API_URL + '/api/admin/v6/health', {
+            headers: { 'Authorization': `Bearer ${_token}` }
+        })
+            .then(data => {
+                setStats(data);
+                setLoading(false);
+            })
+            .catch(err => {
+                console.error(err);
+                setStats({
+                    redis: { status: 'offline', operations: 0, hitRate: '0%' },
+                    server: { uptime: 'Erreur', memory: 'Erreur', cpu: 'N/A' },
+                    errors: [{ time: new Date().toLocaleTimeString(), type: 'Erreur Connexion API Backend', count: 1 }]
+                });
+                setLoading(false);
             });
-            setLoading(false);
-        }, 1500);
-    }, []);
+    }, [_token]);
 
     return (
         <div style={{ padding: 40, animation: 'fadeIn 0.5s ease-out' }}>
@@ -39,10 +45,10 @@ export default function SystemMonitor({ token: _token }: { token: string }) {
                         <div className="card" style={{ padding: 24, background: 'var(--bg-secondary)', border: '1px solid rgba(6,182,212,0.3)' }}>
                             <h3 style={{ color: 'var(--text-secondary)', fontSize: 13, textTransform: 'uppercase', marginBottom: 12 }}>Redis Cache</h3>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                                <div style={{ width: 8, height: 8, borderRadius: 4, background: '#10b981' }}></div>
-                                <span style={{ fontSize: 18, color: 'var(--text-primary)' }}>Connecté (Mock)</span>
+                                <div style={{ width: 8, height: 8, borderRadius: 4, background: stats.redis.status === 'online' ? '#10b981' : '#ef4444' }}></div>
+                                <span style={{ fontSize: 18, color: 'var(--text-primary)' }}>{stats.redis.status === 'online' ? 'Connecté & Actif' : 'Hors-Ligne (Désactivé)'}</span>
                             </div>
-                            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Hit Rate: {stats.redis.hitRate} | Ops: {stats.redis.operations}</div>
+                            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Hit Rate: {stats.redis.hitRate} | Requêtes Totales: {stats.redis.operations}</div>
                         </div>
                     </div>
 

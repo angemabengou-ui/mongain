@@ -4,8 +4,6 @@ import helmet from 'helmet';
 import http from 'http';
 import { Server } from 'socket.io';
 import { initCronJobs } from './cron';
-import { getSystemAccount } from './services/systemAccounts';
-import { resolveSocketRoom } from './sockets/socketAuth';
 import adminRoutes from './routes/admin';
 import adminMerchantsRoutes from './routes/admin.merchants';
 import adminSearchRoutes from './routes/admin.search';
@@ -17,13 +15,18 @@ import authRoutes from './routes/auth';
 import corpRoutes from './routes/corp';
 import merchantRoutes from './routes/merchant';
 import notificationRoutes from './routes/notifications';
+import pushRoutes from './routes/push';
 import rbacRoutes from './routes/rbac';
+import scoringRoutes from './routes/scoring';
 import servicesRoutes from './routes/services';
 import settingsRoutes from './routes/settings';
 import tontineRoutes from './routes/tontine';
 import treasuryRoutes from './routes/treasury';
 import vaultRoutes from './routes/vault';
 import walletRoutes from './routes/wallet';
+import webhookRoutes from './routes/webhooks';
+import { getSystemAccount } from './services/systemAccounts';
+import { resolveSocketRoom } from './sockets/socketAuth';
 import { logError } from './utils/errorLog';
 import { withDbRetry } from './utils/errors';
 import logger from './utils/logger';
@@ -120,7 +123,6 @@ if (!isProd) {
 import { adminIpAllowlistMiddleware } from './middleware/adminIpAllowlist';
 import { circuitBreakerMiddleware } from './middleware/circuitBreaker';
 import reclamationRoutes from './routes/reclamation';
-import webhookRoutes from './routes/webhooks';
 
 // ==========================================
 // ROUTES SYSTEME ET ADMINISTRATION (SAFE)
@@ -135,6 +137,8 @@ app.use('/api/admin', adminIpAllowlistMiddleware, adminTontinesRoutes);
 app.use('/api/admin', adminIpAllowlistMiddleware, adminMerchantsRoutes);
 app.use('/api/admin', adminIpAllowlistMiddleware, adminSearchRoutes);
 app.use('/api/admin', adminIpAllowlistMiddleware, adminSystemAccountsRoutes);
+app.use('/api/admin/push', adminIpAllowlistMiddleware, pushRoutes);
+app.use('/api/admin/scoring', adminIpAllowlistMiddleware, scoringRoutes);
 // /api/settings mélange une route publique (GET / — taux de frais lus par l'app mobile,
 // accessible depuis n'importe où par nature) et des routes réservées au personnel : la
 // restriction IP est appliquée route par route À L'INTÉRIEUR de settings.ts, jamais ici au

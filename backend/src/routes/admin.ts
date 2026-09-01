@@ -1,4 +1,4 @@
-import bcrypt from 'bcryptjs';
+﻿import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import express from 'express';
 import { z } from 'zod';
@@ -9,12 +9,13 @@ import { hasPermission } from '../services/RBAC';
 import { sendSms } from '../services/sms';
 import { getSystemAccount } from '../services/systemAccounts';
 import { friendlyErrorMessage } from '../utils/errors';
+import { withCache } from '../utils/redis';
 
 const router = express.Router();
 
-// AuditLog.adminId est une référence libre (pas de FK) : l'acteur peut être un Staff
-// (portail corporate) ou un User (rôle ADMIN historique). Impossible de résoudre son nom/
-// téléphone/rôle via une relation Prisma unique, donc on le fait manuellement des deux côtés.
+// AuditLog.adminId est une rÃ©fÃ©rence libre (pas de FK) : l'acteur peut Ãªtre un Staff
+// (portail corporate) ou un User (rÃ´le ADMIN historique). Impossible de rÃ©soudre son nom/
+// tÃ©lÃ©phone/rÃ´le via une relation Prisma unique, donc on le fait manuellement des deux cÃ´tÃ©s.
 async function attachAuditActors<T extends { adminId: string }>(logs: T[]) {
     const actorIds = [...new Set(logs.map(l => l.adminId))];
     if (actorIds.length === 0) return logs.map(l => ({ ...l, admin: null as { name: string; phone: string | null; role: string } | null }));
@@ -26,14 +27,14 @@ async function attachAuditActors<T extends { adminId: string }>(logs: T[]) {
     return logs.map(l => ({ ...l, admin: actorMap.get(l.adminId) || null }));
 }
 
-// KYC/AML : SUPER_ADMIN + les deux rôles explicitement dédiés à la conformité, cohérent
-// avec ce que montre déjà le portail admin-web (module "Dossiers KYC/AML").
+// KYC/AML : SUPER_ADMIN + les deux rÃ´les explicitement dÃ©diÃ©s Ã  la conformitÃ©, cohÃ©rent
+// avec ce que montre dÃ©jÃ  le portail admin-web (module "Dossiers KYC/AML").
 const KYC_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'];
 
 router.get('/stats', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const user = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!user || !hasPermission(user, 'perm_analytics_view')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!user || !hasPermission(user, 'perm_analytics_view')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const totalUsers = await prisma.user.count({ where: { role: 'USER', isActive: true } });
         const agentsCount = await prisma.user.count({ where: { role: 'AGENT', isActive: true } });
@@ -46,14 +47,14 @@ router.get('/stats', authMiddleware, async (req: AuthRequest, res) => {
             where: { user: { role: { notIn: ['ADMIN'] } } },
             _sum: { balance: true }
         });
-        // Depuis la séparation Trésorerie Centrale / Siège : plus un solde d'agence.
+        // Depuis la sÃ©paration TrÃ©sorerie Centrale / SiÃ¨ge : plus un solde d'agence.
         const centralTreasury = await getCentralTreasury();
         const reserveBalance = centralTreasury.wallet.balance;
 
-        // `company` (compte corporate) était récupéré ci-dessus mais jamais lu — supprimé.
-        // `select` scopé ici : seuls `amount` et le rôle du destinataire servent (voir la
-        // boucle plus bas) ; la requête entière rapatriait auparavant chaque User complet
-        // (photos KYC comprises) pour tout l'historique FUND_AGENT- depuis le lancement, à
+        // `company` (compte corporate) Ã©tait rÃ©cupÃ©rÃ© ci-dessus mais jamais lu â€” supprimÃ©.
+        // `select` scopÃ© ici : seuls `amount` et le rÃ´le du destinataire servent (voir la
+        // boucle plus bas) ; la requÃªte entiÃ¨re rapatriait auparavant chaque User complet
+        // (photos KYC comprises) pour tout l'historique FUND_AGENT- depuis le lancement, Ã 
         // chaque ouverture du tableau de bord admin.
         const fundTxs = await prisma.transaction.findMany({
             where: { reference: { startsWith: 'FUND_AGENT-' }, status: 'COMPLETED' },
@@ -122,18 +123,18 @@ const resolveAgencyScope = async (userId: string, requestedId?: string): Promise
     const staff = await prisma.staff.findUnique({ where: { id: userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
     if (!staff) return { branchId: null, error: 'Utilisateur introuvable.' };
     if (staff.role === 'BRANCH_MANAGER' && staff.branchId) {
-        if (requestedId && requestedId !== staff.branchId) return { branchId: null, error: 'Accès restreint à votre agence.' };
+        if (requestedId && requestedId !== staff.branchId) return { branchId: null, error: 'AccÃ¨s restreint Ã  votre agence.' };
         return { branchId: staff.branchId };
     }
     if (hasPermission(staff, 'perm_branch_manage')) return { branchId: requestedId || null };
-    return { branchId: null, error: 'Rôle non autorisé.' };
+    return { branchId: null, error: 'RÃ´le non autorisÃ©.' };
 };
 
 // -- 1. Liste agences (pagin?e + filtres) ---------------------
 router.get('/branches', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_branch_view')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_branch_view')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         // BRANCH_MANAGER ne voit que son agence
         if (staff.role === 'BRANCH_MANAGER' && staff.branchId) {
@@ -178,14 +179,14 @@ router.get('/branches', authMiddleware, async (req: AuthRequest, res) => {
 router.post('/branches', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_branch_manage')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_branch_manage')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const { name, code, address, city, region, phone, managerId, status, isHQ } = req.body;
         if (!name || !code) return res.status(400).json({ error: 'Nom et code requis.' });
 
         // V?rification unicit? code
         const existing = await prisma.branch.findUnique({ where: { code } });
-        if (existing) return res.status(409).json({ error: `Code agence "${code}" déjà utilisé.` });
+        if (existing) return res.status(409).json({ error: `Code agence "${code}" dÃ©jÃ  utilisÃ©.` });
 
         const agencyWallet = await prisma.wallet.create({ data: { balance: 0 } });
 
@@ -194,12 +195,12 @@ router.post('/branches', authMiddleware, async (req: AuthRequest, res) => {
         });
 
         await prisma.auditLog.create({
-            data: { adminId: staff.id, action: 'CREATE_BRANCH', details: `Création agence ${code} (${name}) · Ville: ${city} · Statut: ${status || 'DRAFT'}` }
+            data: { adminId: staff.id, action: 'CREATE_BRANCH', details: `CrÃ©ation agence ${code} (${name}) Â· Ville: ${city} Â· Statut: ${status || 'DRAFT'}` }
         });
 
         res.status(201).json({ success: true, branch: newBranch });
     } catch (e: any) {
-        if ((e as any).code === 'P2002') return res.status(409).json({ error: 'Nom ou code agence déjà utilisé.' });
+        if ((e as any).code === 'P2002') return res.status(409).json({ error: 'Nom ou code agence dÃ©jÃ  utilisÃ©.' });
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });
@@ -208,7 +209,7 @@ router.post('/branches', authMiddleware, async (req: AuthRequest, res) => {
 router.patch('/branches/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_branch_manage')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_branch_manage')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const branchId = req.params.id as string;
         const { status, managerId, name, address, city, region, phone, code } = req.body;
@@ -218,7 +219,7 @@ router.patch('/branches/:id', authMiddleware, async (req: AuthRequest, res) => {
             const branch = await prisma.branch.findUnique({ where: { id: branchId } });
             if (branch && code !== branch.code) {
                 const txCount = await prisma.transaction.count({ where: { branchId } });
-                if (txCount > 0) return res.status(400).json({ error: `Code agence immuable : ${txCount} transaction(s) historiques sont référencées. Utilisez un workflow sécurisé.` });
+                if (txCount > 0) return res.status(400).json({ error: `Code agence immuable : ${txCount} transaction(s) historiques sont rÃ©fÃ©rencÃ©es. Utilisez un workflow sÃ©curisÃ©.` });
             }
         }
 
@@ -235,7 +236,7 @@ router.patch('/branches/:id', authMiddleware, async (req: AuthRequest, res) => {
         const updated = await prisma.branch.update({ where: { id: branchId }, data });
 
         await prisma.auditLog.create({
-            data: { adminId: staff.id, action: 'UPDATE_BRANCH', details: `Agence ${updated.code}: statut: ${status || '-'} · managerId: ${managerId || '-'}` }
+            data: { adminId: staff.id, action: 'UPDATE_BRANCH', details: `Agence ${updated.code}: statut: ${status || '-'} Â· managerId: ${managerId || '-'}` }
         });
 
         res.json({ success: true, branch: updated });
@@ -301,7 +302,7 @@ router.get('/branches/:id/staff', authMiddleware, async (req: AuthRequest, res) 
 router.post('/branches/:id/staff/:staffId/assign', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!admin || !hasPermission(admin, 'perm_branch_manage')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!admin || !hasPermission(admin, 'perm_branch_manage')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const target = await prisma.staff.findUnique({ where: { id: req.params.staffId as string } });
         if (!target) return res.status(404).json({ error: 'Staff introuvable.' });
@@ -311,7 +312,7 @@ router.post('/branches/:id/staff/:staffId/assign', authMiddleware, async (req: A
             data: { branchId: req.params.id as string }
         });
 
-        await prisma.auditLog.create({ data: { adminId: admin.id, action: 'ASSIGN_STAFF', details: `${target.name} (${target.role}) assigné à l'agence ${req.params.id}` } });
+        await prisma.auditLog.create({ data: { adminId: admin.id, action: 'ASSIGN_STAFF', details: `${target.name} (${target.role}) assignÃ© Ã  l'agence ${req.params.id}` } });
         res.json({ success: true, staff: updated });
     } catch (e: any) { res.status(500).json({ error: friendlyErrorMessage(e) }); }
 });
@@ -320,18 +321,18 @@ router.post('/branches/:id/staff/:staffId/assign', authMiddleware, async (req: A
 router.delete('/branches/:id/staff/:staffId/unassign', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!admin || !hasPermission(admin, 'perm_branch_manage')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!admin || !hasPermission(admin, 'perm_branch_manage')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const target = await prisma.staff.findUnique({ where: { id: req.params.staffId as string } });
-        if (!target || target.branchId !== req.params.id) return res.status(400).json({ error: 'Staff non assigné à cette agence.' });
+        if (!target || target.branchId !== req.params.id) return res.status(400).json({ error: 'Staff non assignÃ© Ã  cette agence.' });
 
         // Ne pas d?sassigner si session ouverte
         const openSession = await prisma.cashSession.findFirst({ where: { tellerId: target.id, status: 'OPEN' } });
-        if (openSession) return res.status(400).json({ error: 'Ce caissier a une session ouverte. Clôturer la session avant désaffectation.' });
+        if (openSession) return res.status(400).json({ error: 'Ce caissier a une session ouverte. ClÃ´turer la session avant dÃ©saffectation.' });
 
         await prisma.staff.update({ where: { id: req.params.staffId as string }, data: { branchId: null } });
 
-        await prisma.auditLog.create({ data: { adminId: admin.id, action: 'UNASSIGN_STAFF', details: `${target.name} désaffecté de l'agence ${req.params.id}` } });
+        await prisma.auditLog.create({ data: { adminId: admin.id, action: 'UNASSIGN_STAFF', details: `${target.name} dÃ©saffectÃ© de l'agence ${req.params.id}` } });
         res.json({ success: true });
     } catch (e: any) { res.status(500).json({ error: friendlyErrorMessage(e) }); }
 });
@@ -422,7 +423,7 @@ router.get('/branches/:id/cash-operations/:txId', authMiddleware, async (req: Au
                 receiverWallet: { include: { user: { select: { name: true, phone: true } }, branch: { select: { name: true, code: true } } } },
             }
         });
-        if (!tx || tx.branchId !== req.params.id) return res.status(404).json({ error: 'Opération introuvable pour cette agence.' });
+        if (!tx || tx.branchId !== req.params.id) return res.status(404).json({ error: 'OpÃ©ration introuvable pour cette agence.' });
         res.json(tx);
     } catch (e: any) { res.status(500).json({ error: friendlyErrorMessage(e) }); }
 });
@@ -523,15 +524,15 @@ router.get('/branches/:id/alerts', authMiddleware, async (req: AuthRequest, res)
         const alerts: { type: string; severity: string; message: string }[] = [];
 
         // Agence suspendue
-        if (branch.status === 'SUSPENDED') alerts.push({ type: 'SUSPENDED', severity: 'CRITICAL', message: `L'agence ${branch.name} est SUSPENDUE. Aucune opération financière autorisée.` });
+        if (branch.status === 'SUSPENDED') alerts.push({ type: 'SUSPENDED', severity: 'CRITICAL', message: `L'agence ${branch.name} est SUSPENDUE. Aucune opÃ©ration financiÃ¨re autorisÃ©e.` });
 
         // Liquidit? physique faible (seuil: agencyWithdrawThreshold)
         const lowLiquidityThreshold = (settings?.agencyWithdrawThreshold ?? 500000) * 0.1;
-        if (branch.balance < lowLiquidityThreshold) alerts.push({ type: 'LOW_LIQUIDITY', severity: branch.balance <= 0 ? 'CRITICAL' : 'HIGH', message: `Liquidité physique faible : ${branch.balance.toLocaleString()} FCFA (seuil alerte : ${lowLiquidityThreshold.toLocaleString()})` });
+        if (branch.balance < lowLiquidityThreshold) alerts.push({ type: 'LOW_LIQUIDITY', severity: branch.balance <= 0 ? 'CRITICAL' : 'HIGH', message: `LiquiditÃ© physique faible : ${branch.balance.toLocaleString()} FCFA (seuil alerte : ${lowLiquidityThreshold.toLocaleString()})` });
 
         // Discrepancies non r?solues
         const discrepancyCount = await prisma.cashSession.count({ where: { branchId: branch.id, discrepancy: { not: 0 }, status: 'CLOSED' } });
-        if (discrepancyCount > 0) alerts.push({ type: 'CASH_DISCREPANCY', severity: 'HIGH', message: `${discrepancyCount} session(s) avec écart de caisse non résolu(es).` });
+        if (discrepancyCount > 0) alerts.push({ type: 'CASH_DISCREPANCY', severity: 'HIGH', message: `${discrepancyCount} session(s) avec Ã©cart de caisse non rÃ©solu(es).` });
 
         // Sessions ouvertes depuis plus de 12h
         const staleSessions = await prisma.cashSession.count({ where: { branchId: branch.id, status: 'OPEN', openedAt: { lte: new Date(Date.now() - 12 * 3600 * 1000) } } });
@@ -545,7 +546,7 @@ router.get('/branches/:id/alerts', authMiddleware, async (req: AuthRequest, res)
 router.get('/staff/unassigned', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!admin || !hasPermission(admin, 'perm_branch_manage')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!admin || !hasPermission(admin, 'perm_branch_manage')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const staff = await prisma.staff.findMany({
             where: { branchId: null, role: { in: ['TELLER', 'BRANCH_MANAGER'] }, status: 'ACTIVE' },
@@ -570,7 +571,7 @@ const hasSupportAccess = (role: string) => ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_C
 router.post('/users/:id/reclamation', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const user = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!user || !hasSupportAccess(user.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!user || !hasSupportAccess(user.role)) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const customerId = req.params.id; // User ID
         const customer = await prisma.user.findUnique({ where: { id: customerId as string } });
@@ -592,7 +593,7 @@ router.post('/users/:id/reclamation', authMiddleware, async (req: AuthRequest, r
         });
 
         await prisma.auditLog.create({
-            data: { adminId: user.id, action: 'CREATE_TICKET', details: `Création Ticket ${newRec.id} pour le client ${customer.phone}` }
+            data: { adminId: user.id, action: 'CREATE_TICKET', details: `CrÃ©ation Ticket ${newRec.id} pour le client ${customer.phone}` }
         });
 
         res.json({ success: true, reclamation: newRec });
@@ -608,7 +609,7 @@ router.post('/users/:id/reclamation', authMiddleware, async (req: AuthRequest, r
 router.get('/users', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const user = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!user || user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        if (!user || user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const role = req.query.role as string;
         const users = await prisma.user.findMany({
@@ -641,7 +642,7 @@ router.get('/users', authMiddleware, async (req: AuthRequest, res) => {
 router.post('/users/create-pro', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const user = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!user || user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        if (!user || user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const schema = z.object({
             phone: z.string().transform(val => val.replace(/\s+/g, '').replace(/^\+2410/, '+241')),
@@ -651,12 +652,12 @@ router.post('/users/create-pro', authMiddleware, async (req: AuthRequest, res) =
         });
 
         const parsed = schema.safeParse(req.body);
-        if (!parsed.success) return res.status(400).json({ error: 'Données invalides.' });
+        if (!parsed.success) return res.status(400).json({ error: 'DonnÃ©es invalides.' });
 
         const { phone, name, role, pin } = parsed.data;
 
         const existing = await prisma.user.findUnique({ where: { phone } });
-        if (existing) return res.status(400).json({ error: 'Ce numéro de téléphone est déjà pris.' });
+        if (existing) return res.status(400).json({ error: 'Ce numÃ©ro de tÃ©lÃ©phone est dÃ©jÃ  pris.' });
 
         const hashedPin = await bcrypt.hash(pin, 10);
         const newUser = await prisma.user.create({
@@ -673,11 +674,11 @@ router.post('/users/create-pro', authMiddleware, async (req: AuthRequest, res) =
             data: {
                 adminId: user.id,
                 action: 'CREATE_PRO_USER',
-                details: `Création du compte PRO ${role} pour ${phone}`,
+                details: `CrÃ©ation du compte PRO ${role} pour ${phone}`,
             }
         });
 
-        res.json({ message: 'Compte Pro créé avec succès.', user: { id: newUser.id, name, phone, role } });
+        res.json({ message: 'Compte Pro crÃ©Ã© avec succÃ¨s.', user: { id: newUser.id, name, phone, role } });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -687,11 +688,11 @@ router.post('/users/create-pro', authMiddleware, async (req: AuthRequest, res) =
 router.post('/users/:id/toggle-status', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const targetUser = await prisma.user.findUnique({ where: { id: String(req.params.id) as string } });
-        if (!targetUser) return res.status(404).json({ error: 'Utilisateur non trouvé' });
-        if (targetUser.role === 'ADMIN') return res.status(400).json({ error: 'Impossible de désactiver un Administrateur Supremo.' });
+        if (!targetUser) return res.status(404).json({ error: 'Utilisateur non trouvÃ©' });
+        if (targetUser.role === 'ADMIN') return res.status(400).json({ error: 'Impossible de dÃ©sactiver un Administrateur Supremo.' });
 
         const updated = await prisma.user.update({
             where: { id: targetUser.id },
@@ -702,11 +703,11 @@ router.post('/users/:id/toggle-status', authMiddleware, async (req: AuthRequest,
             data: {
                 adminId: admin.id,
                 action: 'TOGGLE_STATUS',
-                details: `Le compte ${targetUser.phone} a été passé en statut ${updated.isActive ? 'ACTIF' : 'SUSPENDU'}`,
+                details: `Le compte ${targetUser.phone} a Ã©tÃ© passÃ© en statut ${updated.isActive ? 'ACTIF' : 'SUSPENDU'}`,
             }
         });
 
-        res.json({ message: `Le compte est désormais ${updated.isActive ? 'ACTIF' : 'SUSPENDU'}.` });
+        res.json({ message: `Le compte est dÃ©sormais ${updated.isActive ? 'ACTIF' : 'SUSPENDU'}.` });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -716,7 +717,7 @@ router.post('/users/:id/toggle-status', authMiddleware, async (req: AuthRequest,
 router.put('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const schema = z.object({
             name: z.string().min(2),
@@ -724,7 +725,7 @@ router.put('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
             username: z.string().optional(),
         });
         const parsed = schema.safeParse(req.body);
-        if (!parsed.success) return res.status(400).json({ error: 'Données invalides' });
+        if (!parsed.success) return res.status(400).json({ error: 'DonnÃ©es invalides' });
 
         const targetId = req.params.id as string;
         const targetUser = await prisma.user.findUnique({ where: { id: targetId } });
@@ -739,11 +740,11 @@ router.put('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
         // Check uniqueness if changing
         if (phone !== targetUser.phone) {
             const exists = await prisma.user.findUnique({ where: { phone } });
-            if (exists) return res.status(400).json({ error: 'Ce numéro est déjà utilisé.' });
+            if (exists) return res.status(400).json({ error: 'Ce numÃ©ro est dÃ©jÃ  utilisÃ©.' });
         }
         if (username && username !== targetUser.username) {
             const exists = await prisma.user.findUnique({ where: { username } });
-            if (exists) return res.status(400).json({ error: 'Ce pseudo est déjà utilisé.' });
+            if (exists) return res.status(400).json({ error: 'Ce pseudo est dÃ©jÃ  utilisÃ©.' });
         }
 
         const updated = await prisma.user.update({
@@ -751,29 +752,29 @@ router.put('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
             data: { name, phone, username: username || null }
         });
 
-        res.json({ message: 'Profil mis à jour avec succès.', user: { id: updated.id, name: updated.name, phone: updated.phone } });
+        res.json({ message: 'Profil mis Ã  jour avec succÃ¨s.', user: { id: updated.id, name: updated.name, phone: updated.phone } });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });
 
 
-// PUT /api/admin/users/:id/branch — rattache (ou détache) un compte Agent à une agence.
-// Sans ce rattachement, un agent n'a aucun lien avec le réseau d'agences et ses opérations
-// (dépôts/retraits guichet via l'app mobile) restent invisibles des rapports d'agence.
+// PUT /api/admin/users/:id/branch â€” rattache (ou dÃ©tache) un compte Agent Ã  une agence.
+// Sans ce rattachement, un agent n'a aucun lien avec le rÃ©seau d'agences et ses opÃ©rations
+// (dÃ©pÃ´ts/retraits guichet via l'app mobile) restent invisibles des rapports d'agence.
 router.put('/users/:id/branch', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const schema = z.object({ branchId: z.string().nullable() });
         const parsed = schema.safeParse(req.body);
-        if (!parsed.success) return res.status(400).json({ error: 'Données invalides.' });
+        if (!parsed.success) return res.status(400).json({ error: 'DonnÃ©es invalides.' });
 
         const targetId = req.params.id as string;
         const targetUser = await prisma.user.findUnique({ where: { id: targetId } });
         if (!targetUser) return res.status(404).json({ error: 'Utilisateur introuvable.' });
-        if (targetUser.role !== 'AGENT') return res.status(400).json({ error: 'Seuls les comptes Agent peuvent être rattachés à une agence.' });
+        if (targetUser.role !== 'AGENT') return res.status(400).json({ error: 'Seuls les comptes Agent peuvent Ãªtre rattachÃ©s Ã  une agence.' });
 
         if (parsed.data.branchId) {
             const branch = await prisma.branch.findUnique({ where: { id: parsed.data.branchId } });
@@ -786,10 +787,10 @@ router.put('/users/:id/branch', authMiddleware, async (req: AuthRequest, res) =>
         });
 
         await prisma.auditLog.create({
-            data: { adminId: admin.id, action: 'ASSIGN_AGENT_BRANCH', details: `Agent ${targetUser.phone} rattaché à l'agence ${parsed.data.branchId || 'AUCUNE'}.` }
+            data: { adminId: admin.id, action: 'ASSIGN_AGENT_BRANCH', details: `Agent ${targetUser.phone} rattachÃ© Ã  l'agence ${parsed.data.branchId || 'AUCUNE'}.` }
         });
 
-        res.json({ message: 'Rattachement mis à jour.', user: { id: updated.id, branchId: updated.branchId } });
+        res.json({ message: 'Rattachement mis Ã  jour.', user: { id: updated.id, branchId: updated.branchId } });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -799,7 +800,7 @@ router.put('/users/:id/branch', authMiddleware, async (req: AuthRequest, res) =>
 router.get('/logs', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!admin || !hasPermission(admin, 'perm_audit_log_view')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!admin || !hasPermission(admin, 'perm_audit_log_view')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const logs = await prisma.auditLog.findMany({
             orderBy: { createdAt: 'desc' },
@@ -812,34 +813,79 @@ router.get('/logs', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
+// GET /api/admin/v6/health - System Telemetry for SystemMonitor.tsx
+router.get('/v6/health', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || !hasPermission(admin, 'perm_analytics_view')) {
+            return res.status(403).json({ error: 'Accès refusé. Nécessite perm_analytics_view.' });
+        }
+
+        let redisStats = { status: 'offline', hitRate: '0%', operations: 0 };
+        if (require('../utils/redis').default.status === 'ready') {
+            const redis = require('../utils/redis').default;
+            const hits = parseInt((await redis.get('stats:redis:hits')) || '0', 10);
+            const misses = parseInt((await redis.get('stats:redis:misses')) || '0', 10);
+            const total = hits + misses;
+            redisStats = {
+                status: 'online',
+                hitRate: total > 0 ? ((hits / total) * 100).toFixed(1) + '%' : '100%',
+                operations: total
+            };
+        }
+
+        const mem = process.memoryUsage();
+        const uptime = process.uptime();
+        const d = Math.floor(uptime / (3600 * 24));
+        const h = Math.floor(uptime % (3600 * 24) / 3600);
+        const m = Math.floor(uptime % 3600 / 60);
+
+        res.json({
+            redis: redisStats,
+            server: {
+                uptime: `${d}d ${h}h ${m}m`,
+                memory: `${Math.round(mem.rss / 1024 / 1024)} MB (RSS)`,
+                cpu: 'See Render Dashboard'
+            },
+            errors: [
+                { time: new Date().toLocaleTimeString(), type: 'En Attente Sentry', count: 0 }
+            ]
+        });
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
 // GET /api/admin/ledger
 router.get('/ledger', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        // Régression : cette route vérifiait `perm_system_settings_view` — sans rapport avec
-        // le Grand Livre — au lieu de `perm_transaction_view`, la permission sur laquelle
-        // App.tsx/Ledger.tsx gatent réellement l'onglet côté UI. Seuls SUPER_ADMIN/ADMIN
-        // possèdent la permission settings par défaut, donc BRANCH_MANAGER/TELLER/RISK/
-        // SUPPORT_MAKER (qui ont bien perm_transaction_view) recevaient un 403 malgré un
-        // accès légitime — et comme Dashboard.tsx enchaîne cet appel dans le MÊME try/catch
-        // que /admin/stats, l'échec faisait disparaître tout le tableau de bord, KPIs inclus.
-        if (!admin || !hasPermission(admin, 'perm_transaction_view')) return res.status(403).json({ error: 'Accès refusé.' });
+        // RÃ©gression : cette route vÃ©rifiait `perm_system_settings_view` â€” sans rapport avec
+        // le Grand Livre â€” au lieu de `perm_transaction_view`, la permission sur laquelle
+        // App.tsx/Ledger.tsx gatent rÃ©ellement l'onglet cÃ´tÃ© UI. Seuls SUPER_ADMIN/ADMIN
+        // possÃ¨dent la permission settings par dÃ©faut, donc BRANCH_MANAGER/TELLER/RISK/
+        // SUPPORT_MAKER (qui ont bien perm_transaction_view) recevaient un 403 malgrÃ© un
+        // accÃ¨s lÃ©gitime â€” et comme Dashboard.tsx enchaÃ®ne cet appel dans le MÃŠME try/catch
+        // que /admin/stats, l'Ã©chec faisait disparaÃ®tre tout le tableau de bord, KPIs inclus.
+        if (!admin || !hasPermission(admin, 'perm_transaction_view')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         // Les courbes 7j/14j et le Grand Livre (admin-web Dashboard.tsx, MacroStats.tsx,
-        // Ledger.tsx) agrègent/filtrent TOUT côté client sur ce même jeu de résultats. À
-        // `take: 200`, une agence à fort volume peut épuiser les 200 lignes en quelques
-        // heures — les jours précédents retombent alors silencieusement à zéro dans les
-        // graphiques, et la recherche du Grand Livre ne porte que sur ces mêmes 200 lignes.
-        // 2000 réduit fortement le risque sans le résoudre en théorie ; une vraie solution
-        // nécessiterait une agrégation par plage de dates côté serveur plutôt qu'une simple
-        // liste tronquée — hors périmètre de ce correctif.
-        const txs = await prisma.transaction.findMany({
-            orderBy: { createdAt: 'desc' },
-            take: 2000,
-            include: {
-                senderWallet: { include: { user: { select: { id: true, name: true, phone: true, role: true } }, systemAccount: { select: { name: true } }, branch: { select: { name: true } }, centralTreasury: true } },
-                receiverWallet: { include: { user: { select: { id: true, name: true, phone: true, role: true } }, systemAccount: { select: { name: true } }, branch: { select: { name: true } }, centralTreasury: true } },
-            }
+        // Ledger.tsx) agrÃ¨gent/filtrent TOUT cÃ´tÃ© client sur ce mÃªme jeu de rÃ©sultats. Ã€
+        // `take: 200`, une agence Ã  fort volume peut Ã©puiser les 200 lignes en quelques
+        // heures â€” les jours prÃ©cÃ©dents retombent alors silencieusement Ã  zÃ©ro dans les
+        // graphiques, et la recherche du Grand Livre ne porte que sur ces mÃªmes 200 lignes.
+        // 2000 rÃ©duit fortement le risque sans le rÃ©soudre en thÃ©orie ; une vraie solution
+        // nÃ©cessiterait une agrÃ©gation par plage de dates cÃ´tÃ© serveur plutÃ´t qu'une simple
+        // liste tronquÃ©e â€” hors pÃ©rimÃ¨tre de ce correctif.
+        const txs = await withCache('ledger:all', 30, async () => {
+            return await prisma.transaction.findMany({
+                orderBy: { createdAt: 'desc' },
+                take: 2000,
+                include: {
+                    senderWallet: { include: { user: { select: { id: true, name: true, phone: true, role: true } }, systemAccount: { select: { name: true } }, branch: { select: { name: true } }, centralTreasury: true } },
+                    receiverWallet: { include: { user: { select: { id: true, name: true, phone: true, role: true } }, systemAccount: { select: { name: true } }, branch: { select: { name: true } }, centralTreasury: true } },
+                }
+            });
         });
 
         res.json(txs);
@@ -852,7 +898,7 @@ router.get('/ledger', authMiddleware, async (req: AuthRequest, res) => {
 router.delete('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const targetId = req.params.id as string;
         const targetUser = await prisma.user.findUnique({ where: { id: targetId }, include: { wallet: true } });
@@ -874,35 +920,35 @@ router.delete('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
                 username: scrambledUsername,
                 email: scrambledEmail,
                 isActive: false,
-                name: `[SUPPRIMÉ] ${targetUser.name}`
+                name: `[SUPPRIMÃ‰] ${targetUser.name}`
             }
         });
 
         await prisma.auditLog.create({
-            data: { adminId: admin.id, action: 'DELETE_USER', details: `Clôture définitive du compte ${targetUser.phone}` }
+            data: { adminId: admin.id, action: 'DELETE_USER', details: `ClÃ´ture dÃ©finitive du compte ${targetUser.phone}` }
         });
 
-        res.json({ success: true, message: 'Utilisateur supprimé avec succès.' });
+        res.json({ success: true, message: 'Utilisateur supprimÃ© avec succÃ¨s.' });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });
 
-// La route POST /transactions/:id/refund (remboursement exécuté unilatéralement par un
-// seul SUPER_ADMIN) a été retirée : elle contournait le flux Maker/Checker déjà en place
-// via /refund-requests (create → approve → execute, voir plus bas dans ce fichier), qui
-// impose qu'un second agent distinct valide l'opération. Toute demande de remboursement
-// doit désormais passer par ce flux.
+// La route POST /transactions/:id/refund (remboursement exÃ©cutÃ© unilatÃ©ralement par un
+// seul SUPER_ADMIN) a Ã©tÃ© retirÃ©e : elle contournait le flux Maker/Checker dÃ©jÃ  en place
+// via /refund-requests (create â†’ approve â†’ execute, voir plus bas dans ce fichier), qui
+// impose qu'un second agent distinct valide l'opÃ©ration. Toute demande de remboursement
+// doit dÃ©sormais passer par ce flux.
 
 // --- V4: Mod?ration KYC ---
 router.get('/users/kyc', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        // Consulter la file (et les photos) est une action distincte d'approuver/rejeter —
-        // `perm_customer_kyc_view` couvre la première (TELLER/RISK/SUPPORT_MAKER, ex. vérifier
-        // une pièce au guichet), `perm_customer_kyc_validate` reste seule à autoriser le PUT
-        // ci-dessous. Vérifier uniquement `validate` ici bloquait tous les rôles voir-seul.
-        if (!admin || !(hasPermission(admin, 'perm_customer_kyc_view') || hasPermission(admin, 'perm_customer_kyc_validate'))) return res.status(403).json({ error: 'Accès refusé.' });
+        // Consulter la file (et les photos) est une action distincte d'approuver/rejeter â€”
+        // `perm_customer_kyc_view` couvre la premiÃ¨re (TELLER/RISK/SUPPORT_MAKER, ex. vÃ©rifier
+        // une piÃ¨ce au guichet), `perm_customer_kyc_validate` reste seule Ã  autoriser le PUT
+        // ci-dessous. VÃ©rifier uniquement `validate` ici bloquait tous les rÃ´les voir-seul.
+        if (!admin || !(hasPermission(admin, 'perm_customer_kyc_view') || hasPermission(admin, 'perm_customer_kyc_validate'))) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const filter = req.query.status as string || 'PENDING';
         const pendingList = await (prisma.user as any).findMany({
@@ -912,7 +958,7 @@ router.get('/users/kyc', authMiddleware, async (req: AuthRequest, res) => {
 
         res.json(pendingList);
     } catch (e: any) {
-        res.status(500).json({ error: 'Erreur réseau (KYC List)' });
+        res.status(500).json({ error: 'Erreur rÃ©seau (KYC List)' });
     }
 });
 
@@ -925,8 +971,8 @@ const vipLimitSchema = z.object({
 router.put('/users/:id/vip-limit', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        // Plafond VIP : action à fort impact financier, réservée strictement à SUPER_ADMIN.
-        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Accès refusé.' });
+        // Plafond VIP : action Ã  fort impact financier, rÃ©servÃ©e strictement Ã  SUPER_ADMIN.
+        if (!admin || admin.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const parsed = vipLimitSchema.safeParse(req.body);
         if (!parsed.success) return res.status(400).json({ error: 'Plafond invalide.' });
@@ -934,10 +980,10 @@ router.put('/users/:id/vip-limit', authMiddleware, async (req: AuthRequest, res)
         const targetUser = await prisma.user.findUnique({ where: { id: String(req.params.id) as string } });
         if (!targetUser) return res.status(404).json({ error: 'Introuvable' });
 
-        // Écrit dans le bon champ granulaire (journalier/mensuel/par-transaction) — ce
-        // endpoint écrivait auparavant la valeur brute en FCFA dans kycLevel (censé être
+        // Ã‰crit dans le bon champ granulaire (journalier/mensuel/par-transaction) â€” ce
+        // endpoint Ã©crivait auparavant la valeur brute en FCFA dans kycLevel (censÃ© Ãªtre
         // un simple palier 0/1/2), ce qui basculait silencieusement le client en Tier 2
-        // générique au lieu d'appliquer le plafond demandé.
+        // gÃ©nÃ©rique au lieu d'appliquer le plafond demandÃ©.
         await prisma.user.update({
             where: { id: targetUser.id },
             data: {
@@ -947,10 +993,10 @@ router.put('/users/:id/vip-limit', authMiddleware, async (req: AuthRequest, res)
         });
 
         await prisma.auditLog.create({
-            data: { adminId: admin.id, action: 'VIP_LIMIT_SET', details: `${parsed.data.limitType} = ${parsed.data.limit} FCFA (application immédiate, sans Checker) pour ${targetUser.phone}` }
+            data: { adminId: admin.id, action: 'VIP_LIMIT_SET', details: `${parsed.data.limitType} = ${parsed.data.limit} FCFA (application immÃ©diate, sans Checker) pour ${targetUser.phone}` }
         });
 
-        res.json({ message: 'Plafond VIP appliqué avec succès.' });
+        res.json({ message: 'Plafond VIP appliquÃ© avec succÃ¨s.' });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -967,7 +1013,7 @@ const kycReviewSchema = z.object({
 router.put('/users/:id/kyc', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!admin || !hasPermission(admin, 'perm_customer_kyc_validate')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!admin || !hasPermission(admin, 'perm_customer_kyc_validate')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const parsed = kycReviewSchema.safeParse(req.body);
         if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -994,11 +1040,11 @@ router.put('/users/:id/kyc', authMiddleware, async (req: AuthRequest, res) => {
 
         await prisma.notification.create({
             data: parsed.data.status === 'APPROVED'
-                ? { userId: targetId, title: 'Vérification approuvée ✅', body: 'Votre dossier de vérification d\'identité a été approuvé. Vos limites de compte ont été mises à jour.', type: 'SYSTEM' }
-                : { userId: targetId, title: 'Vérification rejetée', body: `Votre dossier de vérification d'identité a été rejeté. Motif : ${reason}`, type: 'SYSTEM' }
+                ? { userId: targetId, title: 'VÃ©rification approuvÃ©e âœ…', body: 'Votre dossier de vÃ©rification d\'identitÃ© a Ã©tÃ© approuvÃ©. Vos limites de compte ont Ã©tÃ© mises Ã  jour.', type: 'SYSTEM' }
+                : { userId: targetId, title: 'VÃ©rification rejetÃ©e', body: `Votre dossier de vÃ©rification d'identitÃ© a Ã©tÃ© rejetÃ©. Motif : ${reason}`, type: 'SYSTEM' }
         });
 
-        res.json({ message: 'Dossier KYC traité avec succès.' });
+        res.json({ message: 'Dossier KYC traitÃ© avec succÃ¨s.' });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -1014,16 +1060,16 @@ router.post('/branches/:id/fund', authMiddleware, async (req: AuthRequest, res) 
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
         // Only SuperAdmin or Risk can inject physical Liquidity
         if (!admin || !hasPermission(admin, 'perm_audit_log_view')) {
-            return res.status(403).json({ error: 'Autorisation "Injection de Liquidité" requise.' });
+            return res.status(403).json({ error: 'Autorisation "Injection de LiquiditÃ©" requise.' });
         }
 
         // Comme treasury.ts : le Circuit Breaker bloque les mouvements de fonds mais pas
         // le reste de /api/admin (staff, KYC, tableaux de bord), donc pas de gating au
-        // niveau du routeur — sinon un verrouillage d'urgence empêcherait aussi les admins
-        // d'opérer le reste de la plateforme pour, justement, gérer l'incident.
+        // niveau du routeur â€” sinon un verrouillage d'urgence empÃªcherait aussi les admins
+        // d'opÃ©rer le reste de la plateforme pour, justement, gÃ©rer l'incident.
         const settings = await prisma.systemSettings.findFirst();
         if (settings?.circuitBreaker) {
-            return res.status(403).json({ error: 'Le Circuit Breaker est activé. Opérations financières bloquées.' });
+            return res.status(403).json({ error: 'Le Circuit Breaker est activÃ©. OpÃ©rations financiÃ¨res bloquÃ©es.' });
         }
 
         const branchId = req.params.id as string;
@@ -1039,17 +1085,17 @@ router.post('/branches/:id/fund', authMiddleware, async (req: AuthRequest, res) 
         if (!hq) return res.status(500).json({ error: 'Caisse Centrale HQ introuvable.' });
 
         if (hq.id === branchId) {
-            return res.status(400).json({ error: 'Impossible d\'alimenter la Caisse Centrale avec elle-même.' });
+            return res.status(400).json({ error: 'Impossible d\'alimenter la Caisse Centrale avec elle-mÃªme.' });
         }
 
         if (hq.balance < amount) {
             return res.status(400).json({ error: `Fonds insuffisants. Solde HQ : ${hq.balance.toLocaleString('fr-FR')} FCFA` });
         }
 
-        // Garde atomique (balance: gte) sur le débit HQ : le contrôle ci-dessus lit une
-        // valeur non verrouillée, donc deux injections concurrentes depuis le même HQ
+        // Garde atomique (balance: gte) sur le dÃ©bit HQ : le contrÃ´le ci-dessus lit une
+        // valeur non verrouillÃ©e, donc deux injections concurrentes depuis le mÃªme HQ
         // pouvaient toutes deux le passer et faire chuter le coffre physique central sous
-        // zéro (même classe de bug déjà corrigée dans CashOperationService/wallet.ts).
+        // zÃ©ro (mÃªme classe de bug dÃ©jÃ  corrigÃ©e dans CashOperationService/wallet.ts).
         const [updatedHQ, updatedBranch] = await prisma.$transaction([
             prisma.branch.update({ where: { id: hq.id, balance: { gte: amount } }, data: { balance: { decrement: amount } } }),
             prisma.branch.update({ where: { id: branchId }, data: { balance: { increment: amount } } })
@@ -1064,7 +1110,7 @@ router.post('/branches/:id/fund', authMiddleware, async (req: AuthRequest, res) 
             }
         });
 
-        return res.json({ success: true, message: `Liquidité de ${amount} FCFA transférée à ${branch.name}.`, branch: updatedBranch });
+        return res.json({ success: true, message: `LiquiditÃ© de ${amount} FCFA transfÃ©rÃ©e Ã  ${branch.name}.`, branch: updatedBranch });
     } catch (e: any) {
         return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -1078,13 +1124,13 @@ router.get('/teller/lookup/:phone', authMiddleware, async (req: AuthRequest, res
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
         if (!staff || !hasPermission(staff, 'perm_cash_out')) {
-            return res.status(403).json({ error: 'Accès Guichet refusé.' });
+            return res.status(403).json({ error: 'AccÃ¨s Guichet refusÃ©.' });
         }
 
-        // Photos KYC incluses : un client se présentant physiquement en agence doit pouvoir
-        // être comparé à sa pièce d'identité au dossier — avant, ce lookup ne renvoyait que
-        // nom/téléphone/statut, sans aucun moyen pour le caissier de vérifier visuellement
-        // l'identité de la personne en face de lui.
+        // Photos KYC incluses : un client se prÃ©sentant physiquement en agence doit pouvoir
+        // Ãªtre comparÃ© Ã  sa piÃ¨ce d'identitÃ© au dossier â€” avant, ce lookup ne renvoyait que
+        // nom/tÃ©lÃ©phone/statut, sans aucun moyen pour le caissier de vÃ©rifier visuellement
+        // l'identitÃ© de la personne en face de lui.
         const user = await prisma.user.findUnique({
             where: { phone: req.params.phone as string },
             select: { id: true, name: true, phone: true, kycStatus: true, role: true, idCardFront: true, idCardBack: true, selfie: true }
@@ -1106,11 +1152,11 @@ router.get('/teller/lookup/:phone', authMiddleware, async (req: AuthRequest, res
 router.get('/staff', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        // Régression : vérifiait `perm_system_settings_view` (sans rapport) au lieu de
-        // `perm_staff_view` — BRANCH_MANAGER, seul rôle non-admin qui l'a par défaut, voyait
-        // l'onglet Personnel (App.tsx, perm_staff_view) mais chaque appel y échouait en 403.
+        // RÃ©gression : vÃ©rifiait `perm_system_settings_view` (sans rapport) au lieu de
+        // `perm_staff_view` â€” BRANCH_MANAGER, seul rÃ´le non-admin qui l'a par dÃ©faut, voyait
+        // l'onglet Personnel (App.tsx, perm_staff_view) mais chaque appel y Ã©chouait en 403.
         if (!admin || !hasPermission(admin, 'perm_staff_view')) {
-            return res.status(403).json({ error: 'Accès refusé.' });
+            return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
         }
 
         const page = Math.max(1, parseInt(req.query.page as string) || 1);
@@ -1127,8 +1173,8 @@ router.get('/staff', authMiddleware, async (req: AuthRequest, res) => {
             ];
         }
         if (status) {
-            // Liste séparée par virgules (ex: "ACTIVE,SUSPENDED") pour exclure un seul statut
-            // (PENDING) sans devoir choisir une seule valeur exacte — cf. admin-web StaffAccessRights,
+            // Liste sÃ©parÃ©e par virgules (ex: "ACTIVE,SUSPENDED") pour exclure un seul statut
+            // (PENDING) sans devoir choisir une seule valeur exacte â€” cf. admin-web StaffAccessRights,
             // dont la recherche doit couvrir les comptes actifs ET suspendus, mais pas la file PENDING.
             const statuses = (status as string).split(',').map(s => s.trim()).filter(Boolean);
             where.status = statuses.length > 1 ? { in: statuses } : statuses[0];
@@ -1144,9 +1190,9 @@ router.get('/staff', authMiddleware, async (req: AuthRequest, res) => {
         const [staffList, total] = await prisma.$transaction([
             prisma.staff.findMany({
                 where,
-                // matricule et status manquaient ici : Page 3 ("Droits d'Accès") dépend de
-                // status==='PENDING' pour distinguer sa file d'attente, donc c'était
-                // systématiquement vide côté client (toujours undefined !== 'PENDING'), et
+                // matricule et status manquaient ici : Page 3 ("Droits d'AccÃ¨s") dÃ©pend de
+                // status==='PENDING' pour distinguer sa file d'attente, donc c'Ã©tait
+                // systÃ©matiquement vide cÃ´tÃ© client (toujours undefined !== 'PENDING'), et
                 // le matricule s'affichait toujours "N/A" quelle que soit la vraie valeur.
                 select: { id: true, email: true, name: true, role: true, isActive: true, status: true, matricule: true, branchId: true, branch: true, createdAt: true, permissionsCustomized: true },
                 orderBy: { [sortField]: sortOrder },
@@ -1164,10 +1210,10 @@ router.get('/staff', authMiddleware, async (req: AuthRequest, res) => {
 router.post('/staff', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        // Régression : vérifiait `perm_audit_log_view` (consultation de logs, sans rapport) au
-        // lieu de `perm_staff_manage` — la permission dédiée dans RBAC.ts, jamais accordée par
-        // défaut à un rôle non-admin, ce qui restreint correctement cette action à SUPER_ADMIN/
-        // ADMIN (ou une surcharge explicite) plutôt qu'à quiconque a déjà consulté les audit logs.
+        // RÃ©gression : vÃ©rifiait `perm_audit_log_view` (consultation de logs, sans rapport) au
+        // lieu de `perm_staff_manage` â€” la permission dÃ©diÃ©e dans RBAC.ts, jamais accordÃ©e par
+        // dÃ©faut Ã  un rÃ´le non-admin, ce qui restreint correctement cette action Ã  SUPER_ADMIN/
+        // ADMIN (ou une surcharge explicite) plutÃ´t qu'Ã  quiconque a dÃ©jÃ  consultÃ© les audit logs.
         if (!admin || !hasPermission(admin, 'perm_staff_manage')) {
             return res.status(403).json({ error: 'Seule la direction peut habiliter du personnel.' });
         }
@@ -1187,10 +1233,10 @@ router.post('/staff', authMiddleware, async (req: AuthRequest, res) => {
             branchId: z.string().optional()
         });
         const parsed = schema.safeParse(req.body);
-        if (!parsed.success) return res.status(400).json({ error: 'Données invalides ou incomplètes (Matricule, CNI requis).' });
+        if (!parsed.success) return res.status(400).json({ error: 'DonnÃ©es invalides ou incomplÃ¨tes (Matricule, CNI requis).' });
 
         const existing = await prisma.staff.findUnique({ where: { email: parsed.data.email } });
-        if (existing) return res.status(400).json({ error: 'Cet email professionnel est déjà attribué.' });
+        if (existing) return res.status(400).json({ error: 'Cet email professionnel est dÃ©jÃ  attribuÃ©.' });
 
         const hash = await bcrypt.hash(parsed.data.password, 10);
 
@@ -1215,10 +1261,10 @@ router.post('/staff', authMiddleware, async (req: AuthRequest, res) => {
         });
 
         await prisma.auditLog.create({
-            data: { adminId: admin.id, action: 'CREATE_STAFF_PENDING', details: `Création compte Staff en attente : ${newStaff.email} (${newStaff.role})` }
+            data: { adminId: admin.id, action: 'CREATE_STAFF_PENDING', details: `CrÃ©ation compte Staff en attente : ${newStaff.email} (${newStaff.role})` }
         });
 
-        return res.json({ success: true, message: 'Employé Corporate ajouté (STATUT : EN ATTENTE DE VALIDATION).' });
+        return res.json({ success: true, message: 'EmployÃ© Corporate ajoutÃ© (STATUT : EN ATTENTE DE VALIDATION).' });
     } catch (e: any) {
         return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -1234,13 +1280,13 @@ router.put('/staff/:id/approve', authMiddleware, async (req: AuthRequest, res) =
         const targetId = req.params.id as string;
         const targetStaff = await prisma.staff.findUnique({ where: { id: targetId } });
         if (!targetStaff) return res.status(404).json({ error: 'Staff introuvable.' });
-        if (targetStaff.status === 'ACTIVE') return res.status(400).json({ error: 'Ce compte est déjà actif.' });
+        if (targetStaff.status === 'ACTIVE') return res.status(400).json({ error: 'Ce compte est dÃ©jÃ  actif.' });
 
         // Anti-auto-approbation (Maker/Checker) : le recruteur ne peut pas valider son propre
-        // recrutement — sauf SUPER_ADMIN (autorité ultime), pour éviter une impasse totale
-        // d'onboarding si un seul compte staff actif existe dans le système.
+        // recrutement â€” sauf SUPER_ADMIN (autoritÃ© ultime), pour Ã©viter une impasse totale
+        // d'onboarding si un seul compte staff actif existe dans le systÃ¨me.
         if (targetStaff.createdById && targetStaff.createdById === admin.id && admin.role !== 'SUPER_ADMIN') {
-            return res.status(403).json({ error: 'Le recruteur ne peut pas approuver le compte qu\'il a lui-même créé.' });
+            return res.status(403).json({ error: 'Le recruteur ne peut pas approuver le compte qu\'il a lui-mÃªme crÃ©Ã©.' });
         }
 
         await prisma.staff.update({
@@ -1249,10 +1295,10 @@ router.put('/staff/:id/approve', authMiddleware, async (req: AuthRequest, res) =
         });
 
         await prisma.auditLog.create({
-            data: { adminId: admin.id, action: 'APPROVE_STAFF', details: `Habilitation définitive du matricule : ${targetStaff.matricule}` }
+            data: { adminId: admin.id, action: 'APPROVE_STAFF', details: `Habilitation dÃ©finitive du matricule : ${targetStaff.matricule}` }
         });
 
-        return res.json({ success: true, message: 'Habilitation bancaire approuvée avec succès !' });
+        return res.json({ success: true, message: 'Habilitation bancaire approuvÃ©e avec succÃ¨s !' });
     } catch (e: any) {
         return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -1271,36 +1317,36 @@ router.put('/staff/:id', authMiddleware, async (req: AuthRequest, res) => {
         // Allows modifying Role and BranchId
         const { role, branchId, isActive } = req.body;
 
-        // Le changement de rôle (et l'activation/désactivation d'un compte SUPER_ADMIN) est
-        // réservé au SUPER_ADMIN : un RISK ne doit pas pouvoir s'auto-promouvoir ni éjecter un
-        // SUPER_ADMIN en le désactivant. `role` est validé par la même whitelist que la
-        // création (POST /staff) — sans ça, n'importe quelle chaîne était acceptée telle
-        // quelle et écrite en base.
+        // Le changement de rÃ´le (et l'activation/dÃ©sactivation d'un compte SUPER_ADMIN) est
+        // rÃ©servÃ© au SUPER_ADMIN : un RISK ne doit pas pouvoir s'auto-promouvoir ni Ã©jecter un
+        // SUPER_ADMIN en le dÃ©sactivant. `role` est validÃ© par la mÃªme whitelist que la
+        // crÃ©ation (POST /staff) â€” sans Ã§a, n'importe quelle chaÃ®ne Ã©tait acceptÃ©e telle
+        // quelle et Ã©crite en base.
         if (role !== undefined) {
             if (admin.role !== 'SUPER_ADMIN') {
-                return res.status(403).json({ error: 'Seul un SUPER_ADMIN peut modifier un rôle.' });
+                return res.status(403).json({ error: 'Seul un SUPER_ADMIN peut modifier un rÃ´le.' });
             }
             if (targetId === admin.id) {
-                return res.status(400).json({ error: 'Vous ne pouvez pas modifier votre propre rôle.' });
+                return res.status(400).json({ error: 'Vous ne pouvez pas modifier votre propre rÃ´le.' });
             }
             if (!STAFF_ROLES.includes(role)) {
-                return res.status(400).json({ error: 'Rôle invalide.' });
+                return res.status(400).json({ error: 'RÃ´le invalide.' });
             }
         }
         if (isActive !== undefined && targetId === admin.id) {
             return res.status(400).json({ error: 'Vous ne pouvez pas modifier votre propre statut d\'activation.' });
         }
 
-        // N'écrit branchId que si la clé est explicitement présente dans le body : sinon
-        // `branchId || null` écrasait systématiquement l'affectation existante à null dès
-        // qu'un appelant ne mettait à jour que le rôle ou l'activation (StaffAccessRights.tsx
-        // n'envoie jamais branchId), désaffectant silencieusement le staff de son agence.
+        // N'Ã©crit branchId que si la clÃ© est explicitement prÃ©sente dans le body : sinon
+        // `branchId || null` Ã©crasait systÃ©matiquement l'affectation existante Ã  null dÃ¨s
+        // qu'un appelant ne mettait Ã  jour que le rÃ´le ou l'activation (StaffAccessRights.tsx
+        // n'envoie jamais branchId), dÃ©saffectant silencieusement le staff de son agence.
         const data: any = {};
         if (role !== undefined) data.role = role;
         if (isActive !== undefined) {
             data.isActive = isActive;
-            // Suspension : révoque immédiatement toute session déjà ouverte plutôt que
-            // d'attendre jusqu'à 12h l'expiration naturelle du token déjà émis.
+            // Suspension : rÃ©voque immÃ©diatement toute session dÃ©jÃ  ouverte plutÃ´t que
+            // d'attendre jusqu'Ã  12h l'expiration naturelle du token dÃ©jÃ  Ã©mis.
             if (isActive === false) data.jwtVersion = { increment: 1 };
         }
         if ('branchId' in req.body) data.branchId = branchId || null;
@@ -1311,10 +1357,10 @@ router.put('/staff/:id', authMiddleware, async (req: AuthRequest, res) => {
         });
 
         await prisma.auditLog.create({
-            data: { adminId: admin.id, action: 'UPDATE_STAFF', details: `Mutation appliquée à ${updated.name} (${updated.matricule})` }
+            data: { adminId: admin.id, action: 'UPDATE_STAFF', details: `Mutation appliquÃ©e Ã  ${updated.name} (${updated.matricule})` }
         });
 
-        return res.json({ success: true, message: 'Fiche du personnel mise à jour avec succès.', staff: updated });
+        return res.json({ success: true, message: 'Fiche du personnel mise Ã  jour avec succÃ¨s.', staff: updated });
     } catch (e: any) {
         return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -1326,11 +1372,11 @@ router.put('/staff/:id', authMiddleware, async (req: AuthRequest, res) => {
 router.get('/customers', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        // Régression : vérifiait `perm_ticket_resolve` (sans rapport avec la liste clients) au
-        // lieu de `perm_customer_view` — la permission sur laquelle App.tsx/Users.tsx gatent
-        // réellement l'onglet côté UI (TELLER et RISK l'ont par défaut mais pas ticket_resolve).
+        // RÃ©gression : vÃ©rifiait `perm_ticket_resolve` (sans rapport avec la liste clients) au
+        // lieu de `perm_customer_view` â€” la permission sur laquelle App.tsx/Users.tsx gatent
+        // rÃ©ellement l'onglet cÃ´tÃ© UI (TELLER et RISK l'ont par dÃ©faut mais pas ticket_resolve).
         if (!staff || !hasPermission(staff, 'perm_customer_view')) {
-            return res.status(403).json({ error: 'Accès refusé.' });
+            return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
         }
 
         const page = parseInt(req.query.page as string) || 1;
@@ -1339,12 +1385,12 @@ router.get('/customers', authMiddleware, async (req: AuthRequest, res) => {
 
         const { q, status, kycStatus, role } = req.query;
 
-        // Le segment de compte (Client / Agent / Marchand) — auparavant fig? sur 'USER'
+        // Le segment de compte (Client / Agent / Marchand) â€” auparavant fig? sur 'USER'
         // sans possibilit? de filtrer, ce qui rendait les comptes Agent/Marchand cr??s
         // via "Cr?er Compte Pro" litt?ralement invisibles dans cette liste.
         // AGENT filtrable individuellement (utilis? par l'entr?e "Agents Mongain" sous
         // Organisation Interne) mais volontairement exclu de 'ALL' : un agent est rattach?
-        // ? l'organisation/agence, pas à la clientèle, donc "Tous" dans l'?cran Clients &
+        // ? l'organisation/agence, pas Ã  la clientÃ¨le, donc "Tous" dans l'?cran Clients &
         // Marchands ne doit pas le m?langer avec les vrais tiers externes.
         const SEGMENT_ROLES = ['USER', 'AGENT', 'MERCHANT'];
         const CLIENT_SEGMENT_ROLES = ['USER', 'MERCHANT'];
@@ -1393,7 +1439,7 @@ router.post('/users/:id/logout-all', authMiddleware, async (req: AuthRequest, re
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
         if (!staff || !hasPermission(staff, 'perm_customer_suspend')) {
-            return res.status(403).json({ error: 'Action non autorisée.' });
+            return res.status(403).json({ error: 'Action non autorisÃ©e.' });
         }
 
         const targetId = req.params.id as string;
@@ -1404,11 +1450,11 @@ router.post('/users/:id/logout-all', authMiddleware, async (req: AuthRequest, re
                 data: { jwtVersion: { increment: 1 } }
             }),
             prisma.auditLog.create({
-                data: { adminId: staff.id, action: 'LOGOUT_ALL_SESSIONS', details: `Invalidation forcée de toutes les sessions mobiles (Client : ${targetId}).` }
+                data: { adminId: staff.id, action: 'LOGOUT_ALL_SESSIONS', details: `Invalidation forcÃ©e de toutes les sessions mobiles (Client : ${targetId}).` }
             })
         ]);
 
-        return res.json({ success: true, message: 'Toutes les sessions de cet utilisateur ont été invalidées (Log Out universel).' });
+        return res.json({ success: true, message: 'Toutes les sessions de cet utilisateur ont Ã©tÃ© invalidÃ©es (Log Out universel).' });
     } catch (e: any) {
         return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -1418,7 +1464,7 @@ router.post('/users/:id/risk-flags', authMiddleware, async (req: AuthRequest, re
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
         if (!staff || !hasPermission(staff, 'perm_customer_flag')) {
-            return res.status(403).json({ error: 'Seule la conformité et les risques peuvent affecter un Flag.' });
+            return res.status(403).json({ error: 'Seule la conformitÃ© et les risques peuvent affecter un Flag.' });
         }
 
         const targetId = req.params.id as string;
@@ -1437,11 +1483,11 @@ router.post('/users/:id/risk-flags', authMiddleware, async (req: AuthRequest, re
                 }
             }),
             prisma.auditLog.create({
-                data: { adminId: staff.id, action: 'ATTACH_RISK_FLAG', details: `Flag type [${type}] ajouté au Client ID ${targetId}` }
+                data: { adminId: staff.id, action: 'ATTACH_RISK_FLAG', details: `Flag type [${type}] ajoutÃ© au Client ID ${targetId}` }
             })
         ]);
 
-        return res.json({ success: true, message: 'Drapeau de risque enregistré.' });
+        return res.json({ success: true, message: 'Drapeau de risque enregistrÃ©.' });
     } catch (e: any) {
         return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -1463,8 +1509,8 @@ router.post('/users/:id/reset-pin-request', authMiddleware, async (req: AuthRequ
         if (!user) return res.status(404).json({ error: 'Introuvable' });
 
         // 4 chiffres : doit rester alignable avec resetPinSchema (auth.ts, /reset-pin),
-        // qui n'accepte qu'un code à 4 chiffres — un code à 6 chiffres ne pourrait
-        // jamais être soumis avec succès par le client.
+        // qui n'accepte qu'un code Ã  4 chiffres â€” un code Ã  6 chiffres ne pourrait
+        // jamais Ãªtre soumis avec succÃ¨s par le client.
         const otp = crypto.randomInt(1000, 10000).toString();
 
         await prisma.$transaction([
@@ -1475,13 +1521,13 @@ router.post('/users/:id/reset-pin-request', authMiddleware, async (req: AuthRequ
             }),
             prisma.user.update({ where: { id: targetId }, data: { failedPinAttempts: 0 } }),
             prisma.auditLog.create({
-                data: { adminId: staff.id, action: 'PIN_RESET_TRIGGER', details: `Demande réinit. PIN pour ${user.phone}. Raison : ${reason}` }
+                data: { adminId: staff.id, action: 'PIN_RESET_TRIGGER', details: `Demande rÃ©init. PIN pour ${user.phone}. Raison : ${reason}` }
             })
         ]);
 
-        await sendSms(user.phone, `Mongain : Votre demande de réinitialisation de PIN a été approuvée par le Support. OTP de sécurité : ${otp}. Valide 15 minutes.`);
+        await sendSms(user.phone, `Mongain : Votre demande de rÃ©initialisation de PIN a Ã©tÃ© approuvÃ©e par le Support. OTP de sÃ©curitÃ© : ${otp}. Valide 15 minutes.`);
 
-        return res.json({ success: true, message: 'Procédure OTP de recouvrement déclenchée sur le téléphone du client.' });
+        return res.json({ success: true, message: 'ProcÃ©dure OTP de recouvrement dÃ©clenchÃ©e sur le tÃ©lÃ©phone du client.' });
     } catch (e: any) {
         return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -1491,9 +1537,9 @@ router.post('/users/:id/reset-pin-request', authMiddleware, async (req: AuthRequ
 // GET Limit Requests specific to a user
 router.get('/users/:id/limit-requests', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        // Historique de relèvement de plafond client : donnée de conformité, réservée aux
-        // mêmes rôles que le reste du dossier Customer 360 sensible — un simple `if (!staff)`
-        // laissait n'importe quel rôle (TELLER inclus) la consulter pour n'importe quel client.
+        // Historique de relÃ¨vement de plafond client : donnÃ©e de conformitÃ©, rÃ©servÃ©e aux
+        // mÃªmes rÃ´les que le reste du dossier Customer 360 sensible â€” un simple `if (!staff)`
+        // laissait n'importe quel rÃ´le (TELLER inclus) la consulter pour n'importe quel client.
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
         if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Interdit' });
 
@@ -1521,9 +1567,9 @@ router.get('/users/:id/limit-requests', authMiddleware, async (req: AuthRequest,
 router.post('/reclamations', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        // Régression : vérifiait `perm_ticket_resolve` (clôturer un ticket) au lieu de
-        // `perm_ticket_create` — la permission dédiée à cette action dans RBAC.ts.
-        if (!staff || !hasPermission(staff, 'perm_ticket_create')) return res.status(403).json({ error: 'Accès refusé.' });
+        // RÃ©gression : vÃ©rifiait `perm_ticket_resolve` (clÃ´turer un ticket) au lieu de
+        // `perm_ticket_create` â€” la permission dÃ©diÃ©e Ã  cette action dans RBAC.ts.
+        if (!staff || !hasPermission(staff, 'perm_ticket_create')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const { title, description, category, priority, userId, transactionId, branchId, tellerId } = req.body;
         if (!title || !description || !userId) return res.status(400).json({ error: 'title, description et userId sont obligatoires.' });
@@ -1543,7 +1589,7 @@ router.post('/reclamations', authMiddleware, async (req: AuthRequest, res) => {
             data: { title, description, category: category || 'OTHER', priority: p, userId, transactionId, branchId, tellerId, slaDeadline }
         });
 
-        await prisma.auditLog.create({ data: { adminId: staff.id, action: 'CREATE_TICKET', details: `Ticket ${ticket.id.substring(0, 8)} créé catégorie [${category}] SLA deadline : ${slaDeadline.toISOString()}` } });
+        await prisma.auditLog.create({ data: { adminId: staff.id, action: 'CREATE_TICKET', details: `Ticket ${ticket.id.substring(0, 8)} crÃ©Ã© catÃ©gorie [${category}] SLA deadline : ${slaDeadline.toISOString()}` } });
         res.status(201).json(ticket);
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
@@ -1558,7 +1604,7 @@ router.post('/reclamations', authMiddleware, async (req: AuthRequest, res) => {
 router.post('/fraud-cases', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_flag')) return res.status(403).json({ error: 'Réservé équipe Risk/Compliance.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_flag')) return res.status(403).json({ error: 'RÃ©servÃ© Ã©quipe Risk/Compliance.' });
 
         const { userId, type, riskLevel, description, linkedTransactionIds, reclamationId } = req.body;
         if (!userId || !description) return res.status(400).json({ error: 'userId et description requis.' });
@@ -1575,7 +1621,7 @@ router.post('/fraud-cases', authMiddleware, async (req: AuthRequest, res) => {
             }
         });
 
-        await prisma.auditLog.create({ data: { adminId: staff.id, action: 'OPEN_FRAUD_CASE', details: `Dossier fraude ${fraudCase.id.substring(0, 8)} ouvert · Type: ${type} · NiveauRisque: ${riskLevel}` } });
+        await prisma.auditLog.create({ data: { adminId: staff.id, action: 'OPEN_FRAUD_CASE', details: `Dossier fraude ${fraudCase.id.substring(0, 8)} ouvert Â· Type: ${type} Â· NiveauRisque: ${riskLevel}` } });
         res.status(201).json(fraudCase);
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
@@ -1585,7 +1631,7 @@ router.post('/fraud-cases', authMiddleware, async (req: AuthRequest, res) => {
 router.get('/fraud-cases', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_flag')) return res.status(403).json({ error: 'Accès limité.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_flag')) return res.status(403).json({ error: 'AccÃ¨s limitÃ©.' });
 
         const { status, riskLevel, page = '1', limit = '50' } = req.query;
         const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
@@ -1615,7 +1661,7 @@ router.get('/fraud-cases', authMiddleware, async (req: AuthRequest, res) => {
 router.get('/fraud-cases/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_flag')) return res.status(403).json({ error: 'Accès limité.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_flag')) return res.status(403).json({ error: 'AccÃ¨s limitÃ©.' });
 
         const fc = await prisma.fraudCase.findUnique({
             where: { id: String(req.params.id) as string },
@@ -1631,7 +1677,7 @@ router.get('/fraud-cases/:id', authMiddleware, async (req: AuthRequest, res) => 
 router.patch('/fraud-cases/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_flag')) return res.status(403).json({ error: 'Accès limité.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_flag')) return res.status(403).json({ error: 'AccÃ¨s limitÃ©.' });
 
         const { status, riskLevel, decision, analystId } = req.body;
         const data: any = {};
@@ -1642,7 +1688,7 @@ router.patch('/fraud-cases/:id', authMiddleware, async (req: AuthRequest, res) =
         if (status === 'CLOSED') data.closedAt = new Date();
 
         const updated = await prisma.fraudCase.update({ where: { id: String(req.params.id) as string }, data });
-        await prisma.auditLog.create({ data: { adminId: staff.id, action: 'UPDATE_FRAUD_CASE', details: `Fraud ${updated.id.substring(0, 8)}: statut: ${status} · décision: ${decision}` } });
+        await prisma.auditLog.create({ data: { adminId: staff.id, action: 'UPDATE_FRAUD_CASE', details: `Fraud ${updated.id.substring(0, 8)}: statut: ${status} Â· dÃ©cision: ${decision}` } });
         res.json({ success: true, fraudCase: updated });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
@@ -1656,9 +1702,9 @@ router.patch('/fraud-cases/:id', authMiddleware, async (req: AuthRequest, res) =
 router.post('/refund-requests', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        // Régression : vérifiait `perm_ticket_resolve` (sans rapport) au lieu de
-        // `perm_refund_request`, la permission Maker dédiée pour cette action (voir RBAC.ts).
-        if (!staff || !hasPermission(staff, 'perm_refund_request')) return res.status(403).json({ error: 'Accès non autorisé.' });
+        // RÃ©gression : vÃ©rifiait `perm_ticket_resolve` (sans rapport) au lieu de
+        // `perm_refund_request`, la permission Maker dÃ©diÃ©e pour cette action (voir RBAC.ts).
+        if (!staff || !hasPermission(staff, 'perm_refund_request')) return res.status(403).json({ error: 'AccÃ¨s non autorisÃ©.' });
 
         const { transactionId, userId, amount, refundType, reason, description, reclamationId } = req.body;
         if (!transactionId || !userId || !amount || !reason) return res.status(400).json({ error: 'transactionId, userId, amount, reason sont obligatoires.' });
@@ -1673,10 +1719,10 @@ router.post('/refund-requests', authMiddleware, async (req: AuthRequest, res) =>
             data: { transactionId, userId, requesterId: staff.id, amount, refundType: refundType || 'FULL', reason, description: description || '', reclamationId: reclamationId || null }
         });
 
-        await prisma.auditLog.create({ data: { adminId: staff.id, action: 'CREATE_REFUND_REQUEST', details: `RefundReq ${refund.id.substring(0, 8)}: TX ${transactionId} · ${amount} FCFA · Type: ${refundType}` } });
+        await prisma.auditLog.create({ data: { adminId: staff.id, action: 'CREATE_REFUND_REQUEST', details: `RefundReq ${refund.id.substring(0, 8)}: TX ${transactionId} Â· ${amount} FCFA Â· Type: ${refundType}` } });
         res.status(201).json(refund);
     } catch (e: any) {
-        if (e.code === 'P2002') return res.status(409).json({ error: 'Un remboursement pour cette transaction existe déjà. Double remboursement interdit.' });
+        if (e.code === 'P2002') return res.status(409).json({ error: 'Un remboursement pour cette transaction existe dÃ©jÃ . Double remboursement interdit.' });
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });
@@ -1684,9 +1730,9 @@ router.post('/refund-requests', authMiddleware, async (req: AuthRequest, res) =>
 router.get('/refund-requests', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        // Régression : vérifiait `perm_ticket_resolve` (sans rapport) au lieu d'autoriser à la
-        // fois le Maker (crée la demande) et le Checker (l'approuve) à consulter la liste.
-        if (!staff || !(hasPermission(staff, 'perm_refund_request') || hasPermission(staff, 'perm_refund_approve'))) return res.status(403).json({ error: 'Accès non autorisé.' });
+        // RÃ©gression : vÃ©rifiait `perm_ticket_resolve` (sans rapport) au lieu d'autoriser Ã  la
+        // fois le Maker (crÃ©e la demande) et le Checker (l'approuve) Ã  consulter la liste.
+        if (!staff || !(hasPermission(staff, 'perm_refund_request') || hasPermission(staff, 'perm_refund_approve'))) return res.status(403).json({ error: 'AccÃ¨s non autorisÃ©.' });
 
         const { status, page = '1', limit = '50' } = req.query;
         const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
@@ -1721,7 +1767,7 @@ router.patch('/refund-requests/:id/approve', authMiddleware, async (req: AuthReq
 
         // Anti auto-approbation: le Maker ne peut pas ?tre le Checker (sauf SUPER_ADMIN)
         if (refund.requesterId === staff.id && staff.role !== 'SUPER_ADMIN') {
-            return res.status(403).json({ error: 'Le demandeur ne peut pas approuver sa propre demande (règle Maker/Checker).' });
+            return res.status(403).json({ error: 'Le demandeur ne peut pas approuver sa propre demande (rÃ¨gle Maker/Checker).' });
         }
         if (refund.status !== 'REQUESTED' && refund.status !== 'UNDER_REVIEW') return res.status(400).json({ error: 'Statut incompatible pour approbation.' });
 
@@ -1743,21 +1789,21 @@ router.patch('/refund-requests/:id/approve', authMiddleware, async (req: AuthReq
 router.post('/refund-requests/:id/execute', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_refund_approve')) return res.status(403).json({ error: 'Seul Finance/SuperAdmin peut exécuter un remboursement.' });
+        if (!staff || !hasPermission(staff, 'perm_refund_approve')) return res.status(403).json({ error: 'Seul Finance/SuperAdmin peut exÃ©cuter un remboursement.' });
 
         const settings = await prisma.systemSettings.findFirst();
         if (settings?.circuitBreaker) {
-            return res.status(403).json({ error: 'Le Circuit Breaker est activé. Opérations financières bloquées.' });
+            return res.status(403).json({ error: 'Le Circuit Breaker est activÃ©. OpÃ©rations financiÃ¨res bloquÃ©es.' });
         }
 
         const refund = await prisma.refundRequest.findUnique({ where: { id: String(req.params.id) as string } });
         if (!refund) return res.status(404).json({ error: 'Demande introuvable.' });
-        if (refund.status !== 'APPROVED') return res.status(400).json({ error: 'La demande doit être APPROVED avant exécution.' });
+        if (refund.status !== 'APPROVED') return res.status(400).json({ error: 'La demande doit Ãªtre APPROVED avant exÃ©cution.' });
 
         // Retrouver la TX originale et le wallet du client
         const originalTx = await prisma.transaction.findUnique({ where: { id: refund.transactionId } });
         if (!originalTx) return res.status(404).json({ error: 'Transaction originale introuvable.' });
-        if (!originalTx.receiverWalletId) return res.status(400).json({ error: 'Transaction originale sans portefeuille bénéficiaire — remboursement impossible.' });
+        if (!originalTx.receiverWalletId) return res.status(400).json({ error: 'Transaction originale sans portefeuille bÃ©nÃ©ficiaire â€” remboursement impossible.' });
 
         const userWallet = await prisma.wallet.findUnique({ where: { userId: refund.userId } });
         if (!userWallet) return res.status(404).json({ error: 'Wallet client introuvable.' });
@@ -1768,21 +1814,21 @@ router.post('/refund-requests/:id/execute', authMiddleware, async (req: AuthRequ
             return res.status(400).json({ error: 'Le portefeuille contrepartie n\'a plus assez de fonds pour couvrir ce remboursement.' });
         }
 
-        // Exécution atomique : débiter la contrepartie, créditer le wallet client + marquer
-        // le refund EXECUTED. NE JAMAIS effacer la TX originale — créer une NOUVELLE écriture
+        // ExÃ©cution atomique : dÃ©biter la contrepartie, crÃ©diter le wallet client + marquer
+        // le refund EXECUTED. NE JAMAIS effacer la TX originale â€” crÃ©er une NOUVELLE Ã©criture
         // TX inverse. Transaction interactive (pas le simple tableau `$transaction([...])`
-        // utilisé avant) afin de pouvoir réclamer atomiquement le statut APPROVED->EXECUTED :
-        // le check `refund.status !== 'APPROVED'` ci-dessus lit une valeur non verrouillée,
-        // donc deux appels /execute concurrents sur la même demande (double-clic, retry
-        // réseau) pouvaient tous deux le passer et payer le remboursement deux fois. La garde
-        // atomique (balance: gte) protège en plus contre deux remboursements différents
-        // débitant la même contrepartie en parallèle.
+        // utilisÃ© avant) afin de pouvoir rÃ©clamer atomiquement le statut APPROVED->EXECUTED :
+        // le check `refund.status !== 'APPROVED'` ci-dessus lit une valeur non verrouillÃ©e,
+        // donc deux appels /execute concurrents sur la mÃªme demande (double-clic, retry
+        // rÃ©seau) pouvaient tous deux le passer et payer le remboursement deux fois. La garde
+        // atomique (balance: gte) protÃ¨ge en plus contre deux remboursements diffÃ©rents
+        // dÃ©bitant la mÃªme contrepartie en parallÃ¨le.
         await prisma.$transaction(async (tx) => {
             const claim = await tx.refundRequest.updateMany({
                 where: { id: refund.id, status: 'APPROVED' },
                 data: { status: 'EXECUTED', executedAt: new Date() }
             });
-            if (claim.count === 0) throw new Error('Cette demande a déjà été exécutée.');
+            if (claim.count === 0) throw new Error('Cette demande a dÃ©jÃ  Ã©tÃ© exÃ©cutÃ©e.');
 
             await tx.wallet.update({ where: { id: counterpartWallet.id, balance: { gte: refund.amount } }, data: { balance: { decrement: refund.amount } } });
             await tx.wallet.update({ where: { id: userWallet.id }, data: { balance: { increment: refund.amount } } });
@@ -1795,15 +1841,15 @@ router.post('/refund-requests/:id/execute', authMiddleware, async (req: AuthRequ
                     reference: 'REFUND-' + (originalTx.reference || originalTx.id.substring(0, 8)),
                 }
             });
-            await tx.auditLog.create({ data: { adminId: staff.id, action: 'EXECUTE_REFUND', details: `Refund ${refund.id.substring(0, 8)} : ${refund.amount} FCFA crédités sur wallet ${userWallet.id}, débités du wallet ${counterpartWallet.id}. TX originale ${refund.transactionId} NON modifiée.` } });
-            // Sans ça, le client remboursé n'a aucun moyen de savoir que l'argent est arrivé
+            await tx.auditLog.create({ data: { adminId: staff.id, action: 'EXECUTE_REFUND', details: `Refund ${refund.id.substring(0, 8)} : ${refund.amount} FCFA crÃ©ditÃ©s sur wallet ${userWallet.id}, dÃ©bitÃ©s du wallet ${counterpartWallet.id}. TX originale ${refund.transactionId} NON modifiÃ©e.` } });
+            // Sans Ã§a, le client remboursÃ© n'a aucun moyen de savoir que l'argent est arrivÃ©
             // en dehors d'ouvrir son historique et de le remarquer par hasard.
             await tx.notification.create({
-                data: { userId: refund.userId, title: 'Remboursement reçu', body: `Vous avez été remboursé de ${refund.amount.toLocaleString('fr-FR')} FCFA.`, type: 'TRANSACTION' }
+                data: { userId: refund.userId, title: 'Remboursement reÃ§u', body: `Vous avez Ã©tÃ© remboursÃ© de ${refund.amount.toLocaleString('fr-FR')} FCFA.`, type: 'TRANSACTION' }
             });
         });
 
-        res.json({ success: true, message: `Remboursement de ${refund.amount} FCFA exécuté. TX originale préservée.` });
+        res.json({ success: true, message: `Remboursement de ${refund.amount} FCFA exÃ©cutÃ©. TX originale prÃ©servÃ©e.` });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -1818,16 +1864,16 @@ router.post('/refund-requests/:id/execute', authMiddleware, async (req: AuthRequ
 router.get('/users/:id/360', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_view')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_view')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const customerId = req.params.id as string;
-        // Régression : un unique flag `isSensitive` sur `perm_customer_360_basic` gatait wallet,
-        // photos KYC ET notes de risque/gel à la fois — or `perm_customer_360_basic` est
-        // accordée par défaut à TOUS les rôles non-admin (TELLER, BRANCH_MANAGER inclus), ce
-        // qui rendait ce contrôle inopérant : Customer360.tsx masque bien wallet/KYC/motif de
-        // gel côté UI pour TELLER/BRANCH_MANAGER, mais le backend les envoyait quand même dans
-        // la réponse JSON brute (visible depuis l'onglet réseau du navigateur). Chaque
-        // catégorie utilise désormais sa propre permission dédiée (RBAC.ts).
+        // RÃ©gression : un unique flag `isSensitive` sur `perm_customer_360_basic` gatait wallet,
+        // photos KYC ET notes de risque/gel Ã  la fois â€” or `perm_customer_360_basic` est
+        // accordÃ©e par dÃ©faut Ã  TOUS les rÃ´les non-admin (TELLER, BRANCH_MANAGER inclus), ce
+        // qui rendait ce contrÃ´le inopÃ©rant : Customer360.tsx masque bien wallet/KYC/motif de
+        // gel cÃ´tÃ© UI pour TELLER/BRANCH_MANAGER, mais le backend les envoyait quand mÃªme dans
+        // la rÃ©ponse JSON brute (visible depuis l'onglet rÃ©seau du navigateur). Chaque
+        // catÃ©gorie utilise dÃ©sormais sa propre permission dÃ©diÃ©e (RBAC.ts).
         const canViewWallet = hasPermission(staff, 'perm_customer_wallet_view');
         const canViewKyc = hasPermission(staff, 'perm_customer_kyc_view');
         const canViewRisk = hasPermission(staff, 'perm_customer_flag');
@@ -1855,9 +1901,9 @@ router.get('/users/:id/360', authMiddleware, async (req: AuthRequest, res) => {
                 failedPinAttempts: true,
                 lockedUntil: true,
                 jwtVersion: true,
-                // Motif de gel et description des alertes de risque : notes de conformité en
-                // clair, jamais destinées à un rôle guichet (TELLER) ou d'agence
-                // (BRANCH_MANAGER) — désormais masquées comme le reste des champs sensibles.
+                // Motif de gel et description des alertes de risque : notes de conformitÃ© en
+                // clair, jamais destinÃ©es Ã  un rÃ´le guichet (TELLER) ou d'agence
+                // (BRANCH_MANAGER) â€” dÃ©sormais masquÃ©es comme le reste des champs sensibles.
                 freezeReason: canViewRisk ? true : false,
                 frozenUntil: canViewRisk ? true : false,
                 customDailyLimit: canViewWallet ? true : false,
@@ -1903,20 +1949,20 @@ router.get('/users/:id/360', authMiddleware, async (req: AuthRequest, res) => {
             select: { id: true, action: true, details: true, createdAt: true, adminId: true }
         }));
 
-        // Compteurs réels (indépendants du `take: 5` sur riskFlags/reclamations ci-dessus,
-        // qui ne fournit qu'un aperçu) — évite que l'Aperçu sous-évalue silencieusement le
-        // niveau de risque d'un client au-delà de 5 flags/tickets.
+        // Compteurs rÃ©els (indÃ©pendants du `take: 5` sur riskFlags/reclamations ci-dessus,
+        // qui ne fournit qu'un aperÃ§u) â€” Ã©vite que l'AperÃ§u sous-Ã©value silencieusement le
+        // niveau de risque d'un client au-delÃ  de 5 flags/tickets.
         const [openRiskFlagsCount, reclamationsCount] = await Promise.all([
             prisma.riskFlag.count({ where: { userId: customerId, status: 'OPEN' } }),
             prisma.reclamation.count({ where: { userId: customerId } })
         ]);
 
-        // Score de fiabilité tontine — usage interne UNIQUEMENT (aide à la décision d'un
-        // opérateur avant d'accepter ce client dans un nouveau groupe, ou pour prioriser un
-        // rappel amiable). Ceci n'est PAS un score de crédit et ne doit JAMAIS servir à décider
-        // d'un prêt ou d'une ligne de crédit — le microcrédit est une activité réglementée hors
-        // du périmètre décidé pour cette fonctionnalité (voir la validation utilisateur :
-        // "Juste calculer un score interne, sans prêter"). Gatée par perm_tontine_view comme le
+        // Score de fiabilitÃ© tontine â€” usage interne UNIQUEMENT (aide Ã  la dÃ©cision d'un
+        // opÃ©rateur avant d'accepter ce client dans un nouveau groupe, ou pour prioriser un
+        // rappel amiable). Ceci n'est PAS un score de crÃ©dit et ne doit JAMAIS servir Ã  dÃ©cider
+        // d'un prÃªt ou d'une ligne de crÃ©dit â€” le microcrÃ©dit est une activitÃ© rÃ©glementÃ©e hors
+        // du pÃ©rimÃ¨tre dÃ©cidÃ© pour cette fonctionnalitÃ© (voir la validation utilisateur :
+        // "Juste calculer un score interne, sans prÃªter"). GatÃ©e par perm_tontine_view comme le
         // reste de la lecture admin des tontines (admin.tontines.ts).
         let tontineReliability: { totalCycles: number; paidCycles: number; partialOrMissedCycles: number; penaltiesCount: number; scorePercent: number | null } | null = null;
         if (hasPermission(staff, 'perm_tontine_view')) {
@@ -1930,9 +1976,9 @@ router.get('/users/:id/360', authMiddleware, async (req: AuthRequest, res) => {
                 paidCycles,
                 partialOrMissedCycles: totalCycles - paidCycles,
                 penaltiesCount,
-                // null tant qu'aucun historique n'existe — distinct de 0%, qui affirmerait
-                // à tort une mauvaise fiabilité pour un client n'ayant simplement jamais
-                // participé à une tontine.
+                // null tant qu'aucun historique n'existe â€” distinct de 0%, qui affirmerait
+                // Ã  tort une mauvaise fiabilitÃ© pour un client n'ayant simplement jamais
+                // participÃ© Ã  une tontine.
                 scorePercent: totalCycles > 0 ? Math.round((paidCycles / totalCycles) * 100) : null,
             };
         }
@@ -1947,15 +1993,15 @@ router.get('/users/:id/360', authMiddleware, async (req: AuthRequest, res) => {
 router.post('/users/:id/block', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'Accès refusé. (RISK ou SUPER_ADMIN requis)' });
+        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©. (RISK ou SUPER_ADMIN requis)' });
 
         const { reason } = req.body;
-        if (!reason || reason.trim().length < 5) return res.status(400).json({ error: 'Motif obligatoire (min 5 caractères).' });
+        if (!reason || reason.trim().length < 5) return res.status(400).json({ error: 'Motif obligatoire (min 5 caractÃ¨res).' });
 
         const customerId = req.params.id as string;
         const target = await prisma.user.findUnique({ where: { id: customerId } });
         if (!target) return res.status(404).json({ error: 'Client introuvable.' });
-        if (target.accountStatus === 'SUSPENDED') return res.status(400).json({ error: 'Le compte est déjà suspendu.' });
+        if (target.accountStatus === 'SUSPENDED') return res.status(400).json({ error: 'Le compte est dÃ©jÃ  suspendu.' });
 
         const before = target.accountStatus;
 
@@ -1968,14 +2014,14 @@ router.post('/users/:id/block', authMiddleware, async (req: AuthRequest, res) =>
                 data: {
                     adminId: staff.id,
                     action: 'BLOCK_ACCOUNT',
-                    details: `[CRM360] Compte ${target.phone} (${customerId}) BLOQUÉ. Avant : ${before}. Raison : ${reason}. Par : ${staff.name} (${staff.role})`
+                    details: `[CRM360] Compte ${target.phone} (${customerId}) BLOQUÃ‰. Avant : ${before}. Raison : ${reason}. Par : ${staff.name} (${staff.role})`
                 }
             }),
             prisma.notification.create({
                 data: {
                     userId: customerId,
                     title: 'Compte suspendu',
-                    body: 'Votre compte Mongain a été temporairement suspendu. Contactez le support pour plus d\'informations.',
+                    body: 'Votre compte Mongain a Ã©tÃ© temporairement suspendu. Contactez le support pour plus d\'informations.',
                     type: 'SECURITY'
                 }
             })
@@ -1991,10 +2037,10 @@ router.post('/users/:id/block', authMiddleware, async (req: AuthRequest, res) =>
 router.post('/users/:id/unblock', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const { reason } = req.body;
-        if (!reason || reason.trim().length < 5) return res.status(400).json({ error: 'Motif de déblocage obligatoire.' });
+        if (!reason || reason.trim().length < 5) return res.status(400).json({ error: 'Motif de dÃ©blocage obligatoire.' });
 
         const customerId = req.params.id as string;
         const target = await prisma.user.findUnique({ where: { id: customerId } });
@@ -2009,20 +2055,20 @@ router.post('/users/:id/unblock', authMiddleware, async (req: AuthRequest, res) 
                 data: {
                     adminId: staff.id,
                     action: 'UNBLOCK_ACCOUNT',
-                    details: `[CRM360] Compte ${target.phone} (${customerId}) DÉBLOQUÉ. Raison : ${reason}. Par : ${staff.name} (${staff.role})`
+                    details: `[CRM360] Compte ${target.phone} (${customerId}) DÃ‰BLOQUÃ‰. Raison : ${reason}. Par : ${staff.name} (${staff.role})`
                 }
             }),
             prisma.notification.create({
                 data: {
                     userId: customerId,
-                    title: 'Compte réactivé',
-                    body: 'Votre compte Mongain a été réactivé. Vous pouvez maintenant effectuer des transactions.',
+                    title: 'Compte rÃ©activÃ©',
+                    body: 'Votre compte Mongain a Ã©tÃ© rÃ©activÃ©. Vous pouvez maintenant effectuer des transactions.',
                     type: 'SECURITY'
                 }
             })
         ]);
 
-        res.json({ success: true, message: `Compte de ${target.name} réactivé.` });
+        res.json({ success: true, message: `Compte de ${target.name} rÃ©activÃ©.` });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -2032,10 +2078,10 @@ router.post('/users/:id/unblock', authMiddleware, async (req: AuthRequest, res) 
 router.post('/users/:id/flag', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        // Régression : vérifiait `perm_customer_360_basic` (accordée par défaut à tous les
-        // rôles non-admin, donc inopérante) au lieu de `perm_customer_flag`, la permission
-        // dédiée dans RBAC.ts (que TELLER, notamment, n'a pas par défaut).
-        if (!staff || !hasPermission(staff, 'perm_customer_flag')) return res.status(403).json({ error: 'Accès refusé.' });
+        // RÃ©gression : vÃ©rifiait `perm_customer_360_basic` (accordÃ©e par dÃ©faut Ã  tous les
+        // rÃ´les non-admin, donc inopÃ©rante) au lieu de `perm_customer_flag`, la permission
+        // dÃ©diÃ©e dans RBAC.ts (que TELLER, notamment, n'a pas par dÃ©faut).
+        if (!staff || !hasPermission(staff, 'perm_customer_flag')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const { type, description } = req.body;
         const validTypes = ['SUSPICIOUS_ACTIVITY', 'AML_ALERT', 'FRAUD_REPORT', 'IDENTITY_THEFT', 'ANTI_FRACTIONING', 'OTHER'];
@@ -2060,7 +2106,7 @@ router.post('/users/:id/flag', authMiddleware, async (req: AuthRequest, res) => 
             data: {
                 adminId: staff.id,
                 action: 'FLAG_CUSTOMER',
-                details: `[CRM360] Flag ${flag.type} créé sur ${target.phone} (${customerId}). Description : ${description}`
+                details: `[CRM360] Flag ${flag.type} crÃ©Ã© sur ${target.phone} (${customerId}). Description : ${description}`
             }
         });
 
@@ -2074,7 +2120,7 @@ router.post('/users/:id/flag', authMiddleware, async (req: AuthRequest, res) => 
 router.get('/users/:id/transactions', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const customerId = req.params.id as string;
         const { type, status, page = '1', limit = '25' } = req.query;
@@ -2092,11 +2138,11 @@ router.get('/users/:id/transactions', authMiddleware, async (req: AuthRequest, r
                 where, orderBy: { createdAt: 'desc' }, skip, take: parseInt(limit as string),
                 include: {
                     // `id` est indispensable ici : Customer360.tsx compare
-                    // `t.senderWallet?.user?.id === userId` pour déterminer le sens de la
+                    // `t.senderWallet?.user?.id === userId` pour dÃ©terminer le sens de la
                     // transaction (entrant/sortant) et qui afficher comme contrepartie. Sans
                     // lui, cette comparaison est toujours `undefined === userId` (faux), donc
                     // TOUTE transaction sortante s'affichait comme entrante, avec le client
-                    // lui-même affiché comme contrepartie au lieu du vrai destinataire.
+                    // lui-mÃªme affichÃ© comme contrepartie au lieu du vrai destinataire.
                     senderWallet: { include: { user: { select: { id: true, name: true, phone: true } } } },
                     receiverWallet: { include: { user: { select: { id: true, name: true, phone: true } } } }
                 }
@@ -2114,7 +2160,7 @@ router.get('/users/:id/transactions', authMiddleware, async (req: AuthRequest, r
 router.get('/users/:id/cash-ops', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const customerId = req.params.id as string;
         const user = await prisma.user.findUnique({ where: { id: customerId }, include: { wallet: true } });
@@ -2171,7 +2217,7 @@ router.get('/users/:id/cash-ops', authMiddleware, async (req: AuthRequest, res) 
 router.get('/users/:id/security', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const customerId = req.params.id as string;
         const user = await prisma.user.findUnique({
@@ -2208,7 +2254,7 @@ router.get('/users/:id/security', authMiddleware, async (req: AuthRequest, res) 
 router.post('/users/:id/unlock-account', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const { reason } = req.body;
         if (!reason) return res.status(400).json({ error: 'Motif requis.' });
@@ -2226,12 +2272,12 @@ router.post('/users/:id/unlock-account', authMiddleware, async (req: AuthRequest
                 data: {
                     adminId: staff.id,
                     action: 'UNLOCK_ACCOUNT',
-                    details: `[CRM360] Déverrouillage PIN pour ${target.phone} (${customerId}). Raison : ${reason}. Par : ${staff.name}`
+                    details: `[CRM360] DÃ©verrouillage PIN pour ${target.phone} (${customerId}). Raison : ${reason}. Par : ${staff.name}`
                 }
             })
         ]);
 
-        res.json({ success: true, message: 'Compte déverrouillé, le client peut maintenant retenter son PIN.' });
+        res.json({ success: true, message: 'Compte dÃ©verrouillÃ©, le client peut maintenant retenter son PIN.' });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -2241,7 +2287,7 @@ router.post('/users/:id/unlock-account', authMiddleware, async (req: AuthRequest
 router.post('/users/:id/revoke-sessions', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'Accès refusé. (RISK ou SUPER_ADMIN requis)' });
+        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©. (RISK ou SUPER_ADMIN requis)' });
 
         const { reason } = req.body;
         if (!reason) return res.status(400).json({ error: 'Motif requis.' });
@@ -2260,20 +2306,20 @@ router.post('/users/:id/revoke-sessions', authMiddleware, async (req: AuthReques
                 data: {
                     adminId: staff.id,
                     action: 'REVOKE_SESSIONS',
-                    details: `[CRM360] Révocation de toutes les sessions pour ${target.phone} (${customerId}). Raison : ${reason}. Par : ${staff.name}`
+                    details: `[CRM360] RÃ©vocation de toutes les sessions pour ${target.phone} (${customerId}). Raison : ${reason}. Par : ${staff.name}`
                 }
             }),
             prisma.notification.create({
                 data: {
                     userId: customerId,
-                    title: 'Sessions révoquées',
-                    body: 'Toutes vos sessions actives ont été invalidées par un administrateur. Veuillez vous reconnecter.',
+                    title: 'Sessions rÃ©voquÃ©es',
+                    body: 'Toutes vos sessions actives ont Ã©tÃ© invalidÃ©es par un administrateur. Veuillez vous reconnecter.',
                     type: 'SECURITY'
                 }
             })
         ]);
 
-        res.json({ success: true, message: 'Toutes les sessions de l\'utilisateur ont été révoquées.' });
+        res.json({ success: true, message: 'Toutes les sessions de l\'utilisateur ont Ã©tÃ© rÃ©voquÃ©es.' });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -2283,7 +2329,7 @@ router.post('/users/:id/revoke-sessions', authMiddleware, async (req: AuthReques
 router.get('/users/:id/audit', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const customerId = req.params.id as string;
         const { page = '1', limit = '30' } = req.query;
@@ -2310,7 +2356,7 @@ router.get('/users/:id/audit', authMiddleware, async (req: AuthRequest, res) => 
 router.get('/users/:id/reclamations', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_view')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_view')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const customerId = req.params.id as string;
         const isSensitive = hasPermission(staff, 'perm_customer_360_basic');
@@ -2318,10 +2364,10 @@ router.get('/users/:id/reclamations', authMiddleware, async (req: AuthRequest, r
             where: { userId: customerId },
             orderBy: { createdAt: 'desc' },
             include: {
-                // Notes internes (support/conformité) masquées aux rôles guichet/agence
-                // (TELLER, BRANCH_MANAGER) — même filtre que la route client (reclamation.ts),
-                // absent ici jusqu'à présent alors que cette route (perm_customer_view) reste
-                // accessible à des rôles bien plus larges que ceux censés voir ces notes.
+                // Notes internes (support/conformitÃ©) masquÃ©es aux rÃ´les guichet/agence
+                // (TELLER, BRANCH_MANAGER) â€” mÃªme filtre que la route client (reclamation.ts),
+                // absent ici jusqu'Ã  prÃ©sent alors que cette route (perm_customer_view) reste
+                // accessible Ã  des rÃ´les bien plus larges que ceux censÃ©s voir ces notes.
                 notes: {
                     where: isSensitive ? undefined : { isInternal: false },
                     orderBy: { createdAt: 'asc' },
@@ -2341,7 +2387,7 @@ router.get('/users/:id/reclamations', authMiddleware, async (req: AuthRequest, r
 router.get('/users/:id/limits-view', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const customerId = req.params.id as string;
         const [user, settings] = await Promise.all([
@@ -2353,7 +2399,7 @@ router.get('/users/:id/limits-view', authMiddleware, async (req: AuthRequest, re
         const { LimitEngine } = await import('../services/LimitEngine');
         const computedLimits = await LimitEngine.getApplicableLimits(user, settings);
 
-        const tierName = user.kycLevel === 0 ? 'TIER 0 (Standard)' : user.kycLevel === 1 ? 'TIER 1 (Vérifié)' : 'TIER 2 (Premium)';
+        const tierName = user.kycLevel === 0 ? 'TIER 0 (Standard)' : user.kycLevel === 1 ? 'TIER 1 (VÃ©rifiÃ©)' : 'TIER 2 (Premium)';
 
         res.json({
             customerId,
@@ -2382,7 +2428,7 @@ router.get('/users/:id/limits-view', authMiddleware, async (req: AuthRequest, re
 router.post('/users/:id/limit-request', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const customerId = req.params.id as string;
         const { limitType, requestedValue, reason, expiresAt } = req.body;
@@ -2390,7 +2436,7 @@ router.post('/users/:id/limit-request', authMiddleware, async (req: AuthRequest,
         const validTypes = ['customDailyLimit', 'customMonthlyLimit', 'customPerTxLimit'];
         if (!validTypes.includes(limitType)) return res.status(400).json({ error: 'Type de limite invalide.' });
         if (!requestedValue || !reason) return res.status(400).json({ error: 'Montant et raison requis.' });
-        if (requestedValue > 10000000) return res.status(400).json({ error: 'Dépassement du plafond réglementaire COBAC (10M FCFA).' });
+        if (requestedValue > 10000000) return res.status(400).json({ error: 'DÃ©passement du plafond rÃ©glementaire COBAC (10M FCFA).' });
 
         // Check no PENDING request already exists for this customer + type
         const existingPending = await prisma.settingsApproval.findFirst({
@@ -2401,7 +2447,7 @@ router.post('/users/:id/limit-request', authMiddleware, async (req: AuthRequest,
                 payload: { contains: customerId }
             }
         });
-        if (existingPending) return res.status(400).json({ error: 'Une demande est déjà en attente pour ce client.' });
+        if (existingPending) return res.status(400).json({ error: 'Une demande est dÃ©jÃ  en attente pour ce client.' });
 
         const approval = await prisma.settingsApproval.create({
             data: {
@@ -2416,7 +2462,7 @@ router.post('/users/:id/limit-request', authMiddleware, async (req: AuthRequest,
             data: {
                 adminId: staff.id,
                 action: 'REQUEST_LIMIT_CHANGE',
-                details: `[CRM360] Demande de modification ${limitType} à ${requestedValue} FCFA pour client ${customerId}. Raison: ${reason}`
+                details: `[CRM360] Demande de modification ${limitType} Ã  ${requestedValue} FCFA pour client ${customerId}. Raison: ${reason}`
             }
         });
 
@@ -2437,21 +2483,21 @@ const FREEZE_REASONS = ['SUSPECTED_FRAUD', 'AML_REVIEW', 'SECURITY_ISSUE', 'LEGA
 router.post('/users/:id/freeze', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'Accès refusé. (RISK ou SUPER_ADMIN requis)' });
+        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©. (RISK ou SUPER_ADMIN requis)' });
 
         const { freezeReason, comment } = req.body;
         if (!freezeReason || !FREEZE_REASONS.includes(freezeReason)) {
-            return res.status(400).json({ error: `Motif de gel invalide. Valeurs acceptées : ${FREEZE_REASONS.join(', ')}` });
+            return res.status(400).json({ error: `Motif de gel invalide. Valeurs acceptÃ©es : ${FREEZE_REASONS.join(', ')}` });
         }
         if (freezeReason === 'OTHER' && (!comment || comment.trim().length < 10)) {
-            return res.status(400).json({ error: 'Un commentaire (min 10 caractères) est requis pour le motif OTHER.' });
+            return res.status(400).json({ error: 'Un commentaire (min 10 caractÃ¨res) est requis pour le motif OTHER.' });
         }
 
         const customerId = req.params.id as string;
         const target = await prisma.user.findUnique({ where: { id: customerId } });
         if (!target) return res.status(404).json({ error: 'Client introuvable.' });
-        if (target.accountStatus === 'FROZEN') return res.status(400).json({ error: 'Le compte est déjà gelé.' });
-        if (target.accountStatus === 'CLOSED') return res.status(400).json({ error: 'Impossible de geler un compte fermé.' });
+        if (target.accountStatus === 'FROZEN') return res.status(400).json({ error: 'Le compte est dÃ©jÃ  gelÃ©.' });
+        if (target.accountStatus === 'CLOSED') return res.status(400).json({ error: 'Impossible de geler un compte fermÃ©.' });
 
         const freezeNote = freezeReason === 'OTHER' ? comment : freezeReason;
         const beforeStatus = target.accountStatus;
@@ -2465,20 +2511,20 @@ router.post('/users/:id/freeze', authMiddleware, async (req: AuthRequest, res) =
                 data: {
                     adminId: staff.id,
                     action: 'FREEZE_ACCOUNT',
-                    details: `[CRM360/FREEZE] Compte ${target.phone} (${customerId}) GELÉ. Avant : ${beforeStatus}. Motif : ${freezeReason}. Note : ${freezeNote}. Par : ${staff.name} (${staff.role})`
+                    details: `[CRM360/FREEZE] Compte ${target.phone} (${customerId}) GELÃ‰. Avant : ${beforeStatus}. Motif : ${freezeReason}. Note : ${freezeNote}. Par : ${staff.name} (${staff.role})`
                 }
             }),
             prisma.notification.create({
                 data: {
                     userId: customerId,
-                    title: 'Compte gelé',
-                    body: 'Votre compte Mongain a été temporairement gelé. Contactez le support pour plus d\'informations.',
+                    title: 'Compte gelÃ©',
+                    body: 'Votre compte Mongain a Ã©tÃ© temporairement gelÃ©. Contactez le support pour plus d\'informations.',
                     type: 'SECURITY'
                 }
             })
         ]);
 
-        res.json({ success: true, message: `Compte de ${target.name} gelé (FROZEN). Motif : ${freezeReason}.` });
+        res.json({ success: true, message: `Compte de ${target.name} gelÃ© (FROZEN). Motif : ${freezeReason}.` });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -2488,17 +2534,17 @@ router.post('/users/:id/freeze', authMiddleware, async (req: AuthRequest, res) =
 router.post('/users/:id/unfreeze', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const { justification } = req.body;
         if (!justification || justification.trim().length < 10) {
-            return res.status(400).json({ error: 'Justification du dégel obligatoire (min 10 caractères).' });
+            return res.status(400).json({ error: 'Justification du dÃ©gel obligatoire (min 10 caractÃ¨res).' });
         }
 
         const customerId = req.params.id as string;
         const target = await prisma.user.findUnique({ where: { id: customerId } });
         if (!target) return res.status(404).json({ error: 'Client introuvable.' });
-        if (target.accountStatus !== 'FROZEN') return res.status(400).json({ error: `Le compte n'est pas gelé (statut : ${target.accountStatus}).` });
+        if (target.accountStatus !== 'FROZEN') return res.status(400).json({ error: `Le compte n'est pas gelÃ© (statut : ${target.accountStatus}).` });
 
         await prisma.$transaction([
             prisma.user.update({
@@ -2509,20 +2555,20 @@ router.post('/users/:id/unfreeze', authMiddleware, async (req: AuthRequest, res)
                 data: {
                     adminId: staff.id,
                     action: 'UNFREEZE_ACCOUNT',
-                    details: `[CRM360/UNFREEZE] Compte ${target.phone} (${customerId}) DÉGELÉ. Motif gel initial : ${target.freezeReason || 'N/A'}. Justification dégel : ${justification}. Par : ${staff.name} (${staff.role})`
+                    details: `[CRM360/UNFREEZE] Compte ${target.phone} (${customerId}) DÃ‰GELÃ‰. Motif gel initial : ${target.freezeReason || 'N/A'}. Justification dÃ©gel : ${justification}. Par : ${staff.name} (${staff.role})`
                 }
             }),
             prisma.notification.create({
                 data: {
                     userId: customerId,
-                    title: 'Compte dégelé',
-                    body: 'Votre compte Mongain a été réactivé. Vous pouvez maintenant effectuer des transactions.',
+                    title: 'Compte dÃ©gelÃ©',
+                    body: 'Votre compte Mongain a Ã©tÃ© rÃ©activÃ©. Vous pouvez maintenant effectuer des transactions.',
                     type: 'SECURITY'
                 }
             })
         ]);
 
-        res.json({ success: true, message: `Compte de ${target.name} dégelé et réactivé.` });
+        res.json({ success: true, message: `Compte de ${target.name} dÃ©gelÃ© et rÃ©activÃ©.` });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -2533,10 +2579,10 @@ router.post('/users/:id/unfreeze', authMiddleware, async (req: AuthRequest, res)
 router.post('/users/:id/reset-pin', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'Accès refusé. (RISK ou SUPER_ADMIN requis)' });
+        if (!staff || !hasPermission(staff, 'perm_customer_freeze')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©. (RISK ou SUPER_ADMIN requis)' });
 
         const { reason } = req.body;
-        if (!reason || reason.trim().length < 5) return res.status(400).json({ error: 'Motif obligatoire (min 5 caractères).' });
+        if (!reason || reason.trim().length < 5) return res.status(400).json({ error: 'Motif obligatoire (min 5 caractÃ¨res).' });
 
         const customerId = req.params.id as string;
         const target = await prisma.user.findUnique({ where: { id: customerId } });
@@ -2553,20 +2599,20 @@ router.post('/users/:id/reset-pin', authMiddleware, async (req: AuthRequest, res
                 data: {
                     adminId: staff.id,
                     action: 'RESET_PIN',
-                    details: `[CRM360/RESET_PIN] Réinitialisation PIN demandée pour ${target.phone} (${customerId}). Sessions révoquées. PIN NON EXPOSÉ. Raison : ${reason}. Par : ${staff.name} (${staff.role})`
+                    details: `[CRM360/RESET_PIN] RÃ©initialisation PIN demandÃ©e pour ${target.phone} (${customerId}). Sessions rÃ©voquÃ©es. PIN NON EXPOSÃ‰. Raison : ${reason}. Par : ${staff.name} (${staff.role})`
                 }
             }),
             prisma.notification.create({
                 data: {
                     userId: customerId,
-                    title: 'Réinitialisation de votre PIN',
-                    body: 'Une réinitialisation de votre PIN a été déclenchée par le support. Veuillez vous reconnecter et créer un nouveau PIN.',
+                    title: 'RÃ©initialisation de votre PIN',
+                    body: 'Une rÃ©initialisation de votre PIN a Ã©tÃ© dÃ©clenchÃ©e par le support. Veuillez vous reconnecter et crÃ©er un nouveau PIN.',
                     type: 'SECURITY'
                 }
             })
         ]);
 
-        res.json({ success: true, message: 'PIN réinitialisé. Toutes les sessions révoquées. Le client doit créer un nouveau PIN via l\'application.' });
+        res.json({ success: true, message: 'PIN rÃ©initialisÃ©. Toutes les sessions rÃ©voquÃ©es. Le client doit crÃ©er un nouveau PIN via l\'application.' });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -2577,13 +2623,13 @@ router.post('/users/:id/reset-pin', authMiddleware, async (req: AuthRequest, res
 router.post('/users/:id/refund-request', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const { transactionId, amount, reason } = req.body;
         if (!transactionId || !amount || !reason) {
             return res.status(400).json({ error: 'transactionId, amount et reason sont requis.' });
         }
-        if (amount <= 0) return res.status(400).json({ error: 'Le montant doit être positif.' });
+        if (amount <= 0) return res.status(400).json({ error: 'Le montant doit Ãªtre positif.' });
 
         const customerId = req.params.id as string;
         const target = await prisma.user.findUnique({ where: { id: customerId }, include: { wallet: true } });
@@ -2592,26 +2638,26 @@ router.post('/users/:id/refund-request', authMiddleware, async (req: AuthRequest
         // Verify the transaction belongs to this customer and is COMPLETED
         const tx = await prisma.transaction.findUnique({ where: { id: transactionId } });
         if (!tx) return res.status(404).json({ error: 'Transaction introuvable.' });
-        if (tx.status !== 'COMPLETED') return res.status(400).json({ error: 'Seules les transactions COMPLETED peuvent être remboursées.' });
+        if (tx.status !== 'COMPLETED') return res.status(400).json({ error: 'Seules les transactions COMPLETED peuvent Ãªtre remboursÃ©es.' });
         const walletId = target.wallet?.id;
         const isTxOwned = walletId && (tx.senderWalletId === walletId || tx.receiverWalletId === walletId);
         if (!isTxOwned) {
-            return res.status(403).json({ error: 'Cette transaction n\'appartient pas à ce client.' });
+            return res.status(403).json({ error: 'Cette transaction n\'appartient pas Ã  ce client.' });
         }
         if (amount > tx.amount) {
-            return res.status(400).json({ error: `Le montant de remboursement (${amount}) ne peut pas dépasser le montant original (${tx.amount}).` });
+            return res.status(400).json({ error: `Le montant de remboursement (${amount}) ne peut pas dÃ©passer le montant original (${tx.amount}).` });
         }
 
-        // Prevent duplicate refund requests — 'PENDING' n'existe pas dans le cycle de vie
-        // réel de RefundRequest (REQUESTED, UNDER_REVIEW, APPROVED, EXECUTED, REJECTED, voir
-        // schema.prisma), donc cette vérification ne matchait jamais rien, et la création
-        // ci-dessous plaçait la demande dans un statut que ni l'écran Support Center ni la
-        // route d'approbation ne reconnaissent : la demande restait bloquée sans bouton
-        // d'action possible, sans jamais aboutir à un remboursement réel.
+        // Prevent duplicate refund requests â€” 'PENDING' n'existe pas dans le cycle de vie
+        // rÃ©el de RefundRequest (REQUESTED, UNDER_REVIEW, APPROVED, EXECUTED, REJECTED, voir
+        // schema.prisma), donc cette vÃ©rification ne matchait jamais rien, et la crÃ©ation
+        // ci-dessous plaÃ§ait la demande dans un statut que ni l'Ã©cran Support Center ni la
+        // route d'approbation ne reconnaissent : la demande restait bloquÃ©e sans bouton
+        // d'action possible, sans jamais aboutir Ã  un remboursement rÃ©el.
         const existing = await prisma.refundRequest.findFirst({
             where: { transactionId, status: { in: ['REQUESTED', 'UNDER_REVIEW', 'APPROVED'] } }
         });
-        if (existing) return res.status(400).json({ error: 'Une demande de remboursement est déjà en cours pour cette transaction.' });
+        if (existing) return res.status(400).json({ error: 'Une demande de remboursement est dÃ©jÃ  en cours pour cette transaction.' });
 
         const refund = await prisma.refundRequest.create({
             data: {
@@ -2629,7 +2675,7 @@ router.post('/users/:id/refund-request', authMiddleware, async (req: AuthRequest
             data: {
                 adminId: staff.id,
                 action: 'REQUEST_REFUND',
-                details: `[CRM360/REFUND] Demande de remboursement ${refund.id.substring(0, 8)} créée. TX : ${transactionId}. Montant : ${amount} FCFA. Client : ${customerId}. Reason : ${reason}. TX ORIGINALE NON MODIFIÉE.`
+                details: `[CRM360/REFUND] Demande de remboursement ${refund.id.substring(0, 8)} crÃ©Ã©e. TX : ${transactionId}. Montant : ${amount} FCFA. Client : ${customerId}. Reason : ${reason}. TX ORIGINALE NON MODIFIÃ‰E.`
             }
         });
 
@@ -2644,10 +2690,10 @@ router.post('/users/:id/refund-request', authMiddleware, async (req: AuthRequest
 router.post('/users/:id/support-note', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const { content, reclamationId } = req.body;
-        if (!content || content.trim().length < 3) return res.status(400).json({ error: 'Contenu de la note requis (min 3 caractères).' });
+        if (!content || content.trim().length < 3) return res.status(400).json({ error: 'Contenu de la note requis (min 3 caractÃ¨res).' });
 
         const customerId = req.params.id as string;
         const target = await prisma.user.findUnique({ where: { id: customerId } });
@@ -2656,7 +2702,7 @@ router.post('/users/:id/support-note', authMiddleware, async (req: AuthRequest, 
         // If tied to a reclamation, add as internal note there
         if (reclamationId) {
             const rec = await prisma.reclamation.findUnique({ where: { id: reclamationId } });
-            if (!rec || rec.userId !== customerId) return res.status(404).json({ error: 'Réclamation introuvable pour ce client.' });
+            if (!rec || rec.userId !== customerId) return res.status(404).json({ error: 'RÃ©clamation introuvable pour ce client.' });
 
             const note = await prisma.reclamationNote.create({
                 data: {
@@ -2667,7 +2713,7 @@ router.post('/users/:id/support-note', authMiddleware, async (req: AuthRequest, 
                     authorName: `${staff.name} (${staff.role})`
                 }
             });
-            await prisma.auditLog.create({ data: { adminId: staff.id, action: 'ADD_SUPPORT_NOTE', details: `[CRM360/SUPPORT] Note interne ajoutée sur ticket ${reclamationId} de client ${customerId}.` } });
+            await prisma.auditLog.create({ data: { adminId: staff.id, action: 'ADD_SUPPORT_NOTE', details: `[CRM360/SUPPORT] Note interne ajoutÃ©e sur ticket ${reclamationId} de client ${customerId}.` } });
             return res.json({ success: true, note });
         }
 
@@ -2680,7 +2726,7 @@ router.post('/users/:id/support-note', authMiddleware, async (req: AuthRequest, 
             }
         });
 
-        res.json({ success: true, message: 'Note interne enregistrée dans le journal.' });
+        res.json({ success: true, message: 'Note interne enregistrÃ©e dans le journal.' });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -2691,7 +2737,7 @@ router.post('/users/:id/support-note', authMiddleware, async (req: AuthRequest, 
 router.patch('/users/:id/reclamation/:recId/status', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_customer_360_basic')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const { status, comment } = req.body;
         const validStatuses = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
@@ -2701,7 +2747,7 @@ router.patch('/users/:id/reclamation/:recId/status', authMiddleware, async (req:
         const reclamationId = req.params.recId as string;
 
         const rec = await prisma.reclamation.findUnique({ where: { id: reclamationId } });
-        if (!rec || rec.userId !== customerId) return res.status(404).json({ error: 'Réclamation introuvable.' });
+        if (!rec || rec.userId !== customerId) return res.status(404).json({ error: 'RÃ©clamation introuvable.' });
 
         await prisma.$transaction(async (tx) => {
             await tx.reclamation.update({ where: { id: reclamationId }, data: { status } });
@@ -2720,12 +2766,12 @@ router.patch('/users/:id/reclamation/:recId/status', authMiddleware, async (req:
                 data: {
                     adminId: staff.id,
                     action: 'UPDATE_TICKET_STATUS',
-                    details: `[CRM360/SUPPORT] Ticket ${reclamationId} mis à ${status}. Comment : ${comment || 'N/A'}. Par : ${staff.name}`
+                    details: `[CRM360/SUPPORT] Ticket ${reclamationId} mis Ã  ${status}. Comment : ${comment || 'N/A'}. Par : ${staff.name}`
                 }
             });
         });
 
-        res.json({ success: true, message: `Ticket mis à jour : ${status}` });
+        res.json({ success: true, message: `Ticket mis Ã  jour : ${status}` });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
@@ -2738,10 +2784,10 @@ router.patch('/users/:id/reclamation/:recId/status', authMiddleware, async (req:
 router.get('/reclamations/stats', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        // Régression : n'autorisait que `perm_ticket_resolve` — TELLER et RISK, qui n'ont que
-        // `perm_ticket_view` (lecture seule) par défaut, voyaient l'onglet Support (gaté sur
-        // perm_ticket_view côté App.tsx) mais chaque appel y échouait en 403.
-        if (!staff || !(hasPermission(staff, 'perm_ticket_view') || hasPermission(staff, 'perm_ticket_resolve'))) return res.status(403).json({ error: 'Accès non autorisé.' });
+        // RÃ©gression : n'autorisait que `perm_ticket_resolve` â€” TELLER et RISK, qui n'ont que
+        // `perm_ticket_view` (lecture seule) par dÃ©faut, voyaient l'onglet Support (gatÃ© sur
+        // perm_ticket_view cÃ´tÃ© App.tsx) mais chaque appel y Ã©chouait en 403.
+        if (!staff || !(hasPermission(staff, 'perm_ticket_view') || hasPermission(staff, 'perm_ticket_resolve'))) return res.status(403).json({ error: 'AccÃ¨s non autorisÃ©.' });
 
         const [
             open, inProgress, waitingCustomer, slaBreached, critical, refundPending, fraudCases
@@ -2764,7 +2810,7 @@ router.get('/reclamations/stats', authMiddleware, async (req: AuthRequest, res) 
 router.get('/reclamations', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !(hasPermission(staff, 'perm_ticket_view') || hasPermission(staff, 'perm_ticket_resolve'))) return res.status(403).json({ error: 'Accès non autorisé.' });
+        if (!staff || !(hasPermission(staff, 'perm_ticket_view') || hasPermission(staff, 'perm_ticket_resolve'))) return res.status(403).json({ error: 'AccÃ¨s non autorisÃ©.' });
 
         const { status, priority, category, query, slaBreached, limit = '100' } = req.query;
         const where: any = {};
@@ -2810,7 +2856,7 @@ router.get('/reclamations', authMiddleware, async (req: AuthRequest, res) => {
 router.get('/reclamations/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !(hasPermission(staff, 'perm_ticket_view') || hasPermission(staff, 'perm_ticket_resolve'))) return res.status(403).json({ error: 'Accès non autorisé.' });
+        if (!staff || !(hasPermission(staff, 'perm_ticket_view') || hasPermission(staff, 'perm_ticket_resolve'))) return res.status(403).json({ error: 'AccÃ¨s non autorisÃ©.' });
 
         const ticket = await prisma.reclamation.findUnique({
             where: { id: String(req.params.id) as string },
@@ -2848,9 +2894,9 @@ router.get('/reclamations/:id', authMiddleware, async (req: AuthRequest, res) =>
 router.post('/reclamations/:id/notes', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        // `perm_support_note` est la permission dédiée à cette action (RBAC.ts) — tenue par
-        // BRANCH_MANAGER/TELLER/SUPPORT_MAKER, qui n'ont pas forcément `perm_ticket_resolve`.
-        if (!staff || !(hasPermission(staff, 'perm_support_note') || hasPermission(staff, 'perm_ticket_resolve'))) return res.status(403).json({ error: 'Accès non autorisé.' });
+        // `perm_support_note` est la permission dÃ©diÃ©e Ã  cette action (RBAC.ts) â€” tenue par
+        // BRANCH_MANAGER/TELLER/SUPPORT_MAKER, qui n'ont pas forcÃ©ment `perm_ticket_resolve`.
+        if (!staff || !(hasPermission(staff, 'perm_support_note') || hasPermission(staff, 'perm_ticket_resolve'))) return res.status(403).json({ error: 'AccÃ¨s non autorisÃ©.' });
 
         const { content, isInternal } = req.body;
         if (!content) return res.status(400).json({ error: 'Note vide interdite.' });
@@ -2868,14 +2914,14 @@ router.post('/reclamations/:id/notes', authMiddleware, async (req: AuthRequest, 
             }
         });
 
-        // Si note externe (réponse au client), update le statut du ticket vers WAITING_CUSTOMER
+        // Si note externe (rÃ©ponse au client), update le statut du ticket vers WAITING_CUSTOMER
         let updatedRec = rec;
         if (isInternal === false && rec.status !== 'RESOLVED' && rec.status !== 'CLOSED') {
             updatedRec = await prisma.reclamation.update({ where: { id: rec.id }, data: { status: 'WAITING_CUSTOMER', assigneeId: rec.assigneeId || staff.id } });
-            // Sans ça, le client n'a aucun moyen de savoir que le support a répondu à son
-            // ticket, en dehors d'aller vérifier l'écran par hasard.
+            // Sans Ã§a, le client n'a aucun moyen de savoir que le support a rÃ©pondu Ã  son
+            // ticket, en dehors d'aller vÃ©rifier l'Ã©cran par hasard.
             await prisma.notification.create({
-                data: { userId: rec.userId, title: 'Réponse du support', body: `Le support a répondu à votre ticket « ${rec.title} ».`, type: 'SYSTEM' }
+                data: { userId: rec.userId, title: 'RÃ©ponse du support', body: `Le support a rÃ©pondu Ã  votre ticket Â« ${rec.title} Â».`, type: 'SYSTEM' }
             });
         } else if (!rec.assigneeId) {
             updatedRec = await prisma.reclamation.update({ where: { id: rec.id }, data: { status: 'IN_PROGRESS', assigneeId: staff.id } });
@@ -2885,12 +2931,12 @@ router.post('/reclamations/:id/notes', authMiddleware, async (req: AuthRequest, 
             data: {
                 adminId: staff.id,
                 action: 'ADD_TICKET_NOTE',
-                details: `[SUPPORT] Note ajoutée ticket ${rec.id.substring(0, 8)}. Interne : ${isInternal}.`
+                details: `[SUPPORT] Note ajoutÃ©e ticket ${rec.id.substring(0, 8)}. Interne : ${isInternal}.`
             }
         });
 
-        // Renvoie le statut/assignation à jour pour que le panneau ne reste pas figé sur
-        // l'ancien état (WAITING_CUSTOMER/IN_PROGRESS déclenchés automatiquement ci-dessus).
+        // Renvoie le statut/assignation Ã  jour pour que le panneau ne reste pas figÃ© sur
+        // l'ancien Ã©tat (WAITING_CUSTOMER/IN_PROGRESS dÃ©clenchÃ©s automatiquement ci-dessus).
         res.json({ success: true, note, status: updatedRec.status, assigneeId: updatedRec.assigneeId });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
@@ -2900,7 +2946,7 @@ router.post('/reclamations/:id/notes', authMiddleware, async (req: AuthRequest, 
 router.patch('/reclamations/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) return res.status(403).json({ error: 'Accès non autorisé.' });
+        if (!staff || !hasPermission(staff, 'perm_ticket_resolve')) return res.status(403).json({ error: 'AccÃ¨s non autorisÃ©.' });
 
         const { status, priority, category, assigneeId } = req.body;
         const rec = await prisma.reclamation.findUnique({ where: { id: String(req.params.id) as string } });
@@ -2932,7 +2978,7 @@ router.patch('/reclamations/:id', authMiddleware, async (req: AuthRequest, res) 
             await prisma.reclamationNote.create({
                 data: {
                     reclamationId: rec.id,
-                    content: `[Système] Statut passé de ${rec.status} à ${status}.`,
+                    content: `[SystÃ¨me] Statut passÃ© de ${rec.status} Ã  ${status}.`,
                     isInternal: true,
                     authorId: staff.id,
                     authorName: `System (${staff.name})`
@@ -2941,7 +2987,7 @@ router.patch('/reclamations/:id', authMiddleware, async (req: AuthRequest, res) 
 
             if (status === 'RESOLVED') {
                 await prisma.notification.create({
-                    data: { userId: rec.userId, title: 'Ticket résolu ✅', body: `Votre ticket « ${rec.title} » a été marqué comme résolu.`, type: 'SYSTEM' }
+                    data: { userId: rec.userId, title: 'Ticket rÃ©solu âœ…', body: `Votre ticket Â« ${rec.title} Â» a Ã©tÃ© marquÃ© comme rÃ©solu.`, type: 'SYSTEM' }
                 });
             }
         }
@@ -2953,7 +2999,7 @@ router.patch('/reclamations/:id', authMiddleware, async (req: AuthRequest, res) 
 });
 
 // ============================================================
-// API MANAGEMENT — Gestion des intégrations marchands tiers
+// API MANAGEMENT â€” Gestion des intÃ©grations marchands tiers
 // ============================================================
 
 const API_ADMIN_ROLES = ['SUPER_ADMIN', 'COMPLIANCE_CHECKER', 'RISK'];
@@ -2963,18 +3009,18 @@ router.post('/api-integrations', authMiddleware, async (req: AuthRequest, res) =
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId! } });
         if (!staff || !API_ADMIN_ROLES.includes(staff.role)) {
-            return res.status(403).json({ error: 'Accès réservé à l\'administration.' });
+            return res.status(403).json({ error: 'AccÃ¨s rÃ©servÃ© Ã  l\'administration.' });
         }
 
         const { merchantPhone, appName, environment, webhookUrl, permissions, description } = req.body;
         if (!merchantPhone || !appName) {
-            return res.status(400).json({ error: 'Téléphone marchand et nom d\'app requis.' });
+            return res.status(400).json({ error: 'TÃ©lÃ©phone marchand et nom d\'app requis.' });
         }
 
         const merchant = await prisma.user.findUnique({ where: { phone: merchantPhone } });
         if (!merchant) return res.status(404).json({ error: 'Marchand introuvable.' });
         if (!['MERCHANT', 'AGENT'].includes(merchant.role)) {
-            return res.status(400).json({ error: 'L\'utilisateur n\'est pas un Marchand ou Agent autorisé à recevoir des clés API.' });
+            return res.status(400).json({ error: 'L\'utilisateur n\'est pas un Marchand ou Agent autorisÃ© Ã  recevoir des clÃ©s API.' });
         }
 
         // G?n?rer le secret en clair (une seule opportunit? de le voir)
@@ -3016,7 +3062,7 @@ router.post('/api-integrations', authMiddleware, async (req: AuthRequest, res) =
         // Secret retourn? UNE SEULE FOIS ? jamais stock? en clair
         return res.status(201).json({
             success: true,
-            message: 'Clé API générée. Copiez le secret maintenant, il ne sera plus affiché.',
+            message: 'ClÃ© API gÃ©nÃ©rÃ©e. Copiez le secret maintenant, il ne sera plus affichÃ©.',
             data: {
                 id: integration.id,
                 publicKey: integration.publicKey,
@@ -3039,7 +3085,7 @@ router.get('/api-integrations', authMiddleware, async (req: AuthRequest, res) =>
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId! } });
         if (!staff || !API_ADMIN_ROLES.includes(staff.role)) {
-            return res.status(403).json({ error: 'Accès réservé.' });
+            return res.status(403).json({ error: 'AccÃ¨s rÃ©servÃ©.' });
         }
 
         const { merchantId, environment, isActive, page = '1', limit = '25' } = req.query;
@@ -3081,11 +3127,11 @@ router.patch('/api-integrations/:id', authMiddleware, async (req: AuthRequest, r
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId! } });
         if (!staff || !API_ADMIN_ROLES.includes(staff.role)) {
-            return res.status(403).json({ error: 'Accès réservé.' });
+            return res.status(403).json({ error: 'AccÃ¨s rÃ©servÃ©.' });
         }
 
         const integration = await prisma.apiIntegration.findUnique({ where: { id: String(req.params.id) } });
-        if (!integration) return res.status(404).json({ error: 'Intégration introuvable.' });
+        if (!integration) return res.status(404).json({ error: 'IntÃ©gration introuvable.' });
 
         const { isActive, environment, webhookUrl, permissions, description } = req.body;
         const updates: any = {};
@@ -3128,11 +3174,11 @@ router.post('/api-integrations/:id/rotate', authMiddleware, async (req: AuthRequ
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId! } });
         if (!staff || !['SUPER_ADMIN'].includes(staff.role)) {
-            return res.status(403).json({ error: 'Rotation réservée au SUPER_ADMIN.' });
+            return res.status(403).json({ error: 'Rotation rÃ©servÃ©e au SUPER_ADMIN.' });
         }
 
         const integration = await prisma.apiIntegration.findUnique({ where: { id: String(req.params.id) } });
-        if (!integration) return res.status(404).json({ error: 'Intégration introuvable.' });
+        if (!integration) return res.status(404).json({ error: 'IntÃ©gration introuvable.' });
 
         const rawSecret = `sk_${integration.environment === 'LIVE' ? 'live' : 'test'}_${require('crypto').randomBytes(24).toString('hex')}`;
         const secretHash = await require('bcryptjs').hash(rawSecret, 12);
@@ -3156,7 +3202,7 @@ router.post('/api-integrations/:id/rotate', authMiddleware, async (req: AuthRequ
 
         return res.json({
             success: true,
-            message: 'Secret régénéré. Copiez le nouveau secret maintenant, il ne sera plus affiché.',
+            message: 'Secret rÃ©gÃ©nÃ©rÃ©. Copiez le nouveau secret maintenant, il ne sera plus affichÃ©.',
             data: { rawSecret }
         });
     } catch (e: any) {
@@ -3172,7 +3218,7 @@ router.post('/api-integrations/:id/rotate', authMiddleware, async (req: AuthRequ
 router.get('/error-logs', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_audit_log_view')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_audit_log_view')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         const page = Math.max(1, parseInt(req.query.page as string) || 1);
         const limit = Math.min(100, parseInt(req.query.limit as string) || 30);
@@ -3197,7 +3243,7 @@ router.get('/error-logs', authMiddleware, async (req: AuthRequest, res) => {
 router.put('/error-logs/:id/resolve', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!staff || !hasPermission(staff, 'perm_audit_log_view')) return res.status(403).json({ error: 'Accès refusé.' });
+        if (!staff || !hasPermission(staff, 'perm_audit_log_view')) return res.status(403).json({ error: 'AccÃ¨s refusÃ©.' });
 
         await prisma.errorLog.update({ where: { id: req.params.id as string }, data: { resolved: true } });
         return res.json({ success: true });
@@ -3207,6 +3253,7 @@ router.put('/error-logs/:id/resolve', authMiddleware, async (req: AuthRequest, r
 });
 
 export default router;
+
 
 
 
