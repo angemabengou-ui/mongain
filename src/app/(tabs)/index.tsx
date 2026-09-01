@@ -183,7 +183,7 @@ export default function DashboardScreen() {
             {/* Actions */}
             <View style={styles.actionsCard}>
               <ActionItem icon="pie-chart" label="Diviser" color="#F43F5E" onPress={() => router.push('/split' as any)} styles={styles} />
-                <ActionItem icon="send" label="Envoyer" color="#4F46E5" onPress={() => router.push('/transfer')} styles={styles} />
+              <ActionItem icon="send" label="Envoyer" color="#4F46E5" onPress={() => router.push('/transfer')} styles={styles} />
               <ActionItem icon="scan" label="Scan & Payer" color="#F59E0B" onPress={() => router.push('/qr?mode=scanOnly&intent=pay')} styles={styles} />
               <ActionItem icon="card" label="Recharger" color="#10B981" onPress={() => router.push('/recharge' as any)} styles={styles} />
               <ActionItem icon="wallet" label="Retrait" color="#E11D48" onPress={() => router.push('/withdraw' as any)} styles={styles} />
@@ -211,6 +211,22 @@ export default function DashboardScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.textPrimary }}>Mon Épargne</Text>
                 <Text style={{ fontSize: 12.5, color: COLORS.textSecondary, marginTop: 2 }}>Caisse commune et tontine, en un seul endroit</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={22} color={COLORS.textSecondary} />
+            </TouchableOpacity>
+
+            {/* Mongain Credit (V14) */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => router.push('/credit' as any)}
+              style={[styles.actionsCard, { marginTop: 16, padding: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface }]}
+            >
+              <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#3B82F615', justifyContent: 'center', alignItems: 'center', marginRight: 14 }}>
+                <Ionicons name="cash" size={26} color="#3B82F6" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.textPrimary }}>Mongain Crédit</Text>
+                <Text style={{ fontSize: 12.5, color: COLORS.textSecondary, marginTop: 2 }}>Micro-prêts instantanés basés sur la confiance</Text>
               </View>
               <Ionicons name="chevron-forward" size={22} color={COLORS.textSecondary} />
             </TouchableOpacity>

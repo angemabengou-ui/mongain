@@ -111,6 +111,13 @@ export default function TabLayout() {
                     ),
                 }}
             />
+            <Tabs.Screen
+                name="credit"
+                options={{
+                    href: null,
+                    title: 'Crédit Mongain',
+                }}
+            />
         </Tabs>
     );
 }
