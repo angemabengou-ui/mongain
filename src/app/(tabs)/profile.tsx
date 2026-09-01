@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
 import { useTabBarHeight } from '../../hooks/useTabBarHeight';
-import { apiGetBalance, apiGetDailyLimits } from '../../services/api';
+import { apiGetBalance, apiGetDailyLimits, request } from '../../services/api';
 
 // Refonte : l'ancienne page mettait "Informations personnelles", "Sécurité & PIN",
 // "Notifications", "Centre d'aide" et "Conditions d'utilisation" (qui ne menait nulle
@@ -30,9 +30,33 @@ export default function ProfileScreen() {
 
     const [balance, setBalance] = useState(user?.wallet?.balance ?? 0);
     const [currency, setCurrency] = useState(user?.wallet?.currency ?? 'FCFA');
+    const [userData, setUserData] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const [actionLoading, setActionLoading] = useState(false);
+    const [appLockEnabled, setAppLockEnabled] = useState(true);
+
+    const fetchProfileData = async () => {
+        try {
+            const res = await request('GET', '/api/users/profile', {}, true);
+            setUserData(res.user);
+            let pointBalance = 0;
+            try {
+                const lp = await request('GET', '/api/loyalty/balance', {}, true);
+                if (lp && lp.points) pointBalance = lp.points;
+            } catch (e) {
+                // Feature fails silently if endpoint not ready yet
+            }
+            if (res.user) setUserData({ ...res.user, loyaltyPoints: pointBalance });
+        } catch (e: any) {
+            console.warn(e);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useFocusEffect(
         useCallback(() => {
+            fetchProfileData();
             apiGetBalance().then(res => {
                 if (res && res.balance !== undefined) {
                     setBalance(res.balance);
@@ -43,13 +67,11 @@ export default function ProfileScreen() {
     );
 
     const [limits, setLimits] = useState<any>(null);
-    const [appLockEnabled, setAppLockEnabled] = useState(true);
 
     useEffect(() => {
         if (user && user.role === 'USER') {
             apiGetDailyLimits().then(data => setLimits(data)).catch(console.error);
         }
-        // Charger la préférence AppLock (ON par défaut)
         if (Platform.OS !== 'web') {
             SecureStore.getItemAsync('appLockEnabled').then(val => {
                 setAppLockEnabled(val !== 'false');
@@ -62,24 +84,46 @@ export default function ProfileScreen() {
             Alert.alert("Non supporté", "La sécurité renforcée n'est pas supportée sur le Web.");
             return;
         }
-
         await SecureStore.setItemAsync('appLockEnabled', value ? 'true' : 'false');
         setAppLockEnabled(value);
     };
 
-    const initials = user?.name
-        ? user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    const harvestMockPoints = async () => {
+        try {
+            setActionLoading(true);
+            await request('POST', '/api/loyalty/simulate-earn', {}, true);
+            await fetchProfileData();
+            Alert.alert("Bravo !", "Vous venez de gagner automatiquement 5,000 MP = 500 XAF de récompenses.");
+        } catch (e: any) {
+            Alert.alert("Erreur", "Génération des points échouée");
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const convertPoints = async () => {
+        const lp = userData?.loyaltyPoints || 0;
+        if (lp < 1000) return Alert.alert("Points insuffisants", "Vous devez avoir au minimum 1,000 MP pour les échanger contre du XAF.");
+        try {
+            setActionLoading(true);
+            await request('POST', '/api/loyalty/convert', { pointsToConvert: lp }, true);
+            await fetchProfileData();
+            Alert.alert("Jackpot !", `Vous avez échangé ${lp.toLocaleString()} MP. L'argent a été viré instantanément sur votre solde XAF.`);
+        } catch (e: any) {
+            Alert.alert("Erreur", e.response?.data?.error || "Conversion échouée");
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const initials = userData?.name
+        ? userData.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
         : '??';
 
     return (
-        // edges exclut 'top' : heroHeader simule déjà l'espace du haut via un paddingTop
-        // fixe — laisser SafeAreaView gérer aussi le haut doublerait cet espace sur
-        // Android (où l'ancien SafeAreaView de 'react-native' était un no-op, contrairement
-        // à celui-ci) au lieu de le remplacer.
         <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
             <ScrollView contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight + 20 }]} showsVerticalScrollIndicator={false}>
 
-                {/* Identité */}
                 <View style={styles.heroHeader}>
                     <View style={styles.headerTop}>
                         <Text style={styles.headerTitle}>Mon Profil</Text>
@@ -92,14 +136,36 @@ export default function ProfileScreen() {
                         <View style={styles.avatar}>
                             <Text style={styles.avatarText}>{initials}</Text>
                         </View>
-                        <Text style={styles.userName}>{user?.name ?? '...'}</Text>
-                        <Text style={styles.userPhone}>{user?.phone ?? '...'}</Text>
+                        <View>
+                            <Text style={styles.userName}>{userData?.name ?? '...'}</Text>
+                            <Text style={styles.userRole}>{userData?.email ?? '...'}</Text>
+                        </View>
                     </View>
                 </View>
 
                 <View style={styles.contentContainer}>
 
-                    {/* Aperçu */}
+                    <View style={styles.rewardsCard}>
+                        <View style={styles.rewardsHeader}>
+                            <Ionicons name="sparkles" size={24} color="#F59E0B" />
+                            <Text style={styles.rewardsTitle}>Mongain Rewards (V11)</Text>
+                        </View>
+                        <Text style={styles.rewardsPoints}>{(userData?.loyaltyPoints || 0).toLocaleString()} <Text style={{ fontSize: 16 }}>MP</Text></Text>
+                        <Text style={styles.rewardsSubtitle}>Vos actions vous rapportent de l'argent réel. 1000 MP = 100 XAF.</Text>
+
+                        <View style={styles.rewardsActions}>
+                            <TouchableOpacity style={[styles.rewardBtn, styles.rewardBtnClaim]} onPress={harvestMockPoints} disabled={actionLoading}>
+                                <Ionicons name="add-circle" size={16} color="#fff" />
+                                <Text style={styles.rewardBtnText}>Gagner 5,000 MP (Mock)</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity style={[styles.rewardBtn, styles.rewardBtnConvert]} onPress={convertPoints} disabled={actionLoading}>
+                                <Ionicons name="cash" size={16} color="#000" />
+                                <Text style={[styles.rewardBtnText, { color: '#000' }]}>Convertir en XAF</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+
                     <Text style={styles.sectionTitle}>Aperçu</Text>
                     <View style={styles.balanceCard}>
                         <View style={styles.balanceRow}>
@@ -123,15 +189,9 @@ export default function ProfileScreen() {
                             <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 8 }}>
                                 Dépensé : <Text style={{ fontWeight: 'bold', color: COLORS.textPrimary }}>{limits.dailySpend.toLocaleString('fr-FR')}</Text> / {limits.dailyLimit.toLocaleString('fr-FR')} FCFA
                             </Text>
-                            {limits.kycLevel === 0 && (
-                                <TouchableOpacity onPress={() => router.push('/profile-edit')} style={{ marginTop: 12, backgroundColor: '#fef3c7', padding: 8, borderRadius: 8 }}>
-                                    <Text style={{ color: '#d97706', fontSize: 12, fontWeight: '600', textAlign: 'center' }}>+ Débloquer la limite d'envoi jusqu'à 2M (KYC) 🚀</Text>
-                                </TouchableOpacity>
-                            )}
                         </View>
                     )}
 
-                    {/* Compte */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Compte</Text>
                         <MenuItem icon="person-outline" label="Informations personnelles" onPress={() => router.push('/profile-edit')} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
@@ -140,8 +200,6 @@ export default function ProfileScreen() {
                         <MenuItem icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications' as any)} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
                     </View>
 
-                    {/* Sécurité — regroupe tout ce qui protège le compte, y compris le Verrou
-                        Biométrique qui était auparavant mélangé aux réglages de profil. */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Sécurité</Text>
                         <MenuItem icon="shield-checkmark-outline" label="Sécurité & PIN" onPress={() => router.push('/pin-change')} styles={styles} tint={COLORS.warning} chevronColor={COLORS.textSecondary} />
@@ -164,7 +222,6 @@ export default function ProfileScreen() {
                         </View>
                     </View>
 
-                    {/* Assistance */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Assistance</Text>
                         <MenuItem icon="help-circle-outline" label="Centre d'aide" onPress={() => router.push('/support')} styles={styles} tint={COLORS.textSecondary} chevronColor={COLORS.textSecondary} />
@@ -190,8 +247,6 @@ export default function ProfileScreen() {
     );
 }
 
-// `onPress` absent (ex : "À propos") -> ligne purement informative : ni chevron ni
-// retour visuel au toucher, pour ne plus laisser croire qu'elle mène quelque part.
 function MenuItem({ icon, label, sublabel, onPress, styles, tint, chevronColor }: any) {
     const content = (
         <>
@@ -231,16 +286,16 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     headerTitle: { fontSize: 26, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
     editBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
 
-    avatarSection: { alignItems: 'center', marginTop: 10 },
+    avatarSection: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 10 },
     avatar: {
-        width: 86, height: 86, borderRadius: 43,
+        width: 64, height: 64, borderRadius: 32,
         backgroundColor: '#fff',
-        justifyContent: 'center', alignItems: 'center', marginBottom: 12,
+        justifyContent: 'center', alignItems: 'center',
         shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5,
     },
-    avatarText: { fontSize: 32, fontWeight: '900', color: COLORS.primary },
-    userName: { fontSize: 24, fontWeight: '800', color: '#fff', marginBottom: 4 },
-    userPhone: { fontSize: 16, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
+    avatarText: { fontSize: 24, fontWeight: '900', color: COLORS.primary },
+    userName: { fontSize: 20, fontWeight: '800', color: '#fff' },
+    userRole: { fontSize: 14, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
 
     contentContainer: {
         flex: 1,
@@ -264,6 +319,20 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
 
     section: { marginTop: 28 },
     sectionTitle: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
+    settingValueContainer: { flexDirection: 'row', alignItems: 'center' },
+    settingValue: { color: '#ffffff', fontSize: 16, marginRight: 8 },
+
+    rewardsCard: { marginBottom: 32, padding: 24, borderRadius: 24, backgroundColor: 'rgba(245, 158, 11, 0.05)', borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.3)', shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10 },
+    rewardsHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
+    rewardsTitle: { color: '#FCD34D', fontSize: 20, fontWeight: '800' },
+    rewardsPoints: { color: '#fff', fontSize: 40, fontWeight: '900', marginBottom: 4 },
+    rewardsSubtitle: { color: 'rgba(255,255,255,0.6)', fontSize: 13, marginBottom: 20 },
+    rewardsActions: { flexDirection: 'column', gap: 10 },
+    rewardBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 16, gap: 8 },
+    rewardBtnClaim: { backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+    rewardBtnConvert: { backgroundColor: '#FCD34D' },
+    rewardBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14, textTransform: 'uppercase' },
+
     menuItem: {
         flexDirection: 'row', alignItems: 'center',
         backgroundColor: COLORS.surface, borderRadius: 16, padding: 18,

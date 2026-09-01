@@ -11,6 +11,7 @@ datasource db {
 }
 
 model User {
+  loyaltyPoints Float @default(0)
   id                String    @id @default(uuid())
   username          String?   @unique // Secondary auth identifier (Anti-SIM recycle)
   email             String?   @unique // Optional tertiary auth and recovery
@@ -999,3 +1000,4 @@ model CryptoTransaction {
   fee             Float
   createdAt       DateTime    @default(now())
 }
+
