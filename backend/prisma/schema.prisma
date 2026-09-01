@@ -94,6 +94,7 @@ model User {
   requestedVaultTransactions VaultTransaction[] @relation("RequestedVaultTransactions")
   approvedVaultTransactions  VaultApproval[]    @relation("ApprovedVaultTransactions")
   vaultVouchers              VaultVoucher[]     @relation("VaultVouchers")
+  virtualCards               VirtualCard[]
 }
 
 model Reclamation {
@@ -167,6 +168,7 @@ model Wallet {
   centralTreasury      CentralTreasury?
   systemAccount        SystemAccount?
   merchantCommissionOf User?             @relation("MerchantCommissionWallet")
+  virtualCards         VirtualCard[]     @relation("FundingWalletVirtualCards")
 }
 
 // Solde de commission d'un marchand — séparé du Wallet principal (ventes/paiements).
@@ -960,4 +962,17 @@ model VaultVoucher {
 
   usedAt          DateTime?
   createdAt       DateTime @default(now())
+}
+model VirtualCard {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id])
+  fundingWalletId   String
+  fundingWallet     Wallet    @relation("FundingWalletVirtualCards", fields: [fundingWalletId], references: [id])
+  cardNumber        String    @unique
+  cvv               String
+  expiryDate        String
+  status            String    @default("ACTIVE")
+  spendingLimit     Float     @default(0)
+  balance           Float     @default(0)
 }
