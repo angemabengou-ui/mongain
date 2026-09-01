@@ -137,7 +137,7 @@ const WAKEUP_MAX_RETRIES = 2;
 const WAKEUP_RETRY_DELAY_MS = 2000;
 const REQUEST_TIMEOUT_MS = 15000;
 
-const request = async (method: string, path: string, body?: object, auth = false, _isRetry = false, _wakeupAttempt = 0): Promise<any> => {
+export const request = async (method: string, path: string, body?: object, auth = false, _isRetry = false, _wakeupAttempt = 0): Promise<any> => {
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Bypass-Tunnel-Reminder': 'true',

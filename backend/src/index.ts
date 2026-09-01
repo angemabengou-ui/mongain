@@ -12,6 +12,7 @@ import adminTontinesRoutes from './routes/admin.tontines';
 import adminVaultsRoutes from './routes/admin.vaults';
 import agencyRoutes from './routes/agency';
 import authRoutes from './routes/auth';
+import cardsRoutes from './routes/cards';
 import corpRoutes from './routes/corp';
 import merchantRoutes from './routes/merchant';
 import notificationRoutes from './routes/notifications';
@@ -164,6 +165,7 @@ app.use('/api/webhooks', webhookRoutes);
 // ROUTES FINANCIERES (PROTECTED BY CIRCUIT BREAKER)
 // ==========================================
 app.use('/api/wallet', circuitBreakerMiddleware, walletRoutes);
+app.use('/api/wallet/cards', circuitBreakerMiddleware, cardsRoutes);
 app.use('/api/merchant', circuitBreakerMiddleware, merchantRoutes);
 app.use('/api/vaults', circuitBreakerMiddleware, vaultRoutes);
 app.use('/api/tontine', circuitBreakerMiddleware, tontineRoutes);

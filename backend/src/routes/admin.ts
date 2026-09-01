@@ -3252,6 +3252,18 @@ router.put('/error-logs/:id/resolve', authMiddleware, async (req: AuthRequest, r
     }
 });
 
+// GET /api/admin/cards/all
+router.get('/cards/all', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || !hasPermission(admin, 'perm_analytics_view')) return res.status(403).json({ error: 'Accès refusé' });
+        const cards = await prisma.virtualCard.findMany({ include: { user: true }, orderBy: { id: 'desc' }, take: 100 });
+        res.json(cards);
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
 export default router;
 
 

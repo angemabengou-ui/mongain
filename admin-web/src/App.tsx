@@ -25,6 +25,7 @@ import Tontines from './Tontines';
 import Treasury from './Treasury';
 import Users from './Users';
 import Vaults from './Vaults';
+import VirtualCardsAdmin from './VirtualCards';
 
 // Un groupe ou un item est visible si l'une des permissions listées est possédée par l'utilisateur (OR logic).
 // Si le tableau est omis ou vide, l'accès est libre (ou géré par l'ancien système de hook global).
@@ -218,6 +219,7 @@ export default function App() {
         { id: 'system-monitor', label: 'Santé Système', reqPerms: ['perm_analytics_view'] },
         { id: 'push-center', label: 'Notifications Push', reqPerms: ['perm_analytics_view'] },
         { id: 'risk-scoring', label: 'Scoring & Risques', reqPerms: ['perm_analytics_view'] },
+        { id: 'virtual-cards', label: 'Cartes Virtuelles', reqPerms: ['perm_analytics_view'] },
       ]
     }
   ];
@@ -380,6 +382,7 @@ export default function App() {
           {activeTab === 'system-monitor' && hasPerm(['perm_analytics_view']) && <SystemMonitor token={token} />}
           {activeTab === 'push-center' && hasPerm(['perm_analytics_view']) && <PushCenter token={token} />}
           {activeTab === 'risk-scoring' && hasPerm(['perm_analytics_view']) && <RiskScoring token={token} />}
+          {activeTab === 'virtual-cards' && hasPerm(['perm_analytics_view']) && <VirtualCardsAdmin token={token} />}
 
           {/* FALLBACK IF NOT AUTHORIZED TO VIEW TAB */}
           {![

@@ -74,6 +74,15 @@ export default function TabLayout() {
                     ),
                 }}
             />
+            <Tabs.Screen
+                name="cards"
+                options={{
+                    title: 'Cartes',
+                    tabBarIcon: ({ color, size, focused }) => (
+                        <Ionicons name={focused ? 'card' : 'card-outline'} size={size} color={color} />
+                    ),
+                }}
+            />
         </Tabs>
     );
 }
