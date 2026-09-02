@@ -500,3 +500,8 @@ export const apiGetMarketListings = () => request('GET', '/api/market/listings',
 export const apiCreateListing = (data: { title: string, description: string, price: number }) => request('POST', '/api/market/listings', data, true) as Promise<{ success: boolean }>;
 export const apiBuyMarketItem = (id: string, pin: string) => request('POST', `/api/market/buy/${id}`, { pin }, true) as Promise<{ success: boolean, message: string }>;
 export const apiReleaseEscrow = (escrowId: string) => request('POST', `/api/market/escrow/${escrowId}/release`, undefined, true) as Promise<{ success: boolean }>;
+
+// --- 3D-SECURE & INVOICES (V21) ---
+export const apiGetMyInvoices = () => request('GET', '/api/b2b/invoices/my', undefined, true) as Promise<{ success: boolean, invoices: any[] }>;
+export const apiPayInvoice = (id: string, pin: string) => request('POST', `/api/b2b/invoices/${id}/pay`, { pin }, true) as Promise<{ success: boolean, message: string }>;
+export const apiRejectInvoice = (id: string) => request('POST', `/api/b2b/invoices/${id}/reject`, undefined, true) as Promise<{ success: boolean, message: string }>;

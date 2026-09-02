@@ -153,6 +153,33 @@ router.post('/invoices/:id/pay', authMiddleware, async (req: AuthRequest, res) =
     }
 });
 
+// Reject an Invoice (Customer)
+router.post('/invoices/:id/reject', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const invoiceId = req.params.id as string;
+
+        const user = await getActiveUser(req.userId);
+        if (!user) return res.status(401).json({ error: "Profil illisible" });
+
+        const invoice = await prisma.invoice.findUnique({
+            where: { id: invoiceId }
+        });
+
+        if (!invoice) return res.status(404).json({ error: "Facture introuvable." });
+        if (invoice.status !== 'PENDING') return res.status(400).json({ error: "Cette facture est déjà traitée." });
+        if (invoice.customerPhone !== user.phone) return res.status(403).json({ error: "Accès refusé." });
+
+        await prisma.invoice.update({
+            where: { id: invoice.id },
+            data: { status: 'CANCELLED' }
+        });
+
+        res.json({ success: true, message: "Facture rejetée." });
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
 // ==========================================
 // MASS PAYOUTS (PAYROLL)
 // ==========================================
