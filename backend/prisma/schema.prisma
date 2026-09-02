@@ -102,6 +102,13 @@ model User {
   loans                      Loan[]
   invoices                   Invoice[]          @relation("MerchantInvoices")
   payoutBulks                PayoutBulk[]       @relation("MerchantPayoutBulks")
+
+  // V16 Relations
+  marketListings MarketListing[]     @relation("UserListings")
+  buyerEscrows   EscrowTransaction[] @relation("BuyerEscrows")
+  sellerEscrows  EscrowTransaction[] @relation("SellerEscrows")
+  stakingVaults  StakingVault[]      @relation("UserStaking")
+  apiKeys        ApiKey[]            @relation("MerchantApiKeys")
 }
 
 model Reclamation {
@@ -1072,4 +1079,63 @@ model PayoutEntry {
   transactionId String?
 
   bulk PayoutBulk @relation(fields: [bulkId], references: [id], onDelete: Cascade)
+}
+
+// ==========================================
+// V16: MARKETPLACE & ESCROW
+// ==========================================
+
+model MarketListing {
+  id          String   @id @default(cuid())
+  sellerId    String
+  seller      User     @relation("UserListings", fields: [sellerId], references: [id])
+  title       String
+  description String
+  price       Float
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  escrows EscrowTransaction[]
+}
+
+model EscrowTransaction {
+  id         String        @id @default(cuid())
+  buyerId    String
+  buyer      User          @relation("BuyerEscrows", fields: [buyerId], references: [id])
+  sellerId   String
+  seller     User          @relation("SellerEscrows", fields: [sellerId], references: [id])
+  listingId  String
+  listing    MarketListing @relation(fields: [listingId], references: [id])
+  amount     Float
+  status     String // "LOCKED", "RELEASED", "DISPUTED", "REFUNDED"
+  createdAt  DateTime      @default(now())
+  releasedAt DateTime?
+}
+
+// ==========================================
+// V16: WEALTH MANAGEMENT & STAKING
+// ==========================================
+
+model StakingVault {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("UserStaking", fields: [userId], references: [id])
+  amount      Float
+  apy         Float
+  lockedUntil DateTime
+  status      String // "ACTIVE", "MATURED", "WITHDRAWN"
+  createdAt   DateTime @default(now())
+}
+
+// ==========================================
+// V16: OAUTH / MONGAIN CONNECT
+// ==========================================
+
+model ApiKey {
+  id         String   @id @default(cuid())
+  merchantId String
+  merchant   User     @relation("MerchantApiKeys", fields: [merchantId], references: [id])
+  keyHash    String   @unique
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
 }
