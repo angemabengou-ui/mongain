@@ -462,18 +462,18 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                             <div>
                                 <div className="card" style={{ padding: 24, marginBottom: 24 }}>
                                     <h3>Frais de Transactions (Taxes)</h3>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 24 }}>
-                                        <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)' }}>
+                                    <div style={{ display: 'flex', overflowX: 'auto', gap: 24, paddingBottom: 16 }}>
+                                        <div style={{ minWidth: 280, padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)' }}>
                                             <h4 style={{ margin: '0 0 12px', color: 'var(--accent)' }}>Retrait Agence (guichet)</h4>
                                             <div><label>Seuil de Retrait Gratuit (FCFA)</label><input className="input" type="number" value={drafts.agencyWithdrawThreshold || 0} onChange={e => handleFieldChange('agencyWithdrawThreshold', e.target.value)} /></div>
                                             <div style={{ marginTop: 12 }}><label>Taux au-delà du seuil, sur le dépassement (%)</label><input className="input" type="number" step="0.01" value={(drafts.agencyTaxWithdraw || 0) * 100} onChange={e => handlePercentFieldChange('agencyTaxWithdraw', e.target.value)} /></div>
                                         </div>
-                                        <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)' }}>
+                                        <div style={{ minWidth: 280, padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)' }}>
                                             <h4 style={{ margin: '0 0 12px', color: '#f59e0b' }}>Retrait Marchand</h4>
                                             <div><label>Taux fixe, sans seuil (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxWithdraw || 0) * 100} onChange={e => handlePercentFieldChange('taxWithdraw', e.target.value)} /></div>
                                             <div style={{ marginTop: 12 }}><label>Commission reversée au marchand (%)</label><input className="input" type="number" step="0.01" value={(drafts.rewardMerchant || 0) * 100} onChange={e => handlePercentFieldChange('rewardMerchant', e.target.value)} /></div>
                                         </div>
-                                        <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)' }}>
+                                        <div style={{ minWidth: 280, padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)' }}>
                                             <h4 style={{ margin: '0 0 12px', color: 'var(--success)' }}>Dépôt (Cash-In) & P2P</h4>
                                             <div>
                                                 <label>Dépôt — Agence &amp; Marchand</label>
@@ -483,7 +483,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                             </div>
                                             <div style={{ marginTop: 12 }}><label>Taux P2P (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxP2P || 0) * 100} onChange={e => handlePercentFieldChange('taxP2P', e.target.value)} /></div>
                                         </div>
-                                        <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)', borderTop: '4px solid #8B5CF6' }}>
+                                        <div style={{ minWidth: 280, padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)', borderTop: '4px solid #8B5CF6' }}>
                                             <h4 style={{ margin: '0 0 12px', color: '#8B5CF6' }}>V18: Credit & Forex</h4>
                                             <div><label>Intérêt Micro-Crédit (BNPL)</label><input className="input" type="number" step="0.1" value={(drafts.bnplInterest || 0) * 100} onChange={e => handlePercentFieldChange('bnplInterest', e.target.value)} /></div>
                                             <div style={{ marginTop: 12 }}><label>FX Remise (Cross Border)</label><input className="input" type="number" step="0.1" value={(drafts.forexMarkup || 0) * 100} onChange={e => handlePercentFieldChange('forexMarkup', e.target.value)} /></div>
