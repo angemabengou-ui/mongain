@@ -1,115 +1,121 @@
-import express from 'express';
+import { Router } from 'express';
+import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
-import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
-import { friendlyErrorMessage } from '../utils/errors';
 import logger from '../utils/logger';
+import { generateReference } from '../utils/reference';
+import { getSystemSettings } from './settings';
 
-const router = express.Router();
+const router = Router();
 
-// Mock FX Rates (Base: XAF)
-const MULTIPLIERS: Record<string, number> = {
-    EUR: 0.001524,
-    USD: 0.00161,
-    XOF: 1.0,
-    NGN: 1.25
-};
-
-/**
- * POST /api/remit/quote
- * Calcul du taux de change en direct et simulation d'envoi
- */
-router.post('/quote', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
-    try {
-        const { targetCurrency, amountXaf } = req.body;
-        const amount = parseFloat(amountXaf);
-
-        if (isNaN(amount) || amount <= 0) return res.status(400).json({ error: 'Montant invalide.' });
-        if (!MULTIPLIERS[targetCurrency]) return res.status(400).json({ error: 'Devise non supportée.' });
-
-        const rate = MULTIPLIERS[targetCurrency];
-        const converted = amount * rate;
-
-        // Mongain takes a 1.5% cross-border fee
-        const fee = amount * 0.015;
-        const totalToDebit = amount + fee;
-
-        res.json({
-            rate,
-            convertedAmount: converted.toFixed(2),
-            fee: fee.toFixed(2),
-            totalToDebit: totalToDebit.toFixed(2),
-            targetCurrency
-        });
-    } catch (e: any) {
-        res.status(500).json({ error: friendlyErrorMessage(e) });
-    }
+const remitSchema = z.object({
+    destinationCountry: z.string().min(2),
+    destinationCurrency: z.string().min(3),
+    recipientPhone: z.string().min(8),
+    amountXaf: z.number().min(100)
 });
 
 /**
- * POST /api/remit/send
- * Exécute formellement un envoi international depuis le wallet d'origine
+ * FX Mock Rates for MVP
  */
-router.post('/send', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+const FX_RATES: Record<string, number> = {
+    'XOF': 1.0, // CFA BEAC -> CFA BCEAO (1:1 parité mais commissions FX)
+    'EUR': 0.001524, // 1 XAF = 0.001524 EUR
+    'USD': 0.0017
+};
+
+router.post('/send', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const { targetCurrency, amountXaf, targetAccount } = req.body;
-        const amount = parseFloat(amountXaf);
+        const parsed = remitSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
-        if (isNaN(amount) || amount <= 0) return res.status(400).json({ error: 'Montant invalide.' });
-        if (!targetAccount) return res.status(400).json({ error: 'Un compte destinataire international est requis (IBAN/Téléphone).' });
+        const { destinationCountry, destinationCurrency, recipientPhone, amountXaf } = parsed.data;
+        const rate = FX_RATES[destinationCurrency];
 
-        const rate = MULTIPLIERS[targetCurrency];
-        if (!rate) throw new Error('Devise inconnue');
+        if (!rate) return res.status(400).json({ error: 'Devise de destination non supportée par notre corridor.' });
 
-        await prisma.$transaction(async (tx: any) => {
-            const payer = await tx.user.findUnique({
-                where: { id: req.userId },
-                include: { wallet: true }
-            });
+        // Retrieve settings for Forex Markup
+        const settings = await getSystemSettings();
+        const fxMarkup = settings.forexMarkup || 0.025; // default 2.5%
 
-            if (!payer) throw new Error('Expéditeur introuvable.');
+        const fee = amountXaf * fxMarkup;
+        const netSourceAmount = amountXaf - fee;
+        const destinationAmount = netSourceAmount * rate;
 
-            const fee = amount * 0.015;
-            const totalToDebit = amount + fee;
+        const sender = await prisma.user.findUnique({
+            where: { id: req.userId },
+            include: { wallet: true }
+        });
 
-            if (payer.wallet!.balance < totalToDebit) {
-                throw new Error(`Solde insuffisant. Coût total (avec 1.5% frais) : ${totalToDebit} XAF`);
-            }
+        if (!sender || sender.accountStatus !== 'ACTIVE') {
+            return res.status(403).json({ error: 'Compte restreint pour l\'international.' });
+        }
 
-            // Débit de l'utilisateur
+        if (sender.wallet!.balance < amountXaf) {
+            return res.status(400).json({ error: 'Fonds insuffisants pour cet envoi (Frais inclus).' });
+        }
+
+        // Atomically lock and transfer
+        const result = await prisma.$transaction(async (tx) => {
+
+            // Debit Sender
             await tx.wallet.update({
-                where: { id: payer.wallet!.id },
-                data: { balance: { decrement: totalToDebit } }
+                where: { id: sender.wallet!.id, balance: { gte: amountXaf } },
+                data: { balance: { decrement: amountXaf } }
             });
 
-            // Envoi des frais au Corporate
-            const feesAcc = await tx.systemAccount.findUnique({ where: { role: 'FEES_COLLECTION' } });
-            if (feesAcc) {
+            // Credit Corporate Treasury for the FX Markup Commission
+            const treasury = await tx.systemAccount.findUnique({ where: { kind: 'FEE_COLLECTION' }, include: { wallet: true } });
+            if (treasury) {
                 await tx.wallet.update({
-                    where: { id: feesAcc.walletId! },
+                    where: { id: treasury.wallet!.id },
                     data: { balance: { increment: fee } }
                 });
             }
 
-            // Historisation (Départ vers l'international)
-            await tx.transaction.create({
+            // Create Remittance Trace
+            const remittance = await tx.remittanceTransaction.create({
                 data: {
-                    type: 'CASH_OUT', // External remittance is technically a structural cash-out
-                    amount: amount,
-                    fee: fee,
-                    status: 'COMPLETED',
-                    senderWalletId: payer.wallet!.id,
-                    reference: 'REMIT-' + Date.now() + '-' + targetCurrency
+                    senderId: sender.id,
+                    recipientPhone,
+                    destinationCountry,
+                    sourceAmountXaf: amountXaf,
+                    exchangeRate: rate,
+                    destinationAmount: destinationAmount,
+                    destinationCurrency,
+                    fee
                 }
             });
 
-            logger.info(`[Mongain Remit] ${payer.phone} a envoyé ${amount} XAF vers la devise ${targetCurrency} (${targetAccount}). Frais: ${fee} XAF.`);
+            // Standard Transaction Log for Statement
+            await tx.transaction.create({
+                data: {
+                    amount: amountXaf,
+                    fee,
+                    status: 'COMPLETED',
+                    reference: generateReference('REMIT'),
+                    senderWalletId: sender.wallet!.id,
+                }
+            });
+
+            // Notify
+            await tx.notification.create({
+                data: {
+                    userId: sender.id,
+                    title: 'Envoi International Réussi',
+                    body: `${destinationAmount.toFixed(2)} ${destinationCurrency} expédié vers ${recipientPhone} (${destinationCountry}).`,
+                    type: 'TRANSACTION'
+                }
+            });
+
+            return remittance;
         });
 
-        res.json({ message: 'Le transfert international a été initié et est en cours d\'acheminement vers la passerelle SWIFT/SEPA locale.' });
-    } catch (e: any) {
-        logger.error(`[Mongain Remit ERROR] ${e.message}`);
-        res.status(400).json({ error: friendlyErrorMessage(e) });
+        return res.json({ message: 'L\'envoi Cross-Border a été exécuté avec succès.', data: result });
+
+    } catch (error: any) {
+        logger.error(`[Remittance Engine] ${error.message}`);
+        return res.status(500).json({ error: 'Erreur réseau internationale.' });
     }
 });
 

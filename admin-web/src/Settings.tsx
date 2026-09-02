@@ -382,7 +382,11 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
 
     const simulateFee = () => {
         const amt = parseFloat(sim.amount as any) || 0;
-        if (sim.type === 'CASH_IN') return amt * (settings.taxCashIn || 0);
+        // Un dépôt (Cash-In) est toujours gratuit, en agence comme chez un commerçant —
+        // voir backend CashOperationService.executeCashIn, qui ne prélève plus aucun frais
+        // quelle que soit la configuration. taxCashIn n'a donc plus aucun effet ; ignoré ici
+        // pour que ce simulateur reflète fidèlement ce que le client paiera réellement.
+        if (sim.type === 'CASH_IN') return 0;
         // Retrait Agence (guichet Staff / réseau d'agents) : gratuit jusqu'au seuil, puis
         // un taux marginal sur le seul dépassement — pas sur le montant entier une fois le
         // seuil franchi (voir backend CashOperationService.ts / wallet.ts qr-cash-out,
@@ -419,8 +423,8 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
         <div style={{ maxWidth: 1100, margin: '0 auto', paddingBottom: 60 }}>
             <div style={{ marginBottom: 20 }}>
                 <PageHeader
-                    title="Paramètres de la Plateforme"
-                    subtitle="Gestion centralisée des politiques financières. Processus strict MAKER ⇒ CHECKER."
+                    title="Gouvernance V18"
+                    subtitle="Gestion centralisée instantanée. Les Super Admins valident sans attente (Auto-Approve)."
                     action={
                         <div style={{ textAlign: 'right' }}>
                             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' }}>Environnement Actif</div>
@@ -449,7 +453,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                     <div><label>Email Support</label><input className="input" value={drafts.supportEmail || ''} onChange={e => handleFieldChange('supportEmail', e.target.value)} /></div>
                                     <div><label>Téléphone Support</label><input className="input" value={drafts.supportPhone || ''} onChange={e => handleFieldChange('supportPhone', e.target.value)} /></div>
                                 </div>
-                                <button className="btn" style={{ marginTop: 24, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_GENERAL', ['platformName', 'currency', 'supportEmail', 'supportPhone'])}>Déposer Changement (Maker)</button>
+                                <button className="btn" style={{ marginTop: 24, padding: '14px 24px', background: '#4F46E5', borderRadius: 12 }} onClick={() => handleSaveGroup('UPDATE_GENERAL', ['platformName', 'currency', 'supportEmail', 'supportPhone'])}>💾 Enregistrer les Modifications</button>
                             </div>
                         )}
 
@@ -471,11 +475,22 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                         </div>
                                         <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)' }}>
                                             <h4 style={{ margin: '0 0 12px', color: 'var(--success)' }}>Dépôt (Cash-In) & P2P</h4>
-                                            <div><label>Taux de Dépôt (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxCashIn || 0) * 100} onChange={e => handlePercentFieldChange('taxCashIn', e.target.value)} /></div>
+                                            <div>
+                                                <label>Dépôt — Agence &amp; Marchand</label>
+                                                <div style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--success-bg, rgba(16,185,129,0.1))', color: 'var(--success)', fontWeight: 700, fontSize: 13 }}>
+                                                    Toujours 100% gratuit — non configurable
+                                                </div>
+                                            </div>
                                             <div style={{ marginTop: 12 }}><label>Taux P2P (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxP2P || 0) * 100} onChange={e => handlePercentFieldChange('taxP2P', e.target.value)} /></div>
                                         </div>
+                                        <div style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)', borderTop: '4px solid #8B5CF6' }}>
+                                            <h4 style={{ margin: '0 0 12px', color: '#8B5CF6' }}>V18: Credit & Forex</h4>
+                                            <div><label>Intérêt Micro-Crédit (BNPL)</label><input className="input" type="number" step="0.1" value={(drafts.bnplInterest || 0) * 100} onChange={e => handlePercentFieldChange('bnplInterest', e.target.value)} /></div>
+                                            <div style={{ marginTop: 12 }}><label>FX Remise (Cross Border)</label><input className="input" type="number" step="0.1" value={(drafts.forexMarkup || 0) * 100} onChange={e => handlePercentFieldChange('forexMarkup', e.target.value)} /></div>
+                                            <div style={{ marginTop: 12 }}><label>Plafond Absolu KYC</label><input className="input" type="number" value={drafts.kycReqAmount || 2000000} onChange={e => handleFieldChange('kycReqAmount', e.target.value)} /></div>
+                                        </div>
                                     </div>
-                                    <button className="btn" style={{ marginTop: 24, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_FEES', ['taxWithdraw', 'agencyWithdrawThreshold', 'agencyTaxWithdraw', 'rewardMerchant', 'taxCashIn', 'taxP2P'])}>Déposer Changement (Maker)</button>
+                                    <button className="btn" style={{ marginTop: 24, padding: '14px 24px', background: '#059669', borderRadius: 12 }} onClick={() => handleSaveGroup('UPDATE_FEES', ['taxWithdraw', 'agencyWithdrawThreshold', 'agencyTaxWithdraw', 'rewardMerchant', 'taxP2P', 'bnplInterest', 'forexMarkup', 'kycReqAmount'])}>💾 Enregistrer les Taxes & Limites V18</button>
                                 </div>
 
                                 <div className="card" style={{ padding: 24, background: '#1e293b', color: 'white' }}>
@@ -509,7 +524,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                         <div style={{ marginTop: 12 }}><label>Alerte Liquidité Critique (CRITICAL)</label><input className="input" type="number" value={drafts.agencyCriticalLiquidity || 0} onChange={e => handleFieldChange('agencyCriticalLiquidity', e.target.value)} /></div>
                                     </div>
                                 </div>
-                                <button className="btn" style={{ marginTop: 24, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_TREASURY_POLICIES', ['maxMintAmount', 'treasuryApprovalThreshold', 'agencyLowLiquidityThreshold', 'agencyCriticalLiquidity'])}>Déposer Changement (Maker)</button>
+                                <button className="btn" style={{ marginTop: 24, padding: '14px 24px', background: '#3B82F6', borderRadius: 12 }} onClick={() => handleSaveGroup('UPDATE_TREASURY_POLICIES', ['maxMintAmount', 'treasuryApprovalThreshold', 'agencyLowLiquidityThreshold', 'agencyCriticalLiquidity'])}>💾 Appliquer aux Coffres Forts</button>
                             </div>
                         )}
 

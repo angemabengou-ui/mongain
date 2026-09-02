@@ -86,6 +86,9 @@ const settingsSchema = z.object({
     taxCashIn: z.number().min(0).max(1).optional(),
     taxWithdraw: z.number().min(0).max(1).optional(),
     rewardMerchant: z.number().min(0).max(1).optional(),
+    bnplInterest: z.number().min(0).max(1).optional(),
+    forexMarkup: z.number().min(0).max(1).optional(),
+    kycReqAmount: z.number().min(0).optional(),
     agencyWithdrawThreshold: z.number().min(0).optional(),
     agencyTaxWithdraw: z.number().min(0).max(1).optional(),
 
@@ -187,7 +190,24 @@ router.post('/request', authMiddleware, adminIpAllowlistMiddleware, async (req: 
             }
         });
 
-        return res.json({ message: 'Requête soumise. Un second agent habilité doit l\'approuver (règle Maker/Checker : l\'auteur ne peut pas approuver sa propre demande).', requestId: approvalRequest.id });
+        // AUTO-APPROVE FOR SUPER_ADMIN
+        if (staff.role === 'SUPER_ADMIN') {
+            const settings = await getSystemSettings();
+            await prisma.$transaction([
+                prisma.settingsApproval.update({
+                    where: { id: approvalRequest.id },
+                    data: { status: 'APPROVED', checkerId: staff.id }
+                }),
+                prisma.systemSettings.update({
+                    where: { id: settings.id },
+                    data: parsed.data
+                })
+            ]);
+            invalidateSettingsCache();
+            return res.json({ message: 'Modifications appliquées instantanément (Super Admin).', requestId: approvalRequest.id });
+        }
+
+        return res.json({ message: 'Requête soumise. Un second agent habilité doit l\'approuver.', requestId: approvalRequest.id });
     } catch (e: any) {
         return res.status(500).json({ error: 'Erreur Serveur.' });
     }
