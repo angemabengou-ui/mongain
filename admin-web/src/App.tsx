@@ -11,6 +11,8 @@ import { API_URL } from './config';
 import CryptoAdmin from './CryptoAdmin';
 import Dashboard from './Dashboard';
 import ErrorLogs from './ErrorLogs';
+import DevPortal from './DevPortal';
+import WealthManager from './WealthManager';
 import KycMod from './KycMod';
 import Ledger from './Ledger';
 import Login from './Login';
@@ -378,6 +380,8 @@ export default function App() {
           {activeTab === 'treasury' && hasPerm(['perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_approve']) && <Treasury token={token} prefillAdjustTarget={adjustTarget} hasPerm={hasPerm} staffId={staffId} />}
           {activeTab === 'system-accounts' && hasPerm(['perm_treasury_view']) && <SystemAccounts token={token} onAdjust={(walletId, name) => { setAdjustTarget({ walletId, name }); setActiveTab('treasury'); }} />}
           {activeTab === 'b2b-hub' && hasPerm(['perm_merchant_view']) && <B2BHub token={token} />}
+            {activeTab === 'dev-portal' && hasPerm(['perm_merchant_view']) && <DevPortal token={token} />}
+            {activeTab === 'wealth-manager' && hasPerm(['perm_treasury_view']) && <WealthManager token={token} />}
             {activeTab === 'audit' && hasPerm(['perm_audit_log_view']) && <AuditLogs token={token} />}
           {activeTab === 'error-logs' && hasPerm(['perm_audit_log_view']) && <ErrorLogs token={token} />}
           {activeTab === 'settings' && hasPerm(['perm_system_settings_view', 'perm_system_settings_approve']) && <Settings token={token} hasPerm={hasPerm} staffId={staffId} />}

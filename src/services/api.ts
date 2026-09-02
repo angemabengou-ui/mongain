@@ -494,3 +494,9 @@ export const apiRepayCredit = (loanId: string) => request('POST', '/api/credit/r
 // --- REWARDS (V15) ---
 export const apiGetRewardsBalance = () => request('GET', '/api/rewards/balance', undefined, true) as Promise<{ loyaltyPoints: number, conversionRate: number }>;
 export const apiRedeemRewards = (pointsToRedeem: number) => request('POST', '/api/rewards/redeem', { pointsToRedeem }, true) as Promise<{ success: boolean, message: string, amount: number }>;
+
+// --- MARKET & ESCROW (V16) ---
+export const apiGetMarketListings = () => request('GET', '/api/market/listings', undefined, true) as Promise<{ success: boolean, listings: any[] }>;
+export const apiCreateListing = (data: { title: string, description: string, price: number }) => request('POST', '/api/market/listings', data, true) as Promise<{ success: boolean }>;
+export const apiBuyMarketItem = (id: string, pin: string) => request('POST', `/api/market/buy/${id}`, { pin }, true) as Promise<{ success: boolean, message: string }>;
+export const apiReleaseEscrow = (escrowId: string) => request('POST', `/api/market/escrow/${escrowId}/release`, undefined, true) as Promise<{ success: boolean }>;

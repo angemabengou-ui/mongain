@@ -118,6 +118,15 @@ export default function TabLayout() {
                     title: 'Crédit Mongain',
                 }}
             />
+            <Tabs.Screen
+                name="market"
+                options={{
+                    title: 'Market',
+                    tabBarIcon: ({ color, size, focused }) => (
+                        <Ionicons name={focused ? 'basket' : 'basket-outline'} size={size} color={color} />
+                    ),
+                }}
+            />
         </Tabs>
     );
 }
