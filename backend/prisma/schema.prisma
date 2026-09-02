@@ -100,6 +100,8 @@ model User {
   virtualCards               VirtualCard[]
   cryptoWallets              CryptoWallet[]
   loans                      Loan[]
+  invoices                   Invoice[]          @relation("MerchantInvoices")
+  payoutBulks                PayoutBulk[]       @relation("MerchantPayoutBulks")
 }
 
 model Reclamation {
@@ -1026,4 +1028,48 @@ model Loan {
   updatedAt    DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id])
+}
+
+// ==========================================
+// V15: MONGAIN PRO (B2B, INVOICING, PAYROLL)
+// ==========================================
+
+model Invoice {
+  id            String    @id @default(uuid())
+  merchantId    String
+  customerPhone String
+  amount        Float
+  description   String?
+  status        String    @default("PENDING") // PENDING, PAID, CANCELLED
+  transactionId String? // reference to Ledger transaction when paid
+  createdAt     DateTime  @default(now())
+  paidAt        DateTime?
+  updatedAt     DateTime  @updatedAt
+
+  merchant User @relation("MerchantInvoices", fields: [merchantId], references: [id])
+}
+
+model PayoutBulk {
+  id          String    @id @default(uuid())
+  merchantId  String
+  name        String?
+  totalAmount Float     @default(0)
+  status      String    @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  merchant User          @relation("MerchantPayoutBulks", fields: [merchantId], references: [id])
+  entries  PayoutEntry[]
+}
+
+model PayoutEntry {
+  id            String  @id @default(uuid())
+  bulkId        String
+  phone         String
+  amount        Float
+  status        String  @default("PENDING") // PENDING, SUCCESS, FAILED
+  errorReason   String?
+  transactionId String?
+
+  bulk PayoutBulk @relation(fields: [bulkId], references: [id], onDelete: Cascade)
 }

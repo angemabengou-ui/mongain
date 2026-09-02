@@ -58,6 +58,38 @@ export class LimitEngine {
     }
 
     /**
+     * Algorithmique SAR (Suspicious Activity Reporting).
+     * Gèle algorithmiquement un compte si une signature de Smurfing ou Structuration est detectée.
+     * Exemple : > 20 transactions en 1 heure.
+     */
+    static async detectAndFreezeSAR(tx: any, userId: string): Promise<boolean> {
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        const velocity = await tx.transaction.count({
+            where: {
+                senderWallet: { userId },
+                createdAt: { gte: oneHourAgo }
+            }
+        });
+
+        if (velocity > 15) {
+            await tx.user.update({
+                where: { id: userId },
+                data: { isActive: false, kycStatus: 'REJECTED' }
+            });
+            await tx.auditLog.create({
+                data: {
+                    userId,
+                    action: 'AML_FREEZE_SAR',
+                    details: `Suspicious velocity detected (${velocity} tx/h). Account automatically frozen.`,
+                    ipAddress: 'INTERNAL_AML_ENGINE'
+                }
+            });
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * Moteur central pour interroger ET incrémenter les consommations de manière transactionnelle.
      */
     static async verifyAndIncrementConsumption(
@@ -102,6 +134,10 @@ export class LimitEngine {
         await tx.$queryRaw`SELECT id FROM "Wallet" WHERE id = ${walletId} FOR UPDATE`;
         const wallet = await tx.wallet.findUnique({ where: { id: walletId } });
         if (!wallet) throw new Error('Portefeuille introuvable');
+
+        // 2.5 SAR Engine Check (Anti-Smurfing)
+        const isFrozen = await this.detectAndFreezeSAR(tx, userId);
+        if (isFrozen) throw new Error("Compte gelé par réseau Sécurité (SAR Fraud). Vélocité anormale détectée.");
 
         // 3. Calculs des Limites Hiérarchisées
         const limits = await this.getApplicableLimits(user, settings);

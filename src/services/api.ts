@@ -490,3 +490,7 @@ export const apiGetCreditEligibility = () => request('GET', '/api/credit/eligibi
 export const apiGetActiveLoans = () => request('GET', '/api/credit/active', undefined, true) as Promise<any[]>;
 export const apiApplyCredit = (amount: number) => request('POST', '/api/credit/apply', { amount }, true) as Promise<{ success: boolean, loan: any, balance: number }>;
 export const apiRepayCredit = (loanId: string) => request('POST', '/api/credit/repay', { loanId }, true) as Promise<{ success: boolean, balance: number }>;
+
+// --- REWARDS (V15) ---
+export const apiGetRewardsBalance = () => request('GET', '/api/rewards/balance', undefined, true) as Promise<{ loyaltyPoints: number, conversionRate: number }>;
+export const apiRedeemRewards = (pointsToRedeem: number) => request('POST', '/api/rewards/redeem', { pointsToRedeem }, true) as Promise<{ success: boolean, message: string, amount: number }>;

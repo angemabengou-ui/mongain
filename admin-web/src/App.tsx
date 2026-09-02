@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import Accounts from './Accounts';
 import AgencyCenter from './AgencyCenter';
 import AuditLogs from './AuditLogs';
+import B2BHub from './B2BHub';
 import BranchDashboard from './BranchDashboard';
 import ChangePassword from './ChangePassword';
 import GlobalSearch from './components/GlobalSearch';
@@ -376,7 +377,8 @@ export default function App() {
           {activeTab === 'ledger' && hasPerm(['perm_transaction_view']) && <Ledger token={token} hasPerm={hasPerm} />}
           {activeTab === 'treasury' && hasPerm(['perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_approve']) && <Treasury token={token} prefillAdjustTarget={adjustTarget} hasPerm={hasPerm} staffId={staffId} />}
           {activeTab === 'system-accounts' && hasPerm(['perm_treasury_view']) && <SystemAccounts token={token} onAdjust={(walletId, name) => { setAdjustTarget({ walletId, name }); setActiveTab('treasury'); }} />}
-          {activeTab === 'audit' && hasPerm(['perm_audit_log_view']) && <AuditLogs token={token} />}
+          {activeTab === 'b2b-hub' && hasPerm(['perm_merchant_view']) && <B2BHub token={token} />}
+            {activeTab === 'audit' && hasPerm(['perm_audit_log_view']) && <AuditLogs token={token} />}
           {activeTab === 'error-logs' && hasPerm(['perm_audit_log_view']) && <ErrorLogs token={token} />}
           {activeTab === 'settings' && hasPerm(['perm_system_settings_view', 'perm_system_settings_approve']) && <Settings token={token} hasPerm={hasPerm} staffId={staffId} />}
 
