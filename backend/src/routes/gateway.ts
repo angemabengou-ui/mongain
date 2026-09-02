@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { friendlyErrorMessage } from '../utils/errors';
+import { sendPushNotification } from './admin.push';
 
 const router = Router();
 
@@ -96,6 +97,16 @@ router.post('/charge', async (req, res) => {
                 description: `Mongain Connect Checkout: ${orderId || 'WEB_ORD'}`
             }
         });
+
+        // Etape V21: 3D Secure Notification
+        if (customer.pushToken) {
+            await sendPushNotification(
+                customer.pushToken,
+                "Autorisation de Paiement 🔒",
+                `Le marchand ${apiKey.merchant.name || apiKey.merchant.phone} demande à prélever ${chargeAmount} CFA. Ouvrez l'app pour valider.`,
+                { invoiceId: invoice.id, merchantName: apiKey.merchant.name }
+            );
+        }
 
         res.status(200).json({
             success: true,
