@@ -13,12 +13,15 @@ import adminVaultsRoutes from './routes/admin.vaults';
 import agencyRoutes from './routes/agency';
 import aiRoutes from './routes/ai';
 import authRoutes from './routes/auth';
+import { executeTontineAutomations } from './cron';
 import b2bRoutes from './routes/b2b';
 import ussdRoutes from './routes/ussd';
 import rewardsRoutes from './routes/rewards';
 import marketRoutes from './routes/market';
 import investRoutes from './routes/invest';
 import gatewayRoutes from './routes/gateway';
+import billerRoutes from './routes/biller';
+import bnplRoutes from './routes/bnpl';
 import cardsRoutes from './routes/cards';
 import corpRoutes from './routes/corp';
 import creditRoutes from './routes/credit';
@@ -181,10 +184,12 @@ app.use('/api/wallet', circuitBreakerMiddleware, walletRoutes);
 app.use('/api/wallet/cards', circuitBreakerMiddleware, cardsRoutes);
 app.use('/api/b2b', circuitBreakerMiddleware, b2bRoutes);
 app.use('/api/ussd', ussdRoutes);
-app.use('/api/rewards', authMiddleware, rewardsRoutes);
+app.use('/api/rewards', rewardsRoutes);
 app.use('/api/market', marketRoutes);
-app.use('/api/invest', authMiddleware, investRoutes);
+app.use('/api/invest', investRoutes);
 app.use('/api/gateway', gatewayRoutes);
+app.use('/api/billers', billerRoutes);
+app.use('/api/bnpl', bnplRoutes);
 app.use('/api/crypto', circuitBreakerMiddleware, cryptoRoutes);
 app.use('/api/credit', creditRoutes);
 app.use('/api/ai', circuitBreakerMiddleware, aiRoutes);
@@ -274,3 +279,6 @@ async function seedCorporateAccount() {
 }
 
 seedCorporateAccount();
+
+// CRON JOBS V17
+setInterval(() => { executeTontineAutomations().catch(console.error); }, 86400000); // Runs daily in Prod
