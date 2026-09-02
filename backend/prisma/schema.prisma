@@ -91,6 +91,8 @@ model User {
   tontineParticipations  TontineParticipant[]
   remittancesSent        RemittanceTransaction[] @relation("SenderRemit")
   createdTontines        TontineGroup[]          @relation("GroupCreator")
+  escrowsBought          EscrowContract[]        @relation("BuyerEscrow")
+  escrowsSold            EscrowContract[]        @relation("SellerEscrow")
   apiIntegrations        ApiIntegration[]        @relation("MerchantAPI")
 
   adminOfVaults              Vault[]            @relation("AdminVault")
@@ -1189,4 +1191,20 @@ model RemittanceTransaction {
   fee              Float
   status           String   @default("COMPLETED")
   createdAt        DateTime @default(now())
+}
+
+model EscrowContract {
+  id              String   @id @default(cuid())
+  buyerId         String
+  sellerId        String
+  buyer           User     @relation("BuyerEscrow", fields: [buyerId], references: [id])
+  seller          User     @relation("SellerEscrow", fields: [sellerId], references: [id])
+  amount          Float
+  fee             Float
+  status          String   @default("LOCKED") // LOCKED, RELEASED, DISPUTED, REFUNDED
+  itemDescription String
+  releaseCode     String   // Used by buyer to give to seller upon delivery
+  disputeReason   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
