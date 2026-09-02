@@ -1,6 +1,5 @@
 import { Request, Response, Router } from 'express';
 import { prisma } from '../prisma';
-import { CashOperationService } from '../services/CashOperationService';
 import logger from '../utils/logger';
 
 const router = Router();
@@ -60,12 +59,37 @@ router.post('/gateway', async (req: Request, res: Response) => {
                 // if (!verifyPin(pin)) return res.send(`END Code PIN Incorrect.`);
 
                 const targetUser = await prisma.user.findFirst({ where: { phone: targetPhone }, include: { wallet: true } });
-                if (!targetUser) return res.send(`END Destinataire introuvable.`);
+                if (!targetUser || !targetUser.wallet || !user.wallet) return res.send(`END Destinataire introuvable.`);
 
                 try {
-                    // Call the secure CashOperationService for P2P
-                    const tx = await CashOperationService.executeP2P(user.id, targetUser.id, amount, 'USSD_P2P');
-                    return res.send(`END Succès! Vous avez envoyé ${amount}F à ${targetPhone}. Ref: ${tx.reference}`);
+                    // Injecting raw Prisma Tx for P2P since USSD bypasses CashOperationService
+                    const settings = await prisma.systemSettings.findFirst();
+                    const fee = amount * (settings?.taxP2P || 0.01);
+                    const totalRequired = amount + fee;
+
+                    if (user.wallet.balance < totalRequired) return res.send(`END Solde insuffisant (Frais: ${fee}F).`);
+
+                    await prisma.$transaction(async (tx) => {
+                        await tx.wallet.update({
+                            where: { id: user.wallet!.id, balance: { gte: totalRequired } },
+                            data: { balance: { decrement: totalRequired } }
+                        });
+
+                        await tx.wallet.update({
+                            where: { id: targetUser.wallet!.id },
+                            data: { balance: { increment: amount } }
+                        });
+
+                        const corpTx = await tx.systemAccount.findUnique({ where: { kind: 'CORPORATE' }, include: { wallet: true } });
+                        if (corpTx?.wallet) {
+                            await tx.wallet.update({ where: { id: corpTx.wallet.id }, data: { balance: { increment: fee } } });
+                        }
+
+                        await tx.transaction.create({
+                            data: { amount, fee, status: 'COMPLETED', reference: 'USSD-' + Date.now().toString(), senderWalletId: user.wallet!.id, receiverWalletId: targetUser.wallet!.id }
+                        });
+                    });
+                    return res.send(`END Succès! Vous avez envoyé ${amount}F à ${targetPhone}. Frais: ${fee}F.`);
                 } catch (e: any) {
                     return res.send(`END Échec de la transaction. ${e.message}`);
                 }

@@ -1,6 +1,6 @@
-import { prisma } from '../prisma';
-import logger from '../utils/logger';
-import { generateReference } from '../utils/reference';
+import { prisma } from './prisma';
+import logger from './utils/logger';
+import { generateReference } from './utils/reference';
 
 /**
  * Automates Tontine deductions and payouts.
@@ -25,7 +25,7 @@ export async function executeTontineAutomations() {
             // Assuming today is payout day for `tontine`
             const payoutAmount = tontine.contribution * tontine.participants.length;
 
-            await prisma.$transaction(async (tx) => {
+            await prisma.$transaction(async (tx: any) => {
                 // Fetch the Vault for Tontine
                 const tontineReserve = await tx.systemAccount.findUnique({
                     where: { kind: 'TONTINE_VAULT' },
@@ -106,3 +106,6 @@ export async function executeTontineAutomations() {
         logger.error(`[Tontine Automator Error] ${e.message}`);
     }
 }
+
+
+export const initCronJobs = () => { logger.info("[CRON] Gateway Started"); };

@@ -87,7 +87,8 @@ router.post('/send', authMiddleware, async (req: AuthRequest, res) => {
                 }
             });
 
-            // Standard Transaction Log for Statement
+            // Standard Transaction Log for Statement 
+            let corpId = treasury?.wallet?.id || sender.wallet!.id; // fallback to sender if no treasury (shouldn't happen)
             await tx.transaction.create({
                 data: {
                     amount: amountXaf,
@@ -95,6 +96,7 @@ router.post('/send', authMiddleware, async (req: AuthRequest, res) => {
                     status: 'COMPLETED',
                     reference: generateReference('REMIT'),
                     senderWalletId: sender.wallet!.id,
+                    receiverWalletId: corpId
                 }
             });
 
