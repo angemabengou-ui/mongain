@@ -463,34 +463,45 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                 <div className="card" style={{ padding: 24, marginBottom: 24 }}>
                                     <h3>Frais de Transactions (Taxes)</h3>
                                     <div style={{ display: 'flex', overflowX: 'auto', gap: 24, paddingBottom: 16 }}>
-                                        <div style={{ minWidth: 280, padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)' }}>
-                                            <h4 style={{ margin: '0 0 12px', color: 'var(--accent)' }}>Retrait Agence (guichet)</h4>
-                                            <div><label>Seuil de Retrait Gratuit (FCFA)</label><input className="input" type="number" value={drafts.agencyWithdrawThreshold || 0} onChange={e => handleFieldChange('agencyWithdrawThreshold', e.target.value)} /></div>
-                                            <div style={{ marginTop: 12 }}><label>Taux au-delà du seuil, sur le dépassement (%)</label><input className="input" type="number" step="0.01" value={(drafts.agencyTaxWithdraw || 0) * 100} onChange={e => handlePercentFieldChange('agencyTaxWithdraw', e.target.value)} /></div>
-                                        </div>
-                                        <div style={{ minWidth: 280, padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)' }}>
-                                            <h4 style={{ margin: '0 0 12px', color: '#f59e0b' }}>Retrait Marchand</h4>
-                                            <div><label>Taux fixe, sans seuil (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxWithdraw || 0) * 100} onChange={e => handlePercentFieldChange('taxWithdraw', e.target.value)} /></div>
-                                            <div style={{ marginTop: 12 }}><label>Commission reversée au marchand (%)</label><input className="input" type="number" step="0.01" value={(drafts.rewardMerchant || 0) * 100} onChange={e => handlePercentFieldChange('rewardMerchant', e.target.value)} /></div>
-                                        </div>
-                                        <div style={{ minWidth: 280, padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)' }}>
-                                            <h4 style={{ margin: '0 0 12px', color: 'var(--success)' }}>Dépôt (Cash-In) & P2P</h4>
+                                        <div style={{ minWidth: 280, padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column' }}>
                                             <div>
-                                                <label>Dépôt — Agence &amp; Marchand</label>
-                                                <div style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--success-bg, rgba(16,185,129,0.1))', color: 'var(--success)', fontWeight: 700, fontSize: 13 }}>
-                                                    Toujours 100% gratuit — non configurable
-                                                </div>
+                                                <h4 style={{ margin: '0 0 12px', color: 'var(--accent)' }}>Retrait Agence (guichet)</h4>
+                                                <div><label>Seuil de Retrait Gratuit (FCFA)</label><input className="input" type="number" value={drafts.agencyWithdrawThreshold || 0} onChange={e => handleFieldChange('agencyWithdrawThreshold', e.target.value)} /></div>
+                                                <div style={{ marginTop: 12 }}><label>Taux au-delà du seuil, sur le dépassement (%)</label><input className="input" type="number" step="0.01" value={(drafts.agencyTaxWithdraw || 0) * 100} onChange={e => handlePercentFieldChange('agencyTaxWithdraw', e.target.value)} /></div>
                                             </div>
-                                            <div style={{ marginTop: 12 }}><label>Taux P2P (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxP2P || 0) * 100} onChange={e => handlePercentFieldChange('taxP2P', e.target.value)} /></div>
+                                            <button className="btn" style={{ marginTop: 'auto', paddingTop: 12, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_FEE_AGENCY', ['agencyWithdrawThreshold', 'agencyTaxWithdraw'])}>Déposer Changement</button>
                                         </div>
-                                        <div style={{ minWidth: 280, padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)', borderTop: '4px solid #8B5CF6' }}>
-                                            <h4 style={{ margin: '0 0 12px', color: '#8B5CF6' }}>V18: Credit & Forex</h4>
-                                            <div><label>Intérêt Micro-Crédit (BNPL)</label><input className="input" type="number" step="0.1" value={(drafts.bnplInterest || 0) * 100} onChange={e => handlePercentFieldChange('bnplInterest', e.target.value)} /></div>
-                                            <div style={{ marginTop: 12 }}><label>FX Remise (Cross Border)</label><input className="input" type="number" step="0.1" value={(drafts.forexMarkup || 0) * 100} onChange={e => handlePercentFieldChange('forexMarkup', e.target.value)} /></div>
-                                            <div style={{ marginTop: 12 }}><label>Plafond Absolu KYC</label><input className="input" type="number" value={drafts.kycReqAmount || 2000000} onChange={e => handleFieldChange('kycReqAmount', e.target.value)} /></div>
+                                        <div style={{ minWidth: 280, padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column' }}>
+                                            <div>
+                                                <h4 style={{ margin: '0 0 12px', color: '#f59e0b' }}>Retrait Marchand</h4>
+                                                <div><label>Taux fixe, sans seuil (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxWithdraw || 0) * 100} onChange={e => handlePercentFieldChange('taxWithdraw', e.target.value)} /></div>
+                                                <div style={{ marginTop: 12 }}><label>Commission reversée au marchand (%)</label><input className="input" type="number" step="0.01" value={(drafts.rewardMerchant || 0) * 100} onChange={e => handlePercentFieldChange('rewardMerchant', e.target.value)} /></div>
+                                            </div>
+                                            <button className="btn" style={{ marginTop: 'auto', paddingTop: 12, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_FEE_MERCHANT', ['taxWithdraw', 'rewardMerchant'])}>Déposer Changement</button>
+                                        </div>
+                                        <div style={{ minWidth: 280, padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column' }}>
+                                            <div>
+                                                <h4 style={{ margin: '0 0 12px', color: 'var(--success)' }}>Dépôt (Cash-In) & P2P</h4>
+                                                <div>
+                                                    <label>Dépôt — Agence &amp; Marchand</label>
+                                                    <div style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--success-bg, rgba(16,185,129,0.1))', color: 'var(--success)', fontWeight: 700, fontSize: 13 }}>
+                                                        Toujours 100% gratuit — non configurable
+                                                    </div>
+                                                </div>
+                                                <div style={{ marginTop: 12 }}><label>Taux P2P (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxP2P || 0) * 100} onChange={e => handlePercentFieldChange('taxP2P', e.target.value)} /></div>
+                                            </div>
+                                            <button className="btn" style={{ marginTop: 'auto', paddingTop: 12, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_FEE_P2P', ['taxP2P'])}>Déposer Changement</button>
+                                        </div>
+                                        <div style={{ minWidth: 280, padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)', borderTop: '4px solid #8B5CF6', display: 'flex', flexDirection: 'column' }}>
+                                            <div>
+                                                <h4 style={{ margin: '0 0 12px', color: '#8B5CF6' }}>V18: Credit & Forex</h4>
+                                                <div><label>Intérêt Micro-Crédit (BNPL)</label><input className="input" type="number" step="0.1" value={(drafts.bnplInterest || 0) * 100} onChange={e => handlePercentFieldChange('bnplInterest', e.target.value)} /></div>
+                                                <div style={{ marginTop: 12 }}><label>FX Remise (Cross Border)</label><input className="input" type="number" step="0.1" value={(drafts.forexMarkup || 0) * 100} onChange={e => handlePercentFieldChange('forexMarkup', e.target.value)} /></div>
+                                                <div style={{ marginTop: 12 }}><label>Plafond Absolu KYC</label><input className="input" type="number" value={drafts.kycReqAmount || 2000000} onChange={e => handleFieldChange('kycReqAmount', e.target.value)} /></div>
+                                            </div>
+                                            <button className="btn" style={{ marginTop: 'auto', paddingTop: 12, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_CREDIT_FOREX', ['bnplInterest', 'forexMarkup', 'kycReqAmount'])}>Déposer Changement</button>
                                         </div>
                                     </div>
-                                    <button className="btn" style={{ marginTop: 24, padding: '14px 24px', background: '#059669', borderRadius: 12 }} onClick={() => handleSaveGroup('UPDATE_FEES', ['taxWithdraw', 'agencyWithdrawThreshold', 'agencyTaxWithdraw', 'rewardMerchant', 'taxP2P', 'bnplInterest', 'forexMarkup', 'kycReqAmount'])}>💾 Enregistrer les Taxes & Limites V18</button>
                                 </div>
 
                                 <div className="card" style={{ padding: 24, background: '#1e293b', color: 'white' }}>
