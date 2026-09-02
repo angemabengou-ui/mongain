@@ -20,7 +20,7 @@ export default function WealthManager({ token }: { token: string }) {
             // Since we are fast-prototyping, we assume the API hits the DB directly or we hit a general route.
             // But 'invest.ts' route `/api/invest/vaults` uses `req.userId` directly. 
             // So for now, we'll quickly scaffold the UI layout representing the AUM.
-            const res = await axios.get(`${API_URL}/api/system-accounts`, {
+            await axios.get(`${API_URL}/api/system-accounts`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             // Hacking a dummy fetch if no admin route exists just to display the UI correctly:
