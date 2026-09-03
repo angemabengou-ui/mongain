@@ -1,8 +1,12 @@
-import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { LimitEngine } from '../services/LimitEngine';
+import { getSystemAccount } from '../services/systemAccounts';
 import { friendlyErrorMessage } from '../utils/errors';
+import { verifyUserPin } from '../utils/pinAuth';
+import { getSystemSettings } from './settings';
+import { sendPush } from './wallet';
 
 const router = Router();
 
@@ -51,24 +55,11 @@ router.get('/listings', authMiddleware, async (req: AuthRequest, res) => {
 // 2. Escrow (Purchase)
 // ==========================================
 
-// Get or Create Escrow System Wallet
+// Le find-or-create local dupliquait exactement systemAccounts.ts::getSystemAccount, dont
+// c'est justement le rôle (remplacer ce genre de copie dispersée) — même clé `kind`, donc la
+// ligne SystemAccount déjà créée par l'ancien code est simplement retrouvée par l'upsert.
 async function getEscrowWallet(tx: any) {
-    let sa = await tx.systemAccount.findUnique({
-        where: { kind: 'MARKET_ESCROW' },
-        include: { wallet: true }
-    });
-
-    if (!sa) {
-        const w = await tx.wallet.create({ data: { currency: 'FCFA' } });
-        sa = await tx.systemAccount.create({
-            data: {
-                kind: 'MARKET_ESCROW',
-                name: 'Mongain Escrow Reserve',
-                walletId: w.id
-            },
-            include: { wallet: true }
-        });
-    }
+    const sa = await getSystemAccount('MARKET_ESCROW', tx);
     return sa.wallet;
 }
 
@@ -86,8 +77,10 @@ router.post('/buy/:id', authMiddleware, async (req: AuthRequest, res) => {
 
         if (!buyer || !buyer.wallet) return res.status(400).json({ error: "Buyer error" });
 
-        const isValidPin = await bcrypt.compare(pin, buyer.pin);
-        if (!isValidPin) return res.status(401).json({ error: "Code PIN incorrect" });
+        // Contrôle centralisé (verrouillage 3 échecs) — un bcrypt.compare nu ici n'avait
+        // aucune limite de tentatives, rendant l'espace à 4 chiffres du PIN brute-forçable.
+        const pinCheck = await verifyUserPin(buyer, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         const listing = await prisma.marketListing.findUnique({
             where: { id: listingId }
@@ -96,17 +89,24 @@ router.post('/buy/:id', authMiddleware, async (req: AuthRequest, res) => {
         if (!listing || !listing.isActive) {
             return res.status(400).json({ error: "Annonce indisponible" });
         }
+        if (listing.sellerId === buyer.id) return res.status(400).json({ error: "Vous ne pouvez pas acheter votre propre annonce." });
 
         if (buyer.wallet.balance < listing.price) {
             return res.status(400).json({ error: "Solde insuffisant" });
         }
 
-        const escrowTx = await prisma.$transaction(async (tx) => {
+        const settings = await getSystemSettings();
+
+        const { escrowTx, seller } = await prisma.$transaction(async (tx) => {
             // Lock Listing
             await tx.marketListing.update({
                 where: { id: listing.id },
                 data: { isActive: false }
             });
+
+            // Plafonds AML/KYC — cet achat débitait le portefeuille de l'acheteur sans passer
+            // par aucun contrôle de plafond, contrairement aux rails de paiement équivalents.
+            await LimitEngine.verifyAndIncrementConsumption(tx, buyer.id, buyer.wallet!.id, listing.price, settings);
 
             const escrowWallet = await getEscrowWallet(tx);
 
@@ -134,7 +134,7 @@ router.post('/buy/:id', authMiddleware, async (req: AuthRequest, res) => {
             });
 
             // Create Escrow Rule Record
-            return await tx.escrowTransaction.create({
+            const escrowTx = await tx.escrowTransaction.create({
                 data: {
                     buyerId: buyer.id,
                     sellerId: listing.sellerId,
@@ -143,7 +143,23 @@ router.post('/buy/:id', authMiddleware, async (req: AuthRequest, res) => {
                     status: 'LOCKED'
                 }
             });
+
+            // Aucune notification n'existait jusqu'ici pour le vendeur — il ne pouvait
+            // apprendre qu'un article s'était vendu qu'en ouvrant l'app par hasard, alors
+            // qu'il doit livrer l'article pour débloquer les fonds.
+            const soldTitle = 'Article vendu !';
+            const soldBody = `« ${listing.title} » a été acheté pour ${listing.price.toLocaleString('fr-FR')} FCFA. Les fonds sont bloqués en séquestre jusqu'à confirmation de réception.`;
+            await tx.notification.create({
+                data: { userId: listing.sellerId, title: soldTitle, body: soldBody, type: 'TRANSACTION' }
+            });
+            const seller = await tx.user.findUnique({ where: { id: listing.sellerId }, select: { phone: true, pushToken: true } });
+
+            return { escrowTx, seller };
         });
+
+        await sendPush(seller?.pushToken, 'Article vendu !', `« ${listing.title} » a été acheté pour ${listing.price.toLocaleString('fr-FR')} FCFA. Les fonds sont bloqués en séquestre jusqu'à confirmation de réception.`);
+        const io = req.app.get('io');
+        if (io && seller) io.to(`user_${seller.phone}`).emit('global_push', { title: 'Article vendu !', body: `« ${listing.title} » a été acheté.` });
 
         res.json({ success: true, escrowTx, message: "Achat sécurisé ! Les fonds sont bloqués chez Mongain." });
     } catch (e: any) {
@@ -167,7 +183,10 @@ router.post('/escrow/:id/release', authMiddleware, async (req: AuthRequest, res)
         }
         if (escrow.status !== 'LOCKED') return res.status(400).json({ error: "Les fonds ne sont plus bloqués." });
 
-        await prisma.$transaction(async (tx) => {
+        const releaseTitle = 'Fonds débloqués !';
+        const releaseBody = `Le séquestre de ${escrow.amount.toLocaleString('fr-FR')} FCFA a été libéré sur votre solde.`;
+
+        const sellerUser = await prisma.$transaction(async (tx) => {
             const escrowWallet = await getEscrowWallet(tx);
             const sellerUser = await tx.user.findUnique({
                 where: { id: escrow.sellerId },
@@ -202,7 +221,19 @@ router.post('/escrow/:id/release', authMiddleware, async (req: AuthRequest, res)
                 where: { id: escrow.id },
                 data: { status: 'RELEASED', releasedAt: new Date() }
             });
+
+            // Même angle mort que l'achat : aucune notification n'existait pour prévenir le
+            // vendeur que l'argent, jusque-là bloqué, est désormais réellement sur son solde.
+            await tx.notification.create({
+                data: { userId: sellerUser.id, title: releaseTitle, body: releaseBody, type: 'TRANSACTION' }
+            });
+
+            return sellerUser;
         });
+
+        await sendPush(sellerUser.pushToken, releaseTitle, releaseBody);
+        const io = req.app.get('io');
+        if (io) io.to(`user_${sellerUser.phone}`).emit('global_push', { title: releaseTitle, body: releaseBody });
 
         res.json({ success: true, message: "Fonds libérés avec succès vers le vendeur." });
     } catch (e: any) {

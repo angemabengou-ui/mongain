@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { friendlyErrorMessage } from '../utils/errors';
+import { generateReference } from '../utils/reference';
+import { sendPush } from './wallet';
 
 const router = Router();
 
@@ -107,6 +109,89 @@ router.get('/vaults', authMiddleware, async (req: AuthRequest, res) => {
         res.json({ success: true, vaults });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+// Débloquer un coffre de staking arrivé à échéance (capital + intérêts).
+// Il n'existait jusqu'ici AUCUN moyen de récupérer l'argent déposé via /stake : aucun
+// endpoint de retrait, aucun job de versement du rendement — un utilisateur pouvait bloquer
+// des fonds sans jamais pouvoir les récupérer par l'API (seule une intervention manuelle en
+// base le permettait). N'autorise le retrait qu'après `lockedUntil` : la promesse produit est
+// un blocage jusqu'à cette date, pas un retrait anticipé avec pénalité (mécanisme qui
+// n'existe nulle part ailleurs dans le code et relève d'une décision produit, pas d'un bug).
+router.post('/vaults/:id/withdraw', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        if (!req.userId) return res.status(401).json({ error: "Unauthorized" });
+
+        const vault = await prisma.stakingVault.findUnique({ where: { id: req.params.id as string } });
+        if (!vault || vault.userId !== req.userId) return res.status(404).json({ error: "Coffre introuvable." });
+        if (vault.status !== 'ACTIVE') return res.status(400).json({ error: "Ce coffre n'est plus actif." });
+        if (vault.lockedUntil > new Date()) {
+            return res.status(400).json({ error: `Ce coffre reste bloqué jusqu'au ${vault.lockedUntil.toLocaleDateString('fr-FR')}. Aucun retrait anticipé n'est possible.` });
+        }
+
+        // Intérêt calculé sur la durée réelle de blocage (createdAt -> lockedUntil), pas un
+        // nombre de mois codé en dur : /stake ne persistait que lockedUntil, pas lockMonths.
+        const termMonths = Math.max(1, Math.round(
+            (vault.lockedUntil.getFullYear() - vault.createdAt.getFullYear()) * 12
+            + (vault.lockedUntil.getMonth() - vault.createdAt.getMonth())
+        ));
+        const interest = Math.round(vault.amount * vault.apy * (termMonths / 12));
+        const totalPayout = vault.amount + interest;
+
+        const result = await prisma.$transaction(async (tx) => {
+            const claim = await tx.stakingVault.updateMany({
+                where: { id: vault.id, status: 'ACTIVE' },
+                data: { status: 'WITHDRAWN' }
+            });
+            if (claim.count === 0) throw new Error("Ce coffre vient d'être traité (double clic ou requête concurrente).");
+
+            const user = await tx.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
+            if (!user?.wallet) throw new Error("Portefeuille introuvable.");
+
+            // Le capital ET l'intérêt sortent de la Trésorerie Centrale : c'est elle qui avait
+            // reçu le capital à la création du coffre (/stake) et qui porte, dans ce modèle,
+            // la contrepartie de rendement — même logique que credit.ts (Trésorerie <->
+            // client), en sens inverse ici (retour de fonds vers le client).
+            const treasury = await tx.centralTreasury.findFirst({ include: { wallet: true } });
+            if (!treasury?.wallet) throw new Error("Trésorerie d'investissement introuvable.");
+            if (treasury.wallet.balance < totalPayout) throw new Error("Liquidité centrale insuffisante pour ce retrait — contactez le support.");
+
+            await tx.wallet.update({
+                where: { id: treasury.walletId, balance: { gte: totalPayout } },
+                data: { balance: { decrement: totalPayout } }
+            });
+            await tx.wallet.update({
+                where: { id: user.wallet.id },
+                data: { balance: { increment: totalPayout } }
+            });
+
+            await tx.transaction.create({
+                data: {
+                    amount: totalPayout,
+                    fee: 0,
+                    type: 'WEALTH_WITHDRAWAL',
+                    status: 'COMPLETED',
+                    reference: generateReference('STK_OUT'),
+                    senderWalletId: treasury.walletId,
+                    receiverWalletId: user.wallet.id,
+                }
+            });
+
+            const title = 'Coffre débloqué';
+            const body = `Votre dépôt de ${vault.amount.toLocaleString('fr-FR')} FCFA arrivé à échéance a été crédité, intérêts inclus : +${interest.toLocaleString('fr-FR')} FCFA (total ${totalPayout.toLocaleString('fr-FR')} FCFA).`;
+            await tx.notification.create({
+                data: { userId: user.id, title, body, type: 'TRANSACTION' }
+            });
+
+            return { balance: user.wallet.balance + totalPayout, pushToken: user.pushToken, title, body };
+        });
+
+        await sendPush(result.pushToken, result.title, result.body);
+
+        res.json({ success: true, message: `Coffre débloqué : ${vault.amount.toLocaleString('fr-FR')} FCFA + ${interest.toLocaleString('fr-FR')} FCFA d'intérêts.`, amount: vault.amount, interest, totalPayout, balance: result.balance });
+    } catch (e: any) {
+        res.status(400).json({ error: friendlyErrorMessage(e) });
     }
 });
 

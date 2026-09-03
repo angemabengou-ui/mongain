@@ -12,6 +12,10 @@ const SYSTEM_ACCOUNT_DEFS = {
     SERVICE_PARTNER_SEEG: { name: 'SERVICE PARTENAIRE - SEEG', initialBalance: 0 },
     SERVICE_PARTNER_CANAL: { name: 'SERVICE PARTENAIRE - CANAL', initialBalance: 0 },
     SERVICE_PARTNER_TELECOM: { name: 'SERVICE PARTENAIRE - TELECOM', initialBalance: 0 },
+    // market.ts avait sa propre fonction locale getEscrowWallet() dupliquant exactement ce
+    // même pattern find-or-create ; même clé `kind` ('MARKET_ESCROW') donc aucune migration
+    // de données nécessaire, juste la même ligne SystemAccount retrouvée par upsert.
+    MARKET_ESCROW: { name: 'RÉSERVE ESCROW MARKETPLACE', initialBalance: 0 },
 } as const;
 
 export type SystemAccountKind = keyof typeof SYSTEM_ACCOUNT_DEFS;

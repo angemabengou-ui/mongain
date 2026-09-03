@@ -14,6 +14,17 @@ export async function getTontineVaultWallet() {
     return vault.wallet;
 }
 
+// collectParticipantContribution est le seul point de ce fichier appelé par le CRON
+// automatique (executeTontineCycle) SANS jamais passer par un appel HTTP synchrone côté
+// participant — sans push, un prélèvement (ou un échec de prélèvement) déclenché par le
+// CRON pendant que l'app est fermée n'était visible qu'en l'ouvrant par hasard.
+async function pushToParticipant(userId: string, title: string, body: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { pushToken: true } });
+    if (!user?.pushToken) return;
+    const { sendPush } = await import('../routes/wallet');
+    await sendPush(user.pushToken, title, body);
+}
+
 // Débite un montant — libre, potentiellement partiel — pour le cycle courant du groupe,
 // crédite le Coffre Tontine, et CUMULE le résultat dans TontineContribution (une seule ligne
 // par (cycle, participant), dont `amount` représente le TOTAL versé jusqu'ici pour ce
@@ -114,18 +125,18 @@ export async function collectParticipantContribution(
             }
 
             const remaining = group.contribution - updatedContribution.amount;
+            const collectedTitle = 'Cotisation Tontine prélevée 💸';
+            const collectedBody = `${cappedAmount.toLocaleString('fr-FR')} FCFA prélevés (frais inclus : ${fee.toLocaleString('fr-FR')} FCFA).${remaining > 0 ? ` Il vous reste ${remaining.toLocaleString('fr-FR')} FCFA à cotiser pour ce tour.` : ' Votre cotisation est complète pour ce tour.'}`;
             await tx.notification.create({
-                data: {
-                    userId, title: 'Cotisation Tontine prélevée 💸',
-                    body: `${cappedAmount.toLocaleString('fr-FR')} FCFA prélevés (frais inclus : ${fee.toLocaleString('fr-FR')} FCFA).${remaining > 0 ? ` Il vous reste ${remaining.toLocaleString('fr-FR')} FCFA à cotiser pour ce tour.` : ' Votre cotisation est complète pour ce tour.'}`,
-                    type: 'INFO'
-                }
+                data: { userId, title: collectedTitle, body: collectedBody, type: 'INFO' }
             });
 
-            return updatedContribution.amount;
+            return { amount: updatedContribution.amount, collectedTitle, collectedBody };
         });
 
-        return { success: true, totalPaid };
+        await pushToParticipant(userId, totalPaid.collectedTitle, totalPaid.collectedBody);
+
+        return { success: true, totalPaid: totalPaid.amount };
     } catch (err: any) {
         if (err.message === 'ALREADY_COMPLETE') {
             // Un autre dépôt concurrent (CRON automatique + cotisation manuelle simultanés,
@@ -141,9 +152,12 @@ export async function collectParticipantContribution(
         // tentative reste acquis (transaction annulée, rien n'a changé) : seul CE dépôt
         // échoue, pas l'ensemble de la cotisation.
         const errStr = err.message || '';
+        const failTitle = 'Échec Cotisation Tontine ⚠️';
+        const failBody = errStr.includes('Plafond') ? errStr : `Solde insuffisant pour ce prélèvement de ${amount.toLocaleString('fr-FR')} FCFA.`;
         await prisma.notification.create({
-            data: { userId, title: 'Échec Cotisation Tontine ⚠️', body: errStr.includes('Plafond') ? errStr : `Solde insuffisant pour ce prélèvement de ${amount.toLocaleString('fr-FR')} FCFA.`, type: 'ALERT' }
+            data: { userId, title: failTitle, body: failBody, type: 'ALERT' }
         });
+        await pushToParticipant(userId, failTitle, failBody);
         const existing = await prisma.tontineContribution.findUnique({ where: { cycleId_participantId: { cycleId, participantId } } });
         return { success: false, totalPaid: existing?.amount || 0 };
     }
@@ -189,7 +203,7 @@ async function applyLatePenaltyIfDue(
                 where: { id: wallet.id, balance: { gte: penalty } },
                 data: { balance: { decrement: penalty } }
             });
-            if (debited.count === 0) return 0; // Solde insuffisant — pas d'échec bloquant, juste non recouvré pour l'instant.
+            if (debited.count === 0) return { penalty: 0, penaltyTitle: '', penaltyBody: '' }; // Solde insuffisant — pas d'échec bloquant, juste non recouvré pour l'instant.
 
             const { getOrCreateCorporateWallet } = await import('../routes/wallet');
             const corporate = await getOrCreateCorporateWallet(tx);
@@ -213,16 +227,16 @@ async function applyLatePenaltyIfDue(
                 data: { penaltyAmount: penalty, penaltyAppliedAt: new Date() }
             });
 
+            const penaltyTitle = 'Pénalité de retard tontine ⏰';
+            const penaltyBody = `Vous n'avez pas complété votre cotisation à temps pour ce tour — une pénalité de ${penalty.toLocaleString('fr-FR')} FCFA a été prélevée.`;
             await tx.notification.create({
-                data: {
-                    userId,
-                    title: 'Pénalité de retard tontine ⏰',
-                    body: `Vous n'avez pas complété votre cotisation à temps pour ce tour — une pénalité de ${penalty.toLocaleString('fr-FR')} FCFA a été prélevée.`,
-                    type: 'ALERT'
-                }
+                data: { userId, title: penaltyTitle, body: penaltyBody, type: 'ALERT' }
             });
 
-            return penalty;
+            return { penalty, penaltyTitle, penaltyBody };
+        }).then(async (result) => {
+            if (result.penalty > 0) await pushToParticipant(userId, result.penaltyTitle, result.penaltyBody);
+            return result.penalty;
         });
     } catch {
         return 0;
@@ -267,13 +281,17 @@ async function payoutBeneficiaryIfDue(
             where: { id: beneficiary.id },
             data: { hasReceivedPayout: true }
         });
+        const payoutTitle = '🎉 Cagnotte Tontine Reçue !';
+        const payoutBody = `C'est votre tour ! Vous avez reçu la cagnotte de ${totalPot} FCFA du club ${group.name}.`;
         await tx.notification.create({
-            data: { userId: beneficiary.userId, title: '🎉 Cagnotte Tontine Reçue !', body: `C'est votre tour ! Vous avez reçu la cagnotte de ${totalPot} FCFA du club ${group.name}.`, type: 'INFO' }
+            data: { userId: beneficiary.userId, title: payoutTitle, body: payoutBody, type: 'INFO' }
         });
-        return createdTx.id;
+        return { id: createdTx.id, payoutTitle, payoutBody };
     });
 
-    return payoutTxId;
+    await pushToParticipant(beneficiary.userId, payoutTxId.payoutTitle, payoutTxId.payoutBody);
+
+    return payoutTxId.id;
 }
 
 // Rappel envoyé la veille du prélèvement (J-1, voir cron.ts pour le déclenchement). Une

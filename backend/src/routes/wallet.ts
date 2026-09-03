@@ -199,11 +199,13 @@ router.post('/qr-cash-out', authMiddleware, async (req: AuthRequest, res) => {
         });
 
         // Notifications au Front
+        const qrCashOutBody = `Votre retrait de ${amount} FCFA en agence (${branch.name}) a été traité avec succès.`;
         await prisma.notification.createMany({
             data: [
-                { userId: client.id, title: 'Retrait Guichet Validé', body: `Votre retrait de ${amount} FCFA en agence (${branch.name}) a été traité avec succès.` }
+                { userId: client.id, title: 'Retrait Guichet Validé', body: qrCashOutBody }
             ]
         });
+        await sendPush(client.pushToken, 'Retrait Guichet Validé', qrCashOutBody);
 
         res.json({ success: true, message: 'Transfert au guichet autorisé !' });
 
@@ -791,7 +793,9 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
                 transaction,
                 remainingBalance: updatedSenderWallet.balance,
                 agentName: agent.name,
-                agentPhone: agent.phone
+                agentPhone: agent.phone,
+                agentPushToken: agent.pushToken,
+                senderPushToken: sender.pushToken
             };
             // Timeout relevé à 15s (défaut Prisma : 5s) — cette transaction enchaîne
             // plafonds, anti-fractionnement et plusieurs écritures ; elle expirait déjà
@@ -807,6 +811,11 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
                 from: 'Client ' + req.userId?.substring(0, 5) // Minimal info
             });
         }
+        // Push Expo pour les deux côtés — le socket ci-dessus ne couvre l'agent que s'il est
+        // connecté à cet instant précis ; le client, lui, n'avait jusqu'ici aucun canal temps
+        // réel du tout pour ce retrait.
+        await sendPush(result.agentPushToken, 'Paiement reçu', `Vous avez reçu ${amount.toLocaleString('fr-FR')} FCFA de la part d'un client.`);
+        await sendPush(result.senderPushToken, 'Retrait effectué', `Vous avez retiré ${amount.toLocaleString('fr-FR')} FCFA chez ${result.agentName}.`);
 
         return res.json({ message: 'Retrait autorisé avec succès !', data: result });
     } catch (error: any) {
@@ -959,7 +968,8 @@ router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
             return w.balance;
         });
 
-        // Trigger socket IO if needed, but the user is the one initiating it.
+        await sendPush(user.pushToken, 'Rechargement CB', `Votre compte a été rechargé de ${amount.toLocaleString('fr-FR')} FCFA via Carte Bancaire.`);
+
         return res.json({
             message: 'Rechargement réussi.',
             balance: newBalance
@@ -1043,6 +1053,8 @@ router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
 
             return w.balance;
         });
+
+        await sendPush(user.pushToken, `Achat de Service : ${type}`, `Débit de ${amount.toLocaleString('fr-FR')} FCFA. Référence: ${reference}.`);
 
         return res.json({
             message: 'Achat effectué avec succès.',
