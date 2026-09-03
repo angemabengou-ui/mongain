@@ -20,14 +20,22 @@ router.post('/listings', authMiddleware, async (req: AuthRequest, res) => {
         if (!req.userId) return res.status(401).json({ error: "Unauthorized" });
         const { title, description, price } = req.body;
 
-        if (!title || price <= 0) return res.status(400).json({ error: "Invalid data" });
+        // `price <= 0` sur une valeur non parsée laissait passer un prix manquant/non
+        // numérique (`undefined <= 0` vaut `false` en JS, donc "ni titre manquant ni prix
+        // négatif" restait vrai) : l'annonce était créée avec `price: NaN` (Postgres accepte
+        // NaN en float8), ensuite invendable — `buyer.wallet.balance < NaN` est toujours
+        // `false`, laissant croire l'achat autorisé jusqu'à un 500 confus en transaction.
+        const parsedPrice = parseFloat(price);
+        if (!title || !Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+            return res.status(400).json({ error: "Invalid data" });
+        }
 
         const listing = await prisma.marketListing.create({
             data: {
                 sellerId: req.userId,
                 title,
                 description,
-                price: parseFloat(price)
+                price: parsedPrice
             }
         });
 

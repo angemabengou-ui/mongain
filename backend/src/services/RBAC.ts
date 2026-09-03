@@ -47,6 +47,9 @@ export const ALL_PERMISSIONS = [
     // ── Marchands ──────────────────────────────────────────────────────────
     'perm_merchant_view',           // Voir les comptes marchands (soldes, transactions, demandes)
     'perm_merchant_manage',         // Approuver/rejeter une demande de retrait marchand
+    // ── Marketplace C2C ──────────────────────────────────────────────────────
+    'perm_market_view',             // Voir les annonces et séquestres marketplace (lecture admin)
+    'perm_market_manage',           // Trancher un séquestre bloqué (livrer au vendeur / rembourser l'acheteur)
     // ── Trésorerie & Système ───────────────────────────────────────────────
     'perm_treasury_view',           // Voir la masse monétaire globale 
     'perm_treasury_mint',           // Émettre de la nouvelle monnaie (Mint)
@@ -135,6 +138,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, Permission[]> = {
         'perm_tontine_manage',
         'perm_merchant_view',
         'perm_merchant_manage',
+        'perm_market_view',
+        'perm_market_manage',           // ✅ Même logique que perm_vault_manage : RISK tranche les litiges de séquestre marketplace
     ],
 
     COMPLIANCE_CHECKER: [
@@ -235,6 +240,10 @@ export const PERMISSION_GROUPS: { label: string; perms: Permission[] }[] = [
     {
         label: 'Marchands',
         perms: ['perm_merchant_view', 'perm_merchant_manage'],
+    },
+    {
+        label: 'Marketplace C2C',
+        perms: ['perm_market_view', 'perm_market_manage'],
     },
     {
         label: 'Trésorerie & Système',

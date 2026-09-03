@@ -5,6 +5,7 @@ import http from 'http';
 import { Server } from 'socket.io';
 import { initCronJobs } from './cron';
 import adminRoutes from './routes/admin';
+import adminMarketRoutes from './routes/admin.market';
 import adminMerchantsRoutes from './routes/admin.merchants';
 import adminSearchRoutes from './routes/admin.search';
 import adminSystemAccountsRoutes from './routes/admin.systemAccounts';
@@ -151,6 +152,7 @@ app.use('/api/admin', adminIpAllowlistMiddleware, rbacRoutes); // RBAC: /api/adm
 app.use('/api/admin', adminIpAllowlistMiddleware, adminVaultsRoutes);
 app.use('/api/admin', adminIpAllowlistMiddleware, adminTontinesRoutes);
 app.use('/api/admin', adminIpAllowlistMiddleware, adminMerchantsRoutes);
+app.use('/api/admin', adminIpAllowlistMiddleware, adminMarketRoutes);
 app.use('/api/admin', adminIpAllowlistMiddleware, adminSearchRoutes);
 app.use('/api/admin', adminIpAllowlistMiddleware, adminSystemAccountsRoutes);
 app.use('/api/admin/push', adminIpAllowlistMiddleware, pushRoutes);
