@@ -287,6 +287,21 @@ router.post('/:id/leave', authMiddleware, async (req: AuthRequest, res) => {
             }
         }
 
+        // PUT /:id/roles passe déjà par applyRoleChangeGuards pour interdire de retirer le
+        // dernier commissaire — /leave, qui retire TOUS les rôles d'un coup en quittant,
+        // contournait ce même garde-fou : un commissaire (isValidator) pouvait partir même en
+        // étant le dernier habilité à approuver, bloquant définitivement toute demande de
+        // retrait en attente ou future (POST /approve exige un validateur, il n'en resterait
+        // plus aucun). Pas de vérification équivalente nécessaire pour isAdmin ici : déjà geré
+        // ci-dessus avec une logique plus fine (dernier membre + solde).
+        if (membership.isValidator) {
+            try {
+                await applyRoleChangeGuards(prisma, vaultId, req.userId!, { isValidator: false });
+            } catch (guardError: any) {
+                return res.status(400).json({ success: false, message: `${guardError.message} Faites d'abord nommer un autre commissaire avant de quitter.` });
+            }
+        }
+
         await prisma.vaultMember.delete({ where: { vaultId_userId: { vaultId, userId: req.userId! } } });
 
         res.json({ success: true, message: "Vous avez quitté la caisse." });

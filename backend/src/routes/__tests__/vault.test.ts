@@ -495,6 +495,32 @@ describe('Vault Routes', () => {
 
             expect(res.status).toBe(500);
         });
+
+        // Avant ce correctif, quitter la caisse ne passait par AUCUN des garde-fous
+        // qu'applyRoleChangeGuards impose déjà à PUT /:id/roles pour retirer le rôle de
+        // commissaire — un dernier validateur pouvait donc partir en laissant la caisse sans
+        // personne capable d'approuver un retrait, en attente ou futur.
+        it('devrait refuser au dernier commissaire (non-admin) de quitter la caisse', async () => {
+            (prisma.vaultMember.findUnique as jest.Mock).mockResolvedValue({ isAdmin: false, isValidator: true });
+            (prisma.vaultMember.count as jest.Mock).mockResolvedValue(0); // otherValidators
+
+            const res = await request(app).post('/vault/v1/leave');
+
+            expect(res.status).toBe(400);
+            expect(res.body.message).toContain('dernier commissaire');
+            expect(prisma.vaultMember.delete).not.toHaveBeenCalled();
+        });
+
+        it('devrait permettre à un commissaire de quitter si un autre commissaire reste', async () => {
+            (prisma.vaultMember.findUnique as jest.Mock).mockResolvedValue({ isAdmin: false, isValidator: true });
+            (prisma.vaultMember.count as jest.Mock).mockResolvedValue(1); // otherValidators
+            (prisma.vaultMember.delete as jest.Mock).mockResolvedValue({});
+
+            const res = await request(app).post('/vault/v1/leave');
+
+            expect(res.status).toBe(200);
+            expect(prisma.vaultMember.delete).toHaveBeenCalled();
+        });
     });
 
     // ==========================================
