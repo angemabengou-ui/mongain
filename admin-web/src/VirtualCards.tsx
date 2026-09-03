@@ -77,7 +77,7 @@ export default function VirtualCardsAdmin({ token: _token }: { token: string }) 
                                         {c.status === 'ACTIVE' ? (
                                             <span style={{ fontSize: 12, padding: '4px 8px', borderRadius: 4, background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', fontWeight: 600 }}>ACTIVE</span>
                                         ) : (
-                                            <span style={{ fontSize: 12, padding: '4px 8px', borderRadius: 4, background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', fontWeight: 600 }}>FROZEN</span>
+                                            <span style={{ fontSize: 12, padding: '4px 8px', borderRadius: 4, background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', fontWeight: 600 }}>{c.status === 'BLOCKED' ? 'BLOQUÉE' : 'FROZEN'}</span>
                                         )}
                                     </td>
                                     <td style={{ padding: '16px 20px', textAlign: 'center' }}>

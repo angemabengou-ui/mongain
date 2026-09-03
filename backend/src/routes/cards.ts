@@ -128,6 +128,15 @@ router.put('/:id/freeze', authMiddleware, async (req: AuthRequest, res) => {
         const card = await prisma.virtualCard.findUnique({ where: { id: cardId } });
         if (!card || card.userId !== req.userId) return res.status(404).json({ error: 'Carte introuvable.' });
 
+        // BLOCKED = gel d'urgence posé par le back-office (admin.ts PUT /cards/:id/freeze,
+        // perm_customer_freeze), distinct de FROZEN (pause volontaire du titulaire) : sans
+        // cette distinction, ce toggle client basculait sur le MÊME statut que l'admin, et
+        // le titulaire d'une carte gelée pour fraude suspectée pouvait se re-débloquer
+        // lui-même en rappelant cette route.
+        if (card.status === 'BLOCKED') {
+            return res.status(403).json({ error: 'Cette carte a été bloquée par notre équipe sécurité. Contactez le support pour la débloquer.' });
+        }
+
         const newStatus = card.status === 'ACTIVE' ? 'FROZEN' : 'ACTIVE';
         const updated = await prisma.virtualCard.update({
             where: { id: card.id },

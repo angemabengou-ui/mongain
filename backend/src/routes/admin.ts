@@ -3308,11 +3308,18 @@ router.put('/cards/:id/freeze', authMiddleware, async (req: AuthRequest, res) =>
         const card = await prisma.virtualCard.findUnique({ where: { id: req.params.id as string } });
         if (!card) return res.status(404).json({ error: 'Carte introuvable.' });
 
-        const newStatus = card.status === 'ACTIVE' ? 'FROZEN' : 'ACTIVE';
+        // BLOCKED (pas FROZEN, réservé à la pause volontaire du titulaire — cards.ts PUT
+        // /:id/freeze) : ce statut administratif dédié est le seul que la route client refuse
+        // désormais de basculer elle-même, pour qu'un gel d'urgence ne puisse pas être annulé
+        // par le titulaire de la carte (potentiellement l'auteur de la fraude visée). Comparé
+        // sur 'BLOCKED' spécifiquement (pas juste `!== 'ACTIVE'`) : si la carte était déjà
+        // auto-gelée par son titulaire (FROZEN) quand l'admin agit, ce bouton doit tout de même
+        // aboutir à BLOCKED, jamais repasser par erreur à ACTIVE.
+        const newStatus = card.status === 'BLOCKED' ? 'ACTIVE' : 'BLOCKED';
         const updated = await prisma.virtualCard.update({ where: { id: card.id }, data: { status: newStatus } });
 
         await prisma.auditLog.create({
-            data: { adminId: admin.id, action: newStatus === 'FROZEN' ? 'FREEZE_CARD' : 'UNFREEZE_CARD', details: `Carte se terminant par ${card.cardNumber.slice(-4)} (utilisateur ${card.userId})` }
+            data: { adminId: admin.id, action: newStatus === 'BLOCKED' ? 'FREEZE_CARD' : 'UNFREEZE_CARD', details: `Carte se terminant par ${card.cardNumber.slice(-4)} (utilisateur ${card.userId})` }
         });
 
         res.json(updated);
