@@ -197,8 +197,27 @@ router.put('/change-password', authCorp, async (req: AuthRequest, res) => {
         const staff = await prisma.staff.findUnique({ where: { id: req.userId } });
         if (!staff) return res.status(404).json({ error: 'Compte introuvable.' });
 
+        // Même verrouillage que /login (failedLoginAttempts/lockedUntil, champs déjà existants
+        // sur Staff) : sans lui, une session déjà ouverte (token volé, poste laissé sans
+        // surveillance) permettait de deviner le mot de passe actuel sans aucune limite de
+        // tentatives, alors que /login lui-même est protégé (5 échecs -> 15 min).
+        if (staff.lockedUntil && staff.lockedUntil > new Date()) {
+            const minutesLeft = Math.ceil((staff.lockedUntil.getTime() - Date.now()) / 60000);
+            return res.status(403).json({ error: `Compte verrouillé suite à trop de tentatives. Réessayez dans ${minutesLeft} minute(s).` });
+        }
+
         const valid = await bcrypt.compare(currentPassword, staff.password);
-        if (!valid) return res.status(401).json({ error: 'Mot de passe actuel incorrect.' });
+        if (!valid) {
+            const attempts = staff.failedLoginAttempts + 1;
+            const updates: any = { failedLoginAttempts: attempts };
+            if (attempts >= 5) updates.lockedUntil = new Date(Date.now() + 15 * 60000);
+            await prisma.staff.update({ where: { id: staff.id }, data: updates });
+            return res.status(401).json({
+                error: attempts >= 5
+                    ? 'Compte verrouillé suite à trop de tentatives. Réessayez dans 15 minutes.'
+                    : 'Mot de passe actuel incorrect.'
+            });
+        }
 
         const samePassword = await bcrypt.compare(newPassword, staff.password);
         if (samePassword) return res.status(400).json({ error: 'Le nouveau mot de passe doit être différent de l\'ancien.' });
@@ -208,7 +227,9 @@ router.put('/change-password', authCorp, async (req: AuthRequest, res) => {
             where: { id: staff.id },
             // jwtVersion incrémenté : révoque immédiatement toute session déjà ouverte
             // ailleurs avec l'ancien mot de passe, comme le fait déjà /auth/reset-pin côté mobile.
-            data: { password: hash, mustChangePassword: false, jwtVersion: { increment: 1 } }
+            // failedLoginAttempts remis à 0 : un changement de mot de passe réussi efface
+            // l'ardoise des tentatives précédentes, comme le fait déjà /login sur succès.
+            data: { password: hash, mustChangePassword: false, jwtVersion: { increment: 1 }, failedLoginAttempts: 0, lockedUntil: null }
         });
 
         res.json({ success: true });
