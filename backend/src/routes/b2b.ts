@@ -28,11 +28,24 @@ router.post('/invoices', authMiddleware, async (req: AuthRequest, res) => {
 
         const { customerPhone, amount, description } = req.body;
 
+        // Un montant nul, négatif ou non numérique n'était jamais rejeté : réglé sur
+        // /invoices/:id/pay, un montant négatif inverse silencieusement le sens des
+        // `increment`/`decrement` de la transaction (le client payeur est CRÉDITÉ, le
+        // marchand est DÉBITÉ) — un mécanisme d'auto-paiement à l'envers, hors de toute
+        // logique de facturation, sans frais ni contrôle de plafond cohérent.
+        const parsedAmount = parseFloat(amount);
+        if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+            return res.status(400).json({ error: "Montant de facture invalide." });
+        }
+        if (!customerPhone || typeof customerPhone !== 'string') {
+            return res.status(400).json({ error: "Numéro de téléphone client requis." });
+        }
+
         const invoice = await prisma.invoice.create({
             data: {
                 merchantId: user.id,
                 customerPhone,
-                amount: parseFloat(amount),
+                amount: parsedAmount,
                 description
             }
         });
@@ -205,6 +218,20 @@ router.post('/payouts', authMiddleware, async (req: AuthRequest, res) => {
 
         if (!entries || !Array.isArray(entries) || entries.length === 0) {
             return res.status(400).json({ error: "Liste de bénéficiaires invalide." });
+        }
+
+        // CRITIQUE : une entrée à montant négatif ou non numérique n'était jamais rejetée.
+        // processBulkAsync ci-dessous applique `decrement: entry.amount` au marchand et
+        // `increment: entry.amount` au bénéficiaire tel quel — avec un montant négatif, ces
+        // deux opérations s'inversent silencieusement (le marchand est CRÉDITÉ, le
+        // bénéficiaire est DÉBITÉ), sans le consentement de ce dernier, sans PIN, sans
+        // aucune limite : n'importe quel compte MARCHAND pouvait ainsi vider le solde de
+        // N'IMPORTE QUEL numéro de téléphone en le glissant dans un lot de paie.
+        for (const e of entries) {
+            const amt = parseFloat(e?.amount);
+            if (!e?.phone || typeof e.phone !== 'string' || !Number.isFinite(amt) || amt <= 0) {
+                return res.status(400).json({ error: "Chaque bénéficiaire doit avoir un téléphone et un montant positif valides." });
+            }
         }
 
         const totalAmount = entries.reduce((sum: number, e: any) => sum + parseFloat(e.amount), 0);
