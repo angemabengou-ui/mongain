@@ -211,14 +211,14 @@ router.post('/tontines/:id/participants/:userId/resume', authMiddleware, async (
 
         const updated = await prisma.tontineParticipant.update({ where: { id: participant.id }, data: { status: 'ACTIVE' } });
 
+        const resumeTitle = 'Vous avez été repris';
+        const resumeBody = `L'administration vous a repris dans « ${participant.group.name} » — vous êtes de nouveau inclus dans les prochains cycles.`;
         await prisma.notification.create({
-            data: {
-                userId: targetUserId,
-                title: 'Vous avez été repris',
-                body: `L'administration vous a repris dans « ${participant.group.name} » — vous êtes de nouveau inclus dans les prochains cycles.`,
-                type: 'INFO'
-            }
+            data: { userId: targetUserId, title: resumeTitle, body: resumeBody, type: 'INFO' }
         });
+        const resumedUser = await prisma.user.findUnique({ where: { id: targetUserId }, select: { pushToken: true } });
+        const { sendPush } = await import('./wallet');
+        await sendPush(resumedUser?.pushToken, resumeTitle, resumeBody);
 
         await prisma.auditLog.create({
             data: { adminId: staff.id, action: 'RESUME_TONTINE_PARTICIPANT', details: `Participant ${targetUserId} (tontine ${groupId}) repris par l'admin.` }

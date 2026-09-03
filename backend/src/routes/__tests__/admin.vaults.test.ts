@@ -21,6 +21,7 @@ jest.mock('../wallet', () => ({
 jest.mock('../../prisma', () => ({
     prisma: {
         staff: { findUnique: jest.fn() },
+        user: { findUnique: jest.fn() },
         vault: { findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
         vaultMember: { findUnique: jest.fn(), count: jest.fn(), update: jest.fn() },
         vaultVoucher: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
@@ -169,6 +170,7 @@ describe('Admin Vaults Routes', () => {
                     updateMany: jest.fn().mockResolvedValue({ count: 1 }),
                 },
                 notification: { create: jest.fn().mockResolvedValue({}) },
+                user: { findUnique: jest.fn().mockResolvedValue({ pushToken: null }) },
             };
             (prisma.$transaction as jest.Mock).mockImplementation((cb: any) => cb(tx));
 
@@ -250,6 +252,7 @@ describe('Admin Vaults Routes', () => {
             (prisma.vaultMember.count as jest.Mock).mockResolvedValue(2);
             (prisma.vaultMember.update as jest.Mock).mockResolvedValue({ userId: 'u1', isValidator: true });
             (prisma.vault.findUnique as jest.Mock).mockResolvedValue({ name: 'Caisse A' });
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ pushToken: null });
 
             const res = await request(app).put('/admin/vaults/v1/members/u1/role').send({ isValidator: true });
 
@@ -283,6 +286,7 @@ describe('Admin Vaults Routes', () => {
         it('devrait annuler un bon actif, reverser le solde à la caisse et notifier son porteur', async () => {
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(RISK);
             (prisma.vaultVoucher.findUnique as jest.Mock).mockResolvedValue({ id: 'vo1', vaultId: 'v1', status: 'ACTIVE', amount: 5000, presidentId: 'u1' });
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ pushToken: null });
             const tx = {
                 vaultVoucher: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
                 vault: { update: jest.fn().mockResolvedValue({}) },

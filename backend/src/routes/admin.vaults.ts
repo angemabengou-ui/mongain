@@ -191,14 +191,14 @@ router.post('/vaults/:id/withdraw-requests/:txId/force-resolve', authMiddleware,
                 });
                 if (claim.count === 0) throw new Error("Cette demande vient d'être traitée.");
 
+                const rejectTitle = 'Retrait de caisse rejeté';
+                const rejectBody = `Votre demande de ${vaultTx.amount.toLocaleString('fr-FR')} FCFA sur « ${vaultTx.vault.name} » a été rejetée par l'administration : ${reason}`;
                 await tx.notification.create({
-                    data: {
-                        userId: vaultTx.requestedById,
-                        title: 'Retrait de caisse rejeté',
-                        body: `Votre demande de ${vaultTx.amount.toLocaleString('fr-FR')} FCFA sur « ${vaultTx.vault.name} » a été rejetée par l'administration : ${reason}`,
-                        type: 'TRANSACTION'
-                    }
+                    data: { userId: vaultTx.requestedById, title: rejectTitle, body: rejectBody, type: 'TRANSACTION' }
                 });
+                const requester = await tx.user.findUnique({ where: { id: vaultTx.requestedById }, select: { pushToken: true } });
+                const { sendPush } = await import('./wallet');
+                await sendPush(requester?.pushToken, rejectTitle, rejectBody);
 
                 return { executed: false, status: 'REJECTED' as const };
             }
@@ -253,14 +253,14 @@ router.put('/vaults/:id/members/:userId/role', authMiddleware, async (req: AuthR
         });
 
         const vaultForNotif = await prisma.vault.findUnique({ where: { id: vaultId }, select: { name: true } });
+        const roleChangeTitle = 'Vos rôles ont été modifiés';
+        const roleChangeBody = `L'administration a modifié vos rôles dans la caisse « ${vaultForNotif?.name ?? ''} » — vérifiez ce que vous pouvez désormais y faire.`;
         await prisma.notification.create({
-            data: {
-                userId: targetUserId,
-                title: 'Vos rôles ont été modifiés',
-                body: `L'administration a modifié vos rôles dans la caisse « ${vaultForNotif?.name ?? ''} » — vérifiez ce que vous pouvez désormais y faire.`,
-                type: 'INFO'
-            }
+            data: { userId: targetUserId, title: roleChangeTitle, body: roleChangeBody, type: 'INFO' }
         });
+        const targetUser = await prisma.user.findUnique({ where: { id: targetUserId }, select: { pushToken: true } });
+        const { sendPush } = await import('./wallet');
+        await sendPush(targetUser?.pushToken, roleChangeTitle, roleChangeBody);
 
         await prisma.auditLog.create({
             data: { adminId: staff.id, action: 'OVERRIDE_VAULT_MEMBER_ROLE', details: `Rôles du membre ${targetUserId} (caisse ${vaultId}) modifiés par l'admin : ${JSON.stringify({ isInitiator, isValidator, isTreasurer, isAdmin, isRequiredValidator: resolvedIsRequiredValidator })}` }
@@ -305,11 +305,13 @@ router.post('/vaults/:id/vouchers/:voucherId/void', authMiddleware, async (req: 
 
             // Sans ça, le porteur du bon (le Président qui l'a émis) ne l'apprend qu'en essayant
             // de le dépenser chez un marchand et en se le voyant refuser, sans explication.
+            const voidTitle = 'Bon de retrait annulé';
+            const voidBody = `Votre bon de ${voucher.amount.toLocaleString('fr-FR')} FCFA a été annulé par l'administration et reversé au solde de la caisse.${reason ? ` Motif : ${reason}` : ''}`;
             await tx.notification.create({
                 data: {
                     userId: voucher.presidentId,
-                    title: 'Bon de retrait annulé',
-                    body: `Votre bon de ${voucher.amount.toLocaleString('fr-FR')} FCFA a été annulé par l'administration et reversé au solde de la caisse.${reason ? ` Motif : ${reason}` : ''}`,
+                    title: voidTitle,
+                    body: voidBody,
                     type: 'ALERT'
                 }
             });
@@ -320,6 +322,10 @@ router.post('/vaults/:id/vouchers/:voucherId/void', authMiddleware, async (req: 
         await prisma.auditLog.create({
             data: { adminId: staff.id, action: 'VOID_VAULT_VOUCHER', details: `Bon ${voucherId} (${voucher.amount} FCFA) annulé par l'admin et reversé au solde de la caisse.${reason ? ` Motif : ${reason}` : ''}` }
         });
+
+        const president = await prisma.user.findUnique({ where: { id: voucher.presidentId }, select: { pushToken: true } });
+        const { sendPush } = await import('./wallet');
+        await sendPush(president?.pushToken, 'Bon de retrait annulé', `Votre bon de ${voucher.amount.toLocaleString('fr-FR')} FCFA a été annulé par l'administration et reversé au solde de la caisse.${reason ? ` Motif : ${reason}` : ''}`);
 
         res.json({ success: true, voucher: updated });
     } catch (e: any) {

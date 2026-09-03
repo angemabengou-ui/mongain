@@ -327,14 +327,13 @@ router.post('/invite', authMiddleware, async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, message: "Ce membre y est déjà." });
         }
 
+        const inviteTitle = "Invitation Tontine 🤝";
+        const inviteBody = `Vous avez été ajouté au club ${group.name}.`;
         await prisma.notification.create({
-            data: {
-                userId: invitee.id,
-                title: "Invitation Tontine 🤝",
-                body: `Vous avez été ajouté au club ${group.name}.`,
-                type: "INFO"
-            }
+            data: { userId: invitee.id, title: inviteTitle, body: inviteBody, type: "INFO" }
         });
+        const { sendPush } = await import('./wallet');
+        await sendPush(invitee.pushToken, inviteTitle, inviteBody);
 
         res.json({ success: true, message: "Membre ajouté avec succès.", data: participant });
     } catch (e: any) {
@@ -444,16 +443,18 @@ router.post('/leave', authMiddleware, async (req: Request, res: Response) => {
                 });
             }
 
+            const leaveTitle = debt > 0 ? 'Dette de tontine réglée' : 'Tontine quittée';
+            const leaveBody = debt > 0
+                ? `${debt.toLocaleString('fr-FR')} FCFA prélevés pour solder votre dû envers « ${group.name} ». Vous avez quitté le club.`
+                : `Vous avez quitté « ${group.name} ». Vous ne serez plus prélevé aux prochains cycles.`;
             await tx.notification.create({
-                data: {
-                    userId,
-                    title: debt > 0 ? 'Dette de tontine réglée' : 'Tontine quittée',
-                    body: debt > 0
-                        ? `${debt.toLocaleString('fr-FR')} FCFA prélevés pour solder votre dû envers « ${group.name} ». Vous avez quitté le club.`
-                        : `Vous avez quitté « ${group.name} ». Vous ne serez plus prélevé aux prochains cycles.`,
-                    type: 'TRANSACTION'
-                }
+                data: { userId, title: leaveTitle, body: leaveBody, type: 'TRANSACTION' }
             });
+            return { leaveTitle, leaveBody };
+        }).then(async ({ leaveTitle, leaveBody }) => {
+            const leavingUser = await prisma.user.findUnique({ where: { id: userId }, select: { pushToken: true } });
+            const { sendPush } = await import('./wallet');
+            await sendPush(leavingUser?.pushToken, leaveTitle, leaveBody);
         });
 
         res.json({ success: true, message: debt > 0 ? `Dette de ${debt.toLocaleString('fr-FR')} FCFA réglée. Vous avez quitté le club.` : "Vous avez quitté le club de tontine. Vous ne serez plus prélevé aux prochains cycles." });
@@ -653,14 +654,14 @@ router.post('/join', authMiddleware, async (req: Request, res: Response) => {
         }
 
         // Notifier l'utilisateur
+        const joinTitle = "Tontine rejointe 🤝";
+        const joinBody = `Vous avez rejoint le club ${group.name}. Votre cotisation est de ${group.contribution} FCFA par cycle.`;
         await prisma.notification.create({
-            data: {
-                userId,
-                title: "Tontine rejointe 🤝",
-                body: `Vous avez rejoint le club ${group.name}. Votre cotisation est de ${group.contribution} FCFA par cycle.`,
-                type: "INFO"
-            }
+            data: { userId, title: joinTitle, body: joinBody, type: "INFO" }
         });
+        const joiningUser = await prisma.user.findUnique({ where: { id: userId }, select: { pushToken: true } });
+        const { sendPush } = await import('./wallet');
+        await sendPush(joiningUser?.pushToken, joinTitle, joinBody);
 
         res.json({ success: true, message: "Vous avez rejoint la tontine avec succès.", data: participant });
     } catch (error: any) {

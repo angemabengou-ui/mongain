@@ -1,7 +1,7 @@
 import type { Server } from 'socket.io';
 import { prisma } from '../prisma';
 import { getSystemSettings } from '../routes/settings';
-import { getOrCreateCorporateWallet } from '../routes/wallet';
+import { getOrCreateCorporateWallet, sendPush } from '../routes/wallet';
 import { generateReference } from '../utils/reference';
 import { LimitEngine } from './LimitEngine';
 
@@ -155,11 +155,13 @@ export class CashOperationService {
         // pour toutes ici, chaque appel suivant ne coûte plus qu'un miss de cache trivial.
         const corporateWallet = (await getOrCreateCorporateWallet(prisma)).wallet;
 
-        return await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx) => {
             // 1. Idempotence Guard
             if (idempotencyKey) {
                 const dup = await tx.transaction.findUnique({ where: { idempotencyKey } });
-                if (dup) return dup;
+                // Rejeu idempotent : ne pousse pas une seconde notification pour une opération
+                // déjà notifiée lors de son tout premier passage.
+                if (dup) return { transaction: dup, isNew: false as const };
             }
 
             // 2. Session & Vault check
@@ -311,17 +313,28 @@ export class CashOperationService {
                 data: { totalCashOutValue: { increment: amount } }
             });
 
+            const cashOutTitle = 'Retrait effectué';
+            const cashOutBody = `Vous avez retiré ${amount.toLocaleString('fr-FR')} FCFA en agence (frais : ${fee.toLocaleString('fr-FR')} FCFA).`;
             await tx.notification.create({
-                data: { userId: client.id, title: 'Retrait effectué', body: `Vous avez retiré ${amount.toLocaleString('fr-FR')} FCFA en agence (frais : ${fee.toLocaleString('fr-FR')} FCFA).`, type: 'TRANSACTION' }
+                data: { userId: client.id, title: cashOutTitle, body: cashOutBody, type: 'TRANSACTION' }
             });
 
-            return transaction;
+            return { transaction, isNew: true as const, cashOutTitle, cashOutBody, clientPushToken: client.pushToken };
         }, { timeout: 15000 });
         // Timeout relevé à 15s (défaut Prisma : 5s) — cette transaction enchaîne une
         // douzaine d'allers-retours séquentiels (session, agence, client, plafonds,
         // anti-fractionnement, écritures) ; contre la base distante, elle expirait déjà
         // sous charge réseau réelle, y compris avant l'ajout du crédit Corporate ci-dessus
         // (vérifié en le reproduisant : "Transaction already closed... 5335 ms passed").
+
+        // Notification créée en base ci-dessus mais jamais poussée : le client n'apprenait ce
+        // retrait qu'en ouvrant l'app par hasard, alors qu'il vient de recevoir du cash en main
+        // et pourrait vouloir une confirmation immédiate sur son téléphone.
+        if (result.isNew) {
+            await sendPush(result.clientPushToken, result.cashOutTitle, result.cashOutBody);
+        }
+
+        return result.transaction;
     }
 
 }

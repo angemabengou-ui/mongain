@@ -21,6 +21,7 @@ jest.mock('../wallet', () => ({
 jest.mock('../../prisma', () => ({
     prisma: {
         staff: { findUnique: jest.fn() },
+        user: { findUnique: jest.fn() },
         tontineGroup: { findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
         tontineParticipant: { findFirst: jest.fn(), update: jest.fn() },
         transaction: { findMany: jest.fn() },
@@ -198,6 +199,7 @@ describe('Admin Tontines Routes (lecture seule)', () => {
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(SUPER_ADMIN);
             (prisma.tontineParticipant.findFirst as jest.Mock).mockResolvedValue({ id: 'p1', tontineGroupId: 'g1', userId: 'u1', status: 'PAUSED', group: { name: 'Amis' } });
             (prisma.tontineParticipant.update as jest.Mock).mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ pushToken: null });
 
             const res = await request(app).post('/admin/tontines/g1/participants/u1/resume');
 
