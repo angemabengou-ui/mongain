@@ -70,21 +70,34 @@ export default function CreditScreen() {
                 { text: "Annuler", style: "cancel" },
                 {
                     text: "Débloquer",
-                    onPress: async () => {
-                        setActionLoading(true);
-                        try {
-                            const res = await apiApplyCredit(eligibility.maxAmount);
-                            Alert.alert("Succès", "Les fonds ont été virés sur votre portefeuille ! 🎉");
-                            await loadData();
-                        } catch (error: any) {
-                            Alert.alert('Erreur', error.response?.data?.error || 'Opération échouée');
-                        } finally {
-                            setActionLoading(false);
-                        }
+                    onPress: () => {
+                        Alert.prompt(
+                            'Confirmer le crédit',
+                            'Saisissez votre code PIN Mongain pour débloquer ce crédit.',
+                            [
+                                { text: 'Annuler', style: 'cancel' },
+                                { text: 'Confirmer', onPress: (pin?: string) => executeApply(pin) },
+                            ],
+                            'secure-text',
+                        );
                     }
                 }
             ]
         );
+    };
+
+    const executeApply = async (pin?: string) => {
+        if (!pin) return Alert.alert("Erreur", "Code PIN requis.");
+        setActionLoading(true);
+        try {
+            const res = await apiApplyCredit(eligibility.maxAmount, pin);
+            Alert.alert("Succès", "Les fonds ont été virés sur votre portefeuille ! 🎉");
+            await loadData();
+        } catch (error: any) {
+            Alert.alert('Erreur', error.response?.data?.error || 'Opération échouée');
+        } finally {
+            setActionLoading(false);
+        }
     };
 
     const handleRepay = async (loanId: string, amountOwed: number) => {
@@ -95,21 +108,34 @@ export default function CreditScreen() {
                 { text: "Annuler", style: "cancel" },
                 {
                     text: "Confirmer",
-                    onPress: async () => {
-                        setActionLoading(true);
-                        try {
-                            const res = await apiRepayCredit(loanId);
-                            Alert.alert("Succès", "Votre micro-crédit a été intégralement soldé ! ✅");
-                            await loadData();
-                        } catch (error: any) {
-                            Alert.alert('Erreur', error.response?.data?.error || 'Remboursement échoué');
-                        } finally {
-                            setActionLoading(false);
-                        }
+                    onPress: () => {
+                        Alert.prompt(
+                            'Confirmer le remboursement',
+                            'Saisissez votre code PIN Mongain pour valider ce remboursement.',
+                            [
+                                { text: 'Annuler', style: 'cancel' },
+                                { text: 'Confirmer', onPress: (pin?: string) => executeRepay(loanId, pin) },
+                            ],
+                            'secure-text',
+                        );
                     }
                 }
             ]
         );
+    };
+
+    const executeRepay = async (loanId: string, pin?: string) => {
+        if (!pin) return Alert.alert("Erreur", "Code PIN requis.");
+        setActionLoading(true);
+        try {
+            const res = await apiRepayCredit(loanId, pin);
+            Alert.alert("Succès", "Votre micro-crédit a été intégralement soldé ! ✅");
+            await loadData();
+        } catch (error: any) {
+            Alert.alert('Erreur', error.response?.data?.error || 'Remboursement échoué');
+        } finally {
+            setActionLoading(false);
+        }
     };
 
     if (loading) {

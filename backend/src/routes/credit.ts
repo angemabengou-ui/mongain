@@ -4,6 +4,7 @@ import { prisma } from '../prisma';
 import { getCentralTreasury } from '../services/centralTreasury';
 import { getSystemAccount } from '../services/systemAccounts';
 import { friendlyErrorMessage } from '../utils/errors';
+import { verifyUserPin } from '../utils/pinAuth';
 
 // `io` était importé de '../index' au niveau du module — comme CashOperationService.ts,
 // cela chargeait toute l'application (routes, serveur HTTP) comme effet de bord d'un simple
@@ -62,10 +63,19 @@ router.get('/active', authMiddleware, async (req: AuthRequest, res) => {
 // POST /api/credit/apply
 router.post('/apply', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const { amount } = req.body;
+        const { amount, pin } = req.body;
         if (!amount || amount < 5000) {
             return res.status(400).json({ error: 'Montant minimum: 5000 FCFA' });
         }
+
+        // Comme bnpl.ts /apply (produit quasi-identique) : sans PIN, un jeton de session volé
+        // suffisait à engager la victime dans une dette réelle (intérêts inclus) sans son
+        // consentement — même si les fonds atterrissent bien sur son propre wallet.
+        if (!pin) return res.status(400).json({ error: 'Code PIN requis.' });
+        const userForPin = await prisma.user.findUnique({ where: { id: req.userId } });
+        if (!userForPin) return res.status(403).json({ error: 'Utilisateur non trouvé' });
+        const pinCheck = await verifyUserPin(userForPin, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         const result = await prisma.$transaction(async (tx) => {
             const user = await tx.user.findUnique({
@@ -143,7 +153,15 @@ router.post('/apply', authMiddleware, async (req: AuthRequest, res) => {
 // POST /api/credit/repay
 router.post('/repay', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const { loanId } = req.body;
+        const { loanId, pin } = req.body;
+
+        // Débit réel du wallet client — le seul mouvement sortant de ce fichier qui n'exigeait
+        // encore aucun PIN (voir /apply ci-dessus pour le même raisonnement).
+        if (!pin) return res.status(400).json({ error: 'Code PIN requis.' });
+        const userForPin = await prisma.user.findUnique({ where: { id: req.userId } });
+        if (!userForPin) return res.status(403).json({ error: 'Utilisateur non trouvé' });
+        const pinCheck = await verifyUserPin(userForPin, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         const result = await prisma.$transaction(async (tx) => {
             const loan = await tx.loan.findUnique({

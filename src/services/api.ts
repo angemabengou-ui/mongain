@@ -495,8 +495,8 @@ export const apiSpendVoucher = (voucherId: string, destinationPhone: string, pin
 
 export const apiGetCreditEligibility = () => request('GET', '/api/credit/eligibility', undefined, true) as Promise<{ eligible: boolean, maxAmount: number, interestRate: number, loyaltyPoints: number }>;
 export const apiGetActiveLoans = () => request('GET', '/api/credit/active', undefined, true) as Promise<any[]>;
-export const apiApplyCredit = (amount: number) => request('POST', '/api/credit/apply', { amount }, true) as Promise<{ success: boolean, loan: any, balance: number }>;
-export const apiRepayCredit = (loanId: string) => request('POST', '/api/credit/repay', { loanId }, true) as Promise<{ success: boolean, balance: number }>;
+export const apiApplyCredit = (amount: number, pin: string) => request('POST', '/api/credit/apply', { amount, pin }, true) as Promise<{ success: boolean, loan: any, balance: number }>;
+export const apiRepayCredit = (loanId: string, pin: string) => request('POST', '/api/credit/repay', { loanId, pin }, true) as Promise<{ success: boolean, balance: number }>;
 
 
 // --- MARKET & ESCROW (V16) ---
