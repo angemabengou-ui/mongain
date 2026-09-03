@@ -37,7 +37,8 @@ jest.mock('../../prisma', () => ({
             create: jest.fn(),
             findUnique: jest.fn(),
             update: jest.fn(),
-            updateMany: jest.fn()
+            updateMany: jest.fn(),
+            groupBy: jest.fn()
         },
         vaultApproval: {
             create: jest.fn()
@@ -187,16 +188,29 @@ describe('Vault Routes', () => {
             expect(res.body.message).toContain("Vous n'êtes pas membre");
         });
 
-        it('devrait retourner les détails de la caisse pour un membre', async () => {
+        it('devrait retourner les détails de la caisse pour un membre, avec le total versé par membre', async () => {
             const membership = { vaultId: 'v1', userId: 'test_user_id', isAdmin: true };
             (prisma.vaultMember.findUnique as jest.Mock).mockResolvedValue(membership);
-            (prisma.vault.findUnique as jest.Mock).mockResolvedValue({ id: 'v1', name: 'Caisse A' });
+            (prisma.vault.findUnique as jest.Mock).mockResolvedValue({
+                id: 'v1',
+                name: 'Caisse A',
+                members: [
+                    { userId: 'test_user_id', isAdmin: true, user: { id: 'test_user_id', name: 'Alice', phone: '+24100000000' } },
+                    { userId: 'user_2', isAdmin: false, user: { id: 'user_2', name: 'Bob', phone: '+24100000001' } }
+                ]
+            });
+            (prisma.vaultTransaction.groupBy as jest.Mock).mockResolvedValue([
+                { requestedById: 'test_user_id', _sum: { amount: 15000 } }
+            ]);
 
             const res = await request(app).get('/vault/v1');
 
-            console.log(res.body); expect(res.status).toBe(200);
+            expect(res.status).toBe(200);
             expect(res.body.success).toBe(true);
             expect(res.body.role).toEqual(membership);
+            expect(res.body.data.members[0].totalDeposited).toBe(15000);
+            // Aucun dépôt trouvé pour ce membre dans le groupBy : doit tomber à 0, pas undefined/NaN.
+            expect(res.body.data.members[1].totalDeposited).toBe(0);
         });
 
         it('devrait retourner 500 en cas d\'erreur serveur', async () => {

@@ -101,6 +101,28 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res) => {
             }
         });
 
+        if (vault) {
+            const depositsSummary = await prisma.vaultTransaction.groupBy({
+                by: ['requestedById'],
+                where: {
+                    vaultId: vaultId,
+                    type: 'DEPOSIT',
+                    status: 'COMPLETED'
+                },
+                _sum: {
+                    amount: true
+                }
+            });
+
+            vault.members = vault.members.map(m => {
+                const sumRow = depositsSummary.find(d => d.requestedById === m.userId);
+                return {
+                    ...m,
+                    totalDeposited: sumRow?._sum.amount || 0
+                };
+            }) as any;
+        }
+
         res.json({ success: true, data: vault, role: membership });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });

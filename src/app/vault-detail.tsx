@@ -579,7 +579,10 @@ export default function VaultDetailScreen() {
                                     <Text style={{ color: COLORS.textPrimary, fontWeight: '600' }}>
                                         {m.user.name}{m.userId === user?.id ? ' (Vous)' : ''}
                                     </Text>
-                                    <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2 }}>{m.user.phone}</Text>
+                                    <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2, fontWeight: '500' }}>
+                                        Total versé : {m.totalDeposited?.toLocaleString('fr-FR') || 0} FCFA
+                                    </Text>
+                                    <Text style={{ color: COLORS.textSecondary, fontSize: 11.5, marginTop: 2 }}>{m.user.phone}</Text>
                                 </View>
                                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, maxWidth: '45%', justifyContent: 'flex-end' }}>
                                     {roleBadges(m).map((b) => (
