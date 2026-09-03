@@ -67,11 +67,16 @@ router.post('/buy', authMiddleware, circuitBreakerMiddleware, async (req: AuthRe
             // aucun contrôle de plafond malgré un débit réel du portefeuille XAF.
             await LimitEngine.verifyAndIncrementConsumption(tx, user.id, user.wallet!.id, xafAmount, settings);
 
-            // Debit XAF
-            await tx.wallet.update({
-                where: { id: user.wallet!.id },
+            // Debit XAF — garde atomique (balance: gte) : le contrôle `user.wallet!.balance <
+            // xafAmount` ci-dessus lit une valeur non verrouillée avant l'ouverture de la
+            // transaction, donc deux achats concurrents (double-tap, script) passaient tous les
+            // deux ce contrôle et pouvaient faire passer le solde XAF en négatif — même classe de
+            // bug déjà corrigée sur wallet.ts/market.ts/treasury.ts, manquante ici.
+            const debited = await tx.wallet.updateMany({
+                where: { id: user.wallet!.id, balance: { gte: xafAmount } },
                 data: { balance: { decrement: xafAmount } }
             });
+            if (debited.count === 0) throw new Error('Solde XAF insuffisant');
 
             // Credit Crypto Wallet
             let cryptoWallet = await tx.cryptoWallet.findFirst({ where: { userId: user.id, asset } });
@@ -142,11 +147,16 @@ router.post('/sell', authMiddleware, circuitBreakerMiddleware, async (req: AuthR
         if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         await prisma.$transaction(async (tx: any) => {
-            // Debit Crypto
-            await tx.cryptoWallet.update({
-                where: { id: cryptoWallet.id },
+            // Debit Crypto — garde atomique (balance: gte) : le contrôle `cryptoWallet.balance <
+            // cryptoQty` ci-dessus lit une valeur non verrouillée avant l'ouverture de la
+            // transaction, donc deux ventes concurrentes de la même quantité détenue une seule
+            // fois passaient toutes les deux ce contrôle et pouvaient faire passer le solde crypto
+            // en négatif (XAF crédité deux fois pour un seul actif réellement détenu).
+            const debited = await tx.cryptoWallet.updateMany({
+                where: { id: cryptoWallet.id, balance: { gte: cryptoQty } },
                 data: { balance: { decrement: cryptoQty } }
             });
+            if (debited.count === 0) throw new Error('Solde crypto insuffisant');
 
             // Credit XAF
             await tx.wallet.update({
