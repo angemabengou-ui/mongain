@@ -46,15 +46,6 @@ router.post('/apply', authMiddleware, async (req: AuthRequest, res) => {
         const pinCheck = await verifyUserPin(user, pin);
         if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
-        // Check existing BNPL debt
-        const existingDebt = await prisma.bnplContract.findFirst({
-            where: { userId: user.id, status: 'ACTIVE' }
-        });
-
-        if (existingDebt) {
-            return res.status(400).json({ error: "Vous devez rembourser votre dette BNPL en cours avant d'emprunter à nouveau." });
-        }
-
         const settings = await getSystemSettings();
         const bnplInterest = settings.bnplInterest || DEFAULT_BNPL_INTEREST;
         const fee = requestedAmount * bnplInterest;
@@ -64,6 +55,22 @@ router.post('/apply', authMiddleware, async (req: AuthRequest, res) => {
         nextPayment.setMonth(nextPayment.getMonth() + 1);
 
         await prisma.$transaction(async (tx) => {
+            // Verrou advisory scopé à l'utilisateur (même technique que agency.ts /sessions/open) :
+            // aucune ligne BnplContract n'existe encore à ce stade pour un `SELECT ... FOR UPDATE`,
+            // donc rien n'empêchait nativement deux transactions concurrentes de lire toutes deux
+            // "aucune dette active" avant qu'aucune n'ait committé. Le contrôle "une seule dette
+            // active à la fois" était fait hors transaction (avant même son ouverture) : un
+            // double-tap sur "Emprunter" débloquait deux crédits BNPL actifs simultanés, doublant
+            // l'exposition au-delà du plafond KYC prévu pour ce produit de microcrédit.
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${user.id}))`;
+
+            const existingDebt = await tx.bnplContract.findFirst({
+                where: { userId: user.id, status: 'ACTIVE' }
+            });
+            if (existingDebt) {
+                throw new Error("Vous devez rembourser votre dette BNPL en cours avant d'emprunter à nouveau.");
+            }
+
             // Plafonds AML/KYC — l'octroi d'un crédit était le seul mouvement de fonds de ce
             // fichier à ne passer par aucun contrôle de plafond.
             await LimitEngine.verifyAndIncrementConsumption(tx, user.id, user.wallet!.id, requestedAmount, settings);
