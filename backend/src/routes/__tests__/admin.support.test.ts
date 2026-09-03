@@ -13,6 +13,7 @@ jest.mock('../../middleware/auth', () => ({
 jest.mock('../../prisma', () => ({
     prisma: {
         staff: { findUnique: jest.fn() },
+        user: { findUnique: jest.fn() },
         systemSettings: { findFirst: jest.fn() },
         reclamation: { create: jest.fn() },
         auditLog: { create: jest.fn() },
@@ -26,6 +27,7 @@ jest.mock('../../prisma', () => ({
 }));
 
 jest.mock('../../services/sms', () => ({ sendSms: jest.fn() }));
+jest.mock('../wallet', () => ({ sendPush: jest.fn().mockResolvedValue(undefined) }));
 
 const app = express();
 app.use(express.json());
@@ -310,6 +312,7 @@ describe('Admin Support/Fraud/Refund Routes', () => {
             (prisma.wallet.findUnique as jest.Mock)
                 .mockResolvedValueOnce({ id: 'w_user', userId: 'u1', balance: 0 }) // userWallet
                 .mockResolvedValueOnce({ id: 'w_counterpart', balance: 10000 }); // counterpartWallet
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ phone: '077000000', pushToken: null });
 
             const txMock = {
                 refundRequest: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },

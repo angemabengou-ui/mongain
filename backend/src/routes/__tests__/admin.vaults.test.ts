@@ -195,6 +195,7 @@ describe('Admin Vaults Routes', () => {
                 vault: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
                 vaultVoucher: { create: jest.fn().mockResolvedValue({}) },
                 notification: { create: jest.fn().mockResolvedValue({}) },
+                user: { findUnique: jest.fn().mockResolvedValue({ pushToken: null }) },
             };
             (prisma.$transaction as jest.Mock).mockImplementation((cb: any) => cb(tx));
 

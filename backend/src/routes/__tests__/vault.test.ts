@@ -655,14 +655,17 @@ describe('Vault Routes', () => {
             (prisma.vaultMember.findUnique as jest.Mock).mockResolvedValue({ isInitiator: true });
             (prisma.vault.findUnique as jest.Mock).mockResolvedValue({ id: 'v1', balance: 1000, name: 'Caisse A' });
             (prisma.vaultTransaction.create as jest.Mock).mockResolvedValue({ id: 'tx1', status: 'PENDING' });
-            (prisma.vaultMember.findMany as jest.Mock).mockResolvedValue([{ userId: 'validator1' }, { userId: 'validator2' }]);
+            (prisma.vaultMember.findMany as jest.Mock).mockResolvedValue([
+                { userId: 'validator1', user: { phone: '077000001', pushToken: null } },
+                { userId: 'validator2', user: { phone: '077000002', pushToken: null } },
+            ]);
             (prisma.notification.createMany as jest.Mock).mockResolvedValue({});
 
             const res = await request(app)
                 .post('/vault/v1/withdraw-request')
                 .send({ amount: 100, reason: 'Achat matériel' });
 
-            console.log(res.body); expect(res.status).toBe(200);
+            expect(res.status).toBe(200);
             expect(res.body.success).toBe(true);
             expect(prisma.vaultTransaction.create).toHaveBeenCalledWith({
                 data: expect.objectContaining({ destinationType: 'VOUCHER', status: 'PENDING' })

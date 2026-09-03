@@ -574,20 +574,16 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
             // aussi le délai par défaut sous charge réseau réelle contre la base distante.
         }, { timeout: 15000 });
 
-        // Notify Receiver via Expo Push
-        if ((result as any).receiverPushToken) {
-            fetch('https://exp.host/--/api/v2/push/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    to: (result as any).receiverPushToken,
-                    title: '💰 Transfert reçu !',
-                    body: `Vous venez de recevoir ${amount.toLocaleString('fr-FR')} FCFA de la part de ${result.senderName || 'Un utilisateur'}.`,
-                    data: { amount },
-                    sound: 'default'
-                })
-            }).catch(e => console.error('Push Error:', e));
-        }
+        // Notify Receiver via Expo Push — utilise désormais le helper sendPush() (déjà exporté
+        // par ce fichier et déjà utilisé partout ailleurs : tontine.ts, admin.vaults.ts,
+        // admin.tontines.ts, tontineService.ts) au lieu d'un fetch() brut vers exp.host qui
+        // dupliquait sa logique sans sa validation Expo.isExpoPushToken() ni son typage.
+        await sendPush(
+            (result as any).receiverPushToken,
+            '💰 Transfert reçu !',
+            `Vous venez de recevoir ${amount.toLocaleString('fr-FR')} FCFA de la part de ${result.senderName || 'Un utilisateur'}.`,
+            { amount }
+        );
 
         // Notify Receiver via Socket.IO
         const io = req.app.get('io');

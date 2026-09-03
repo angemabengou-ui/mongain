@@ -2,9 +2,11 @@ import express from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
+import { LimitEngine } from '../services/LimitEngine';
 import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
 import logger from '../utils/logger';
+import { getSystemSettings } from './settings';
 
 const router = express.Router();
 
@@ -58,8 +60,13 @@ router.post('/buy', authMiddleware, circuitBreakerMiddleware, async (req: AuthRe
         const fee = xafAmount * 0.015; // 1.5% fee
         const netPurchase = xafAmount - fee;
         const amountCrypto = Number((netPurchase / currentRate).toFixed(8));
+        const settings = await getSystemSettings();
 
         await prisma.$transaction(async (tx: any) => {
+            // Plafonds AML/KYC — cet achat était l'un des rails de paiement à ne passer par
+            // aucun contrôle de plafond malgré un débit réel du portefeuille XAF.
+            await LimitEngine.verifyAndIncrementConsumption(tx, user.id, user.wallet!.id, xafAmount, settings);
+
             // Debit XAF
             await tx.wallet.update({
                 where: { id: user.wallet!.id },

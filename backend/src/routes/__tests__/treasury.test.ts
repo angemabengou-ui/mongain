@@ -17,6 +17,7 @@ jest.mock('../../prisma', () => ({
         branch: { findMany: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
         centralTreasury: { findFirst: jest.fn(), create: jest.fn() },
         systemAccount: { findMany: jest.fn() },
+        escrowTransaction: { aggregate: jest.fn() },
         treasuryRequest: {
             count: jest.fn(),
             findMany: jest.fn(),
@@ -83,6 +84,7 @@ describe('Treasury Routes', () => {
             // Compte système (ex: Passerelle Externe) : exclu de clientWalletsBalance, compté à part.
             (prisma.systemAccount.findMany as jest.Mock).mockResolvedValue([{ wallet: { id: 'w_gateway', balance: 999999999 } }]);
             (prisma.wallet.aggregate as jest.Mock).mockResolvedValue({ _sum: { balance: 700 } });
+            (prisma.escrowTransaction.aggregate as jest.Mock).mockResolvedValue({ _sum: { amount: 150 } });
 
             const res = await request(app).get('/treasury/overview');
 
@@ -94,6 +96,7 @@ describe('Treasury Routes', () => {
             expect(res.body.systemAccountsBalance).toBe(999999999);
             expect(res.body.moneySupply).toBe(1000 + 500 + 700 + 999999999);
             expect(res.body.pendingRequestsCount).toBe(3);
+            expect(res.body.escrowBalance).toBe(150);
             // Le wallet de la Trésorerie Centrale et les wallets système doivent être exclus
             // du calcul "Portefeuilles Clients", pas seulement les wallets d'agences.
             expect(prisma.wallet.aggregate).toHaveBeenCalledWith({

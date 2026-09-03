@@ -2,6 +2,18 @@ import type { Prisma } from '@prisma/client';
 
 type TxClient = Prisma.TransactionClient;
 
+// Fonction partagée par le flux d'approbation client (vault.ts) ET l'override admin
+// (admin.vaults.ts, force-resolve) — un seul push ici couvre les deux. Pas de Socket.IO
+// temps réel ici (ce service n'a pas accès à `req`/`io`) : le push Expo suffit à couvrir le
+// cas qui compte le plus (app fermée/arrière-plan), les deux appelants gardent leur propre
+// notification Socket.IO s'ils veulent aussi l'instantané premier plan.
+async function pushToUser(tx: TxClient, userId: string, title: string, body: string) {
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { pushToken: true } });
+    if (!user?.pushToken) return;
+    const { sendPush } = await import('../routes/wallet');
+    await sendPush(user.pushToken, title, body);
+}
+
 // Extrait de PUT /:id/roles (vault.ts) pour être réutilisé tel quel par l'override
 // admin (admin.vaults.ts, PUT /:id/members/:userId/role) — mêmes garde-fous partout,
 // qu'un rôle soit retiré par le Président de la caisse ou par un admin de la plateforme.
@@ -77,14 +89,12 @@ export async function executeVaultWithdraw(tx: TxClient, vaultTx: WithdrawableVa
             });
         }
 
+        const destTitle = 'Vous avez reçu un virement de caisse commune';
+        const destBody = `${netAmount.toLocaleString('fr-FR')} FCFA reçus depuis « ${vaultTx.vault.name} » (après ${fee} FCFA de frais).`;
         await tx.notification.create({
-            data: {
-                userId: vaultTx.destinationId,
-                title: 'Vous avez reçu un virement de caisse commune',
-                body: `${netAmount.toLocaleString('fr-FR')} FCFA reçus depuis « ${vaultTx.vault.name} » (après ${fee} FCFA de frais).`,
-                type: 'TRANSACTION'
-            }
+            data: { userId: vaultTx.destinationId, title: destTitle, body: destBody, type: 'TRANSACTION' }
         });
+        await pushToUser(tx, vaultTx.destinationId, destTitle, destBody);
 
         await tx.transaction.create({
             data: {
@@ -121,12 +131,10 @@ export async function executeVaultWithdraw(tx: TxClient, vaultTx: WithdrawableVa
         });
     }
 
+    const executedTitle = 'Retrait de caisse exécuté';
+    const executedBody = `Votre demande de ${vaultTx.amount.toLocaleString('fr-FR')} FCFA sur « ${vaultTx.vault.name} » a été approuvée et exécutée.`;
     await tx.notification.create({
-        data: {
-            userId: vaultTx.requestedById,
-            title: 'Retrait de caisse exécuté',
-            body: `Votre demande de ${vaultTx.amount.toLocaleString('fr-FR')} FCFA sur « ${vaultTx.vault.name} » a été approuvée et exécutée.`,
-            type: 'TRANSACTION'
-        }
+        data: { userId: vaultTx.requestedById, title: executedTitle, body: executedBody, type: 'TRANSACTION' }
     });
+    await pushToUser(tx, vaultTx.requestedById, executedTitle, executedBody);
 }

@@ -1,8 +1,10 @@
-import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { LimitEngine } from '../services/LimitEngine';
 import { friendlyErrorMessage } from '../utils/errors';
+import { verifyUserPin } from '../utils/pinAuth';
+import { getSystemSettings } from './settings';
 
 const router = Router();
 
@@ -102,14 +104,22 @@ router.post('/invoices/:id/pay', authMiddleware, async (req: AuthRequest, res) =
             return res.status(400).json({ error: "Wallets non initialisés." });
         }
 
-        // Authenticate PIN
-        const valid = await bcrypt.compare(pin, user.pin);
-        if (!valid) return res.status(401).json({ error: "PIN incorrect." });
+        // Authenticate PIN — utilise le contrôle centralisé (verrouillage 3 échecs), comme
+        // les autres rails de paiement ; un bcrypt.compare nu ici n'avait aucune limite de
+        // tentatives, rendant l'espace à 4 chiffres du PIN brute-forçable.
+        const pinCheck = await verifyUserPin(user, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
+
+        const settings = await getSystemSettings();
 
         // Execute payment via Prisma atomic transaction
         const ref = `B2B_INV_${invoice.id.substring(0, 8).toUpperCase()}`;
 
         await prisma.$transaction(async (tx) => {
+            // Plafonds AML/KYC — ce paiement de facture débitait le client sans passer par
+            // aucun contrôle de plafond, contrairement aux rails de paiement équivalents.
+            await LimitEngine.verifyAndIncrementConsumption(tx, user.id, user.wallet!.id, invoice.amount, settings);
+
             const senderWallet = await tx.wallet.findUnique({ where: { userId: user.id } });
             const merchantWallet = await tx.wallet.findUnique({ where: { userId: invoice.merchantId } });
 

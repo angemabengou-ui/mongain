@@ -135,12 +135,11 @@ export default function Customer360({ token, userId, onBack, staffRole, hasPerm 
     const canRequestRefund = hasPerm(['perm_customer_360_basic']);
     const canFlagCustomer = hasPerm(['perm_customer_flag']);
     const canManageAccountStatus = hasPerm(['perm_customer_freeze']);
-    // POST /users/:id/reclamation (admin.ts) vérifie un rôle codé en dur côté serveur
-    // (hasSupportAccess), pas une permission RBAC — TELLER en est exclu. Le bouton restait
-    // affiché sans condition à quiconque atteint cet onglet (perm_customer_360_basic suffit
-    // pour ça), donc un TELLER le voyait, remplissait le formulaire, et se heurtait à un
-    // refus serveur silencieux à la soumission.
-    const canCreateTicketAsStaff = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER', 'BRANCH_MANAGER'].includes(staffRole || '');
+    // POST /users/:id/reclamation (admin.ts) vérifie désormais perm_ticket_create, aligné sur
+    // POST /reclamations — RISK et COMPLIANCE_CHECKER (Investigateur/Checker) en sont exclus
+    // par défaut, seuls les rôles Maker (TELLER, SUPPORT_MAKER, BRANCH_MANAGER) l'ont. Aligné
+    // ici sur le même contrôle plutôt qu'un rôle codé en dur qui divergeait des deux endpoints.
+    const canCreateTicketAsStaff = hasPerm(['perm_ticket_create']);
 
     const api = async (path: string, method = 'GET', body?: any) => {
         const resp = await fetch(`${API_URL}/api/admin${path}`, {

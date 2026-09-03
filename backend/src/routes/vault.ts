@@ -3,6 +3,7 @@ import express from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { applyRoleChangeGuards, executeVaultWithdraw } from '../services/vaultService';
+import { sendPush } from './wallet';
 
 const router = express.Router();
 
@@ -135,16 +136,21 @@ router.post('/:id/invite', authMiddleware, async (req: AuthRequest, res) => {
             }
         });
 
-        // Sans ça, la personne ajoutée n'apprenait qu'elle est membre qu'en ouvrant
-        // l'app par hasard — aucun signal ne l'en informait jamais.
+        // Sans push/socket, la personne ajoutée n'apprenait qu'elle est membre qu'en ouvrant
+        // l'app par hasard — seule la ligne en base était créée, aucun signal temps réel.
+        const memberNotifTitle = 'Ajouté à une caisse commune';
+        const memberNotifBody = `Vous avez été ajouté à la caisse « ${vaultForNotif?.name ?? ''} ».`;
         await prisma.notification.create({
             data: {
                 userId: userToAdd.id,
-                title: 'Ajouté à une caisse commune',
-                body: `Vous avez été ajouté à la caisse « ${vaultForNotif?.name ?? ''} ».`,
+                title: memberNotifTitle,
+                body: memberNotifBody,
                 type: 'INFO'
             }
         });
+        await sendPush(userToAdd.pushToken, memberNotifTitle, memberNotifBody);
+        const io = req.app.get('io');
+        if (io) io.to(`user_${userToAdd.phone}`).emit('global_push', { title: memberNotifTitle, body: memberNotifBody });
 
         res.json({ success: true, message: "Membre ajouté avec succès.", data: newMember });
     } catch (error: any) {
@@ -484,16 +490,29 @@ router.post('/:id/withdraw-request', authMiddleware, async (req: AuthRequest, re
         // décision l'attend — sans ça, une demande pouvait rester invisible
         // indéfiniment pour les autres membres tant qu'ils ne rouvraient pas
         // la caisse par eux-mêmes.
-        const validators = await prisma.vaultMember.findMany({ where: { vaultId, isValidator: true, userId: { not: req.userId! } } });
+        const validators = await prisma.vaultMember.findMany({
+            where: { vaultId, isValidator: true, userId: { not: req.userId! } },
+            include: { user: { select: { phone: true, pushToken: true } } }
+        });
         if (validators.length > 0) {
+            const notifTitle = 'Retrait à approuver';
+            const notifBody = `${parsedAmount.toLocaleString('fr-FR')} FCFA demandés sur « ${vault.name} »${destinationLabel ? ` pour ${destinationLabel}` : ''}.`;
             await prisma.notification.createMany({
                 data: validators.map(v => ({
                     userId: v.userId,
-                    title: 'Retrait à approuver',
-                    body: `${parsedAmount.toLocaleString('fr-FR')} FCFA demandés sur « ${vault.name} »${destinationLabel ? ` pour ${destinationLabel}` : ''}.`,
+                    title: notifTitle,
+                    body: notifBody,
                     type: 'TRANSACTION'
                 }))
             });
+            // Le commentaire ci-dessus décrivait déjà le problème (une demande invisible tant
+            // que le commissaire ne rouvre pas l'app), mais seule la ligne en base était créée —
+            // sans push ni Socket.IO, cette alerte n'était jamais réellement temps réel.
+            const io = req.app.get('io');
+            await Promise.all(validators.map(async v => {
+                await sendPush(v.user.pushToken, notifTitle, notifBody);
+                if (io) io.to(`user_${v.user.phone}`).emit('global_push', { title: notifTitle, body: notifBody });
+            }));
         }
 
         res.json({ success: true, message: "Demande de retrait initiée. En attente de validations.", data: tx });
@@ -603,14 +622,12 @@ router.post('/:id/approve/:txId', authMiddleware, async (req: AuthRequest, res) 
             const progressBody = missingNames.length > 0
                 ? `${currentApprovalsCount}/${requiredApprovals} approbations reçues sur « ${vaultTx.vault.name} ». En attente de : ${missingNames.join(', ')} (validateur obligatoire).`
                 : `${currentApprovalsCount}/${requiredApprovals} approbations reçues sur « ${vaultTx.vault.name} ».`;
+            const progressTitle = 'Retrait approuvé — en attente';
             await tx.notification.create({
-                data: {
-                    userId: vaultTx.requestedById,
-                    title: 'Retrait approuvé — en attente',
-                    body: progressBody,
-                    type: 'TRANSACTION'
-                }
+                data: { userId: vaultTx.requestedById, title: progressTitle, body: progressBody, type: 'TRANSACTION' }
             });
+            const requester = await tx.user.findUnique({ where: { id: vaultTx.requestedById }, select: { pushToken: true } });
+            if (requester?.pushToken) await sendPush(requester.pushToken, progressTitle, progressBody);
 
             return { executed: false, data: null };
         });
@@ -755,17 +772,18 @@ router.post('/vouchers/:id/spend', authMiddleware, async (req: AuthRequest, res)
 
             const updatedVoucher = { ...voucher, status: 'USED' as const, usedAt: new Date() };
 
+            const voucherTitle = 'Bon de caisse commune reçu';
+            const voucherBody = `${netAmount.toLocaleString('fr-FR')} FCFA reçus via un bon de retrait Mongain${fee > 0 ? ` (après ${fee.toLocaleString('fr-FR')} FCFA de frais)` : ''}.`;
             await tx.notification.create({
-                data: {
-                    userId: merchantUser.id,
-                    title: 'Bon de caisse commune reçu',
-                    body: `${netAmount.toLocaleString('fr-FR')} FCFA reçus via un bon de retrait Mongain${fee > 0 ? ` (après ${fee.toLocaleString('fr-FR')} FCFA de frais)` : ''}.`,
-                    type: 'TRANSACTION'
-                }
+                data: { userId: merchantUser.id, title: voucherTitle, body: voucherBody, type: 'TRANSACTION' }
             });
 
-            return { voucher: updatedVoucher, destination: merchantWallet.id, destinationName: merchantUser.name };
+            return { voucher: updatedVoucher, destination: merchantWallet.id, destinationName: merchantUser.name, voucherTitle, voucherBody, merchantPhone: merchantUser.phone, merchantPushToken: merchantUser.pushToken };
         });
+
+        await sendPush(result.merchantPushToken, result.voucherTitle, result.voucherBody);
+        const io = req.app.get('io');
+        if (io) io.to(`user_${result.merchantPhone}`).emit('global_push', { title: result.voucherTitle, body: result.voucherBody });
 
         res.json({ success: true, message: "Paiement réussi avec le Bon de Retrait !", data: result });
     } catch (error: any) {

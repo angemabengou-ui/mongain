@@ -9,6 +9,7 @@ import logger from '../utils/logger';
 import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
 import { getSystemSettings } from './settings';
+import { sendPush } from './wallet';
 
 const router = express.Router();
 
@@ -44,7 +45,7 @@ router.post('/qr-scan', authMiddleware, circuitBreakerMiddleware, async (req: Au
         const settings = await getSystemSettings();
 
         // Pessimistic Locking Transaction
-        await prisma.$transaction(async (tx: any) => {
+        const result = await prisma.$transaction(async (tx: any) => {
             // 1. Fetch Merchant
             const merchant = await tx.user.findUnique({
                 where: { id: merchantId },
@@ -123,7 +124,29 @@ router.post('/qr-scan', authMiddleware, circuitBreakerMiddleware, async (req: Au
             });
 
             logger.info(`[Pay&Go] Merchant ${merchant.phone} encaisse ${amount}XAF de Client ${customer.phone}`);
+
+            return {
+                customerPhone: customer.phone,
+                customerPushToken: customer.pushToken,
+                merchantPhone: merchant.phone,
+                merchantPushToken: merchant.pushToken,
+                merchantName: merchant.name,
+            };
         });
+
+        // Notifications temps réel (push + Socket.IO) — jusqu'ici absentes de cet endpoint,
+        // contrairement à /transfer : ni le client ni le marchand n'étaient prévenus tant
+        // qu'ils n'ouvraient pas eux-mêmes l'onglet Notifications.
+        await sendPush(result.customerPushToken, 'Paiement effectué', `Vous avez payé ${amount.toLocaleString('fr-FR')} FCFA chez ${result.merchantName}.`, { amount });
+        await sendPush(result.merchantPushToken, 'Paiement reçu 💰', `Vous avez reçu un paiement de ${amount.toLocaleString('fr-FR')} FCFA.`, { amount });
+
+        // Socket.IO : seul 'payment_received' est écouté côté mobile (AuthContext.tsx) — pas
+        // d'équivalent "payment_sent" pour le payeur, dont la confirmation passe par le push
+        // ci-dessus (fonctionne même hors app, contrairement au socket).
+        const io = req.app.get('io');
+        if (io) {
+            io.to(`user_${result.merchantPhone}`).emit('payment_received', { amount, from: 'Client QR' });
+        }
 
         res.json({ message: 'Encaissement QR réussi !', amount });
     } catch (e: any) {

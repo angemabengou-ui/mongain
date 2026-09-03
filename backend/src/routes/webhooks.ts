@@ -3,8 +3,22 @@ import express from 'express';
 import { prisma } from '../prisma';
 import { logError } from '../utils/errorLog';
 import { getSystemSettings } from './settings';
+import { sendPush } from './wallet';
 
 const router = express.Router();
+
+// Ce webhook arrive de façon asynchrone, potentiellement bien après que le client ait quitté
+// l'app (initiation via /wallet/pull ou /push) — jusqu'ici, la confirmation ou l'échec d'un
+// dépôt/retrait Mobile Money n'était visible qu'en ouvrant soi-même l'onglet Notifications,
+// sans aucun push ni signal temps réel, contrairement à /transfer. 'global_push' (déjà écouté
+// côté mobile, AuthContext.tsx) déclenche une notification locale immédiate si le socket est
+// connecté ; sendPush() couvre le cas hors ligne/app fermée via Expo.
+async function notifyUser(req: express.Request, user: { phone: string; pushToken?: string | null } | null | undefined, title: string, body: string) {
+    if (!user) return;
+    await sendPush(user.pushToken, title, body);
+    const io = req.app.get('io');
+    if (io) io.to(`user_${user.phone}`).emit('global_push', { title, body });
+}
 
 // PVit (agrégateur de paiement Mobile Money) nous notifie ici du résultat FINAL d'un dépôt
 // initié via POST /api/wallet/pull — la réponse immédiate de /pull n'est qu'un accusé
@@ -57,27 +71,19 @@ router.post('/pvit-status', async (req, res) => {
                         include: { user: true }
                     });
                     if (wallet.user) {
-                        await tx.notification.create({
-                            data: {
-                                userId: wallet.user.id,
-                                title: 'Dépôt reçu',
-                                body: `Votre dépôt Mobile Money de ${transaction.amount.toLocaleString('fr-FR')} FCFA a été crédité.`,
-                                type: 'TRANSACTION'
-                            }
-                        });
+                        const title = 'Dépôt reçu';
+                        const body = `Votre dépôt Mobile Money de ${transaction.amount.toLocaleString('fr-FR')} FCFA a été crédité.`;
+                        await tx.notification.create({ data: { userId: wallet.user.id, title, body, type: 'TRANSACTION' } });
+                        await notifyUser(req, wallet.user, title, body);
                     }
                 } else if (transaction.type === 'CASH_OUT') {
                     // Retrait : Déjà débité en PENDING. Si succès, on notifie juste.
                     const wallet = await tx.wallet.findUnique({ where: { id: transaction.senderWalletId! }, include: { user: true } });
                     if (wallet?.user) {
-                        await tx.notification.create({
-                            data: {
-                                userId: wallet.user.id,
-                                title: 'Retrait réussi',
-                                body: `Votre compte Mobile Money a bien été crédité de ${transaction.amount.toLocaleString('fr-FR')} FCFA.`,
-                                type: 'TRANSACTION'
-                            }
-                        });
+                        const title = 'Retrait réussi';
+                        const body = `Votre compte Mobile Money a bien été crédité de ${transaction.amount.toLocaleString('fr-FR')} FCFA.`;
+                        await tx.notification.create({ data: { userId: wallet.user.id, title, body, type: 'TRANSACTION' } });
+                        await notifyUser(req, wallet.user, title, body);
                     }
                 }
             });
@@ -89,14 +95,10 @@ router.post('/pvit-status', async (req, res) => {
                     if (transaction.type === 'CASH_IN') {
                         const wallet = await tx.wallet.findUnique({ where: { id: transaction.receiverWalletId }, include: { user: true } });
                         if (wallet?.user) {
-                            await tx.notification.create({
-                                data: {
-                                    userId: wallet.user.id,
-                                    title: 'Dépôt échoué',
-                                    body: `Votre dépôt Mobile Money de ${transaction.amount.toLocaleString('fr-FR')} FCFA a échoué. Réessayez ou contactez le support.`,
-                                    type: 'TRANSACTION'
-                                }
-                            });
+                            const title = 'Dépôt échoué';
+                            const body = `Votre dépôt Mobile Money de ${transaction.amount.toLocaleString('fr-FR')} FCFA a échoué. Réessayez ou contactez le support.`;
+                            await tx.notification.create({ data: { userId: wallet.user.id, title, body, type: 'TRANSACTION' } });
+                            await notifyUser(req, wallet.user, title, body);
                         }
                     } else if (transaction.type === 'CASH_OUT') {
                         // Remboursement de l'argent car le retrait a échoué. La Passerelle avait
@@ -122,14 +124,10 @@ router.post('/pvit-status', async (req, res) => {
                         // Remarques de fraude/sécurité : les frais ne sont pas remboursés
                         // pour l'instant (complexité).
                         if (wallet.user) {
-                            await tx.notification.create({
-                                data: {
-                                    userId: wallet.user.id,
-                                    title: 'Retrait échoué',
-                                    body: `Le retrait vers votre Mobile Money a échoué. Le montant de ${transaction.amount.toLocaleString('fr-FR')} FCFA a été recrédité sur votre solde.`,
-                                    type: 'TRANSACTION'
-                                }
-                            });
+                            const title = 'Retrait échoué';
+                            const body = `Le retrait vers votre Mobile Money a échoué. Le montant de ${transaction.amount.toLocaleString('fr-FR')} FCFA a été recrédité sur votre solde.`;
+                            await tx.notification.create({ data: { userId: wallet.user.id, title, body, type: 'TRANSACTION' } });
+                            await notifyUser(req, wallet.user, title, body);
                         }
                     }
                 }

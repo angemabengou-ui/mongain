@@ -15,24 +15,11 @@ export default function WealthManager({ token }: { token: string }) {
     const fetchVaults = async () => {
         setLoading(true);
         try {
-            // Note: Since invest.ts limits vaults to the calling user, for a generic Admin UI
-            // we should technically have built an Admin route like /api/invest/admin/vaults.
-            // Since we are fast-prototyping, we assume the API hits the DB directly or we hit a general route.
-            // But 'invest.ts' route `/api/invest/vaults` uses `req.userId` directly. 
-            // So for now, we'll quickly scaffold the UI layout representing the AUM.
-            await axios.get(`${API_URL}/api/system-accounts`, {
+            const res = await axios.get(`${API_URL}/api/admin/wealth/vaults`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            // Hacking a dummy fetch if no admin route exists just to display the UI correctly:
-            setVaults([
-                { id: 'STK_1A', userId: 'usr_alpha', amount: 5000000, apy: 0.08, status: 'ACTIVE', lockedUntil: '2027-04-12T00:00:00.000Z', user: { name: 'Entreprise ABC' } },
-                { id: 'STK_2B', userId: 'usr_beta', amount: 150000, apy: 0.05, status: 'ACTIVE', lockedUntil: '2026-11-20T00:00:00.000Z', user: { name: 'Particulier XYZ' } }
-            ]);
-            setStats({
-                totalAum: 5150000,
-                activeStakers: 2,
-                averageApy: 7.5
-            });
+            setVaults(res.data.vaults || []);
+            setStats(res.data.stats || { totalAum: 0, activeStakers: 0, averageApy: 0 });
         } catch (error) {
             console.error("Wealth error", error);
         }

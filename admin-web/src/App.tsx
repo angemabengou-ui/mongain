@@ -160,6 +160,11 @@ export default function App() {
         { id: 'accounts', label: 'Clients & Personnel', reqPerms: ['perm_customer_view', 'perm_staff_view'] },
         { id: 'merchants', label: 'Comptes Marchands', reqPerms: ['perm_merchant_view'] },
         { id: 'agency-center', label: 'Réseau d\'Agences', reqPerms: ['perm_branch_manage'] },
+        // Pages fonctionnelles (vraies routes /api/b2b, /api/gateway) mais absentes du menu
+        // depuis une réorganisation de la sidebar — inatteignables jusqu'ici pour quiconque
+        // ne connaissait pas déjà l'identifiant d'onglet exact.
+        { id: 'b2b-hub', label: 'Espace B2B', reqPerms: ['perm_merchant_view'] },
+        { id: 'dev-portal', label: 'Portail Développeur', reqPerms: ['perm_merchant_view'] },
       ]
     },
 
@@ -191,6 +196,7 @@ export default function App() {
         { id: 'ledger', label: 'Grand Livre (Ledger)', reqPerms: ['perm_transaction_view'] },
         { id: 'treasury', label: 'Réserve & Injection Liquidité', reqPerms: ['perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_approve'] },
         { id: 'system-accounts', label: 'Comptes Techniques Internes', reqPerms: ['perm_treasury_view'] },
+        { id: 'wealth-manager', label: 'Gestion de Fortune', reqPerms: ['perm_treasury_view'] },
       ]
     },
 
@@ -380,9 +386,9 @@ export default function App() {
           {activeTab === 'treasury' && hasPerm(['perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_approve']) && <Treasury token={token} prefillAdjustTarget={adjustTarget} hasPerm={hasPerm} staffId={staffId} />}
           {activeTab === 'system-accounts' && hasPerm(['perm_treasury_view']) && <SystemAccounts token={token} onAdjust={(walletId, name) => { setAdjustTarget({ walletId, name }); setActiveTab('treasury'); }} />}
           {activeTab === 'b2b-hub' && hasPerm(['perm_merchant_view']) && <B2BHub token={token} />}
-            {activeTab === 'dev-portal' && hasPerm(['perm_merchant_view']) && <DevPortal token={token} />}
-            {activeTab === 'wealth-manager' && hasPerm(['perm_treasury_view']) && <WealthManager token={token} />}
-            {activeTab === 'audit' && hasPerm(['perm_audit_log_view']) && <AuditLogs token={token} />}
+          {activeTab === 'dev-portal' && hasPerm(['perm_merchant_view']) && <DevPortal token={token} />}
+          {activeTab === 'wealth-manager' && hasPerm(['perm_treasury_view']) && <WealthManager token={token} />}
+          {activeTab === 'audit' && hasPerm(['perm_audit_log_view']) && <AuditLogs token={token} />}
           {activeTab === 'error-logs' && hasPerm(['perm_audit_log_view']) && <ErrorLogs token={token} />}
           {activeTab === 'settings' && hasPerm(['perm_system_settings_view', 'perm_system_settings_approve']) && <Settings token={token} hasPerm={hasPerm} staffId={staffId} />}
 
@@ -397,7 +403,11 @@ export default function App() {
           {![
             'dashboard', 'macro-stats', 'accounts', 'users', 'vaults', 'tontines',
             'merchants', 'reclamations', 'branch-dash', 'agency-center', 'teller-terminal', 'kyc', 'ledger',
-            'treasury', 'system-accounts', 'audit', 'error-logs', 'settings'
+            'treasury', 'system-accounts', 'audit', 'error-logs', 'settings',
+            // Onglets V6 + pages B2B/Dev/Wealth : absents ici, le message "non disponible"
+            // s'affichait EN PLUS du contenu réel dès que l'un de ces 8 onglets était actif.
+            'system-monitor', 'push-center', 'risk-scoring', 'virtual-cards', 'crypto-desk',
+            'b2b-hub', 'dev-portal', 'wealth-manager',
           ].includes(activeTab) && (
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Configuration demandée non disponible avec vos droits d'accès.</div>
             )}

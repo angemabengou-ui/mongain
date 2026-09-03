@@ -6,6 +6,7 @@ import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
 import { getSystemSettings } from './settings';
+import { sendPush } from './wallet';
 
 const router = Router();
 
@@ -116,6 +117,8 @@ router.post('/apply', authMiddleware, async (req: AuthRequest, res) => {
                 }
             });
         });
+
+        await sendPush(user.pushToken, 'Crédit BNPL Approuvé', `Félicitations, votre avance de ${requestedAmount} FCFA a été virée. Reste à devoir: ${totalOwed} FCFA.`);
 
         res.status(201).json({ success: true, message: "Micro-crédit BNPL débloqué !", amount: requestedAmount });
     } catch (e: any) {

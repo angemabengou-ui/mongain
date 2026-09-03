@@ -1,6 +1,5 @@
 import { Expo } from 'expo-server-sdk';
 import express from 'express';
-import { io } from '../index';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { hasPermission } from '../services/RBAC';
@@ -43,7 +42,10 @@ router.post('/broadcast', authMiddleware, async (req: AuthRequest, res) => {
                 });
             }
             // SOCKET.IO FALLBACK: Emit local push instruction directly to the connected device!
-            io.to(`user_${user.phone}`).emit('global_push', { title, body: message });
+            // `io` lu via req.app.get('io') plutôt qu'importé de '../index' au niveau du
+            // module (voir CashOperationService.ts/credit.ts) — un import direct chargeait
+            // toute l'application comme effet de bord d'un simple require de ce fichier.
+            req.app.get('io').to(`user_${user.phone}`).emit('global_push', { title, body: message });
         }
 
         let chunks = expo.chunkPushNotifications(messages as any);

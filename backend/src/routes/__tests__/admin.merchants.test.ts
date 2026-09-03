@@ -24,6 +24,7 @@ jest.mock('../../prisma', () => ({
 
 jest.mock('../wallet', () => ({
     getOrCreateCorporateWallet: jest.fn().mockResolvedValue({ wallet: { id: 'w_corporate', balance: 0 } }),
+    sendPush: jest.fn().mockResolvedValue(undefined),
 }));
 
 const app = express();

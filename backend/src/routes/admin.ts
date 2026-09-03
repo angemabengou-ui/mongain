@@ -10,8 +10,21 @@ import { sendSms } from '../services/sms';
 import { getSystemAccount } from '../services/systemAccounts';
 import { friendlyErrorMessage } from '../utils/errors';
 import { withCache } from '../utils/redis';
+import { sendPush } from './wallet';
 
 const router = express.Router();
+
+// Toutes les actions staff sensibles (gel/dégel, blocage, révocation de sessions,
+// réinitialisation PIN, KYC, remboursement) créaient une notification en base mais
+// n'envoyaient jamais de push ni de signal Socket.IO — le client ne l'apprenait qu'en
+// rouvrant lui-même l'onglet Notifications, potentiellement bien après l'action (ex: il
+// pouvait continuer à essayer d'utiliser un compte déjà gelé sans comprendre pourquoi).
+async function notifyCustomer(req: AuthRequest, user: { phone: string; pushToken?: string | null } | null | undefined, title: string, body: string) {
+    if (!user) return;
+    await sendPush(user.pushToken, title, body);
+    const io = req.app.get('io');
+    if (io) io.to(`user_${user.phone}`).emit('global_push', { title, body });
+}
 
 // AuditLog.adminId est une référence libre (pas de FK) : l'acteur peut être un Staff
 // (portail corporate) ou un User (rôle ADMIN historique). Impossible de résoudre son nom/
@@ -26,10 +39,6 @@ async function attachAuditActors<T extends { adminId: string }>(logs: T[]) {
     const actorMap = new Map([...staffActors, ...userActors].map(a => [a.id, { name: a.name, phone: a.phone, role: a.role }]));
     return logs.map(l => ({ ...l, admin: actorMap.get(l.adminId) || null }));
 }
-
-// KYC/AML : SUPER_ADMIN + les deux rôles explicitement dédiés à la conformité, cohérent
-// avec ce que montre déjà le portail admin-web (module "Dossiers KYC/AML").
-const KYC_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'];
 
 router.get('/stats', authMiddleware, async (req: AuthRequest, res) => {
     try {
@@ -112,13 +121,10 @@ router.get('/stats', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // ============================================================
-// PROMPT 10 ? GESTION OP?RATIONNELLE DES AGENCES
+// GESTION OPÉRATIONNELLE DES AGENCES
 // ============================================================
 
-const AGENCY_ADMIN_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER'];
-const AGENCY_OPS_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'BRANCH_MANAGER'];
-
-// Helper: r?sout le branchId autoris? (BM limit? au sien, HQ voit tout)
+// Résout le branchId autorisé (un BRANCH_MANAGER est limité au sien, le HQ voit tout)
 const resolveAgencyScope = async (userId: string, requestedId?: string): Promise<{ branchId: string | null; error?: string }> => {
     const staff = await prisma.staff.findUnique({ where: { id: userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
     if (!staff) return { branchId: null, error: 'Utilisateur introuvable.' };
@@ -564,14 +570,16 @@ router.get('/staff/unassigned', authMiddleware, async (req: AuthRequest, res) =>
 // SUPPORT & R?CLAMATIONS DESK (PROMPT 04 + 09)
 // ============================================================
 
-const hasSupportAccess = (role: string) => ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER', 'BRANCH_MANAGER'].includes(role);
-
-
-// 5. Cr?er une R?clamation (Par un Staff Maker/Customer 360)
+// 5. Créer une réclamation (par un staff Maker, depuis Customer 360)
 router.post('/users/:id/reclamation', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const user = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
-        if (!user || !hasSupportAccess(user.role)) return res.status(403).json({ error: 'Accès refusé.' });
+        // Remplace l'ancien hasSupportAccess(role) — une liste de rôles codée en dur (incluant
+        // RISK/COMPLIANCE_CHECKER) qui ignorait les surcharges RBAC individuelles et divergeait
+        // du contrôle déjà corrigé sur POST /reclamations (perm_ticket_create, dont RISK et
+        // COMPLIANCE_CHECKER sont exclus par défaut — ce sont des rôles Investigateur/Checker,
+        // pas Maker). Alignée ici sur ce même modèle plutôt que de le contourner.
+        if (!user || !hasPermission(user, 'perm_ticket_create')) return res.status(403).json({ error: 'Accès refusé.' });
 
         const customerId = req.params.id; // User ID
         const customer = await prisma.user.findUnique({ where: { id: customerId as string } });
@@ -936,7 +944,7 @@ router.delete('/users/:id', authMiddleware, async (req: AuthRequest, res) => {
 
 // La route POST /transactions/:id/refund (remboursement exécuté unilatéralement par un
 // seul SUPER_ADMIN) a été retirée : elle contournait le flux Maker/Checker déjà en place
-// via /refund-requests (create â†’ approve â†’ execute, voir plus bas dans ce fichier), qui
+// via /refund-requests (create → approve → execute, voir plus bas dans ce fichier), qui
 // impose qu'un second agent distinct valide l'opération. Toute demande de remboursement
 // doit désormais passer par ce flux.
 
@@ -1038,11 +1046,14 @@ router.put('/users/:id/kyc', authMiddleware, async (req: AuthRequest, res) => {
             }
         });
 
+        const kycTitle = parsed.data.status === 'APPROVED' ? 'Vérification approuvée ✅' : 'Vérification rejetée';
+        const kycBody = parsed.data.status === 'APPROVED'
+            ? 'Votre dossier de vérification d\'identité a été approuvé. Vos limites de compte ont été mises à jour.'
+            : `Votre dossier de vérification d'identité a été rejeté. Motif : ${reason}`;
         await prisma.notification.create({
-            data: parsed.data.status === 'APPROVED'
-                ? { userId: targetId, title: 'Vérification approuvée âœ…', body: 'Votre dossier de vérification d\'identité a été approuvé. Vos limites de compte ont été mises à jour.', type: 'SYSTEM' }
-                : { userId: targetId, title: 'Vérification rejetée', body: `Votre dossier de vérification d'identité a été rejeté. Motif : ${reason}`, type: 'SYSTEM' }
+            data: { userId: targetId, title: kycTitle, body: kycBody, type: 'SYSTEM' }
         });
+        await notifyCustomer(req, targetUser, kycTitle, kycBody);
 
         res.json({ message: 'Dossier KYC traité avec succès.' });
     } catch (e: any) {
@@ -1828,7 +1839,7 @@ router.post('/refund-requests/:id/execute', authMiddleware, async (req: AuthRequ
         // réseau) pouvaient tous deux le passer et payer le remboursement deux fois. La garde
         // atomique (balance: gte) protège en plus contre deux remboursements différents
         // débitant la même contrepartie en parallèle.
-        await prisma.$transaction(async (tx) => {
+        const { refundTitle, refundBody } = await prisma.$transaction(async (tx) => {
             const claim = await tx.refundRequest.updateMany({
                 where: { id: refund.id, status: 'APPROVED' },
                 data: { status: 'EXECUTED', executedAt: new Date() }
@@ -1847,12 +1858,19 @@ router.post('/refund-requests/:id/execute', authMiddleware, async (req: AuthRequ
                 }
             });
             await tx.auditLog.create({ data: { adminId: staff.id, action: 'EXECUTE_REFUND', details: `Refund ${refund.id.substring(0, 8)} : ${refund.amount} FCFA crédités sur wallet ${userWallet.id}, débités du wallet ${counterpartWallet.id}. TX originale ${refund.transactionId} NON modifiée.` } });
-            // Sans ça, le client remboursé n'a aucun moyen de savoir que l'argent est arrivé
-            // en dehors d'ouvrir son historique et de le remarquer par hasard.
+            // Sans push/socket, le client remboursé n'avait aucun moyen de le savoir en dehors
+            // d'ouvrir son historique et de le remarquer par hasard — seule la ligne en base
+            // était créée.
+            const refundTitle = 'Remboursement reçu';
+            const refundBody = `Vous avez été remboursé de ${refund.amount.toLocaleString('fr-FR')} FCFA.`;
             await tx.notification.create({
-                data: { userId: refund.userId, title: 'Remboursement reçu', body: `Vous avez été remboursé de ${refund.amount.toLocaleString('fr-FR')} FCFA.`, type: 'TRANSACTION' }
+                data: { userId: refund.userId, title: refundTitle, body: refundBody, type: 'TRANSACTION' }
             });
+            return { refundTitle, refundBody };
         });
+
+        const refundedUser = await prisma.user.findUnique({ where: { id: refund.userId }, select: { phone: true, pushToken: true } });
+        await notifyCustomer(req, refundedUser, refundTitle, refundBody);
 
         res.json({ success: true, message: `Remboursement de ${refund.amount} FCFA exécuté. TX originale préservée.` });
     } catch (e: any) {
@@ -2009,6 +2027,8 @@ router.post('/users/:id/block', authMiddleware, async (req: AuthRequest, res) =>
         if (target.accountStatus === 'SUSPENDED') return res.status(400).json({ error: 'Le compte est déjà suspendu.' });
 
         const before = target.accountStatus;
+        const blockTitle = 'Compte suspendu';
+        const blockBody = 'Votre compte Mongain a été temporairement suspendu. Contactez le support pour plus d\'informations.';
 
         await prisma.$transaction([
             prisma.user.update({
@@ -2023,14 +2043,10 @@ router.post('/users/:id/block', authMiddleware, async (req: AuthRequest, res) =>
                 }
             }),
             prisma.notification.create({
-                data: {
-                    userId: customerId,
-                    title: 'Compte suspendu',
-                    body: 'Votre compte Mongain a été temporairement suspendu. Contactez le support pour plus d\'informations.',
-                    type: 'SECURITY'
-                }
+                data: { userId: customerId, title: blockTitle, body: blockBody, type: 'SECURITY' }
             })
         ]);
+        await notifyCustomer(req, target, blockTitle, blockBody);
 
         res.json({ success: true, message: `Compte de ${target.name} suspendu.` });
     } catch (e: any) {
@@ -2051,6 +2067,9 @@ router.post('/users/:id/unblock', authMiddleware, async (req: AuthRequest, res) 
         const target = await prisma.user.findUnique({ where: { id: customerId } });
         if (!target) return res.status(404).json({ error: 'Client introuvable.' });
 
+        const unblockTitle = 'Compte réactivé';
+        const unblockBody = 'Votre compte Mongain a été réactivé. Vous pouvez maintenant effectuer des transactions.';
+
         await prisma.$transaction([
             prisma.user.update({
                 where: { id: customerId },
@@ -2064,14 +2083,10 @@ router.post('/users/:id/unblock', authMiddleware, async (req: AuthRequest, res) 
                 }
             }),
             prisma.notification.create({
-                data: {
-                    userId: customerId,
-                    title: 'Compte réactivé',
-                    body: 'Votre compte Mongain a été réactivé. Vous pouvez maintenant effectuer des transactions.',
-                    type: 'SECURITY'
-                }
+                data: { userId: customerId, title: unblockTitle, body: unblockBody, type: 'SECURITY' }
             })
         ]);
+        await notifyCustomer(req, target, unblockTitle, unblockBody);
 
         res.json({ success: true, message: `Compte de ${target.name} réactivé.` });
     } catch (e: any) {
@@ -2301,6 +2316,9 @@ router.post('/users/:id/revoke-sessions', authMiddleware, async (req: AuthReques
         const target = await prisma.user.findUnique({ where: { id: customerId } });
         if (!target) return res.status(404).json({ error: 'Client introuvable.' });
 
+        const revokeTitle = 'Sessions révoquées';
+        const revokeBody = 'Toutes vos sessions actives ont été invalidées par un administrateur. Veuillez vous reconnecter.';
+
         // Increment jwtVersion ? invalidates ALL existing tokens
         await prisma.$transaction([
             prisma.user.update({
@@ -2315,14 +2333,10 @@ router.post('/users/:id/revoke-sessions', authMiddleware, async (req: AuthReques
                 }
             }),
             prisma.notification.create({
-                data: {
-                    userId: customerId,
-                    title: 'Sessions révoquées',
-                    body: 'Toutes vos sessions actives ont été invalidées par un administrateur. Veuillez vous reconnecter.',
-                    type: 'SECURITY'
-                }
+                data: { userId: customerId, title: revokeTitle, body: revokeBody, type: 'SECURITY' }
             })
         ]);
+        await notifyCustomer(req, target, revokeTitle, revokeBody);
 
         res.json({ success: true, message: 'Toutes les sessions de l\'utilisateur ont été révoquées.' });
     } catch (e: any) {
@@ -2507,6 +2521,9 @@ router.post('/users/:id/freeze', authMiddleware, async (req: AuthRequest, res) =
         const freezeNote = freezeReason === 'OTHER' ? comment : freezeReason;
         const beforeStatus = target.accountStatus;
 
+        const freezeTitle = 'Compte gelé';
+        const freezeBody = 'Votre compte Mongain a été temporairement gelé. Contactez le support pour plus d\'informations.';
+
         await prisma.$transaction([
             prisma.user.update({
                 where: { id: customerId },
@@ -2520,14 +2537,10 @@ router.post('/users/:id/freeze', authMiddleware, async (req: AuthRequest, res) =
                 }
             }),
             prisma.notification.create({
-                data: {
-                    userId: customerId,
-                    title: 'Compte gelé',
-                    body: 'Votre compte Mongain a été temporairement gelé. Contactez le support pour plus d\'informations.',
-                    type: 'SECURITY'
-                }
+                data: { userId: customerId, title: freezeTitle, body: freezeBody, type: 'SECURITY' }
             })
         ]);
+        await notifyCustomer(req, target, freezeTitle, freezeBody);
 
         res.json({ success: true, message: `Compte de ${target.name} gelé (FROZEN). Motif : ${freezeReason}.` });
     } catch (e: any) {
@@ -2551,6 +2564,9 @@ router.post('/users/:id/unfreeze', authMiddleware, async (req: AuthRequest, res)
         if (!target) return res.status(404).json({ error: 'Client introuvable.' });
         if (target.accountStatus !== 'FROZEN') return res.status(400).json({ error: `Le compte n'est pas gelé (statut : ${target.accountStatus}).` });
 
+        const unfreezeTitle = 'Compte dégelé';
+        const unfreezeBody = 'Votre compte Mongain a été réactivé. Vous pouvez maintenant effectuer des transactions.';
+
         await prisma.$transaction([
             prisma.user.update({
                 where: { id: customerId },
@@ -2564,14 +2580,10 @@ router.post('/users/:id/unfreeze', authMiddleware, async (req: AuthRequest, res)
                 }
             }),
             prisma.notification.create({
-                data: {
-                    userId: customerId,
-                    title: 'Compte dégelé',
-                    body: 'Votre compte Mongain a été réactivé. Vous pouvez maintenant effectuer des transactions.',
-                    type: 'SECURITY'
-                }
+                data: { userId: customerId, title: unfreezeTitle, body: unfreezeBody, type: 'SECURITY' }
             })
         ]);
+        await notifyCustomer(req, target, unfreezeTitle, unfreezeBody);
 
         res.json({ success: true, message: `Compte de ${target.name} dégelé et réactivé.` });
     } catch (e: any) {
@@ -2595,6 +2607,11 @@ router.post('/users/:id/reset-pin', authMiddleware, async (req: AuthRequest, res
 
         // Invalidate PIN lock + bump jwtVersion to revoke all active sessions
         // PIN hash is NEVER exposed ? client must re-create PIN via mobile app
+        const resetPinTitle = 'Réinitialisation de votre PIN';
+        const resetPinBody = 'Une réinitialisation de votre PIN a été déclenchée par le support. Veuillez vous reconnecter et créer un nouveau PIN.';
+
+        // Invalidate PIN lock + bump jwtVersion to revoke all active sessions
+        // PIN hash is NEVER exposed ? client must re-create PIN via mobile app
         await prisma.$transaction([
             prisma.user.update({
                 where: { id: customerId },
@@ -2608,14 +2625,10 @@ router.post('/users/:id/reset-pin', authMiddleware, async (req: AuthRequest, res
                 }
             }),
             prisma.notification.create({
-                data: {
-                    userId: customerId,
-                    title: 'Réinitialisation de votre PIN',
-                    body: 'Une réinitialisation de votre PIN a été déclenchée par le support. Veuillez vous reconnecter et créer un nouveau PIN.',
-                    type: 'SECURITY'
-                }
+                data: { userId: customerId, title: resetPinTitle, body: resetPinBody, type: 'SECURITY' }
             })
         ]);
+        await notifyCustomer(req, target, resetPinTitle, resetPinBody);
 
         res.json({ success: true, message: 'PIN réinitialisé. Toutes les sessions révoquées. Le client doit créer un nouveau PIN via l\'application.' });
     } catch (e: any) {
@@ -2923,11 +2936,15 @@ router.post('/reclamations/:id/notes', authMiddleware, async (req: AuthRequest, 
         let updatedRec = rec;
         if (isInternal === false && rec.status !== 'RESOLVED' && rec.status !== 'CLOSED') {
             updatedRec = await prisma.reclamation.update({ where: { id: rec.id }, data: { status: 'WAITING_CUSTOMER', assigneeId: rec.assigneeId || staff.id } });
-            // Sans ça, le client n'a aucun moyen de savoir que le support a répondu à son
-            // ticket, en dehors d'aller vérifier l'écran par hasard.
+            // Sans push/socket, le client n'avait aucun moyen de savoir que le support a
+            // répondu à son ticket, en dehors d'aller vérifier l'écran par hasard.
+            const replyTitle = 'Réponse du support';
+            const replyBody = `Le support a répondu à votre ticket « ${rec.title} ».`;
             await prisma.notification.create({
-                data: { userId: rec.userId, title: 'Réponse du support', body: `Le support a répondu à votre ticket « ${rec.title} ».`, type: 'SYSTEM' }
+                data: { userId: rec.userId, title: replyTitle, body: replyBody, type: 'SYSTEM' }
             });
+            const ticketCustomer = await prisma.user.findUnique({ where: { id: rec.userId }, select: { phone: true, pushToken: true } });
+            await notifyCustomer(req, ticketCustomer, replyTitle, replyBody);
         } else if (!rec.assigneeId) {
             updatedRec = await prisma.reclamation.update({ where: { id: rec.id }, data: { status: 'IN_PROGRESS', assigneeId: staff.id } });
         }
@@ -2991,9 +3008,13 @@ router.patch('/reclamations/:id', authMiddleware, async (req: AuthRequest, res) 
             });
 
             if (status === 'RESOLVED') {
+                const resolvedTitle = 'Ticket résolu ✅';
+                const resolvedBody = `Votre ticket « ${rec.title} » a été marqué comme résolu.`;
                 await prisma.notification.create({
-                    data: { userId: rec.userId, title: 'Ticket résolu âœ…', body: `Votre ticket « ${rec.title} » a été marqué comme résolu.`, type: 'SYSTEM' }
+                    data: { userId: rec.userId, title: resolvedTitle, body: resolvedBody, type: 'SYSTEM' }
                 });
+                const ticketCustomer = await prisma.user.findUnique({ where: { id: rec.userId }, select: { phone: true, pushToken: true } });
+                await notifyCustomer(req, ticketCustomer, resolvedTitle, resolvedBody);
             }
         }
 
@@ -3295,6 +3316,78 @@ router.put('/cards/:id/freeze', authMiddleware, async (req: AuthRequest, res) =>
         });
 
         res.json(updated);
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+// GET /api/admin/wealth/vaults — WealthManager.tsx affichait jusqu'ici des contrats
+// "Smart-Coffre" entièrement inventés (voir le commentaire qu'il contenait : "Hacking a dummy
+// fetch if no admin route exists") : invest.ts expose bien /api/invest/vaults, mais scopé au
+// seul appelant (req.userId), inutilisable pour une vue admin transverse. StakingVault
+// contient pourtant déjà les vraies données de staking — cette route les sert enfin.
+router.get('/wealth/vaults', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || !hasPermission(admin, 'perm_treasury_view')) {
+            return res.status(403).json({ error: 'Accès refusé.' });
+        }
+
+        const vaults = await prisma.stakingVault.findMany({
+            include: { user: { select: { name: true, phone: true } } },
+            orderBy: { createdAt: 'desc' },
+            take: 200,
+        });
+
+        const active = vaults.filter(v => v.status === 'ACTIVE');
+        const totalAum = active.reduce((sum, v) => sum + v.amount, 0);
+        const activeStakers = new Set(active.map(v => v.userId)).size;
+        const averageApy = active.length > 0
+            ? (active.reduce((sum, v) => sum + v.apy, 0) / active.length) * 100
+            : 0;
+
+        res.json({ vaults, stats: { totalAum, activeStakers, averageApy: Number(averageApy.toFixed(2)) } });
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+// GET /api/admin/crypto/stats — CryptoAdmin.tsx affichait un volume d'achat et des revenus de
+// spread codés en dur dans le JSX, et une exposition par utilisateur mockée en objet local
+// (le composant l'assumait explicitement en commentaire : "il faudrait une route
+// /api/admin/crypto/stats"). CryptoTransaction/CryptoWallet contiennent déjà tout le nécessaire.
+router.get('/crypto/stats', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
+        if (!admin || !hasPermission(admin, 'perm_analytics_view')) {
+            return res.status(403).json({ error: 'Accès refusé.' });
+        }
+
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const [buyVolume24h, feeRevenue24h, exposureByAsset] = await Promise.all([
+            prisma.cryptoTransaction.aggregate({
+                where: { type: 'BUY', createdAt: { gte: oneDayAgo } },
+                _sum: { amountFiat: true },
+            }),
+            prisma.cryptoTransaction.aggregate({
+                where: { createdAt: { gte: oneDayAgo } },
+                _sum: { fee: true },
+            }),
+            prisma.cryptoWallet.groupBy({
+                by: ['asset'],
+                _sum: { balance: true },
+            }),
+        ]);
+
+        const usersExposure = Object.fromEntries(
+            exposureByAsset.map(row => [row.asset, row._sum.balance || 0])
+        );
+
+        res.json({
+            volume24h: buyVolume24h._sum.amountFiat || 0,
+            feeRevenue24h: feeRevenue24h._sum.fee || 0,
+            usersExposure,
+        });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }

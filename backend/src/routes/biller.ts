@@ -1,12 +1,13 @@
-import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { LimitEngine } from '../services/LimitEngine';
 import { getSystemAccount } from '../services/systemAccounts';
 import { friendlyErrorMessage } from '../utils/errors';
+import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
 import { getSystemSettings } from './settings';
+import { sendPush } from './wallet';
 
 const router = Router();
 
@@ -36,8 +37,10 @@ router.post('/pay', authMiddleware, async (req: AuthRequest, res) => {
             return res.status(403).json({ error: "Compte restreint" });
         }
 
-        const isValidPin = await bcrypt.compare(pin, user.pin);
-        if (!isValidPin) return res.status(401).json({ error: "PIN incorrect" });
+        // Contrôle centralisé (verrouillage 3 échecs) — un bcrypt.compare nu ici n'avait
+        // aucune limite de tentatives, rendant l'espace à 4 chiffres du PIN brute-forçable.
+        const pinCheck = await verifyUserPin(user, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
         if (user.wallet.balance < amount) return res.status(400).json({ error: "Solde insuffisant" });
 
         const settings = await getSystemSettings();
@@ -95,6 +98,8 @@ router.post('/pay', authMiddleware, async (req: AuthRequest, res) => {
                 }
             });
         });
+
+        await sendPush(user.pushToken, 'Facture Payée', `Rechargement ${provider} de ${amount} FCFA validé.`);
 
         res.json({ success: true, message: `Rechargement ${provider} effectué.` });
     } catch (e: any) {

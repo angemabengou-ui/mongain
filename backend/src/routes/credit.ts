@@ -1,10 +1,14 @@
 import express from 'express';
-import { io } from '../index';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { getCentralTreasury } from '../services/centralTreasury';
 import { getSystemAccount } from '../services/systemAccounts';
 import { friendlyErrorMessage } from '../utils/errors';
+
+// `io` était importé de '../index' au niveau du module — comme CashOperationService.ts,
+// cela chargeait toute l'application (routes, serveur HTTP) comme effet de bord d'un simple
+// require de ce fichier de routes. Utilisé maintenant via req.app.get('io') dans chaque
+// handler (voir index.ts : `app.set('io', io)`).
 
 const router = express.Router();
 
@@ -125,7 +129,7 @@ router.post('/apply', authMiddleware, async (req: AuthRequest, res) => {
         }, { isolationLevel: 'Serializable' });
 
         // Push Local Notification (V14 Bypass Socket)
-        io.to(`user_${result.userPhone}`).emit('global_push', {
+        req.app.get('io').to(`user_${result.userPhone}`).emit('global_push', {
             title: 'Mongain Credit 🎉',
             body: `Votre prêt de ${amount.toLocaleString('fr-FR')} FCFA a été approuvé et viré sur votre compte !`
         });
@@ -201,7 +205,7 @@ router.post('/repay', authMiddleware, async (req: AuthRequest, res) => {
             return { closedLoan, wallet: updatedWallet, userPhone: loan.user.phone };
         }, { isolationLevel: 'Serializable' });
 
-        io.to(`user_${result.userPhone}`).emit('global_push', {
+        req.app.get('io').to(`user_${result.userPhone}`).emit('global_push', {
             title: 'Remboursement Confirmé ✅',
             body: `Merci ! Votre micro-crédit a été intégralement soldé.`
         });

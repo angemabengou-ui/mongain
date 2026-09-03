@@ -4,16 +4,17 @@ import { apiFetch } from './utils/apiFetch';
 
 export default function CryptoAdmin({ token: _token }: { token: string }) {
     const [data, setData] = useState<{ market: any[], usersExposure: any }>({ market: [], usersExposure: {} });
+    const [stats, setStats] = useState({ volume24h: 0, feeRevenue24h: 0 });
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // En vrai, il faudrait une route /api/admin/crypto/stats
-        // Pour V8 on mock les stats de liquidité basées sur le marché global
-        apiFetch(API_URL + '/api/crypto/market', {
-            headers: { 'Authorization': `Bearer ${_token}` }
-        })
-            .then(res => {
-                setData({ market: res.market || [], usersExposure: { BTC: 4.5, ETH: 120, USDT: 45000 } });
+        Promise.all([
+            apiFetch(API_URL + '/api/crypto/market', { headers: { 'Authorization': `Bearer ${_token}` } }),
+            apiFetch(API_URL + '/api/admin/crypto/stats', { headers: { 'Authorization': `Bearer ${_token}` } }),
+        ])
+            .then(([marketRes, statsRes]) => {
+                setData({ market: marketRes.market || [], usersExposure: statsRes.usersExposure || {} });
+                setStats({ volume24h: statsRes.volume24h || 0, feeRevenue24h: statsRes.feeRevenue24h || 0 });
                 setLoading(false);
             })
             .catch(() => setLoading(false));
@@ -29,11 +30,11 @@ export default function CryptoAdmin({ token: _token }: { token: string }) {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 20, marginBottom: 40 }}>
                 <div style={{ background: 'rgba(255,255,255,0.05)', padding: 24, borderRadius: 16, border: '1px solid rgba(255,255,255,0.1)' }}>
                     <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 8 }}>Volume d'achat (24h)</div>
-                    <div style={{ fontSize: 28, fontWeight: 800, color: '#10B981' }}>+48,500,000 XAF</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: '#10B981' }}>+{Math.round(stats.volume24h).toLocaleString()} XAF</div>
                 </div>
                 <div style={{ background: 'rgba(255,255,255,0.05)', padding: 24, borderRadius: 16, border: '1px solid rgba(255,255,255,0.1)' }}>
                     <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 8 }}>Revenus (Commissions Spread)</div>
-                    <div style={{ fontSize: 28, fontWeight: 800, color: '#F59E0B' }}>≈ 727,500 XAF</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: '#F59E0B' }}>≈ {Math.round(stats.feeRevenue24h).toLocaleString()} XAF</div>
                 </div>
             </div>
 

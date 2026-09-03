@@ -1,8 +1,10 @@
 import { executeVaultWithdraw } from '../vaultService';
 
 const mockGetOrCreateCorporateWallet = jest.fn();
+const mockSendPush = jest.fn().mockResolvedValue(undefined);
 jest.mock('../../routes/wallet', () => ({
     getOrCreateCorporateWallet: (...args: any[]) => mockGetOrCreateCorporateWallet(...args),
+    sendPush: (...args: any[]) => mockSendPush(...args),
 }));
 
 function makeTx(overrides: Partial<Record<string, any>> = {}) {
@@ -11,6 +13,9 @@ function makeTx(overrides: Partial<Record<string, any>> = {}) {
         wallet: { findUnique: jest.fn(), update: jest.fn() },
         notification: { create: jest.fn() },
         transaction: { create: jest.fn() },
+        // pushToUser() lit le pushToken du destinataire pour l'alerte Expo — undefined par
+        // défaut ici (le guard `if (!user?.pushToken) return` rend l'appel sûr sans mock dédié).
+        user: { findUnique: jest.fn().mockResolvedValue({ pushToken: undefined }) },
         ...overrides,
     } as any;
 }

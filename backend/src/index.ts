@@ -16,7 +16,6 @@ import authRoutes from './routes/auth';
 import { executeTontineAutomations } from './cron';
 import b2bRoutes from './routes/b2b';
 import ussdRoutes from './routes/ussd';
-import supportRoutes from './routes/support';
 import marketRoutes from './routes/market';
 import investRoutes from './routes/invest';
 import gatewayRoutes from './routes/gateway';
@@ -184,7 +183,6 @@ app.use('/api/wallet', circuitBreakerMiddleware, walletRoutes);
 app.use('/api/wallet/cards', circuitBreakerMiddleware, cardsRoutes);
 app.use('/api/b2b', circuitBreakerMiddleware, b2bRoutes);
 app.use('/api/ussd', circuitBreakerMiddleware, ussdRoutes);
-app.use('/api/support', supportRoutes);
 // admin.fraud.ts et admin.risk.ts ont été supprimés : doublons non protégés (authMiddleware
 // seul, sans hasPermission()) d'endpoints déjà servis en toute sécurité par admin.ts
 // (/fraud-cases, perm_customer_flag) et scoring.ts (/scoring) — aucune page admin-web ne les

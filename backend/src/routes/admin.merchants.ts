@@ -2,7 +2,7 @@ import express from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { hasPermission } from '../services/RBAC';
-import { getOrCreateCorporateWallet } from './wallet';
+import { getOrCreateCorporateWallet, sendPush } from './wallet';
 import { friendlyErrorMessage } from '../utils/errors';
 
 const router = express.Router();
@@ -151,21 +151,24 @@ router.post('/merchants/:id/payouts/:payoutId/approve', authMiddleware, async (r
                 });
             }
 
+            const notifTitle = 'Retrait marchand exécuté';
+            const notifBody = `Votre demande de ${payout.amount.toLocaleString('fr-FR')} FCFA (${payout.sourceAccount === 'COMMISSION' ? 'commission' : 'ventes'}) a été traitée.`;
             await tx.notification.create({
-                data: {
-                    userId: payout.merchantId,
-                    title: 'Retrait marchand exécuté',
-                    body: `Votre demande de ${payout.amount.toLocaleString('fr-FR')} FCFA (${payout.sourceAccount === 'COMMISSION' ? 'commission' : 'ventes'}) a été traitée.`,
-                    type: 'TRANSACTION'
-                }
+                data: { userId: payout.merchantId, title: notifTitle, body: notifBody, type: 'TRANSACTION' }
             });
 
-            return payout;
+            return { ...payout, merchantPhone: merchant.phone, merchantPushToken: merchant.pushToken, notifTitle, notifBody };
         });
 
         await prisma.auditLog.create({
             data: { adminId: staff.id, action: 'APPROVE_MERCHANT_PAYOUT', details: `Retrait marchand ${payoutId} (${result.sourceAccount}, ${result.amount} FCFA) approuvé et exécuté.` }
         });
+
+        // Le marchand attend souvent cette décision sans avoir l'app ouverte — la ligne en
+        // base seule ne le prévenait qu'à sa prochaine visite de l'onglet Notifications.
+        await sendPush(result.merchantPushToken, result.notifTitle, result.notifBody);
+        const io = req.app.get('io');
+        if (io) io.to(`user_${result.merchantPhone}`).emit('global_push', { title: result.notifTitle, body: result.notifBody });
 
         res.json({ success: true });
     } catch (e: any) {
@@ -194,18 +197,20 @@ router.post('/merchants/:id/payouts/:payoutId/reject', authMiddleware, async (re
         });
         if (claim.count === 0) return res.status(400).json({ error: 'Cette demande vient d\'être traitée.' });
 
+        const notifTitle = 'Retrait marchand rejeté';
+        const notifBody = `Votre demande de ${payout.amount.toLocaleString('fr-FR')} FCFA a été rejetée : ${reason}`;
         await prisma.notification.create({
-            data: {
-                userId: payout.merchantId,
-                title: 'Retrait marchand rejeté',
-                body: `Votre demande de ${payout.amount.toLocaleString('fr-FR')} FCFA a été rejetée : ${reason}`,
-                type: 'TRANSACTION'
-            }
+            data: { userId: payout.merchantId, title: notifTitle, body: notifBody, type: 'TRANSACTION' }
         });
 
         await prisma.auditLog.create({
             data: { adminId: staff.id, action: 'REJECT_MERCHANT_PAYOUT', details: `Retrait marchand ${payoutId} rejeté. Motif : ${reason}` }
         });
+
+        const merchant = await prisma.user.findUnique({ where: { id: payout.merchantId }, select: { phone: true, pushToken: true } });
+        await sendPush(merchant?.pushToken, notifTitle, notifBody);
+        const io = req.app.get('io');
+        if (io && merchant) io.to(`user_${merchant.phone}`).emit('global_push', { title: notifTitle, body: notifBody });
 
         res.json({ success: true });
     } catch (e: any) {

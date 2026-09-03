@@ -23,7 +23,7 @@ router.get('/overview', authMiddleware, async (req: AuthRequest, res) => {
             return res.status(403).json({ error: 'Accès refusé. Permission perm_treasury_view manquante.' });
         }
 
-        const [branches, pendingReqs, centralTreasury, systemWallets] = await Promise.all([
+        const [branches, pendingReqs, centralTreasury, systemWallets, escrowAgg] = await Promise.all([
             prisma.branch.findMany({ include: { wallet: true } }),
             prisma.treasuryRequest.count({ where: { status: 'PENDING' } }),
             getCentralTreasury(),
@@ -32,7 +32,10 @@ router.get('/overview', authMiddleware, async (req: AuthRequest, res) => {
             // sans cette exclusion, ils gonflaient silencieusement "Portefeuilles Clients"
             // (ex: la Passerelle Externe est pré-provisionnée à ~1 milliard FCFA à sa
             // création, indissociable d'un vrai solde client dans le calcul précédent).
-            prisma.systemAccount.findMany({ select: { wallet: { select: { id: true, balance: true } } } })
+            prisma.systemAccount.findMany({ select: { wallet: { select: { id: true, balance: true } } } }),
+            // Fonds actuellement bloqués en séquestre (marketplace) — cette valeur était
+            // codée en dur à 0 avant que l'escrow n'existe réellement (market.ts/EscrowTransaction).
+            prisma.escrowTransaction.aggregate({ where: { status: 'LOCKED' }, _sum: { amount: true } }),
         ]);
 
         const reserveBalance = centralTreasury.wallet.balance;
@@ -67,7 +70,7 @@ router.get('/overview', authMiddleware, async (req: AuthRequest, res) => {
             clientWalletsBalance,
             systemAccountsBalance,
             pendingRequestsCount: pendingReqs,
-            escrowBalance: 0 // Mock feature for Escrow until implemented
+            escrowBalance: escrowAgg._sum.amount || 0,
         });
     } catch (e: any) { res.status(500).json({ error: friendlyErrorMessage(e) }); }
 });

@@ -8,6 +8,7 @@ import logger from '../utils/logger';
 import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
 import { getSystemSettings } from './settings';
+import { sendPush } from './wallet';
 
 const router = Router();
 
@@ -150,6 +151,8 @@ router.post('/send', authMiddleware, async (req: AuthRequest, res) => {
 
             return remittance;
         });
+
+        await sendPush(sender.pushToken, 'Envoi International Réussi', `${destinationAmount.toFixed(2)} ${destinationCurrency} expédié vers ${recipientPhone} (${destinationCountry}).`);
 
         return res.json({ message: 'L\'envoi Cross-Border a été exécuté avec succès.', data: result });
 
