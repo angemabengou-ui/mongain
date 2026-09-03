@@ -47,11 +47,17 @@ router.post('/convert', authMiddleware, circuitBreakerMiddleware, async (req: Au
 
             const xafEquiv = points / 10; // 10:1 ratio
 
-            // Deduct Points
-            await tx.user.update({
-                where: { id: user.id },
+            // Deduct Points — garde atomique (loyaltyPoints: gte) : le contrôle ci-dessus lit une
+            // valeur non verrouillée, donc deux conversions concurrentes du même utilisateur
+            // (double-tap, script) passaient toutes deux ce contrôle et pouvaient faire chuter
+            // loyaltyPoints en négatif tout en créditant deux fois le wallet XAF — contrairement à
+            // credit.ts (isolationLevel Serializable), cette transaction n'a aucune protection
+            // d'isolation renforcée contre cette classe de course.
+            const pointsDebited = await tx.user.updateMany({
+                where: { id: user.id, loyaltyPoints: { gte: points } },
                 data: { loyaltyPoints: { decrement: points } }
             });
+            if (pointsDebited.count === 0) throw new Error(`Points insuffisants. Vous avez ${user.loyaltyPoints} MP.`);
 
             // Credit User Wallet
             await tx.wallet.update({
@@ -66,7 +72,7 @@ router.post('/convert', authMiddleware, circuitBreakerMiddleware, async (req: Au
             // débit ne s'exécutait jamais.
             const corporate = await getSystemAccount('CORPORATE', tx);
             await tx.wallet.update({
-                where: { id: corporate.wallet!.id },
+                where: { id: corporate.wallet!.id, balance: { gte: xafEquiv } },
                 data: { balance: { decrement: xafEquiv } }
             });
 
