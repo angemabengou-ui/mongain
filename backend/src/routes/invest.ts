@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { friendlyErrorMessage } from '../utils/errors';
+import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
 import { sendPush } from './wallet';
 
@@ -17,7 +18,7 @@ const DEFAULT_APY = 0.05; // 5% base yield
 router.post('/stake', authMiddleware, async (req: AuthRequest, res) => {
     try {
         if (!req.userId) return res.status(401).json({ error: "Unauthorized" });
-        const { amount, lockMonths } = req.body;
+        const { amount, lockMonths, pin } = req.body;
 
         const stakeAmount = parseFloat(amount);
         const duration = parseInt(lockMonths);
@@ -35,6 +36,15 @@ router.post('/stake', authMiddleware, async (req: AuthRequest, res) => {
         });
 
         if (!user || !user.wallet) return res.status(401).json({ error: "Utilisateur non valide." });
+
+        // Seule route de débit réel du fichier sans code PIN jusqu'ici — contrairement à tous
+        // les autres rails sortants (crypto.ts, bnpl.ts, b2b.ts, biller.ts...), un jeton de
+        // session volé (téléphone déverrouillé, session détournée) suffisait à bloquer les
+        // fonds de la victime jusqu'à 5 ans sans jamais connaître son code PIN.
+        if (!pin) return res.status(400).json({ error: "Code PIN requis." });
+        const pinCheck = await verifyUserPin(user, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
+
         if (user.wallet.balance < stakeAmount) return res.status(400).json({ error: "Solde insuffisant." });
 
         let apy = DEFAULT_APY;
