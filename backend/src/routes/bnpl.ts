@@ -1,9 +1,11 @@
-import bcrypt from 'bcryptjs';
 import { Router } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { LimitEngine } from '../services/LimitEngine';
 import { friendlyErrorMessage } from '../utils/errors';
+import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
+import { getSystemSettings } from './settings';
 
 const router = Router();
 
@@ -12,7 +14,7 @@ const router = Router();
 // ==========================================
 
 const MAX_BNPL_AMOUNT = 50000;
-const BNPL_INTEREST = 0.05; // 5% flat fee on BNPL advance
+const DEFAULT_BNPL_INTEREST = 0.05; // 5% flat fee de repli si non configuré côté admin
 
 router.post('/apply', authMiddleware, async (req: AuthRequest, res) => {
     try {
@@ -40,8 +42,8 @@ router.post('/apply', authMiddleware, async (req: AuthRequest, res) => {
             return res.status(403).json({ error: "Validation KYC Premium requise pour débloquer le crédit." });
         }
 
-        const isValidPin = await bcrypt.compare(pin, user.pin);
-        if (!isValidPin) return res.status(401).json({ error: "PIN incorrect" });
+        const pinCheck = await verifyUserPin(user, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         // Check existing BNPL debt
         const existingDebt = await prisma.bnplContract.findFirst({
@@ -52,13 +54,19 @@ router.post('/apply', authMiddleware, async (req: AuthRequest, res) => {
             return res.status(400).json({ error: "Vous devez rembourser votre dette BNPL en cours avant d'emprunter à nouveau." });
         }
 
-        const fee = requestedAmount * BNPL_INTEREST;
+        const settings = await getSystemSettings();
+        const bnplInterest = settings.bnplInterest || DEFAULT_BNPL_INTEREST;
+        const fee = requestedAmount * bnplInterest;
         const totalOwed = requestedAmount + fee;
 
         const nextPayment = new Date();
         nextPayment.setMonth(nextPayment.getMonth() + 1);
 
         await prisma.$transaction(async (tx) => {
+            // Plafonds AML/KYC — l'octroi d'un crédit était le seul mouvement de fonds de ce
+            // fichier à ne passer par aucun contrôle de plafond.
+            await LimitEngine.verifyAndIncrementConsumption(tx, user.id, user.wallet!.id, requestedAmount, settings);
+
             // Unify Treasury provider
             const treasury = await tx.centralTreasury.findFirst({ include: { wallet: true } });
             if (!treasury) throw new Error("Les fonds de la trésorerie centrale sont inaccessibles.");
@@ -131,6 +139,13 @@ router.post('/repay', authMiddleware, async (req: AuthRequest, res) => {
 
         if (!user || !user.wallet) return res.status(403).json({ error: "Validation échouée" });
 
+        // Vérifié AVANT d'entrer dans la transaction : un `return res.status(...)` depuis
+        // l'intérieur du callback `$transaction` ne l'interrompt pas (il ne fait que résoudre
+        // la promesse interne avec l'objet Response) — le code après continuait de s'exécuter
+        // et renvoyait une seconde réponse HTTP (`ERR_HTTP_HEADERS_SENT`) même après un PIN refusé.
+        const pinCheck = await verifyUserPin(user, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
+
         // Atomic Repay
         await prisma.$transaction(async (tx) => {
             const debt = await tx.bnplContract.findFirst({
@@ -141,9 +156,6 @@ router.post('/repay', authMiddleware, async (req: AuthRequest, res) => {
             const effectiveRepay = Math.min(repayAmount, debt.remaining);
 
             if (user.wallet!.balance < effectiveRepay) throw new Error("Solde insuffisant pour le remboursement.");
-
-            const isValidPin = await bcrypt.compare(pin, user.pin);
-            if (!isValidPin) return res.status(401).json({ error: "PIN incorrect" });
 
             // Pull to Treasury
             const treasury = await tx.centralTreasury.findFirst({ include: { wallet: true } });

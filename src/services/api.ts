@@ -184,7 +184,14 @@ export const request = async (method: string, path: string, body?: object, auth 
         } catch {
             throw new Error(`Réponse inattendue du serveur (${res.status}). Veuillez réessayer.`);
         }
-        if (!res.ok) throw new Error(data.message || data.error || 'Une erreur est survenue.');
+        if (!res.ok) {
+            const err: any = new Error(data.message || data.error || 'Une erreur est survenue.');
+            // La quasi-totalité des écrans lisent l'erreur via `e.response?.data?.error` (habitude
+            // Axios) — sans cette propriété, ce message précis renvoyé par le serveur était
+            // systématiquement ignoré au profit du message générique codé en dur de chaque écran.
+            err.response = { status: res.status, data };
+            throw err;
+        }
         return data;
     } catch (e: any) {
         const isConnectionFailure = e.name === 'AbortError' || e.message.includes('Failed to fetch') || e.message.includes('Network request failed');
@@ -253,7 +260,7 @@ export const apiRegister = (name: string, username: string, phone: string, pin: 
     request('POST', '/api/auth/register', { name, username, phone, pin, otpCode }) as Promise<{ token: string; refreshToken: string; user: User }>;
 
 export const apiLogin = (phone: string, pin: string) =>
-    request('POST', '/api/auth/login', { phone, pin }) as Promise<{ token?: string; user?: User; requireOtp?: boolean; message?: string }>;
+    request('POST', '/api/auth/login', { phone, pin }) as Promise<{ token?: string; refreshToken?: string; user?: User; requireOtp?: boolean; message?: string }>;
 
 export const apiVerifyLoginOtp = (phone: string, otpCode: string) =>
     request('POST', '/api/auth/verify-login-otp', { phone, otpCode }) as Promise<{ token: string; refreshToken: string; user: User }>;
@@ -491,9 +498,6 @@ export const apiGetActiveLoans = () => request('GET', '/api/credit/active', unde
 export const apiApplyCredit = (amount: number) => request('POST', '/api/credit/apply', { amount }, true) as Promise<{ success: boolean, loan: any, balance: number }>;
 export const apiRepayCredit = (loanId: string) => request('POST', '/api/credit/repay', { loanId }, true) as Promise<{ success: boolean, balance: number }>;
 
-// --- REWARDS (V15) ---
-export const apiGetRewardsBalance = () => request('GET', '/api/rewards/balance', undefined, true) as Promise<{ loyaltyPoints: number, conversionRate: number }>;
-export const apiRedeemRewards = (pointsToRedeem: number) => request('POST', '/api/rewards/redeem', { pointsToRedeem }, true) as Promise<{ success: boolean, message: string, amount: number }>;
 
 // --- MARKET & ESCROW (V16) ---
 export const apiGetMarketListings = () => request('GET', '/api/market/listings', undefined, true) as Promise<{ success: boolean, listings: any[] }>;

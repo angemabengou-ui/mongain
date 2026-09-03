@@ -2,8 +2,11 @@ import express from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
+import { LimitEngine } from '../services/LimitEngine';
 import { friendlyErrorMessage } from '../utils/errors';
+import { verifyUserPin } from '../utils/pinAuth';
 import logger from '../utils/logger';
+import { getSystemSettings } from './settings';
 
 const router = express.Router();
 
@@ -67,7 +70,7 @@ router.post('/issue', authMiddleware, circuitBreakerMiddleware, async (req: Auth
 // POST /api/wallet/cards/:id/fund
 router.post('/:id/fund', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
-        const { amount } = req.body;
+        const { amount, pin } = req.body;
         const parsedAmount = parseFloat(amount);
         if (isNaN(parsedAmount) || parsedAmount <= 0) return res.status(400).json({ error: 'Montant invalide.' });
 
@@ -76,14 +79,22 @@ router.post('/:id/fund', authMiddleware, circuitBreakerMiddleware, async (req: A
         if (!card || card.userId !== req.userId) return res.status(404).json({ error: 'Carte introuvable.' });
         if (card.status !== 'ACTIVE') return res.status(403).json({ error: 'Carte inactive ou bloquée.' });
 
+        if (!pin) return res.status(400).json({ error: 'Code PIN requis.' });
+        const pinCheck = await verifyUserPin(card.user, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
+
         if (!card.fundingWallet || card.fundingWallet.balance < parsedAmount) {
             return res.status(400).json({ error: 'Fonds insuffisants dans votre portefeuille.' });
         }
 
+        const settings = await getSystemSettings();
+
         // Atomically transfer value from wallet to card balance
         const updatedCard = await prisma.$transaction(async (tx: any) => {
+            await LimitEngine.verifyAndIncrementConsumption(tx, req.userId!, card.fundingWalletId, parsedAmount, settings);
+
             const w = await tx.wallet.update({
-                where: { id: card.fundingWalletId },
+                where: { id: card.fundingWalletId, balance: { gte: parsedAmount } },
                 data: { balance: { decrement: parsedAmount } }
             });
             const c = await tx.virtualCard.update({

@@ -1,111 +1,89 @@
 import { prisma } from './prisma';
+import { executeTontineCycle, notifyUpcomingCycle, resolveRenewalPoll } from './services/tontineService';
 import logger from './utils/logger';
-import { generateReference } from './utils/reference';
+
+function addInterval(date: Date, frequency: string): Date {
+    const next = new Date(date);
+    if (frequency === 'WEEKLY') {
+        next.setDate(next.getDate() + 7);
+    } else {
+        // MONTHLY (et tout défaut inconnu) : un mois calendaire, pas 30 jours fixes.
+        next.setMonth(next.getMonth() + 1);
+    }
+    return next;
+}
 
 /**
- * Automates Tontine deductions and payouts.
- * In a real environment, this is called by `node-cron` every day at 00:00.
+ * Automatise les tontines : prélèvement + versement de cagnotte des groupes dont
+ * l'échéance (frequency/lastPayoutDate) est atteinte, rappel la veille, et résolution
+ * des sondages de relance dont le délai a expiré.
+ *
+ * Remplace l'ancienne implémentation de démonstration qui tirait un bénéficiaire au
+ * hasard (`Math.random()`), ignorait entièrement le grand livre TontineCycle/
+ * TontineContribution, ne vérifiait jamais si une échéance réelle était atteinte (elle
+ * s'exécutait pour CHAQUE tontine ACTIVE à chaque appel), et ne réutilisait pas la vraie
+ * logique métier de services/tontineService.ts (pénalités de retard, sondage de fin de
+ * boucle, idempotence des cotisations déjà versées à l'avance via /contribute).
  */
 export async function executeTontineAutomations() {
-    logger.info("[Tontine Automator] Running cycle...");
+    logger.info('[Tontine Automator] Vérification des échéances...');
+    const now = new Date();
 
     try {
-        const activeTontines = await prisma.tontineGroup.findMany({
-            where: { status: 'ACTIVE' },
-            include: {
-                participants: { include: { user: { include: { wallet: true } } } }
-            }
+        // 1. Sondages de relance dont le délai a expiré sans que tous les membres aient
+        // répondu (le cas "tout le monde a déjà voté" est déjà tranché immédiatement par
+        // routes/tontine.ts POST /renewal-vote — ceci ne couvre que l'expiration du délai).
+        const pendingRenewals = await prisma.tontineGroup.findMany({
+            where: { status: 'PENDING_RENEWAL', renewalDeadline: { lte: now } },
+            select: { id: true, name: true }
         });
 
-        for (const tontine of activeTontines) {
-            // Find today's cycle/round logic...
-            // For architecture demo purposes, we will mock the process of deducting participants.
-            // In a real cron, we verify if TODAY is a configured payout day.
+        for (const group of pendingRenewals) {
+            try {
+                await resolveRenewalPoll(group.id);
+                logger.info(`[Tontine Automator] Sondage de relance tranché pour « ${group.name} ».`);
+            } catch (e: any) {
+                logger.error(`[Tontine Automator] Échec résolution du sondage « ${group.name} » : ${e.message}`);
+            }
+        }
 
-            // Assuming today is payout day for `tontine`
-            const payoutAmount = tontine.contribution * tontine.participants.length;
+        // 2. Groupes actifs et non mis en pause : cycle si échu, sinon rappel la veille.
+        const activeTontines = await prisma.tontineGroup.findMany({
+            where: { status: 'ACTIVE', isPaused: false },
+            select: { id: true, name: true, contribution: true, frequency: true, startDate: true, lastPayoutDate: true }
+        });
 
-            await prisma.$transaction(async (tx: any) => {
-                // Fetch the Vault for Tontine
-                const tontineReserve = await tx.systemAccount.findUnique({
-                    where: { kind: 'TONTINE_VAULT' },
-                    include: { wallet: true }
-                });
+        for (const group of activeTontines) {
+            const reference = group.lastPayoutDate || group.startDate;
+            const nextDue = addInterval(reference, group.frequency);
 
-                if (!tontineReserve || !tontineReserve.wallet) throw new Error("Vault Introuvable");
-
-                for (const part of tontine.participants) {
-                    if (part.user.accountStatus !== 'ACTIVE') continue;
-
-                    // Pull amount from participant
-                    if (part.user.wallet!.balance >= tontine.contribution) {
-
-                        await tx.wallet.update({
-                            where: { id: part.user.wallet!.id, balance: { gte: tontine.contribution } },
-                            data: { balance: { decrement: tontine.contribution } }
-                        });
-
-                        await tx.wallet.update({
-                            where: { id: tontineReserve.wallet!.id },
-                            data: { balance: { increment: tontine.contribution } }
-                        });
-
-                        await tx.transaction.create({
-                            data: {
-                                amount: tontine.contribution,
-                                status: 'COMPLETED',
-                                reference: generateReference('TON_IN'),
-                                senderWalletId: part.user.wallet!.id,
-                                receiverWalletId: tontineReserve.wallet.id,
-                                fee: 0
-                            }
-                        });
-                    } else {
-                        // Participant failed -> Send Alert / Notification / Strike
-                        logger.warn(`Tontine ${tontine.id}: ${part.user.phone} insufficient funds.`);
+            if (now >= nextDue) {
+                try {
+                    const result = await executeTontineCycle(group.id);
+                    // `lastPayoutDate` n'avance que si le versement a réellement réussi — sinon
+                    // le CRON doit retenter ce même cycle au prochain passage plutôt que de
+                    // sauter silencieusement une échéance entière (même garde que `currentCycle`
+                    // à l'intérieur d'executeTontineCycle lui-même).
+                    if (result.success && !result.payoutFailed) {
+                        await prisma.tontineGroup.update({ where: { id: group.id }, data: { lastPayoutDate: now } });
                     }
+                    logger.info(`[Tontine Automator] « ${group.name} » — cycle ${result.currentCycle} traité (${result.debitedCount ?? 0} cotisations, échec versement : ${!!result.payoutFailed}).`);
+                } catch (e: any) {
+                    logger.error(`[Tontine Automator] Échec du cycle « ${group.name} » : ${e.message}`);
                 }
-
-                // PAYOUT AUTOMATISÉ
-                // Choose Next recipient logically (e.g. payoutOrder === currentRound)
-                const winner = tontine.participants[Math.floor(Math.random() * tontine.participants.length)];
-
-                await tx.wallet.update({
-                    where: { id: tontineReserve.wallet!.id, balance: { gte: payoutAmount } },
-                    data: { balance: { decrement: payoutAmount } }
-                });
-
-                await tx.wallet.update({
-                    where: { id: winner.user.wallet!.id },
-                    data: { balance: { increment: payoutAmount } }
-                });
-
-                await tx.transaction.create({
-                    data: {
-                        amount: payoutAmount,
-                        status: 'COMPLETED',
-                        reference: generateReference('TON_WIN'),
-                        senderWalletId: tontineReserve.wallet.id,
-                        receiverWalletId: winner.user.wallet!.id,
-                        fee: 0
-                    }
-                });
-
-                await tx.notification.create({
-                    data: {
-                        userId: winner.userId,
-                        title: `Tontine ${tontine.name}`,
-                        body: `C'est votre tour ! Cagnotte reçue : ${payoutAmount} FCFA.`,
-                        type: 'TRANSACTION'
-                    }
-                });
-            });
-            logger.info(`[Tontine Automator] Tontine ${tontine.id} cycle resolved.`);
+            } else {
+                const msUntilDue = nextDue.getTime() - now.getTime();
+                const oneDayMs = 24 * 60 * 60 * 1000;
+                if (msUntilDue <= oneDayMs) {
+                    await notifyUpcomingCycle(group);
+                }
+            }
         }
     } catch (e: any) {
         logger.error(`[Tontine Automator Error] ${e.message}`);
     }
 }
 
-
-export const initCronJobs = () => { logger.info("[CRON] Gateway Started"); };
+export const initCronJobs = () => {
+    logger.info('[CRON] Prêt — executeTontineAutomations est déclenché par le setInterval(24h) de index.ts.');
+};

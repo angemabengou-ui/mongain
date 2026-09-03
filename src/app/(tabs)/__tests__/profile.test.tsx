@@ -27,14 +27,20 @@ jest.mock('../../../context/AuthContext', () => ({
 
 const mockApiGetBalance = jest.fn();
 const mockApiGetDailyLimits = jest.fn();
+// `request` manquait de ce mock : profile.tsx l'importe aussi (fetchProfileData l'appelle
+// pour /api/users/profile et /api/loyalty/balance) — sans lui, `request` valait `undefined`
+// dans le module mocké et l'appel plantait avant même le premier rendu, empêchant
+// "Jean Dupont" d'apparaître (d'où le timeout de findByText).
+const mockRequest = jest.fn();
 jest.mock('../../../services/api', () => ({
     apiGetBalance: (...args: any[]) => mockApiGetBalance(...args),
     apiGetDailyLimits: (...args: any[]) => mockApiGetDailyLimits(...args),
+    request: (...args: any[]) => mockRequest(...args),
 }));
 
 import ProfileScreen from '../profile';
 
-const baseUser = { id: 'u1', name: 'Jean Dupont', phone: '077000000', role: 'USER', wallet: { id: 'w1', balance: 1000, currency: 'FCFA' } };
+const baseUser = { id: 'u1', name: 'Jean Dupont', phone: '077000000', email: 'jean.dupont@mongain.com', role: 'USER', wallet: { id: 'w1', balance: 1000, currency: 'FCFA' } };
 
 describe('(tabs)/profile (ProfileScreen)', () => {
     beforeEach(() => {
@@ -43,13 +49,17 @@ describe('(tabs)/profile (ProfileScreen)', () => {
         mockApiGetBalance.mockResolvedValue({ balance: 1000, currency: 'FCFA' });
         mockApiGetDailyLimits.mockResolvedValue({ skip: true });
         mockGetItemAsync.mockResolvedValue(null);
+        mockRequest.mockResolvedValue({ user: baseUser, points: 0 });
     });
 
-    it('renders the user name, phone and wallet balance', async () => {
+    it('renders the user name, email and wallet balance', async () => {
         await render(<ProfileScreen />);
 
+        // Le sous-titre affiché sous le nom est désormais l'email (userData?.email), pas le
+        // téléphone — celui-ci n'apparaît plus du tout sur cet écran. L'ancienne assertion sur
+        // '077000000' cherchait un texte que le composant ne rend plus.
         expect(await screen.findByText('Jean Dupont')).toBeTruthy();
-        expect(screen.getByText('077000000')).toBeTruthy();
+        expect(screen.getByText('jean.dupont@mongain.com')).toBeTruthy();
         expect(mockApiGetBalance).toHaveBeenCalled();
     });
 
@@ -58,8 +68,11 @@ describe('(tabs)/profile (ProfileScreen)', () => {
 
         await render(<ProfileScreen />);
 
+        // La carte de plafond journalier est désormais purement informative (barre de
+        // progression + montant dépensé) — il n'existe plus de bouton "Débloquer la limite"
+        // dans cet écran ; l'ancienne assertion visait un texte qui n'existe plus.
         expect(await screen.findByText('Plafond Journalier')).toBeTruthy();
-        expect(screen.getByText(/Débloquer la limite/)).toBeTruthy();
+        expect(screen.getByText(/4\s000/)).toBeTruthy();
     });
 
     it('does not fetch daily limits for non-USER roles', async () => {

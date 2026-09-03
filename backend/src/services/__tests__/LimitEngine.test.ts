@@ -89,6 +89,7 @@ describe('LimitEngine.verifyAndIncrementConsumption', () => {
                 customLimitExpiresAt: null, isActive: true, lockedUntil: null,
                 ...overrides.user,
             }),
+            update: jest.fn().mockResolvedValue({}),
         },
         wallet: {
             findUnique: jest.fn().mockResolvedValue({
@@ -97,6 +98,15 @@ describe('LimitEngine.verifyAndIncrementConsumption', () => {
                 ...overrides.wallet,
             }),
             update: jest.fn().mockResolvedValue({}),
+        },
+        // detectAndFreezeSAR (vérifié avant les plafonds classiques) compte les transactions
+        // de la dernière heure — 0 par défaut ici (sous le seuil de 15/h) pour ne pas geler le
+        // compte pendant les tests des plafonds classiques, qui ne testent pas ce mécanisme.
+        transaction: {
+            count: jest.fn().mockResolvedValue(overrides.transactionCount ?? 0),
+        },
+        auditLog: {
+            create: jest.fn().mockResolvedValue({}),
         },
     });
 
@@ -205,5 +215,29 @@ describe('LimitEngine.verifyAndIncrementConsumption', () => {
         const call = (tx.wallet.update as jest.Mock).mock.calls[0][0];
         expect(call.data.monthlySpent).toBe(5000);
         expect(call.data.monthlySpentResetAt).toBeInstanceOf(Date);
+    });
+
+    it('devrait geler le compte et lever une exception si la vélocité SAR dépasse 15 tx/h', async () => {
+        const tx = buildTx({ transactionCount: 16 });
+
+        await expect(LimitEngine.verifyAndIncrementConsumption(tx, 'user_1', 'wallet_1', 1000, settings))
+            .rejects.toThrow('Compte gelé par réseau Sécurité (SAR Fraud). Vélocité anormale détectée.');
+
+        expect(tx.user.update).toHaveBeenCalledWith({
+            where: { id: 'user_1' },
+            data: { isActive: false, kycStatus: 'REJECTED' },
+        });
+        expect(tx.auditLog.create).toHaveBeenCalled();
+        // Le gel doit intervenir AVANT toute écriture sur les compteurs de plafond.
+        expect(tx.wallet.update).not.toHaveBeenCalled();
+    });
+
+    it('ne devrait pas geler le compte à exactement 15 tx/h (seuil strict >15)', async () => {
+        const tx = buildTx({ transactionCount: 15 });
+
+        await LimitEngine.verifyAndIncrementConsumption(tx, 'user_1', 'wallet_1', 1000, settings);
+
+        expect(tx.user.update).not.toHaveBeenCalled();
+        expect(tx.wallet.update).toHaveBeenCalled();
     });
 });

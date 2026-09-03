@@ -3,6 +3,7 @@ import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
 import { friendlyErrorMessage } from '../utils/errors';
+import { verifyUserPin } from '../utils/pinAuth';
 import logger from '../utils/logger';
 
 const router = express.Router();
@@ -41,13 +42,16 @@ router.get('/market', authMiddleware, async (req: AuthRequest, res) => {
 // POST /api/crypto/buy
 router.post('/buy', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
-        const { asset, amountXaf } = req.body;
+        const { asset, amountXaf, pin } = req.body;
         const xafAmount = parseFloat(amountXaf);
         if (isNaN(xafAmount) || xafAmount <= 1000) return res.status(400).json({ error: 'Minimum achat : 1000 XAF' });
         if (!RATES[asset]) return res.status(400).json({ error: 'Actif non supporté' });
 
         const user = await prisma.user.findUnique({ where: { id: req.userId! }, include: { wallet: true } });
         if (!user || user.accountStatus !== 'ACTIVE') return res.status(403).json({ error: 'Compte inactif' });
+        if (!pin) return res.status(400).json({ error: 'Code PIN requis.' });
+        const pinCheck = await verifyUserPin(user, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
         if (user.wallet!.balance < xafAmount) return res.status(400).json({ error: 'Solde XAF insuffisant' });
 
         const currentRate = RATES[asset];
@@ -112,7 +116,7 @@ router.post('/buy', authMiddleware, circuitBreakerMiddleware, async (req: AuthRe
 // POST /api/crypto/sell
 router.post('/sell', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
-        const { asset, amountCrypto } = req.body;
+        const { asset, amountCrypto, pin } = req.body;
         const cryptoQty = parseFloat(amountCrypto);
         if (isNaN(cryptoQty) || cryptoQty <= 0) return res.status(400).json({ error: 'Quantité invalide' });
 
@@ -125,6 +129,10 @@ router.post('/sell', authMiddleware, circuitBreakerMiddleware, async (req: AuthR
         const netSale = grossSale - fee;
 
         const user = await prisma.user.findUnique({ where: { id: req.userId! }, include: { wallet: true } });
+        if (!user) return res.status(403).json({ error: 'Compte introuvable' });
+        if (!pin) return res.status(400).json({ error: 'Code PIN requis.' });
+        const pinCheck = await verifyUserPin(user, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         await prisma.$transaction(async (tx: any) => {
             // Debit Crypto

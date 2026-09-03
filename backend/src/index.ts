@@ -16,16 +16,7 @@ import authRoutes from './routes/auth';
 import { executeTontineAutomations } from './cron';
 import b2bRoutes from './routes/b2b';
 import ussdRoutes from './routes/ussd';
-import escrowRoutes from './routes/escrow';
-import adminPushRoutes from './routes/admin.push';
 import supportRoutes from './routes/support';
-import adminSupportRoutes from './routes/admin.support';
-import adminLogsRoutes from './routes/admin.logs';
-import adminAccountsRoutes from './routes/admin.accounts';
-import adminFraudRoutes from './routes/admin.fraud';
-import adminRefundRoutes from './routes/admin.refunds';
-import adminRiskRoutes from './routes/admin.risk';
-import rewardsRoutes from './routes/rewards';
 import marketRoutes from './routes/market';
 import investRoutes from './routes/invest';
 import gatewayRoutes from './routes/gateway';
@@ -192,17 +183,12 @@ app.use('/api/webhooks', webhookRoutes);
 app.use('/api/wallet', circuitBreakerMiddleware, walletRoutes);
 app.use('/api/wallet/cards', circuitBreakerMiddleware, cardsRoutes);
 app.use('/api/b2b', circuitBreakerMiddleware, b2bRoutes);
-app.use('/api/ussd', ussdRoutes);
-app.use('/api/escrow', escrowRoutes);
-app.use('/api/admin/push', adminPushRoutes);
+app.use('/api/ussd', circuitBreakerMiddleware, ussdRoutes);
 app.use('/api/support', supportRoutes);
-app.use('/api/admin/reclamations', adminSupportRoutes);
-app.use('/api/admin/logs', adminLogsRoutes);
-app.use('/api/admin/system-accounts', adminAccountsRoutes);
-app.use('/api/admin/fraud', adminFraudRoutes);
-app.use('/api/admin/refund-requests', adminRefundRoutes);
-app.use('/api/admin/risk', adminRiskRoutes);
-app.use('/api/rewards', rewardsRoutes);
+// admin.fraud.ts et admin.risk.ts ont été supprimés : doublons non protégés (authMiddleware
+// seul, sans hasPermission()) d'endpoints déjà servis en toute sécurité par admin.ts
+// (/fraud-cases, perm_customer_flag) et scoring.ts (/scoring) — aucune page admin-web ne les
+// appelait, ils n'exposaient ces données qu'à un attaquant en JWT valide.
 app.use('/api/market', marketRoutes);
 app.use('/api/invest', investRoutes);
 app.use('/api/gateway', gatewayRoutes);

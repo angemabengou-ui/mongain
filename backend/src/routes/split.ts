@@ -4,6 +4,7 @@ import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
 import { friendlyErrorMessage } from '../utils/errors';
 import logger from '../utils/logger';
+import { verifyUserPin } from '../utils/pinAuth';
 
 const router = express.Router();
 
@@ -91,6 +92,13 @@ router.get('/pending', authMiddleware, circuitBreakerMiddleware, async (req: Aut
 router.post('/pay/:id', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         const splitId = req.params.id;
+        const { pin } = req.body;
+
+        const payerForPin = await prisma.user.findUnique({ where: { id: req.userId! } });
+        if (!payerForPin) return res.status(403).json({ error: 'Utilisateur introuvable.' });
+        if (!pin) return res.status(400).json({ error: 'Code PIN requis.' });
+        const pinCheck = await verifyUserPin(payerForPin, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         await prisma.$transaction(async (tx: any) => {
             const splitReq = await tx.splitRequest.findUnique({
@@ -114,9 +122,11 @@ router.post('/pay/:id', authMiddleware, circuitBreakerMiddleware, async (req: Au
                 throw new Error('Fonds insuffisants pour rembourser cette part.');
             }
 
-            // Transfer Funds
+            // Transfer Funds — garde atomique `balance: gte` : sans elle, deux requêtes
+            // concurrentes sur /pay/:id passent toutes les deux le contrôle de solde ci-dessus
+            // avant qu'aucune n'ait décrémenté, permettant un double paiement du même montant.
             await tx.wallet.update({
-                where: { id: payer.wallet!.id },
+                where: { id: payer.wallet!.id, balance: { gte: splitReq.amount } },
                 data: { balance: { decrement: splitReq.amount } }
             });
 

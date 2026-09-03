@@ -5,10 +5,10 @@ import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, SafeAreaView,
 import { request } from '../services/api';
 
 const CURRENCIES = [
-    { code: 'EUR', label: 'Euro (France)', flag: '🇫🇷' },
-    { code: 'USD', label: 'Dollar (USA)', flag: '🇺🇸' },
-    { code: 'XOF', label: 'Franc CFA (Sénégal)', flag: '🇸🇳' },
-    { code: 'NGN', label: 'Naira (Nigeria)', flag: '🇳🇬' }
+    { code: 'EUR', label: 'Euro (France)', country: 'France', flag: '🇫🇷' },
+    { code: 'USD', label: 'Dollar (USA)', country: 'USA', flag: '🇺🇸' },
+    { code: 'XOF', label: 'Franc CFA (Sénégal)', country: 'Sénégal', flag: '🇸🇳' },
+    { code: 'NGN', label: 'Naira (Nigeria)', country: 'Nigeria', flag: '🇳🇬' }
 ];
 
 export default function RemitScreen() {
@@ -20,52 +20,75 @@ export default function RemitScreen() {
     const [loading, setLoading] = useState(false);
 
     const handleCalculateQuote = async () => {
-        if (!amountStr) return;
+        if (!amountStr) return null;
         setLoading(true);
         try {
             const res = await request('POST', '/api/remit/quote', {
-                targetCurrency,
-                amountXaf: amountStr
+                destinationCurrency: targetCurrency,
+                amountXaf: Number(amountStr)
             }, true);
             setQuote(res);
+            return res;
         } catch (e: any) {
-            Alert.alert("Erreur", e.response?.data?.error || "Erreur de cotation");
+            Alert.alert("Erreur", e.response?.data?.error || e.message || "Erreur de cotation");
             setQuote(null);
+            return null;
         } finally {
             setLoading(false);
         }
     };
 
     const handleSend = async () => {
-        if (!quote) return;
-        if (!targetAccount) return Alert.alert("Erreur", "Saisissez un IBAN ou Numéro de téléphone international.");
+        if (!targetAccount) return Alert.alert("Erreur", "Saisissez le numéro de téléphone du destinataire.");
+
+        // On recalcule la cotation juste avant de confirmer : évite d'envoyer un montant
+        // différent de celui affiché si le champ a été modifié depuis le dernier calcul.
+        const freshQuote = await handleCalculateQuote();
+        if (!freshQuote) return;
+
+        const country = CURRENCIES.find(c => c.code === targetCurrency)?.country || targetCurrency;
 
         Alert.alert(
             "Confirmer le virement",
-            `Souhaitez-vous vraiment débourser ${quote.totalToDebit} XAF pour envoyer l'équivalent de ${quote.convertedAmount} ${targetCurrency} ?`,
+            `Souhaitez-vous vraiment débourser ${freshQuote.totalToDebit} XAF pour envoyer l'équivalent de ${freshQuote.convertedAmount} ${targetCurrency} ?`,
             [
                 { text: "Annuler", style: "cancel" },
                 {
                     text: "Confirmer", style: "default",
-                    onPress: async () => {
-                        setLoading(true);
-                        try {
-                            await request('POST', '/api/remit/send', {
-                                targetCurrency,
-                                amountXaf: amountStr,
-                                targetAccount
-                            }, true);
-                            Alert.alert("Transaction Réussie !", `Fonds expédiés vers le réseau ${targetCurrency}.`);
-                            router.back();
-                        } catch (e: any) {
-                            Alert.alert("Erreur", e.response?.data?.error || "Le transfert a échoué.");
-                        } finally {
-                            setLoading(false);
-                        }
+                    onPress: () => {
+                        Alert.prompt(
+                            'Code PIN',
+                            'Confirmez ce virement avec votre code PIN Mongain.',
+                            [
+                                { text: 'Annuler', style: 'cancel' },
+                                { text: 'Envoyer', onPress: (pin?: string) => executeSend(freshQuote, country, pin) },
+                            ],
+                            'secure-text',
+                        );
                     }
                 }
             ]
         );
+    };
+
+    const executeSend = async (freshQuote: any, country: string, pin?: string) => {
+        if (!pin) return Alert.alert("Erreur", "Code PIN requis.");
+        setLoading(true);
+        try {
+            await request('POST', '/api/remit/send', {
+                destinationCountry: country,
+                destinationCurrency: targetCurrency,
+                recipientPhone: targetAccount,
+                amountXaf: freshQuote.totalToDebit,
+                pin
+            }, true);
+            Alert.alert("Transaction Réussie !", `Fonds expédiés vers le réseau ${targetCurrency}.`);
+            router.back();
+        } catch (e: any) {
+            Alert.alert("Erreur", e.response?.data?.error || e.message || "Le transfert a échoué.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (

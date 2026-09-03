@@ -68,8 +68,10 @@ export default function SystemMonitor({ token: _token }: { token: string }) {
                                         <td style={{ padding: '16px 20px', color: 'var(--text-primary)', fontSize: 14 }}>{e.time}</td>
                                         <td style={{ padding: '16px 20px', color: '#ef4444', fontSize: 14, fontWeight: 500 }}>{e.type}</td>
                                         <td style={{ padding: '16px 20px', textAlign: 'center', color: 'var(--text-primary)' }}>{e.count}</td>
-                                        <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                                            <button style={{ background: 'none', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '6px 12px', borderRadius: 8, cursor: 'not-allowed' }}>Ignorer</button>
+                                        <td style={{ padding: '16px 20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13 }}>
+                                            {/* Flux d'incidents réel (Sentry ou équivalent) pas encore branché côté serveur — le
+                                                bouton "Ignorer" simulait une action qu'aucune route ne pouvait exécuter. */}
+                                            —
                                         </td>
                                     </tr>
                                 ))}

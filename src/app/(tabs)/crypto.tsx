@@ -29,31 +29,57 @@ export default function CryptoScreen() {
         if (token) fetchCryptoData();
     }, [token]);
 
-    const handleBuy = async (asset: string) => {
+    const handleBuy = (asset: string) => {
         if (!amount) return Alert.alert("Erreur", "Veuillez entrer un montant XAF.");
+        Alert.prompt(
+            'Confirmer l\'achat',
+            `Saisissez votre code PIN Mongain pour acheter du ${asset}.`,
+            [
+                { text: 'Annuler', style: 'cancel' },
+                { text: 'Confirmer', onPress: (pin?: string) => executeBuy(asset, pin) },
+            ],
+            'secure-text',
+        );
+    };
+
+    const executeBuy = async (asset: string, pin?: string) => {
+        if (!pin) return Alert.alert("Erreur", "Code PIN requis.");
         setActionLoading(true);
         try {
-            await request('POST', '/api/crypto/buy', { asset, amountXaf: amount }, true);
+            await request('POST', '/api/crypto/buy', { asset, amountXaf: amount, pin }, true);
             await fetchCryptoData();
             Alert.alert("Succès", `Vous avez acheté du ${asset} avec succès.`);
             setAmount('');
         } catch (e: any) {
-            Alert.alert("Erreur", e.response?.data?.error || "Action impossible.");
+            Alert.alert("Erreur", e.response?.data?.error || e.message || "Action impossible.");
         } finally {
             setActionLoading(false);
         }
     };
 
-    const handleSell = async (asset: string) => {
+    const handleSell = (asset: string) => {
         if (!amount) return Alert.alert("Erreur", "Veuillez entrer la quantité de crypto à vendre.");
+        Alert.prompt(
+            'Confirmer la vente',
+            `Saisissez votre code PIN Mongain pour vendre du ${asset}.`,
+            [
+                { text: 'Annuler', style: 'cancel' },
+                { text: 'Confirmer', onPress: (pin?: string) => executeSell(asset, pin) },
+            ],
+            'secure-text',
+        );
+    };
+
+    const executeSell = async (asset: string, pin?: string) => {
+        if (!pin) return Alert.alert("Erreur", "Code PIN requis.");
         setActionLoading(true);
         try {
-            await request('POST', '/api/crypto/sell', { asset, amountCrypto: amount }, true);
+            await request('POST', '/api/crypto/sell', { asset, amountCrypto: amount, pin }, true);
             await fetchCryptoData();
             Alert.alert("Succès", `Vente de ${asset} exécutée avec succès.`);
             setAmount('');
         } catch (e: any) {
-            Alert.alert("Erreur", e.response?.data?.error || "Action impossible.");
+            Alert.alert("Erreur", e.response?.data?.error || e.message || "Action impossible.");
         } finally {
             setActionLoading(false);
         }

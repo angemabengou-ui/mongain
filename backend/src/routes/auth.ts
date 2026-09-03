@@ -86,7 +86,10 @@ router.post('/request-otp', smsLimiter, async (req, res) => {
         if (existingUser) return res.status(400).json({ error: 'Ce numéro est déjà inscrit.' });
 
         // Mode Démo Automatique : si Twilio n'est pas configuré, le code est toujours 1234
-        const useDemoMode = !process.env.TWILIO_ACCOUNT_SID;
+        // Mode démo jamais atteignable en production, même si TWILIO_ACCOUNT_SID est absent par
+        // erreur de configuration : un code aléatoire non livrable est préférable à un code
+        // universel « 1234 » valide pour tout le monde.
+        const useDemoMode = process.env.NODE_ENV !== 'production' && !process.env.TWILIO_ACCOUNT_SID;
         const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
@@ -127,7 +130,10 @@ router.post('/request-reset-otp', smsLimiter, async (req, res) => {
             return res.status(429).json({ error: 'Trop de demandes pour ce numéro. Réessayez dans 1 heure.' });
         }
 
-        const useDemoMode = !process.env.TWILIO_ACCOUNT_SID;
+        // Mode démo jamais atteignable en production, même si TWILIO_ACCOUNT_SID est absent par
+        // erreur de configuration : un code aléatoire non livrable est préférable à un code
+        // universel « 1234 » valide pour tout le monde.
+        const useDemoMode = process.env.NODE_ENV !== 'production' && !process.env.TWILIO_ACCOUNT_SID;
         const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
@@ -320,7 +326,10 @@ router.post('/login', loginLimiter, async (req, res) => {
             data: { failedPinAttempts: 0, lockedUntil: null },
         });
 
-        const useDemoMode = !process.env.TWILIO_ACCOUNT_SID;
+        // Mode démo jamais atteignable en production, même si TWILIO_ACCOUNT_SID est absent par
+        // erreur de configuration : un code aléatoire non livrable est préférable à un code
+        // universel « 1234 » valide pour tout le monde.
+        const useDemoMode = process.env.NODE_ENV !== 'production' && !process.env.TWILIO_ACCOUNT_SID;
         const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
 

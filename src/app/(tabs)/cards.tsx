@@ -40,6 +40,48 @@ export default function CardsScreen() {
         }
     };
 
+    const handleFund = (cardId: string) => {
+        Alert.prompt(
+            'Recharger la carte',
+            'Montant à transférer de votre portefeuille vers cette carte (XAF) :',
+            [
+                { text: 'Annuler', style: 'cancel' },
+                { text: 'Suivant', onPress: (amount?: string) => promptPinForFund(cardId, amount) },
+            ],
+            'plain-text',
+            '',
+            'numeric',
+        );
+    };
+
+    const promptPinForFund = (cardId: string, amount?: string) => {
+        const parsed = parseFloat(amount || '');
+        if (!parsed || parsed <= 0) return Alert.alert('Erreur', 'Montant invalide.');
+        Alert.prompt(
+            'Code PIN',
+            'Confirmez ce rechargement avec votre code PIN Mongain.',
+            [
+                { text: 'Annuler', style: 'cancel' },
+                { text: 'Confirmer', onPress: (pin?: string) => executeFund(cardId, parsed, pin) },
+            ],
+            'secure-text',
+        );
+    };
+
+    const executeFund = async (cardId: string, amount: number, pin?: string) => {
+        if (!pin) return Alert.alert('Erreur', 'Code PIN requis.');
+        setActionLoading(true);
+        try {
+            await request('POST', `/api/wallet/cards/${cardId}/fund`, { amount, pin }, true);
+            await fetchCards();
+            Alert.alert('Succès', 'Carte rechargée avec succès.');
+        } catch (e: any) {
+            Alert.alert('Erreur', e.response?.data?.error || e.message || 'Rechargement impossible.');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     const handleFreeze = async (id: string, isFrozen: boolean) => {
         setActionLoading(true);
         try {
@@ -117,7 +159,7 @@ export default function CardsScreen() {
                                 )}
 
                                 <View style={styles.actions}>
-                                    <TouchableOpacity style={styles.actionBtn} onPress={() => Alert.alert('Bientôt', 'Fonctionnalité de rechargement en cours.')}>
+                                    <TouchableOpacity style={styles.actionBtn} onPress={() => handleFund(c.id)} disabled={actionLoading}>
                                         <Text style={styles.actionText}>Recharger</Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity style={[styles.actionBtn, isFrozen ? styles.actionBtnUnfreeze : styles.actionBtnDanger]} onPress={() => handleFreeze(c.id, isFrozen)} disabled={actionLoading}>

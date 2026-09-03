@@ -1,8 +1,25 @@
+import crypto from 'crypto';
 import { Request, Response, Router } from 'express';
 import { prisma } from '../prisma';
+import { verifyUserPin } from '../utils/pinAuth';
 import logger from '../utils/logger';
 
 const router = Router();
+
+// Cette route n'est jamais appelée par le téléphone du client : c'est le serveur de
+// l'agrégateur télécom (Airtel/Moov) qui la relaie après avoir lui-même authentifié
+// l'appelant sur son propre réseau (SS7/session USSD), et c'est LUI qui affirme le
+// `phoneNumber`. Sans secret partagé, n'importe qui sur Internet peut prétendre être ce
+// relais et agir au nom de n'importe quel numéro connu — d'où cette vérification, sur le
+// même principe que la clé de webhook PVit (routes/webhooks.ts) : comparaison à temps
+// constant, échec fermé (503) si la clé n'est pas configurée en production.
+function isGatewayAuthorized(req: Request): boolean {
+    const expected = process.env.USSD_GATEWAY_SECRET || '';
+    if (!expected) return process.env.NODE_ENV !== 'production';
+    const provided = typeof req.headers['x-gateway-secret'] === 'string' ? req.headers['x-gateway-secret'] as string : '';
+    return provided.length === expected.length
+        && crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+}
 
 /**
  * Endpoint webhook for Telco (Airtel, Moov) USSD Gateway.
@@ -11,6 +28,11 @@ const router = Router();
  */
 router.post('/gateway', async (req: Request, res: Response) => {
     try {
+        if (!isGatewayAuthorized(req)) {
+            logger.warn('[USSD Gateway] Requête rejetée : clé de passerelle absente ou invalide.');
+            return res.status(403).send(`END Passerelle non autorisée.`);
+        }
+
         const { sessionId, serviceCode, phoneNumber, text } = req.body;
         if (!phoneNumber) return res.send(`END Erreur: Numéro requis.`);
 
@@ -55,8 +77,10 @@ router.post('/gateway', async (req: Request, res: Response) => {
                 const amount = parseFloat(inputs[2]);
                 const pin = inputs[3];
 
-                // Check PIN (Simulated check, normally verify bcrypt user.pin)
-                // if (!verifyPin(pin)) return res.send(`END Code PIN Incorrect.`);
+                if (!amount || amount <= 0) return res.send(`END Montant invalide.`);
+
+                const pinCheck = await verifyUserPin(user, pin);
+                if (!pinCheck.ok) return res.send(`END ${pinCheck.error}`);
 
                 const targetUser = await prisma.user.findFirst({ where: { phone: targetPhone }, include: { wallet: true } });
                 if (!targetUser || !targetUser.wallet || !user.wallet) return res.send(`END Destinataire introuvable.`);
@@ -103,13 +127,15 @@ router.post('/gateway', async (req: Request, res: Response) => {
             if (inputs.length === 3) return res.send(`CON Confirmer avec votre code PIN :`);
 
             if (inputs.length === 4) {
-                return res.send(`END Paiement SEEG de ${inputs[2]}F validé pour ${inputs[1]}. Code Ticket EDAN envoyé par SMS.`);
+                // Non implémenté : afficher une confirmation de paiement qui ne débite ni ne
+                // crédite réellement induirait le client en erreur sur un vrai règlement de facture.
+                return res.send(`END Paiement de facture indisponible par USSD pour le moment. Utilisez l'application Mongain ou une agence.`);
             }
         }
 
-        // 4. BNPL Flow
+        // 4. BNPL — même raison : pas d'octroi de crédit réel possible depuis ce canal aujourd'hui.
         if (text === '4') {
-            return res.send(`END Vous êtes éligible à un crédit BNPL de 50 000F. Accédez à l'application réseau pour valider.`);
+            return res.send(`END Le Micro-Crédit BNPL n'est pas encore disponible par USSD. Ouvrez l'application Mongain pour en bénéficier.`);
         }
 
         return res.send(`END Option invalide.`);

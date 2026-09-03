@@ -107,7 +107,7 @@ export default function BNPLScreen() {
                                     <Text style={{ color: '#64748B' }}>Frais (5%)</Text>
                                     <Text style={{ color: '#F43F5E', fontWeight: 'bold' }}>+ {simFee} F</Text>
                                 </View>
-                                <View style={{ height: 1, backgroundColor: '#E2E8F0', my: 8 }}></View>
+                                <View style={{ height: 1, backgroundColor: '#E2E8F0', marginVertical: 8 }}></View>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
                                     <Text style={{ fontWeight: '900', color: '#1E293B', fontSize: 16 }}>Dette Totale</Text>
                                     <Text style={{ fontWeight: '900', color: '#4F46E5', fontSize: 16 }}>{simTotal} F</Text>

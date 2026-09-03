@@ -2,6 +2,7 @@ import express from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
+import { getSystemAccount } from '../services/systemAccounts';
 import { friendlyErrorMessage } from '../utils/errors';
 import logger from '../utils/logger';
 
@@ -58,14 +59,16 @@ router.post('/convert', authMiddleware, circuitBreakerMiddleware, async (req: Au
                 data: { balance: { increment: xafEquiv } }
             });
 
-            // Debit Corporate Fees Engine (for accounting)
-            const sys = await tx.systemAccount.findUnique({ where: { role: 'FEES_COLLECTION' } });
-            if (sys) {
-                await tx.systemAccount.update({
-                    where: { id: sys.id },
-                    data: { balance: { decrement: xafEquiv } } // we "burn" collected fees to give rewards
-                });
-            }
+            // Débit du compte Corporate (revenus collectés — mêmes frais que ceux crédités par
+            // les autres rails) pour ne pas créer de monnaie ex nihilo à la conversion. L'ancien
+            // lookup `{ role: 'FEES_COLLECTION' }` ne correspondait à aucune colonne réelle du
+            // modèle SystemAccount (champ unique : `kind`) : `sys` valait toujours `null` et ce
+            // débit ne s'exécutait jamais.
+            const corporate = await getSystemAccount('CORPORATE', tx);
+            await tx.wallet.update({
+                where: { id: corporate.wallet!.id },
+                data: { balance: { decrement: xafEquiv } }
+            });
 
             // Create Transaction Log
             await tx.transaction.create({
@@ -91,9 +94,14 @@ router.post('/convert', authMiddleware, circuitBreakerMiddleware, async (req: Au
 
 /**
  * POST /api/loyalty/simulate-earn
- * ONLY FOR DEMO PURPOSES (To let the user test gaining points)
+ * UNIQUEMENT POUR LA DÉMO (dev/staging) — jamais en production. Cette route est
+ * convertible en argent réel via /convert : la laisser active en production permettait
+ * à n'importe quel compte de générer des XAF réels sans limite en la rappelant en boucle.
  */
 router.post('/simulate-earn', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+    if (process.env.NODE_ENV === 'production') {
+        return res.status(404).json({ error: 'Introuvable.' });
+    }
     try {
         await prisma.user.update({
             where: { id: req.userId! },

@@ -89,11 +89,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const newSocket = io(BASE_URL);
 
-        newSocket.on('connect', () => {
-            console.log('🔗 WebSocket connecté, enregistrement pour', user.phone);
-            // Le serveur dérive désormais le numéro réel de ce token (jamais d'un numéro
-            // envoyé tel quel par le client) — voir backend/src/index.ts, socket.on('register').
-            newSocket.emit('register', token);
+        newSocket.on('connect', async () => {
+            // Toujours relire le token depuis le cache/SecureStore (getToken()) plutôt que
+            // d'utiliser la variable `token` figée dans la closure de cet effet : le
+            // renouvellement silencieux (tryRefreshSession, services/api.ts) écrit le nouveau
+            // token dans le cache module + SecureStore mais n'appelle jamais setToken() ici —
+            // l'état React `token` reste donc bloqué sur sa valeur de connexion initiale.
+            // Sans ce correctif, le PREMIER 'connect' fonctionnait (token encore frais), mais
+            // toute reconnexion automatique ultérieure (veille du backend Render en plan
+            // gratuit après inactivité, coupure réseau, retour en premier plan de l'app...)
+            // ré-émettait ce même token désormais expiré : le serveur rejetait silencieusement
+            // le 'register' (voir resolveSocketRoom) et le client cessait de recevoir toute
+            // notification temps réel jusqu'au redémarrage complet de l'app — exactement le
+            // symptôme "les notifications passaient avant, plus maintenant".
+            try {
+                const freshToken = await getToken();
+                console.log('🔗 WebSocket connecté, enregistrement pour', user.phone);
+                if (freshToken) newSocket.emit('register', freshToken);
+            } catch (e) {
+                console.error('Erreur lecture token pour enregistrement WebSocket:', e);
+            }
         });
 
         newSocket.on('payment_received', (data: { amount: number, from: string }) => {
@@ -133,12 +148,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return () => {
             newSocket.disconnect();
         };
-        // `token` inclus : sans lui, une reconnexion automatique du socket après une simple
-        // coupure réseau ré-émettrait un token d'accès devenu expiré entre-temps (rafraîchi en
-        // silence ailleurs par la logique de /auth/refresh) — le serveur rejetterait alors
-        // silencieusement le 'register' et l'utilisateur cesserait de recevoir ses notifications
-        // de paiement en temps réel jusqu'au prochain redémarrage complet de l'app.
-    }, [user?.phone, token]);
+        // `token` volontairement absent des dépendances : ce socket ne doit être recréé qu'au
+        // changement de session (connexion/déconnexion), jamais à chaque renouvellement
+        // silencieux du token — celui-ci est relu à la volée via getToken() à chaque 'connect'
+        // ci-dessus (initial ET reconnexions automatiques), donc toujours à jour sans avoir à
+        // reconstruire le socket.
+    }, [user?.phone]);
 
     const logout = async () => {
         // Best-effort : révoque le refresh token côté serveur, mais la session locale
@@ -230,6 +245,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         if (res.token && res.user) {
             await saveToken(res.token);
+            // Sans ceci, un compte connecté par PIN seul (sans 2FA) n'avait aucun refresh
+            // token stocké — contrairement à verifyLoginOtp/register/resetPin — et se
+            // retrouvait déconnecté de force dès l'expiration du token d'accès court.
+            if (res.refreshToken) await saveRefreshToken(res.refreshToken);
             setToken(res.token);
             setUser(res.user);
             await fetchSettings();

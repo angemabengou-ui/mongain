@@ -105,7 +105,8 @@ router.post('/login', loginLimiter, async (req, res) => {
             return res.status(400).json({ error: 'Aucun numéro de téléphone enregistré pour ce compte. Contactez un SUPER_ADMIN pour l\'ajouter avant de pouvoir vous connecter.' });
         }
 
-        const useDemoMode = !process.env.TWILIO_ACCOUNT_SID;
+        // Même garde qu'auth.ts : jamais de mode démo en production, quelle que soit la config Twilio.
+        const useDemoMode = process.env.NODE_ENV !== 'production' && !process.env.TWILIO_ACCOUNT_SID;
         const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes, comme le login client
 

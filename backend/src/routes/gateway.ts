@@ -3,7 +3,11 @@ import { Router } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { friendlyErrorMessage } from '../utils/errors';
-import { sendPushNotification } from './admin.push';
+// admin.push.ts (qui définissait ce helper) a été supprimé : c'était un doublon non protégé
+// de routes/push.ts, entièrement shadowé côté route — mais cette fonction d'envoi (elle,
+// utilisée ici) était un vrai dépendant. wallet.ts exporte déjà le même helper à un
+// destinataire unique, sous le nom `sendPush` — réutilisé plutôt que redupliqué.
+import { sendPush as sendPushNotification } from './wallet';
 
 const router = Router();
 

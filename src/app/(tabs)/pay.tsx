@@ -10,6 +10,7 @@ export default function PayScreen() {
     const [mode, setMode] = useState<'QR' | 'SCAN'>('QR');
     const [scannedUserId, setScannedUserId] = useState('');
     const [amount, setAmount] = useState('');
+    const [pin, setPin] = useState('');
     const [loading, setLoading] = useState(false);
 
     // Mock QR generator animation
@@ -23,12 +24,14 @@ export default function PayScreen() {
 
     const handleScanMock = async () => {
         if (!scannedUserId || !amount) return Alert.alert("Erreur", "L'ID et le montant sont requis.");
+        if (!pin || pin.length !== 4) return Alert.alert("Erreur", "Le client doit saisir son code PIN à 4 chiffres pour autoriser le paiement.");
         setLoading(true);
         try {
-            await request('POST', '/api/pay/qr-scan', { scannedCode: scannedUserId, amountXaf: amount }, true);
+            await request('POST', '/api/pay/qr-scan', { scannedCode: scannedUserId, amountXaf: amount, pin }, true);
             Alert.alert("Succès", `Encaissement de ${amount} XAF validé avec succès !`);
             setScannedUserId('');
             setAmount('');
+            setPin('');
         } catch (e: any) {
             Alert.alert("Échec", e.response?.data?.error || "Paiement refusé.");
         } finally {
@@ -98,6 +101,20 @@ export default function PayScreen() {
                                 placeholderTextColor="#64748b"
                                 value={scannedUserId}
                                 onChangeText={setScannedUserId}
+                            />
+                        </View>
+
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Code PIN du client (saisi par le client, pas par vous)</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="••••"
+                                placeholderTextColor="#64748b"
+                                keyboardType="numeric"
+                                secureTextEntry
+                                maxLength={4}
+                                value={pin}
+                                onChangeText={setPin}
                             />
                         </View>
 

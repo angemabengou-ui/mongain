@@ -2,7 +2,10 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { LimitEngine } from '../services/LimitEngine';
+import { getSystemAccount } from '../services/systemAccounts';
 import logger from '../utils/logger';
+import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
 import { getSystemSettings } from './settings';
 
@@ -12,7 +15,8 @@ const remitSchema = z.object({
     destinationCountry: z.string().min(2),
     destinationCurrency: z.string().min(3),
     recipientPhone: z.string().min(8),
-    amountXaf: z.number().min(100)
+    amountXaf: z.number().min(100),
+    pin: z.string().min(4)
 });
 
 /**
@@ -24,12 +28,42 @@ const FX_RATES: Record<string, number> = {
     'USD': 0.0017
 };
 
+const quoteSchema = z.object({
+    destinationCurrency: z.string().min(3),
+    amountXaf: z.coerce.number().min(100)
+});
+
+// POST /api/remit/quote — cotation sans mouvement de fonds, calculée avec la même formule
+// (fxMarkup, FX_RATES) que /send, pour que le montant affiché à l'écran ne diverge jamais
+// de celui réellement débité.
+router.post('/quote', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const parsed = quoteSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
+
+        const { destinationCurrency, amountXaf } = parsed.data;
+        const rate = FX_RATES[destinationCurrency];
+        if (!rate) return res.status(400).json({ error: 'Devise de destination non supportée par notre corridor.' });
+
+        const settings = await getSystemSettings();
+        const fxMarkup = settings.forexMarkup || 0.025;
+        const fee = Math.round(amountXaf * fxMarkup);
+        const netSourceAmount = amountXaf - fee;
+        const convertedAmount = Number((netSourceAmount * rate).toFixed(2));
+
+        res.json({ convertedAmount, targetCurrency: destinationCurrency, rate, fee, totalToDebit: amountXaf });
+    } catch (e: any) {
+        logger.error(`[Remittance Quote] ${e.message}`);
+        res.status(500).json({ error: 'Erreur de cotation.' });
+    }
+});
+
 router.post('/send', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const parsed = remitSchema.safeParse(req.body);
         if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
-        const { destinationCountry, destinationCurrency, recipientPhone, amountXaf } = parsed.data;
+        const { destinationCountry, destinationCurrency, recipientPhone, amountXaf, pin } = parsed.data;
         const rate = FX_RATES[destinationCurrency];
 
         if (!rate) return res.status(400).json({ error: 'Devise de destination non supportée par notre corridor.' });
@@ -51,12 +85,18 @@ router.post('/send', authMiddleware, async (req: AuthRequest, res) => {
             return res.status(403).json({ error: 'Compte restreint pour l\'international.' });
         }
 
+        const pinCheck = await verifyUserPin(sender, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
+
         if (sender.wallet!.balance < amountXaf) {
             return res.status(400).json({ error: 'Fonds insuffisants pour cet envoi (Frais inclus).' });
         }
 
         // Atomically lock and transfer
         const result = await prisma.$transaction(async (tx) => {
+            // Plafonds AML/KYC — le corridor le plus sensible en blanchiment transfrontalier
+            // ne peut pas être le seul rail financier à ne pas y passer.
+            await LimitEngine.verifyAndIncrementConsumption(tx, sender.id, sender.wallet!.id, amountXaf, settings);
 
             // Debit Sender
             await tx.wallet.update({
@@ -64,14 +104,13 @@ router.post('/send', authMiddleware, async (req: AuthRequest, res) => {
                 data: { balance: { decrement: amountXaf } }
             });
 
-            // Credit Corporate Treasury for the FX Markup Commission
-            const treasury = await tx.systemAccount.findUnique({ where: { kind: 'FEE_COLLECTION' }, include: { wallet: true } });
-            if (treasury) {
-                await tx.wallet.update({
-                    where: { id: treasury.wallet!.id },
-                    data: { balance: { increment: fee } }
-                });
-            }
+            // Credit Corporate (compte de revenus — même compte que les autres commissions
+            // de la plateforme, cf. bnpl.ts/credit.ts) pour la commission de change.
+            const treasury = await getSystemAccount('CORPORATE', tx);
+            await tx.wallet.update({
+                where: { id: treasury.wallet!.id },
+                data: { balance: { increment: fee } }
+            });
 
             // Create Remittance Trace
             const remittance = await tx.remittanceTransaction.create({
@@ -87,8 +126,7 @@ router.post('/send', authMiddleware, async (req: AuthRequest, res) => {
                 }
             });
 
-            // Standard Transaction Log for Statement 
-            let corpId = treasury?.wallet?.id || sender.wallet!.id; // fallback to sender if no treasury (shouldn't happen)
+            // Standard Transaction Log for Statement
             await tx.transaction.create({
                 data: {
                     amount: amountXaf,
@@ -96,7 +134,7 @@ router.post('/send', authMiddleware, async (req: AuthRequest, res) => {
                     status: 'COMPLETED',
                     reference: generateReference('REMIT'),
                     senderWalletId: sender.wallet!.id,
-                    receiverWalletId: corpId
+                    receiverWalletId: treasury.wallet!.id
                 }
             });
 

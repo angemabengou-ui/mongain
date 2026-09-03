@@ -27,7 +27,7 @@ export async function getOrCreateCorporateWallet(tx: any) {
 }
 
 
-export const sendPush = async (token: string | null | undefined, title: string, body: string) => {
+export const sendPush = async (token: string | null | undefined, title: string, body: string, data?: Record<string, any>) => {
     if (token && Expo.isExpoPushToken(token)) {
         try {
             await expo.sendPushNotificationsAsync([{
@@ -35,6 +35,7 @@ export const sendPush = async (token: string | null | undefined, title: string, 
                 sound: 'default',
                 title,
                 body,
+                data,
                 priority: 'high',
                 channelId: 'default'
             }]);

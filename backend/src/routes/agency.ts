@@ -261,7 +261,8 @@ router.post('/cash-in', requireBranchId, async (req: AuthRequest, res) => {
             clientPhone: phone,
             tellerId: req.userId!,
             branchId,
-            idempotencyKey
+            idempotencyKey,
+            io: req.app.get('io')
         });
 
         res.json({ success: true, message: 'Cash-In exécuté avec succès.', transaction });

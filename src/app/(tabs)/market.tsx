@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import { Alert, Image, RefreshControl, ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 import { apiBuyMarketItem, apiGetMarketListings } from '../../services/api';
 
 export default function MongainMarket() {
@@ -38,7 +38,7 @@ export default function MongainMarket() {
                 { text: 'Annuler', style: 'cancel' },
                 {
                     text: 'Acheter & Bloquer les fonds',
-                    onPress: async (pin) => {
+                    onPress: async (pin?: string) => {
                         if (!pin) return;
                         try {
                             const res = await apiBuyMarketItem(item.id, pin);

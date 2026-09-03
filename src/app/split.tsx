@@ -57,21 +57,34 @@ export default function SplitScreen() {
                 {
                     text: "Payer",
                     style: 'default',
-                    onPress: async () => {
-                        setLoading(true);
-                        try {
-                            await request('POST', `/api/split/pay/${id}`, {}, true);
-                            Alert.alert("Payé !", "La dette a été remboursée.");
-                            fetchPending();
-                        } catch (e: any) {
-                            Alert.alert("Erreur", e.response?.data?.error || "Le paiement a échoué.");
-                        } finally {
-                            setLoading(false);
-                        }
+                    onPress: () => {
+                        Alert.prompt(
+                            'Code PIN',
+                            'Confirmez ce remboursement avec votre code PIN Mongain.',
+                            [
+                                { text: 'Annuler', style: 'cancel' },
+                                { text: 'Payer', onPress: (pin?: string) => executePaySplit(id, pin) },
+                            ],
+                            'secure-text',
+                        );
                     }
                 }
             ]
         );
+    };
+
+    const executePaySplit = async (id: string, pin?: string) => {
+        if (!pin) return Alert.alert("Erreur", "Code PIN requis.");
+        setLoading(true);
+        try {
+            await request('POST', `/api/split/pay/${id}`, { pin }, true);
+            Alert.alert("Payé !", "La dette a été remboursée.");
+            fetchPending();
+        } catch (e: any) {
+            Alert.alert("Erreur", e.response?.data?.error || e.message || "Le paiement a échoué.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (

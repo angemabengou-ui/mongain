@@ -1,3 +1,4 @@
+import type { Server } from 'socket.io';
 import { prisma } from '../prisma';
 import { getSystemSettings } from '../routes/settings';
 import { getOrCreateCorporateWallet } from '../routes/wallet';
@@ -17,15 +18,17 @@ export class CashOperationService {
         tellerId: string;
         branchId: string;
         idempotencyKey?: string;
+        // Passé par l'appelant (req.app.get('io')) plutôt qu'importé depuis '../index' au
+        // niveau du module : ce service était auparavant chargé au démarrage avec toute
+        // l'application (routes, serveur HTTP) comme effet de bord de ce seul import — un
+        // simple require de agency.ts suffisait à démarrer index.ts, cassant par exemple les
+        // tests qui montent agency.ts isolément avec des middlewares mockés.
+        io?: Server;
     }) {
-        const { amount, clientPhone, tellerId, branchId, idempotencyKey } = params;
+        const { amount, clientPhone, tellerId, branchId, idempotencyKey, io } = params;
         if (amount <= 0) throw new Error("Le montant doit être positif.");
 
-        // Résolu hors transaction, comme dans executeCashOut ci-dessous (même raison : éviter
-        // un aller-retour de plus dans une transaction interactive déjà longue).
-        const corporateWallet = (await getOrCreateCorporateWallet(prisma)).wallet;
-
-        return await prisma.$transaction(async (tx) => {
+        const transaction = await prisma.$transaction(async (tx) => {
             // 1. Idempotence Guard
             if (idempotencyKey) {
                 const dup = await tx.transaction.findUnique({ where: { idempotencyKey } });
@@ -72,25 +75,17 @@ export class CashOperationService {
                 data: { balance: { decrement: amount } }
             });
 
-            // Frais de dépôt configurables (taxCashIn, Settings.tsx > Politique de Frais) :
-            // affichés au Checker par le simulateur de frais de l'admin (amt * taxCashIn) mais
-            // jamais réellement prélevés ici — l'admin pouvait fixer un taux, le simulateur le
-            // confirmait, et aucun revenu n'était jamais généré ni prélevé au dépôt.
-            const settings = await getSystemSettings();
-            const fee = Math.round(amount * (settings?.taxCashIn || 0));
-            const netAmount = amount - fee; // Le client reçoit le dépôt net de frais
+            // Politique produit : un dépôt (Cash-In) est TOUJOURS gratuit, en agence comme
+            // chez un commerçant — seuls les retraits sont facturés (taxWithdraw chez un
+            // commerçant, agencyTaxWithdraw au-delà du seuil en agence, voir executeCashOut
+            // et wallet.ts /client-initiated-withdraw). Le client reçoit donc l'intégralité
+            // du montant déposé ; aucun frais n'est prélevé ni configurable ici.
+            const fee = 0;
 
             await tx.wallet.update({
                 where: { id: client.wallet.id },
-                data: { balance: { increment: netAmount } }
+                data: { balance: { increment: amount } }
             });
-
-            if (fee > 0) {
-                // Même bénéficiaire que le revenu des frais de Cash-Out (voir executeCashOut) —
-                // conserve l'équilibre : l'agence débite `amount` électronique, redistribué en
-                // `netAmount` (client) + `fee` (Corporate) = `amount`.
-                await tx.wallet.update({ where: { id: corporateWallet.id }, data: { balance: { increment: fee } } });
-            }
 
             // 6. Enregistrement Transaction
             const transaction = await tx.transaction.create({
@@ -123,11 +118,19 @@ export class CashOperationService {
             // Comme /transfer et /refund-requests : sans ça, le client n'a aucune trace de ce
             // dépôt physique en agence dans son historique de notifications.
             await tx.notification.create({
-                data: { userId: client.id, title: 'Dépôt reçu', body: fee > 0 ? `Vous avez reçu un dépôt de ${netAmount.toLocaleString('fr-FR')} FCFA en agence (${amount.toLocaleString('fr-FR')} FCFA déposés, ${fee.toLocaleString('fr-FR')} FCFA de frais).` : `Vous avez reçu un dépôt de ${amount.toLocaleString('fr-FR')} FCFA en agence.`, type: 'TRANSACTION' }
+                data: { userId: client.id, title: 'Dépôt reçu', body: `Vous avez reçu un dépôt de ${amount.toLocaleString('fr-FR')} FCFA en agence.`, type: 'TRANSACTION' }
             });
 
             return transaction;
         });
+
+        // Notification temps réel (Socket.IO), comme /transfer : le déposant n'est pas
+        // forcément le titulaire du compte (dépôt fait par un tiers pour lui) — sans cet
+        // événement, le client ne voyait ce dépôt qu'à la prochaine ouverture de son onglet
+        // Notifications, jamais en direct pendant qu'il est en ligne dans l'app.
+        io?.to(`user_${clientPhone}`).emit('payment_received', { amount, from: 'Dépôt en agence' });
+
+        return transaction;
     }
 
     /**

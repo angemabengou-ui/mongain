@@ -5,8 +5,9 @@ import { apiFetch } from './utils/apiFetch';
 export default function VirtualCardsAdmin({ token: _token }: { token: string }) {
     const [cards, setCards] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [actioningId, setActioningId] = useState<string | null>(null);
 
-    useEffect(() => {
+    const fetchCards = () => {
         apiFetch(API_URL + '/api/admin/cards/all', {
             headers: { 'Authorization': `Bearer ${_token}` }
         })
@@ -18,7 +19,27 @@ export default function VirtualCardsAdmin({ token: _token }: { token: string }) 
                 console.error(err);
                 setLoading(false);
             });
+    };
+
+    useEffect(() => {
+        fetchCards();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [_token]);
+
+    const handleFreeze = async (cardId: string) => {
+        setActioningId(cardId);
+        try {
+            await apiFetch(API_URL + `/api/admin/cards/${cardId}/freeze`, {
+                method: 'PUT',
+                headers: { 'Authorization': `Bearer ${_token}` }
+            });
+            fetchCards();
+        } catch (err: any) {
+            alert(err?.message || "Action impossible.");
+        } finally {
+            setActioningId(null);
+        }
+    };
 
     return (
         <div style={{ padding: 40, animation: 'fadeIn 0.5s ease-out' }}>
@@ -60,8 +81,18 @@ export default function VirtualCardsAdmin({ token: _token }: { token: string }) 
                                         )}
                                     </td>
                                     <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                                        <button disabled style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'not-allowed' }}>
-                                            Gel d'Urgence
+                                        <button
+                                            onClick={() => handleFreeze(c.id)}
+                                            disabled={actioningId === c.id}
+                                            style={{
+                                                padding: '6px 12px',
+                                                background: c.status === 'ACTIVE' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                                color: c.status === 'ACTIVE' ? '#ef4444' : '#10b981',
+                                                border: '1px solid var(--border)', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                                                cursor: actioningId === c.id ? 'wait' : 'pointer', opacity: actioningId === c.id ? 0.6 : 1
+                                            }}
+                                        >
+                                            {c.status === 'ACTIVE' ? "Gel d'Urgence" : 'Débloquer'}
                                         </button>
                                     </td>
                                 </tr>
