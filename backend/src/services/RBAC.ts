@@ -52,6 +52,7 @@ export const ALL_PERMISSIONS = [
     'perm_treasury_mint',           // Émettre de la nouvelle monnaie (Mint)
     'perm_treasury_allocate',       // Allouer des fonds à une agence
     'perm_treasury_approve',        // Approuver une demande de trésorerie (checker)
+    'perm_reconciliation_resolve',  // Clôturer un écart de rapprochement agence (acte, pas juste consultation)
     'perm_system_settings_view',    // Voir les paramètres système
     'perm_system_settings_edit',    // Modifier les paramètres système (maker)
     'perm_system_settings_approve', // Approuver une modification de paramètre (checker)
@@ -127,6 +128,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, Permission[]> = {
         'perm_audit_log_view',
         'perm_analytics_view',
         'perm_treasury_view',
+        'perm_reconciliation_resolve',  // ✅ RISK instruit les écarts agence (même logique que perm_vault_manage)
         'perm_vault_view',
         'perm_vault_manage',            // ✅ Même logique que perm_customer_freeze : RISK gère les cas litigieux
         'perm_tontine_view',
@@ -145,6 +147,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, Permission[]> = {
         'perm_ticket_resolve',
         'perm_system_settings_approve',
         'perm_treasury_approve',        // ✅ Le Checker vérifie la Trésorerie
+        'perm_reconciliation_resolve',  // ✅ Le Checker clôture aussi les écarts qu'il a vérifiés
         'perm_audit_log_view',
         'perm_analytics_view',
         'perm_vault_view',
@@ -236,7 +239,7 @@ export const PERMISSION_GROUPS: { label: string; perms: Permission[] }[] = [
     {
         label: 'Trésorerie & Système',
         perms: [
-            'perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_allocate', 'perm_treasury_approve',
+            'perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_allocate', 'perm_treasury_approve', 'perm_reconciliation_resolve',
             'perm_system_settings_view', 'perm_system_settings_edit', 'perm_system_settings_approve',
         ],
     },

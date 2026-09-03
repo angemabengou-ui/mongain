@@ -560,8 +560,14 @@ router.get('/reconciliation', authMiddleware, async (req: AuthRequest, res) => {
 // 7. Résoudre ou mettre à jour un cas de Réconciliation
 router.post('/reconciliation/:id/resolve', authMiddleware, async (req: AuthRequest, res) => {
     try {
+        // `perm_audit_log_view` est une permission de LECTURE ("voir les journaux d'audit") — elle
+        // gardait par erreur cette action d'ÉCRITURE (clôturer un écart agence), rompant la
+        // séparation vue/action appliquée partout ailleurs dans ce fichier RBAC (perm_ticket_view vs
+        // _resolve, perm_refund_request vs _approve, etc). Un rôle qui gagnerait un jour l'accès aux
+        // journaux d'audit sans être habilité à trancher des écarts financiers aurait hérité de ce
+        // pouvoir par accident.
         const checker = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, permissions: true, permissionsCustomized: true } });
-        if (!checker || !hasPermission(checker, 'perm_audit_log_view')) return res.status(403).json({ error: 'Accès refusé. (perm_audit_log_view requis)' });
+        if (!checker || !hasPermission(checker, 'perm_reconciliation_resolve')) return res.status(403).json({ error: 'Accès refusé. (perm_reconciliation_resolve requis)' });
 
         const { resolution, newStatus } = req.body;
         const recId = req.params.id as string;
