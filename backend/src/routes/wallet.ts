@@ -257,6 +257,36 @@ router.get('/limits', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
+// GET /api/wallet/withdraw-fee-preview?amount=...
+//
+// Le client (client-withdraw-desk.tsx) affichait un aperçu de frais calculé localement en
+// ne comparant que le montant saisi au seuil fixe `agencyWithdrawThreshold` — alors que
+// LimitEngine.calculateWithdrawalFee (appliqué réellement par /client-initiated-withdraw et
+// /qr-cash-out) taxe sur le CUMUL du jour : un client ayant déjà retiré 400 000 FCFA (sous
+// le seuil de 500 000, donc gratuit) puis retirant encore 300 000 FCFA voyait l'app annoncer
+// "GRATUIT" (300 000 < 500 000) alors que le serveur facture réellement des frais sur les
+// 200 000 FCFA de dépassement cumulé. Cet endpoint expose exactement le même calcul, en
+// lecture seule (aucun mouvement de fonds), pour que l'aperçu affiché corresponde toujours
+// à ce qui sera réellement facturé.
+router.get('/withdraw-fee-preview', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const amount = parseFloat(req.query.amount as string);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            return res.status(400).json({ error: 'Montant invalide.' });
+        }
+
+        const wallet = await prisma.wallet.findUnique({ where: { userId: req.userId } });
+        if (!wallet) return res.status(404).json({ error: 'Portefeuille introuvable.' });
+
+        const settings = await getSystemSettings();
+        const fee = await LimitEngine.calculateWithdrawalFee(prisma, wallet.id, amount, settings);
+
+        res.json({ fee });
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
 // GET /api/wallet/balance
 router.get('/balance', authMiddleware, async (req: AuthRequest, res) => {
     try {

@@ -16,7 +16,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
-import { apiClientInitiatedWithdraw } from '../services/api';
+import { apiClientInitiatedWithdraw, apiGetWithdrawFeePreview } from '../services/api';
 import { enableBiometricPin, isBiometricPinEnabled, verifyBiometricsOrPin } from '../services/biometrics';
 
 export default function ClientWithdrawDeskScreen() {
@@ -50,9 +50,36 @@ export default function ClientWithdrawDeskScreen() {
     // vaut 50 et le retrait envoyé au serveur pouvait être 1000x plus petit que prévu.
     const cleanAmount = (v: string) => parseFloat(v.replace(/\s/g, '').replace(',', '.'));
     const numAmountPreview = cleanAmount(amount) || 0;
-    const fee = isMerchant
+    // Cas AGENT : le serveur (LimitEngine.calculateWithdrawalFee) taxe sur le CUMUL du jour,
+    // pas seulement le montant saisi ici — un client ayant déjà retiré 400 000 FCFA (sous le
+    // seuil, donc gratuit) puis retirant encore 300 000 FCFA voyait cette formule locale
+    // annoncer "GRATUIT" (300 000 < seuil) alors que le serveur facture réellement des frais
+    // sur le dépassement cumulé. `localFeeEstimate` reste affiché instantanément le temps que
+    // `agentFeePreview` (le vrai calcul, via /wallet/withdraw-fee-preview) revienne du réseau.
+    const localFeeEstimate = isMerchant
         ? Math.ceil(numAmountPreview * taxRate)
         : (numAmountPreview > threshold ? Math.ceil((numAmountPreview - threshold) * taxRate) : 0);
+    const [agentFeePreview, setAgentFeePreview] = useState<number | null>(null);
+
+    useEffect(() => {
+        if (isMerchant || numAmountPreview <= 0) {
+            setAgentFeePreview(null);
+            return;
+        }
+        let cancelled = false;
+        const timeout = setTimeout(async () => {
+            try {
+                const res = await apiGetWithdrawFeePreview(numAmountPreview);
+                if (!cancelled) setAgentFeePreview(res.fee);
+            } catch {
+                // Best-effort : l'estimation locale (moins précise mais jamais bloquante)
+                // reste affichée si l'appel réseau échoue.
+            }
+        }, 400);
+        return () => { cancelled = true; clearTimeout(timeout); };
+    }, [isMerchant, numAmountPreview]);
+
+    const fee = isMerchant ? localFeeEstimate : (agentFeePreview ?? localFeeEstimate);
 
     const submitWithdraw = async (usedPin: string) => {
         if (submittingRef.current) return;

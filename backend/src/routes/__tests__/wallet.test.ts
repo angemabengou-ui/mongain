@@ -113,6 +113,50 @@ describe('Wallet Routes', () => {
         });
     });
 
+    describe('GET /wallet/withdraw-fee-preview', () => {
+        it('devrait retourner 400 si le montant est invalide', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'user123', isActive: true, jwtVersion: 0 });
+
+            const res = await request(app)
+                .get('/wallet/withdraw-fee-preview?amount=abc')
+                .set('Authorization', 'Bearer dummy-token');
+
+            expect(res.status).toBe(400);
+        });
+
+        it('devrait retourner 404 si le portefeuille n\'existe pas', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'user123', isActive: true, jwtVersion: 0 });
+            (prisma.wallet.findUnique as jest.Mock).mockResolvedValue(null);
+
+            const res = await request(app)
+                .get('/wallet/withdraw-fee-preview?amount=1000')
+                .set('Authorization', 'Bearer dummy-token');
+
+            expect(res.status).toBe(404);
+        });
+
+        it('devrait déléguer le calcul à LimitEngine.calculateWithdrawalFee et renvoyer le frais', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'user123', isActive: true, jwtVersion: 0 });
+            (prisma.wallet.findUnique as jest.Mock).mockResolvedValue({ id: 'w1', balance: 1000000 });
+            // mockResolvedValueOnce (pas mockResolvedValue) : jest.clearAllMocks() dans le
+            // beforeEach de ce fichier ne réinitialise que l'historique des appels, jamais une
+            // implémentation déjà posée par mockResolvedValue — un override permanent ici
+            // aurait fuité vers TOUS les tests suivants de ce fichier qui dépendent du défaut
+            // 0 posé par jest.mock('../../services/LimitEngine', ...) plus haut.
+            (LimitEngine.calculateWithdrawalFee as jest.Mock).mockResolvedValueOnce(2000);
+
+            const res = await request(app)
+                .get('/wallet/withdraw-fee-preview?amount=300000')
+                .set('Authorization', 'Bearer dummy-token');
+
+            expect(res.status).toBe(200);
+            expect(res.body.fee).toBe(2000);
+            expect(LimitEngine.calculateWithdrawalFee).toHaveBeenCalledWith(
+                expect.anything(), 'w1', 300000, expect.anything()
+            );
+        });
+    });
+
     describe('POST /wallet/match-contacts', () => {
         it("devrait retourner 400 si aucun numéro n'est fourni", async () => {
             (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'user123', isActive: true, jwtVersion: 0 });

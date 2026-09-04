@@ -368,6 +368,12 @@ export const apiPushWithdrawal = (phone: string, amount: number, network: string
 export const apiGenerateWithdrawCode = (amount: number) =>
     request('POST', '/api/wallet/generate-withdraw-code', { amount }, true) as Promise<{ code: string; expiresAt: string }>;
 
+// Aperçu du frais qui sera réellement prélevé sur un retrait AGENT (client-withdraw-desk.tsx) —
+// délègue le calcul au même LimitEngine.calculateWithdrawalFee que /client-initiated-withdraw
+// et /qr-cash-out, qui taxe sur le CUMUL du jour, pas seulement le montant saisi.
+export const apiGetWithdrawFeePreview = (amount: number) =>
+    request('GET', `/api/wallet/withdraw-fee-preview?amount=${amount}`, undefined, true) as Promise<{ fee: number }>;
+
 
 
 // Reclamations
