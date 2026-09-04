@@ -32,13 +32,18 @@ export default function InsightsScreen() {
     const router = useRouter();
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     const load = useCallback(async () => {
         try {
             const data = await apiGetTransactions(HISTORY_FETCH_LIMIT);
             setTransactions(data);
-        } catch (e) {
-            console.error('Erreur chargement aperçu des dépenses', e);
+            setLoadError(null);
+        } catch (e: any) {
+            // Un échec silencieux (juste console.error) laissait `transactions` à [], donc
+            // totalSpent/totalReceived à 0 et la section catégories vide — indiscernable
+            // d'un mois réellement sans aucune dépense/recette pour l'utilisateur.
+            setLoadError(e.response?.data?.error || e.message || "Impossible de charger l'aperçu des dépenses.");
         } finally {
             setLoading(false);
         }
@@ -86,6 +91,14 @@ export default function InsightsScreen() {
             {loading ? (
                 <View style={styles.center}>
                     <ActivityIndicator size="large" color={COLORS.primary} />
+                </View>
+            ) : loadError ? (
+                <View style={styles.center}>
+                    <Ionicons name="cloud-offline-outline" size={48} color={COLORS.border} />
+                    <Text style={[styles.emptyText, { marginTop: 12 }]}>{loadError}</Text>
+                    <TouchableOpacity onPress={load} style={{ marginTop: 16 }}>
+                        <Text style={{ color: COLORS.primary, fontWeight: '700' }}>Réessayer</Text>
+                    </TouchableOpacity>
                 </View>
             ) : (
                 <ScrollView contentContainerStyle={styles.container}>

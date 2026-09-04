@@ -22,18 +22,28 @@ export default function ReceiveQRScreen() {
     const { user } = useAuth();
 
     const [fees, setFees] = React.useState({ taxP2P: 0.01, taxWithdraw: 0.013 }); // Defaults
+    // Ces valeurs par défaut ne sont QUE le repli initial le temps du premier chargement —
+    // sans ce marqueur, un échec de l'unique tentative (réseau, serveur endormi) laissait le
+    // marchand afficher/imprimer indéfiniment un taux par défaut possiblement périmé si
+    // l'admin avait changé taxP2P/taxWithdraw depuis, sans jamais être prévenu que le
+    // chargement avait échoué.
+    const [feesConfirmed, setFeesConfirmed] = useState(false);
     const [printing, setPrinting] = useState(false);
     // Un ref par code (clé = QrCardDef.key) — react-native-qrcode-svg expose toDataURL()
     // sur ce ref pour extraire l'image en base64 au moment d'imprimer, voir handlePrint.
     const qrRefs = useRef<Record<string, any>>({});
 
-    React.useEffect(() => {
-        if (user?.role === 'MERCHANT') {
-            apiGetSystemSettings().then(data => {
-                if (data) setFees({ taxP2P: data.taxP2P, taxWithdraw: data.taxWithdraw });
-            }).catch(console.error);
-        }
+    const loadFees = React.useCallback(() => {
+        if (user?.role !== 'MERCHANT') return;
+        apiGetSystemSettings().then(data => {
+            if (data) {
+                setFees({ taxP2P: data.taxP2P, taxWithdraw: data.taxWithdraw });
+                setFeesConfirmed(true);
+            }
+        }).catch(console.error);
     }, [user]);
+
+    React.useEffect(() => { loadFees(); }, [loadFees]);
 
     const baseValue = user ? `mongain://user?phone=${encodeURIComponent(user.phone)}&name=${encodeURIComponent(user.name)}&role=${encodeURIComponent(user.role || 'USER')}` : 'UNKNOWN';
 
@@ -42,10 +52,16 @@ export default function ReceiveQRScreen() {
     // dont la valeur changeait selon un bouton à activer avant chaque scan. L'ancien
     // fonctionnement imposait de toucher l'écran avant chaque client et empêchait
     // d'afficher (ou d'imprimer) les deux en même temps, par ex. sur une affiche comptoir.
+    // "(non confirmé)" tant que /api/settings n'a jamais répondu avec succès : sans ce
+    // marqueur, un échec réseau/serveur endormi laissait afficher — et potentiellement
+    // IMPRIMER sur une affiche comptoir — un taux par défaut codé en dur, sans que le
+    // marchand sache qu'il n'a jamais été confirmé par le serveur et pourrait être périmé
+    // si l'admin a changé taxP2P/taxWithdraw depuis.
+    const unconfirmedSuffix = feesConfirmed ? '' : ' (non confirmé)';
     const cards: QrCardDef[] = user?.role === 'MERCHANT'
         ? [
-            { key: 'pay', label: 'Code Paiement', value: `${baseValue}&action=pay`, accent: '#10B981', feeLabel: `Frais client : ${(fees.taxP2P * 100).toFixed(1)}%` },
-            { key: 'withdraw', label: 'Code Retrait Cash', value: `${baseValue}&action=withdraw`, accent: '#F59E0B', feeLabel: `Frais client : ${(fees.taxWithdraw * 100).toFixed(1)}%` },
+            { key: 'pay', label: 'Code Paiement', value: `${baseValue}&action=pay`, accent: '#10B981', feeLabel: `Frais client : ${(fees.taxP2P * 100).toFixed(1)}%${unconfirmedSuffix}` },
+            { key: 'withdraw', label: 'Code Retrait Cash', value: `${baseValue}&action=withdraw`, accent: '#F59E0B', feeLabel: `Frais client : ${(fees.taxWithdraw * 100).toFixed(1)}%${unconfirmedSuffix}` },
         ]
         : [{ key: 'default', label: 'Mon Code', value: baseValue, accent: COLORS.primary }];
 

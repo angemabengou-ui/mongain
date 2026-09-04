@@ -13,13 +13,18 @@ export default function NotificationsScreen() {
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     const loadNotifications = async () => {
         try {
             const data = await apiGetNotifications();
             setNotifications(data);
-        } catch (e) {
-            console.error('Erreur char. notifications', e);
+            setLoadError(null);
+        } catch (e: any) {
+            // Un échec silencieux (juste console.error) laissait `notifications` à [],
+            // rendant le même état vide que "vous n'avez vraiment aucune notification" —
+            // indiscernable d'une vraie panne réseau/serveur pour l'utilisateur.
+            setLoadError(e.response?.data?.error || e.message || 'Impossible de charger les notifications.');
         } finally {
             setLoading(false);
         }
@@ -84,7 +89,12 @@ export default function NotificationsScreen() {
                     contentContainerStyle={styles.container}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />}
                 >
-                    {notifications.length === 0 ? (
+                    {loadError ? (
+                        <View style={styles.emptyWrap}>
+                            <Ionicons name="cloud-offline-outline" size={60} color={COLORS.border} />
+                            <Text style={styles.emptyText}>{loadError}</Text>
+                        </View>
+                    ) : notifications.length === 0 ? (
                         <View style={styles.emptyWrap}>
                             <Ionicons name="notifications-off-outline" size={60} color={COLORS.border} />
                             <Text style={styles.emptyText}>Aucune notification pour le moment.</Text>
