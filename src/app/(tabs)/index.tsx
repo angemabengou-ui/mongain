@@ -205,6 +205,17 @@ export default function DashboardScreen() {
               <Ionicons name="chevron-forward" size={22} color={COLORS.textSecondary} />
             </TouchableOpacity>
 
+            <View style={styles.servicesHeader}>
+              <Text style={styles.sectionTitle}>Services & factures</Text>
+              <TouchableOpacity><Text style={styles.seeAllText}>Voir tout</Text></TouchableOpacity>
+            </View>
+            <View style={styles.servicesGridSquares}>
+              <ServiceSquareItem icon="flash" label="Factures" bgColor="#FFB02015" color="#FFB020" disabled={!appConfig.seegEnabled} onPress={() => router.push('/billers')} styles={styles} />
+              <ServiceSquareItem icon="phone-portrait" label="Recharge" bgColor="#2563FF15" color="#2563FF" onPress={() => router.push('/services/airtime')} styles={styles} />
+              <ServiceSquareItem icon="water" label="Eau" bgColor="#EF444415" color="#EF4444" onPress={() => Alert.alert('Bientôt disponible', "Le paiement des factures d'eau sera bientôt activé.")} styles={styles} />
+              <ServiceSquareItem icon="earth" label="Internat." bgColor="#00C27A15" color="#00C27A" onPress={() => router.push('/remit')} styles={styles} />
+            </View>
+
             {/* Transactions récentes */}
             <View style={styles.transactionsHeader}>
               <Text style={styles.sectionTitle}>Dernières transactions</Text>
