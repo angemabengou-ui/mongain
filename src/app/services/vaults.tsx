@@ -23,14 +23,20 @@ export default function VaultsListScreen() {
     const [vaults, setVaults] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     const loadVaults = useCallback(async (isRefresh = false) => {
         if (isRefresh) setRefreshing(true);
         try {
             const res = await apiGetVaults();
             setVaults(res.data || []);
-        } catch (e) {
-            console.error(e);
+            setLoadError(null);
+        } catch (e: any) {
+            // Un échec silencieux (juste console.error) laissait `vaults` à [], rendant le
+            // même état vide que "vous n'avez vraiment aucune caisse" — un utilisateur avec
+            // plusieurs caisses actives n'avait aucun moyen de distinguer une vraie panne
+            // réseau d'une perte de ses données.
+            setLoadError(e.response?.data?.error || e.message || 'Impossible de charger vos caisses.');
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -69,7 +75,17 @@ export default function VaultsListScreen() {
                             Un coffre partagé pour un projet, un événement ou une caisse de solidarité — géré collectivement par le groupe.
                         </Text>
 
-                        {vaults.length === 0 ? (
+                        {loadError ? (
+                            <View style={styles.emptyState}>
+                                <View style={[styles.emptyIconCircle, { backgroundColor: COLORS.primary + '15' }]}>
+                                    <Ionicons name="cloud-offline-outline" size={40} color={COLORS.primary} />
+                                </View>
+                                <Text style={[styles.emptyTitle, { color: COLORS.textPrimary }]}>{loadError}</Text>
+                                <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: COLORS.primary }]} onPress={() => loadVaults()}>
+                                    <Text style={styles.primaryBtnText}>Réessayer</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ) : vaults.length === 0 ? (
                             <View style={styles.emptyState}>
                                 <View style={[styles.emptyIconCircle, { backgroundColor: COLORS.primary + '15' }]}>
                                     <Ionicons name="shield-checkmark-outline" size={40} color={COLORS.primary} />

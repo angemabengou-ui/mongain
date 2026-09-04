@@ -23,14 +23,18 @@ export default function TontineListScreen() {
     const [participations, setParticipations] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     const load = useCallback(async (isRefresh = false) => {
         if (isRefresh) setRefreshing(true);
         try {
             const res = await apiGetTontineGroups();
             setParticipations((res.data?.myParticipations || []).filter((p: any) => p.status !== 'LEFT'));
-        } catch (e) {
-            console.error(e);
+            setLoadError(null);
+        } catch (e: any) {
+            // Un échec silencieux (juste console.error) laissait `participations` à [], rendant
+            // le même état vide que "vous ne participez vraiment à aucune tontine".
+            setLoadError(e.response?.data?.error || e.message || 'Impossible de charger vos tontines.');
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -71,7 +75,17 @@ export default function TontineListScreen() {
                             Épargnez à plusieurs, chacun son tour reçoit la cagnotte complète.
                         </Text>
 
-                        {participations.length === 0 ? (
+                        {loadError ? (
+                            <View style={styles.emptyState}>
+                                <View style={[styles.emptyIconCircle, { backgroundColor: COLORS.primary + '15' }]}>
+                                    <Ionicons name="cloud-offline-outline" size={40} color={COLORS.primary} />
+                                </View>
+                                <Text style={[styles.emptyTitle, { color: COLORS.textPrimary }]}>{loadError}</Text>
+                                <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: COLORS.primary }]} onPress={() => load()}>
+                                    <Text style={styles.primaryBtnText}>Réessayer</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ) : participations.length === 0 ? (
                             <View style={styles.emptyState}>
                                 <View style={[styles.emptyIconCircle, { backgroundColor: COLORS.primary + '15' }]}>
                                     <Ionicons name="sync-outline" size={40} color={COLORS.primary} />
