@@ -85,7 +85,10 @@ export default function MerchantHubScreen() {
 
     const handleCreatePayout = async () => {
         const amt = payoutAmount.replace(/\s/g, '').replace(',', '.');
-        if (!amt || Number(amt) <= 0) return;
+        if (!amt || Number(amt) <= 0) {
+            Alert.alert('Montant invalide', 'Indiquez un montant de virement supérieur à zéro.');
+            return;
+        }
         setPayoutLoading(true);
         try {
             await apiCreateMerchantPayout(payoutSource, Number(amt), payoutNote.trim() || undefined);
