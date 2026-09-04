@@ -10,7 +10,12 @@ export default function CryptoScreen() {
     const [market, setMarket] = useState<any[]>([]);
     const [wallets, setWallets] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [amount, setAmount] = useState('');
+    // Un montant PAR actif, pas un seul champ partagé entre toutes les cartes de la liste :
+    // avant ce correctif, un unique `amount` alimentait le TextInput de CHAQUE actif rendu
+    // (BTC/ETH/USDT...) — saisir "5000" pour acheter du BTC laissait ce même "5000" visible
+    // (et actif) sur la carte ETH juste en dessous. Toucher "Vendre" sur ETH sans y retoucher
+    // envoyait alors amountCrypto:"5000" (5000 ETH, pas 5000 XAF de BTC) à /api/crypto/sell.
+    const [amounts, setAmounts] = useState<Record<string, string>>({});
     const [actionLoading, setActionLoading] = useState(false);
 
     const fetchCryptoData = async () => {
@@ -18,8 +23,10 @@ export default function CryptoScreen() {
             const res = await request('GET', '/api/crypto/market', {}, true);
             setMarket(res.market || []);
             setWallets(res.wallets || []);
-        } catch (e) {
-            console.warn(e);
+        } catch (e: any) {
+            // Un échec silencieux (juste console.warn) rendait un marché indisponible
+            // indiscernable d'un marché simplement vide côté utilisateur.
+            Alert.alert("Erreur", e.response?.data?.error || e.message || "Impossible de charger le marché crypto.");
         } finally {
             setLoading(false);
         }
@@ -30,26 +37,27 @@ export default function CryptoScreen() {
     }, [token]);
 
     const handleBuy = (asset: string) => {
+        const amount = amounts[asset];
         if (!amount) return Alert.alert("Erreur", "Veuillez entrer un montant XAF.");
         Alert.prompt(
             'Confirmer l\'achat',
             `Saisissez votre code PIN Mongain pour acheter du ${asset}.`,
             [
                 { text: 'Annuler', style: 'cancel' },
-                { text: 'Confirmer', onPress: (pin?: string) => executeBuy(asset, pin) },
+                { text: 'Confirmer', onPress: (pin?: string) => executeBuy(asset, amount, pin) },
             ],
             'secure-text',
         );
     };
 
-    const executeBuy = async (asset: string, pin?: string) => {
+    const executeBuy = async (asset: string, amount: string, pin?: string) => {
         if (!pin) return Alert.alert("Erreur", "Code PIN requis.");
         setActionLoading(true);
         try {
             await request('POST', '/api/crypto/buy', { asset, amountXaf: amount, pin }, true);
             await fetchCryptoData();
             Alert.alert("Succès", `Vous avez acheté du ${asset} avec succès.`);
-            setAmount('');
+            setAmounts(prev => ({ ...prev, [asset]: '' }));
         } catch (e: any) {
             Alert.alert("Erreur", e.response?.data?.error || e.message || "Action impossible.");
         } finally {
@@ -58,26 +66,27 @@ export default function CryptoScreen() {
     };
 
     const handleSell = (asset: string) => {
+        const amount = amounts[asset];
         if (!amount) return Alert.alert("Erreur", "Veuillez entrer la quantité de crypto à vendre.");
         Alert.prompt(
             'Confirmer la vente',
             `Saisissez votre code PIN Mongain pour vendre du ${asset}.`,
             [
                 { text: 'Annuler', style: 'cancel' },
-                { text: 'Confirmer', onPress: (pin?: string) => executeSell(asset, pin) },
+                { text: 'Confirmer', onPress: (pin?: string) => executeSell(asset, amount, pin) },
             ],
             'secure-text',
         );
     };
 
-    const executeSell = async (asset: string, pin?: string) => {
+    const executeSell = async (asset: string, amount: string, pin?: string) => {
         if (!pin) return Alert.alert("Erreur", "Code PIN requis.");
         setActionLoading(true);
         try {
             await request('POST', '/api/crypto/sell', { asset, amountCrypto: amount, pin }, true);
             await fetchCryptoData();
             Alert.alert("Succès", `Vente de ${asset} exécutée avec succès.`);
-            setAmount('');
+            setAmounts(prev => ({ ...prev, [asset]: '' }));
         } catch (e: any) {
             Alert.alert("Erreur", e.response?.data?.error || e.message || "Action impossible.");
         } finally {
@@ -140,8 +149,8 @@ export default function CryptoScreen() {
                                             placeholder="Montant..."
                                             placeholderTextColor="#94A3B8"
                                             keyboardType="numeric"
-                                            value={amount}
-                                            onChangeText={setAmount}
+                                            value={amounts[m.asset] || ''}
+                                            onChangeText={(text) => setAmounts(prev => ({ ...prev, [m.asset]: text }))}
                                         />
                                         <TouchableOpacity style={[styles.btn, { backgroundColor: '#10B981' }]} onPress={() => handleBuy(m.asset)} disabled={actionLoading}>
                                             <Ionicons name="arrow-down" color="#fff" size={16} />
