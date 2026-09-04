@@ -22,9 +22,18 @@ export function InvoiceApprover() {
                 const res = await apiGetMyInvoices();
                 if (res.success && res.invoices.length > 0) {
                     setInvoices(res.invoices);
-                    if (!activeInvoice) {
-                        setActiveInvoice(res.invoices[0]);
-                    }
+                    // Mise à jour fonctionnelle : cet effet ne dépend que de `token` (il ne
+                    // doit tourner qu'une fois par session, pas se reconstruire à chaque
+                    // frappe dans le champ PIN) — `activeInvoice` lu directement ici restait
+                    // donc figé sur sa valeur `null` initiale dans la fermeture de ce
+                    // setInterval, pour toujours. Résultat : CHAQUE poll (10s) réécrasait
+                    // l'invoice affichée par `res.invoices[0]`, même une facture déjà en cours
+                    // de saisie de PIN par l'utilisateur — une nouvelle facture plus récente
+                    // arrivant entre-temps (triée par createdAt desc côté serveur) remplaçait
+                    // silencieusement celle affichée sous les doigts de l'utilisateur, qui
+                    // pouvait alors valider par inadvertance un paiement différent de celui
+                    // qu'il pensait autoriser.
+                    setActiveInvoice((prev: any | null) => prev ?? res.invoices[0]);
                 } else {
                     setInvoices([]);
                     setActiveInvoice(null);
