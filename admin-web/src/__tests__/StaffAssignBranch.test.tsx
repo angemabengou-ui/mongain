@@ -57,7 +57,7 @@ describe('StaffAssignBranch', () => {
         render(<StaffAssignBranch token="tok" />);
         await screen.findByText('Amina Staff');
 
-        const select = screen.getByDisplayValue('— Non affecté —');
+        const select = screen.getByDisplayValue('— Désaffecter / Non assigné —');
         fireEvent.change(select, { target: { value: 'b1' } });
 
         const saveButton = screen.getByRole('button', { name: /Affecter/i });

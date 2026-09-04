@@ -68,7 +68,7 @@ describe('SystemAccounts', () => {
         fireEvent.click(await screen.findByText('PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)'));
         await screen.findByText('Retour aux comptes système');
 
-        await user.click(screen.getByRole('button', { name: /Créer un ajustement/i }));
+        await user.click(screen.getByRole('button', { name: /Ajustement Manuel/i }));
 
         expect(onAdjust).toHaveBeenCalledWith('w_gateway', 'PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)');
     });

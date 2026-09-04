@@ -202,12 +202,14 @@ describe('Customer360', () => {
         expect(screen.queryByText('Gestion du Statut du Compte')).not.toBeInTheDocument();
     });
 
-    it("masque « + Nouveau ticket » pour un rôle exclu de hasSupportAccess côté serveur (ex: TELLER)", async () => {
-        // POST /users/:id/reclamation (admin.ts) vérifie un rôle codé en dur (hasSupportAccess),
-        // pas une permission — TELLER en est exclu et se heurterait à un refus serveur.
+    it("masque « + Nouveau ticket » pour un rôle sans perm_ticket_create (ex: RISK)", async () => {
+        // POST /users/:id/reclamation (admin.ts) et Customer360.tsx vérifient tous deux
+        // perm_ticket_create (plus l'ancien rôle codé en dur hasSupportAccess) — ce test
+        // doit donc simuler l'ABSENCE de cette permission précise via hasPerm, pas juste
+        // passer un staffRole qui n'a plus aucun effet sur cette décision.
         setupFetch();
         const user = userEvent.setup();
-        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="TELLER" hasPerm={() => true} />);
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="RISK" hasPerm={(perms: string[]) => !perms.includes('perm_ticket_create')} />);
         await screen.findByText('Sophie Ndong');
 
         await user.click(screen.getByRole('button', { name: /Réclamations/i }));

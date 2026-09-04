@@ -177,7 +177,7 @@ describe('Tontines', () => {
 
         render(<Tontines token="tok" hasPerm={() => true} />);
         fireEvent.click(await screen.findByText('Tontine des Amis'));
-        fireEvent.click(await screen.findByText("Paiement d'urgence"));
+        fireEvent.click(await screen.findByText('Urgence'));
 
         const confirmButton = await screen.findByRole('button', { name: 'Déclencher le paiement' });
         expect(confirmButton).toBeDisabled();
@@ -202,7 +202,7 @@ describe('Tontines', () => {
         fireEvent.click(await screen.findByText('Tontine des Amis'));
 
         expect(await screen.findByRole('heading', { name: 'Participants (1)' })).toBeInTheDocument();
-        expect(screen.queryByText("Paiement d'urgence")).not.toBeInTheDocument();
+        expect(screen.queryByText('Urgence')).not.toBeInTheDocument();
     });
 
     it("affiche le montant restant dû pour une cotisation PARTIAL (dépôt libre incomplet) dans le détail des échecs", async () => {

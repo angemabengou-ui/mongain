@@ -75,7 +75,7 @@ describe('PlatformConfig (Settings)', () => {
         await user.click(screen.getByRole('button', { name: /Historique/i }));
 
         expect(await screen.findByText('taxCashIn')).toBeInTheDocument();
-        expect(screen.getByText('Alignement marché')).toBeInTheDocument();
+        expect(screen.getByText(/Alignement marché/)).toBeInTheDocument();
     });
 
     it('approuve une demande en attente après confirmation (succès)', async () => {

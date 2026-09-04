@@ -41,37 +41,41 @@ const reconciliationData = [
 
 const branchesData = { branches: [{ id: 'b1', name: 'Agence LBV', code: 'LBV01', isHQ: false, wallet: { balance: 200 } }] };
 
+function jsonOk(body: unknown) {
+    return Promise.resolve({ ok: true, json: async () => body });
+}
+
 function buildFetchMock() {
     return vi.fn((url: string, opts?: any) => {
         const method = opts?.method;
         if (url.endsWith('/api/treasury/overview')) {
-            return Promise.resolve({ ok: true, json: async () => overviewData });
+            return jsonOk(overviewData);
         }
         if (url.includes('/api/admin/branches')) {
-            return Promise.resolve({ ok: true, json: async () => branchesData });
+            return jsonOk(branchesData);
         }
         if (url.endsWith('/api/treasury/agencies-liquidity')) {
-            return Promise.resolve({ ok: true, json: async () => agenciesData });
+            return jsonOk(agenciesData);
         }
         if (url.endsWith('/api/treasury/reconciliation')) {
-            return Promise.resolve({ ok: true, json: async () => reconciliationData });
+            return jsonOk(reconciliationData);
         }
         if (url.endsWith('/api/treasury/requests') && method === 'POST') {
-            return Promise.resolve({ ok: true, json: async () => ({ id: 'new' }) });
+            return jsonOk({ id: 'new' });
         }
         if (url.endsWith('/api/treasury/requests') && !method) {
-            return Promise.resolve({ ok: true, json: async () => requestsData });
+            return jsonOk(requestsData);
         }
         if (/\/api\/treasury\/requests\/.+\/approve/.test(url)) {
-            return Promise.resolve({ ok: true, json: async () => ({}) });
+            return jsonOk({});
         }
         if (/\/api\/treasury\/requests\/.+\/reject/.test(url)) {
-            return Promise.resolve({ ok: true, json: async () => ({}) });
+            return jsonOk({});
         }
         if (/\/api\/treasury\/reconciliation\/.+\/resolve/.test(url)) {
-            return Promise.resolve({ ok: true, json: async () => ({}) });
+            return jsonOk({});
         }
-        return Promise.resolve({ ok: true, json: async () => ({}) });
+        return jsonOk({});
     });
 }
 
@@ -112,9 +116,11 @@ describe('Treasury', () => {
         expect(screen.getByText('200 FCFA')).toBeInTheDocument();
     });
 
+    // Résolution/approbation/création : migrées de window.prompt()/window.confirm()/window.alert()
+    // vers ConfirmDialog (motif saisi dans une vraie modale) + useToast (message affiché dans un
+    // toast, pas une alerte native) — ces 3 tests dataient de l'ancienne mécanique.
     it('résout un cas de rapprochement', async () => {
         vi.stubGlobal('fetch', buildFetchMock());
-        vi.spyOn(window, 'prompt').mockReturnValue('Erreur de comptage corrigée');
         const user = userEvent.setup();
 
         render(<Treasury token={token} hasPerm={() => true} />);
@@ -124,13 +130,19 @@ describe('Treasury', () => {
         await screen.findByText('REC-001');
 
         await user.click(screen.getByRole('button', { name: 'Résoudre' }));
+        await screen.findByText(/Résolution du cas/);
+        await user.type(screen.getByPlaceholderText(/Motif et actions/i), 'Erreur de comptage corrigée');
+        // Deux boutons "Résoudre" coexistent dans le DOM : celui de la ligne (masqué derrière la
+        // modale, pas retiré) et le bouton de confirmation de la modale — ce dernier est le
+        // dernier ajouté à l'arbre (ConfirmDialog rendu après le contenu principal).
+        const resolveButtons = screen.getAllByRole('button', { name: 'Résoudre' });
+        await user.click(resolveButtons[resolveButtons.length - 1]);
 
-        await waitFor(() => expect(window.prompt).toHaveBeenCalled());
+        await waitFor(() => expect(screen.getByText('Écart résolu avec succès.')).toBeInTheDocument());
     });
 
     it('approuve une demande en attente', async () => {
         vi.stubGlobal('fetch', buildFetchMock());
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
         const user = userEvent.setup();
 
         render(<Treasury token={token} hasPerm={() => true} />);
@@ -140,26 +152,30 @@ describe('Treasury', () => {
         await screen.findByText('REQ-001');
 
         await user.click(screen.getByRole('button', { name: 'Valider' }));
+        await screen.findByText(/Approuver l'opération/);
+        await user.click(screen.getByRole('button', { name: 'Approuver et Exécuter' }));
 
-        await waitFor(() => expect(window.alert).toHaveBeenCalledWith(expect.stringContaining('exécutée avec succès')));
+        await waitFor(() => expect(screen.getByText(/exécutée avec succès/)).toBeInTheDocument());
     });
 
     it('crée une nouvelle requête de trésorerie', async () => {
         vi.stubGlobal('fetch', buildFetchMock());
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
         const user = userEvent.setup();
 
         render(<Treasury token={token} hasPerm={() => true} />);
         await screen.findByText('Trésorerie Centrale');
 
         await user.click(screen.getByRole('button', { name: /Lancer Opération/i }));
-        await screen.findByText('Nouvelle Requête de Trésorerie');
+        await screen.findByPlaceholderText('Ex: 5000000');
 
         await user.type(screen.getByPlaceholderText('Ex: 5000000'), '1000');
         await user.type(screen.getByPlaceholderText(/Renflouement journalier/), 'Réapprovisionnement test');
-        await user.click(screen.getByRole('button', { name: /Soumettre au Validation Center/i }));
+        await user.click(screen.getByRole('button', { name: /Envoyer pour Validation \(Maker\)/i }));
 
-        await waitFor(() => expect(window.alert).toHaveBeenCalledWith('Demande créée avec succès.'));
+        await screen.findByRole('button', { name: 'Soumettre' });
+        await user.click(screen.getByRole('button', { name: 'Soumettre' }));
+
+        await waitFor(() => expect(screen.getByText(/Demande créée avec succès/)).toBeInTheDocument());
     });
 
     it('ouvre directement le formulaire Ajustement pré-rempli quand prefillAdjustTarget est fourni', async () => {
@@ -167,8 +183,7 @@ describe('Treasury', () => {
 
         render(<Treasury token={token} hasPerm={() => true} prefillAdjustTarget={{ walletId: 'w_gateway', name: 'PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)' }} />);
 
-        await screen.findByText('Nouvelle Requête de Trésorerie');
-        expect(screen.getByText('Compte Système Ciblé')).toBeInTheDocument();
+        expect(await screen.findByText('Compte Système Ciblé')).toBeInTheDocument();
         expect(screen.getByText('PASSERELLE EXTERNE (AIRTEL/MOOV/BANK)')).toBeInTheDocument();
         // Le formulaire ne doit pas aussi montrer le sélecteur d'agence tant qu'un compte
         // système est ciblé — les deux cibles sont mutuellement exclusives.

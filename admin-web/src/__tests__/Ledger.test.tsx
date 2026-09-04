@@ -75,6 +75,6 @@ describe('Ledger', () => {
         render(<Ledger token="tok" hasPerm={() => true} />);
         await screen.findByText('Alice Sender');
         expect(screen.getByRole('button', { name: /CSV/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Télécharger PDF/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Rapport PDF/i })).toBeInTheDocument();
     });
 });

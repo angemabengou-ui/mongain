@@ -21,22 +21,26 @@ const customersPage = {
     total: 2,
 };
 
+function jsonResp(ok: boolean, body: unknown) {
+    return Promise.resolve({ ok, json: async () => body });
+}
+
 function buildFetchMock(overrides: { customersOk?: boolean; customersError?: string } = {}) {
     return vi.fn((url: string, opts?: any) => {
         const method = opts?.method;
         if (url.includes('/api/admin/customers')) {
             if (overrides.customersOk === false) {
-                return Promise.resolve({ ok: false, json: async () => ({ error: overrides.customersError || 'Accès refusé.' }) });
+                return jsonResp(false, { error: overrides.customersError || 'Accès refusé.' });
             }
-            return Promise.resolve({ ok: true, json: async () => customersPage });
+            return jsonResp(true, customersPage);
         }
         if (url.includes('/api/admin/users/create-pro') && method === 'POST') {
-            return Promise.resolve({ ok: true, json: async () => ({ id: 'new-1' }) });
+            return jsonResp(true, { id: 'new-1' });
         }
         if (url.includes('/api/admin/branches')) {
-            return Promise.resolve({ ok: true, json: async () => ({ branches: [] }) });
+            return jsonResp(true, { branches: [] });
         }
-        return Promise.resolve({ ok: true, json: async () => ({}) });
+        return jsonResp(true, {});
     });
 }
 
@@ -58,7 +62,7 @@ describe('UsersManagement', () => {
 
         render(<UsersManagement token={token} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
 
-        expect(screen.getByText('Recherche dans la base de données...')).toBeInTheDocument();
+        expect(screen.getByText('Recherche dans la base de données centrale...')).toBeInTheDocument();
 
         await screen.findByText('Jean Dupont');
         expect(screen.getByText('Awa Koné')).toBeInTheDocument();
@@ -82,7 +86,7 @@ describe('UsersManagement', () => {
         render(<UsersManagement token={token} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
         await screen.findByText('Jean Dupont');
 
-        const input = screen.getByPlaceholderText(/Recherche : Nom, Tel/);
+        const input = screen.getByPlaceholderText(/Chercher Nom, Tel/);
         await user.type(input, 'Jean');
         await user.click(screen.getByRole('button', { name: /Rechercher/i }));
 
@@ -97,7 +101,7 @@ describe('UsersManagement', () => {
         render(<UsersManagement token={token} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
         await screen.findByText('Jean Dupont');
 
-        await user.click(screen.getByRole('button', { name: 'Marchands' }));
+        await user.click(screen.getByRole('button', { name: 'Marchands B2B' }));
 
         await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('role=MERCHANT'), expect.anything()));
     });

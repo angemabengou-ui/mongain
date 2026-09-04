@@ -30,7 +30,7 @@ describe('Vaults', () => {
         render(<Vaults token="tok" hasPerm={() => false} />);
         expect(await screen.findByText('Caisse Famille')).toBeInTheDocument();
         expect(screen.getByText('Paul Président')).toBeInTheDocument();
-        expect(screen.getByText('Caisses Communes')).toBeInTheDocument();
+        expect(screen.getByText('Caisses Communes (Tontines)')).toBeInTheDocument();
     });
 
     it("affiche un message quand aucune caisse n'existe", async () => {
@@ -69,7 +69,7 @@ describe('Vaults', () => {
         fireEvent.click(await screen.findByText('Caisse Famille'));
         fireEvent.click(await screen.findByText('Retour aux caisses'));
 
-        expect(await screen.findByText('Caisses Communes')).toBeInTheDocument();
+        expect(await screen.findByText('Caisses Communes (Tontines)')).toBeInTheDocument();
     });
 
     it("n'affiche pas le bouton Geler sans perm_vault_manage", async () => {

@@ -19,7 +19,7 @@ describe('ErrorLogs', () => {
         render(<ErrorLogs token="tok" />);
         expect(await screen.findByText('Timeout upstream')).toBeInTheDocument();
         expect(screen.getByText('Erreurs Système')).toBeInTheDocument();
-        expect(screen.getByText('1 erreur')).toBeInTheDocument();
+        expect(screen.getByText('1 erreur au total')).toBeInTheDocument();
     });
 
     it("affiche un message quand il n'y a pas d'erreur non résolue", async () => {
