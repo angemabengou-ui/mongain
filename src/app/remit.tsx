@@ -1,18 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenHeader from '../components/ui/ScreenHeader';
+import { useAppTheme } from '../constants/theme';
 import { request } from '../services/api';
 
 const CURRENCIES = [
-    { code: 'EUR', label: 'Euro (France)', country: 'France', flag: '🇫🇷' },
-    { code: 'USD', label: 'Dollar (USA)', country: 'USA', flag: '🇺🇸' },
-    { code: 'XOF', label: 'Franc CFA (Sénégal)', country: 'Sénégal', flag: '🇸🇳' },
-    { code: 'NGN', label: 'Naira (Nigeria)', country: 'Nigeria', flag: '🇳🇬' }
+    { code: 'EUR', label: 'Euro', country: 'France', flag: '🇫🇷' },
+    { code: 'USD', label: 'Dollar', country: 'USA', flag: '🇺🇸' },
+    { code: 'XOF', label: 'Franc CFA', country: 'Sénégal', flag: '🇸🇳' },
+    { code: 'NGN', label: 'Naira', country: 'Nigeria', flag: '🇳🇬' }
 ];
 
 export default function RemitScreen() {
+    const COLORS = useAppTheme();
+    const styles = getStyles(COLORS);
     const router = useRouter();
+
     const [amountStr, setAmountStr] = useState('');
     const [targetAccount, setTargetAccount] = useState('');
     const [targetCurrency, setTargetCurrency] = useState('EUR');
@@ -39,10 +45,8 @@ export default function RemitScreen() {
     };
 
     const handleSend = async () => {
-        if (!targetAccount) return Alert.alert("Erreur", "Saisissez le numéro de téléphone du destinataire.");
+        if (!targetAccount) return Alert.alert("Erreur", "Saisissez le numéro ou l'IBAN.");
 
-        // On recalcule la cotation juste avant de confirmer : évite d'envoyer un montant
-        // différent de celui affiché si le champ a été modifié depuis le dernier calcul.
         const freshQuote = await handleCalculateQuote();
         if (!freshQuote) return;
 
@@ -82,7 +86,7 @@ export default function RemitScreen() {
                 amountXaf: freshQuote.totalToDebit,
                 pin
             }, true);
-            Alert.alert("Transaction Réussie !", `Fonds expédiés vers le réseau ${targetCurrency}.`);
+            Alert.alert("Transféré !", `Fonds expédiés vers le réseau ${targetCurrency}.`);
             router.back();
         } catch (e: any) {
             Alert.alert("Erreur", e.response?.data?.error || e.message || "Le transfert a échoué.");
@@ -92,33 +96,30 @@ export default function RemitScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-                        <Ionicons name="arrow-back" size={24} color="#fff" />
-                    </TouchableOpacity>
-                    <Text style={styles.title}>Virements Internationaux</Text>
-                </View>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
+            <ScreenHeader title="Transfert International" onBack={() => router.back()} />
 
-                <ScrollView contentContainerStyle={styles.scroll}>
+            <View style={[styles.content, { backgroundColor: COLORS.background }]}>
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+                    <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
-                    <View style={styles.card}>
-                        <Text style={styles.label}>Montant à envoyer (XAF)</Text>
-                        <TextInput
-                            style={styles.inputXaf}
-                            placeholder="ex: 50000"
-                            placeholderTextColor="#64748b"
-                            keyboardType="numeric"
-                            value={amountStr}
-                            onChangeText={setAmountStr}
-                            onBlur={handleCalculateQuote}
-                        />
+                        <View style={styles.formGroup}>
+                            <Text style={styles.label}>Montant à envoyer (XAF)</Text>
+                            <TextInput
+                                style={[styles.inputLarge, { color: COLORS.primary, backgroundColor: COLORS.surface, borderColor: COLORS.border }]}
+                                placeholder="ex: 50000"
+                                placeholderTextColor={COLORS.textSecondary}
+                                keyboardType="number-pad"
+                                value={amountStr}
+                                onChangeText={setAmountStr}
+                                onBlur={handleCalculateQuote}
+                            />
+                        </View>
 
                         <View style={styles.exchangeIconWrapper}>
-                            <View style={styles.verticalLine}></View>
-                            <Ionicons name="swap-vertical" size={24} color="#6366f1" />
-                            <View style={styles.verticalLine}></View>
+                            <View style={[styles.verticalLine, { backgroundColor: COLORS.primary + '40' }]}></View>
+                            <Ionicons name="swap-vertical" size={24} color={COLORS.primary} />
+                            <View style={[styles.verticalLine, { backgroundColor: COLORS.primary + '40' }]}></View>
                         </View>
 
                         <Text style={styles.label}>Pays Destinataire</Text>
@@ -126,85 +127,84 @@ export default function RemitScreen() {
                             {CURRENCIES.map(c => (
                                 <TouchableOpacity
                                     key={c.code}
-                                    style={[styles.currencyBtn, targetCurrency === c.code && styles.currencyBtnActive]}
+                                    style={[styles.currencyBtn, { backgroundColor: COLORS.surface, borderColor: targetCurrency === c.code ? COLORS.primary : COLORS.border }]}
                                     onPress={() => { setTargetCurrency(c.code); setQuote(null); }}
+                                    activeOpacity={0.7}
                                 >
                                     <Text style={styles.flagText}>{c.flag}</Text>
-                                    <Text style={[styles.currencyText, targetCurrency === c.code && { color: '#fff' }]}>{c.code}</Text>
+                                    <Text style={[styles.currencyText, { color: targetCurrency === c.code ? COLORS.textPrimary : COLORS.textSecondary }]}>{c.code}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
 
-                        {loading && <ActivityIndicator color="#6366f1" style={{ marginVertical: 20 }} />}
+                        {loading && <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 20 }} />}
 
                         {quote && !loading && (
-                            <View style={styles.quoteBox}>
+                            <View style={[styles.quoteBox, { backgroundColor: '#10B98115', borderColor: '#10B98140' }]}>
                                 <Text style={styles.quoteConverted}>{quote.convertedAmount} {quote.targetCurrency}</Text>
                                 <Text style={styles.quoteRate}>Taux d'échange : 1 XAF = {quote.rate} {quote.targetCurrency}</Text>
                                 <View style={styles.quoteDetails}>
-                                    <View style={styles.quoteRow}><Text style={styles.quoteRowText}>Montant initial</Text><Text style={styles.quoteRowVal}>{amountStr} XAF</Text></View>
-                                    <View style={styles.quoteRow}><Text style={styles.quoteRowText}>Frais ({((quote.fxMarkup ?? 0.025) * 100).toLocaleString('fr-FR')}%)</Text><Text style={styles.quoteRowVal}>{quote.fee} XAF</Text></View>
-                                    <View style={[styles.quoteRow, { borderTopWidth: 1, borderColor: '#334155', paddingTop: 8, marginTop: 8 }]}>
-                                        <Text style={[styles.quoteRowText, { color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }]}>Total Débité</Text>
-                                        <Text style={[styles.quoteRowVal, { color: '#F43F5E', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }]}>- {quote.totalToDebit} XAF</Text>
+                                    <View style={styles.quoteRow}><Text style={styles.quoteRowText}>Montant initial</Text><Text style={[styles.quoteRowVal, { color: COLORS.textPrimary }]}>{amountStr} XAF</Text></View>
+                                    <View style={styles.quoteRow}><Text style={styles.quoteRowText}>Frais ({((quote.fxMarkup ?? 0.025) * 100).toLocaleString('fr-FR')}%)</Text><Text style={[styles.quoteRowVal, { color: COLORS.textPrimary }]}>{quote.fee} XAF</Text></View>
+                                    <View style={[styles.quoteRow, { borderTopWidth: 1, borderColor: COLORS.border, paddingTop: 8, marginTop: 8 }]}>
+                                        <Text style={[styles.quoteRowText, { color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }]}>Total Débité</Text>
+                                        <Text style={[styles.quoteRowVal, { color: '#EF4444', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }]}>- {quote.totalToDebit} XAF</Text>
                                     </View>
                                 </View>
                             </View>
                         )}
 
-                        <Text style={[styles.label, { marginTop: 20 }]}>IBAN ou Numéro du destinataire</Text>
-                        <TextInput
-                            style={styles.inputAccount}
-                            placeholder="FR76 1234 5678..."
-                            placeholderTextColor="#64748b"
-                            value={targetAccount}
-                            onChangeText={setTargetAccount}
-                        />
+                        <View style={[styles.formGroup, { marginTop: 24 }]}>
+                            <Text style={styles.label}>IBAN ou Numéro du destinataire</Text>
+                            <TextInput
+                                style={[styles.input, { color: COLORS.textPrimary, backgroundColor: COLORS.surface, borderColor: COLORS.border }]}
+                                placeholder="FR76 1234 5678..."
+                                placeholderTextColor={COLORS.textSecondary}
+                                value={targetAccount}
+                                onChangeText={setTargetAccount}
+                            />
+                        </View>
 
-                        <TouchableOpacity style={[styles.submitBtn, (!quote || loading) && { opacity: 0.5 }]} onPress={handleSend} disabled={!quote || loading}>
-                            <Ionicons name="globe" color="#fff" size={20} />
-                            <Text style={styles.submitBtnText}>Initier le transfert</Text>
+                    </ScrollView>
+
+                    <View style={styles.footer}>
+                        <TouchableOpacity style={[styles.submitBtn, { backgroundColor: COLORS.primary }, (!quote || loading) && { opacity: 0.5 }]} onPress={handleSend} disabled={!quote || loading}>
+                            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Initier le transfert</Text>}
                         </TouchableOpacity>
                     </View>
-
-                </ScrollView>
-            </KeyboardAvoidingView>
+                </KeyboardAvoidingView>
+            </View>
         </SafeAreaView>
     );
 }
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#0f172a' },
-    header: { padding: 20, flexDirection: 'row', alignItems: 'center', gap: 16 },
-    backBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12 },
-    title: { color: '#ffffff', fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: '800' },
+const getStyles = (COLORS: any) => StyleSheet.create({
+    safeArea: { flex: 1 },
+    content: { flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' },
+    scroll: { flexGrow: 1, padding: 24 },
 
-    scroll: { padding: 20 },
-    card: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 24, padding: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+    formGroup: { marginBottom: 16 },
+    label: { fontSize: 13, fontFamily: 'Satoshi-SemiBold', color: '#666', marginBottom: 8, marginLeft: 4, fontWeight: 'bold' },
+    inputLarge: { height: 72, borderWidth: 1, borderRadius: 20, paddingHorizontal: 16, fontSize: 26, fontFamily: 'Satoshi-SemiBold', textAlign: 'center', fontWeight: 'bold' },
+    input: { height: 56, borderWidth: 1, borderRadius: 16, paddingHorizontal: 16, fontSize: 16, fontFamily: 'Satoshi-SemiBold' },
 
-    label: { color: '#cbd5e1', fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', marginBottom: 8 },
-    inputXaf: { backgroundColor: '#1e293b', color: '#fff', padding: 20, borderRadius: 16, fontSize: 28, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', textAlign: 'center' },
-    inputAccount: { backgroundColor: '#1e293b', color: '#fff', padding: 16, borderRadius: 12, fontSize: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+    exchangeIconWrapper: { alignItems: 'center', marginVertical: 8 },
+    verticalLine: { width: 2, height: 16 },
 
-    exchangeIconWrapper: { alignItems: 'center', marginVertical: 12 },
-    verticalLine: { width: 1, height: 16, backgroundColor: 'rgba(99, 102, 241, 0.4)' },
+    currencySelect: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 },
+    currencyBtn: { flex: 1, minWidth: '46%', padding: 14, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12, borderWidth: 2 },
+    flagText: { fontSize: 22 },
+    currencyText: { fontSize: 15, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
-    currencySelect: { flexDirection: 'row', justifyContent: 'space-between', gap: 5, flexWrap: 'wrap' },
-    currencyBtn: { flex: 1, minWidth: '48%', backgroundColor: '#1e293b', padding: 12, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, borderWidth: 1, borderColor: 'transparent' },
-    currencyBtnActive: { backgroundColor: 'rgba(99, 102, 241, 0.2)', borderColor: '#6366f1' },
-    flagText: { fontSize: 20 },
-    currencyText: { color: '#94a3b8', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
-
-    quoteBox: { backgroundColor: 'rgba(16, 185, 129, 0.05)', borderRadius: 16, padding: 16, marginTop: 16, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' },
+    quoteBox: { borderRadius: 16, padding: 16, marginTop: 12, borderWidth: 1 },
     quoteConverted: { fontSize: 32, fontFamily: 'Satoshi-SemiBold', fontWeight: '900', color: '#10B981', textAlign: 'center' },
-    quoteRate: { fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 16 },
-
+    quoteRate: { fontSize: 13, color: '#10B981', textAlign: 'center', marginBottom: 16, opacity: 0.8 },
     quoteDetails: { gap: 8 },
     quoteRow: { flexDirection: 'row', justifyContent: 'space-between' },
-    quoteRowText: { color: '#94a3b8', fontSize: 14 },
-    quoteRowVal: { color: '#cbd5e1', fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' },
+    quoteRowText: { color: COLORS.textSecondary, fontSize: 13, fontFamily: 'Satoshi-Regular' },
+    quoteRowVal: { fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' },
 
-    submitBtn: { backgroundColor: '#6366f1', borderRadius: 16, padding: 18, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, marginTop: 32 },
-    submitBtnText: { color: '#fff', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }
+    footer: { padding: 24, paddingBottom: 34, borderTopWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface },
+    submitBtn: { height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+    submitText: { color: '#fff', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 });
-
