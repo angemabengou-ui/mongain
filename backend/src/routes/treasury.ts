@@ -127,8 +127,19 @@ router.post('/requests', authMiddleware, async (req: AuthRequest, res) => {
 
         const { type, amount, reason, comment, targetBranchId, targetWalletId } = parsed.data;
 
+        // Un ADJUSTMENT/REVERSAL sans aucune cible (ni agence ni portefeuille) ne fait que
+        // créditer la Réserve centrale sans jamais débiter personne (voir l'exécuteur
+        // plus bas, branche `!request.targetBranch && !request.targetWalletId`) — il crée
+        // donc de la monnaie exactement comme une ISSUANCE, mais n'était gardé que par
+        // perm_treasury_allocate (destinée à déplacer des fonds déjà existants entre agences,
+        // pas à en créer) et n'était jamais soumis au plafond maxMintAmount. Un Maker ayant
+        // reçu perm_treasury_allocate sans perm_treasury_mint (séparation des pouvoirs
+        // volontaire d'un SUPER_ADMIN) pouvait ainsi minter un montant arbitraire en le
+        // déguisant en simple "ajustement".
+        const isUntargetedMint = (type === 'ADJUSTMENT' || type === 'REVERSAL') && !targetBranchId && !targetWalletId;
+
         // RBAC Dynamique en fonction du TYPE d'action demandée
-        if (type === 'ISSUANCE' && !hasPermission(maker, 'perm_treasury_mint')) {
+        if ((type === 'ISSUANCE' || isUntargetedMint) && !hasPermission(maker, 'perm_treasury_mint')) {
             return res.status(403).json({ error: 'Création monétaire interdite. Permission perm_treasury_mint requise.' });
         }
         if ((type === 'ALLOCATION' || type === 'RETURN' || type === 'ADJUSTMENT' || type === 'REVERSAL') && !hasPermission(maker, 'perm_treasury_allocate')) {
@@ -141,7 +152,7 @@ router.post('/requests', authMiddleware, async (req: AuthRequest, res) => {
             return res.status(403).json({ error: 'Le Circuit Breaker est activé. Opérations financières bloquées.' });
         }
 
-        if (type === 'ISSUANCE') {
+        if (type === 'ISSUANCE' || isUntargetedMint) {
             if (amount > (settings?.maxMintAmount || 1000000000)) {
                 return res.status(400).json({ error: `La création de monnaie est plafonnée à ${settings?.maxMintAmount} par requête.` });
             }
