@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -45,6 +45,14 @@ export default function VaultSettingsScreen() {
     const [thresholdLoading, setThresholdLoading] = useState(false);
     const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
     const [roleUpdateLoading, setRoleUpdateLoading] = useState<string | null>(null);
+    // Garde synchrone (même pattern que tontine-detail.tsx) : `roleUpdateLoading` (état React)
+    // ne se répercute sur le `disabled` des chips qu'au rendu suivant — deux appuis rapides
+    // sur DEUX chips différentes du même membre (ex: "Commissaire" puis "Trésorier") avant ce
+    // rendu construisaient chacun leur requête à partir du même `member` périmé. L'API envoie
+    // une photo COMPLÈTE des 4 rôles (pas un patch partiel) : la seconde requête, bâtie sur
+    // l'ancien `isValidator`, écrasait silencieusement le rôle que la première venait
+    // d'accorder, sans jamais lever d'erreur.
+    const roleUpdateRef = useRef<string | null>(null);
 
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
@@ -104,10 +112,12 @@ export default function VaultSettingsScreen() {
     };
 
     const handleToggleRole = async (member: any, key: 'isAdmin' | 'isInitiator' | 'isValidator' | 'isTreasurer') => {
+        if (roleUpdateRef.current) return;
         if (member.userId === user?.id && key === 'isAdmin' && member.isAdmin) {
             Alert.alert('Action impossible', 'Vous ne pouvez pas retirer votre propre rôle de Président — désignez d\'abord quelqu\'un d\'autre.');
             return;
         }
+        roleUpdateRef.current = member.id;
         setRoleUpdateLoading(member.id);
         const next = { isAdmin: member.isAdmin, isInitiator: member.isInitiator, isValidator: member.isValidator, isTreasurer: member.isTreasurer };
         next[key] = !next[key];
@@ -121,11 +131,14 @@ export default function VaultSettingsScreen() {
         } catch (e: any) {
             Alert.alert('Échec', e.message || 'Impossible de modifier ce rôle.');
         } finally {
+            roleUpdateRef.current = null;
             setRoleUpdateLoading(null);
         }
     };
 
     const handleToggleRequiredValidator = async (member: any) => {
+        if (roleUpdateRef.current) return;
+        roleUpdateRef.current = member.id;
         setRoleUpdateLoading(member.id);
         try {
             await apiUpdateVaultRoles(id, {
@@ -140,6 +153,7 @@ export default function VaultSettingsScreen() {
         } catch (e: any) {
             Alert.alert('Échec', e.message || "Impossible de modifier l'obligation de validation.");
         } finally {
+            roleUpdateRef.current = null;
             setRoleUpdateLoading(null);
         }
     };
