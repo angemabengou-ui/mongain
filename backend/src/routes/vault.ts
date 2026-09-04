@@ -1,7 +1,6 @@
 import bcrypt from 'bcryptjs';
 import express from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
-import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
 import { LimitEngine } from '../services/LimitEngine';
 import { applyRoleChangeGuards, executeVaultWithdraw } from '../services/vaultService';
@@ -339,7 +338,7 @@ router.post('/:id/leave', authMiddleware, async (req: AuthRequest, res) => {
 // ==========================================
 
 // Déposer dans la caisse
-router.post('/:id/deposit', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+router.post('/:id/deposit', authMiddleware, async (req: AuthRequest, res) => {
     const vaultId = req.params.id as string;
     const { amount } = req.body;
     const parsedAmount = parseFloat(amount);
@@ -454,7 +453,7 @@ router.post('/:id/deposit', authMiddleware, circuitBreakerMiddleware, async (req
 });
 
 // Demander un retrait
-router.post('/:id/withdraw-request', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+router.post('/:id/withdraw-request', authMiddleware, async (req: AuthRequest, res) => {
     const vaultId = req.params.id as string;
     // destinationType: TREASURER (vers un membre trésorier), VOUCHER (bon à
     // redeemer plus tard), ou TRANSFER (envoi direct à n'importe quel numéro
@@ -589,7 +588,7 @@ router.post('/:id/withdraw-request', authMiddleware, circuitBreakerMiddleware, a
 // ==========================================
 
 // Approuver un retrait
-router.post('/:id/approve/:txId', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+router.post('/:id/approve/:txId', authMiddleware, async (req: AuthRequest, res) => {
     const vaultId = req.params.id as string;
     const txId = req.params.txId as string;
 
@@ -722,7 +721,7 @@ router.get('/vouchers/my', authMiddleware, async (req: AuthRequest, res) => {
 // tentatives échouées comptabilisées EN DEHORS de la transaction financière,
 // car un throw dans un $transaction interactif annule aussi l'écriture qui
 // enregistre la tentative échouée.
-router.post('/vouchers/:id/spend', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+router.post('/vouchers/:id/spend', authMiddleware, async (req: AuthRequest, res) => {
     const voucherId = req.params.id as string;
     const { destinationPhone, pin } = req.body;
 

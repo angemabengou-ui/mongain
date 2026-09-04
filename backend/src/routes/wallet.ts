@@ -5,7 +5,6 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
-import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
 import { getCentralTreasury } from '../services/centralTreasury';
 import { getOrCreateMerchantCommissionWallet } from '../services/merchantService';
@@ -122,7 +121,7 @@ const qrCashOutSchema = z.object({
     pin: z.string().length(4)
 });
 
-router.post('/qr-cash-out', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+router.post('/qr-cash-out', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const parsed = qrCashOutSchema.safeParse(req.body);
         if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -405,7 +404,7 @@ router.post('/match-contacts', authMiddleware, matchContactsLimiter, async (req:
 
 
 // POST /api/wallet/transfer
-router.post('/transfer', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
     const parsed = transferSchema.safeParse(req.body);
     if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -600,7 +599,7 @@ router.post('/transfer', authMiddleware, circuitBreakerMiddleware, async (req: A
 });
 
 // ─── Retrait Initié par le Client (QR Permanent) ──────────────────────
-router.post('/client-initiated-withdraw', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthRequest, res) => {
     const parsed = transferSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
@@ -818,7 +817,7 @@ const rechargeSchema = z.object({
 });
 
 // ⚠️ La recharge utilise maintenant la passerelle PVit (mypvit.pro)
-router.post('/recharge', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+router.post('/recharge', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const parsed = rechargeSchema.safeParse(req.body);
         if (!parsed.success) return res.status(400).json({ error: 'Données invalides.' });
@@ -896,7 +895,7 @@ router.post('/recharge', authMiddleware, circuitBreakerMiddleware, async (req: A
 //   2. Quand explicitement activée (démo/staging), le crédit provient d'un
 //      compte "passerelle" pré-approvisionné (même schéma que /recharge),
 //      pour conserver une écriture comptable à double entrée.
-router.post('/topup', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
     if (process.env.ENABLE_UNVERIFIED_CARD_TOPUP !== 'true') {
         return res.status(501).json({
             error: 'Le rechargement par carte bancaire nécessite une intégration avec un prestataire de paiement réel. Cette fonctionnalité est désactivée tant que cette intégration n\'est pas en place.'
@@ -974,7 +973,7 @@ router.post('/topup', authMiddleware, circuitBreakerMiddleware, async (req: Auth
 // avec n'importe quel `type` autre que ELECTRICITY débitait quand même le client pour un
 // service jamais livré. Désactivé par défaut, même flag que services.ts (même catégorie :
 // paiement de service externe non branché, pas un rechargement de wallet).
-router.post('/pay-service', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
     if (process.env.ENABLE_UNVERIFIED_EXTERNAL_SERVICES !== 'true') {
         return res.status(501).json({
             error: 'Le paiement de services nécessite une intégration réelle avec le fournisseur. Cette fonctionnalité est désactivée tant que cette intégration n\'est pas en place.'
@@ -1060,7 +1059,7 @@ router.post('/pay-service', authMiddleware, circuitBreakerMiddleware, async (req
 // final. Le wallet n'est crédité que par le webhook (backend/src/routes/webhooks.ts,
 // POST /api/webhooks/pvit-status) une fois l'opérateur confirmé, ce qui est pourquoi la
 // transaction ci-dessous démarre PENDING et non COMPLETED.
-router.post('/pull', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+router.post('/pull', authMiddleware, async (req: AuthRequest, res) => {
     const settings = await getSystemSettings();
     if (!isPvitConfigured(settings)) {
         return res.status(501).json({
@@ -1110,7 +1109,7 @@ router.post('/pull', authMiddleware, circuitBreakerMiddleware, async (req: AuthR
 });
 
 // POST /api/wallet/push (Retrait Mobile Money vers Airtel/Moov via PVit)
-router.post('/push', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
     const settings = await getSystemSettings();
     if (!isPvitConfigured(settings)) {
         return res.status(501).json({

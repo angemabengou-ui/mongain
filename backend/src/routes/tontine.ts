@@ -1,6 +1,5 @@
 import express, { Request, Response } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
-import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
 import { hasPermission } from '../services/RBAC';
 import { contributeNow, executeTontineCycle, resolveRenewalPoll } from '../services/tontineService';
@@ -346,7 +345,7 @@ router.post('/invite', authMiddleware, async (req: Request, res: Response) => {
 // lui-même. On ne supprime pas la ligne (elle garde la trace des cotisations et
 // cagnottes déjà versées) : on la marque LEFT, un statut déjà ignoré par le CRON
 // de prélèvement (executeTontineCycle ne traite que status === 'ACTIVE').
-router.post('/leave', authMiddleware, circuitBreakerMiddleware, async (req: Request, res: Response) => {
+router.post('/leave', authMiddleware, async (req: Request, res: Response) => {
     try {
         const userId = (req as AuthRequest).userId!;
         const { groupId } = req.body;
@@ -486,7 +485,7 @@ router.post('/leave', authMiddleware, circuitBreakerMiddleware, async (req: Requ
 // et uniquement pour le montant fixe et entier de la part. Chacun peut désormais compléter
 // sa part en plusieurs dépôts, du montant de son choix, jusqu'à atteindre le montant total ;
 // dès que tout le monde a fini, la cagnotte part immédiatement.
-router.post('/contribute', authMiddleware, circuitBreakerMiddleware, async (req: Request, res: Response) => {
+router.post('/contribute', authMiddleware, async (req: Request, res: Response) => {
     try {
         const userId = (req as AuthRequest).userId!;
         const { groupId, amount } = req.body;
@@ -707,7 +706,7 @@ router.post('/join', authMiddleware, async (req: Request, res: Response) => {
 // Déclenchement manuel d'un cycle (le CRON automatique appelle executeTontineCycle
 // directement en interne — voir backend/src/cron.ts — sans jamais passer par cette route
 // HTTP). Réservé au personnel habilité (compte Staff, pas le rôle legacy User.ADMIN).
-router.post('/debit/:groupId', authMiddleware, circuitBreakerMiddleware, async (req: Request, res: Response) => {
+router.post('/debit/:groupId', authMiddleware, async (req: Request, res: Response) => {
     try {
         const staffId = (req as AuthRequest).userId!;
         const staff = await prisma.staff.findUnique({ where: { id: staffId }, select: { id: true, role: true, isActive: true, permissions: true, permissionsCustomized: true } });

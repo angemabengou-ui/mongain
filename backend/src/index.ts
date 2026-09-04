@@ -184,7 +184,13 @@ app.use('/api/webhooks', webhookRoutes);
 app.use('/api/wallet', circuitBreakerMiddleware, walletRoutes);
 app.use('/api/wallet/cards', circuitBreakerMiddleware, cardsRoutes);
 app.use('/api/b2b', circuitBreakerMiddleware, b2bRoutes);
-app.use('/api/ussd', circuitBreakerMiddleware, ussdRoutes);
+// PAS circuitBreakerMiddleware ici : il répond en JSON (res.status(503).json(...)), un
+// contrat incompatible avec le protocole USSD que la passerelle télco attend (texte brut
+// préfixé CON/END) — l'appliquer au routeur entier cassait la réponse de TOUT menu USSD dès
+// le Circuit Breaker activé, pas seulement le transfert P2P. ussd.ts fait son propre contrôle
+// inline (même logique, réponse "END ..." correctement formée) juste avant son unique
+// mouvement de fonds réel.
+app.use('/api/ussd', ussdRoutes);
 // admin.fraud.ts et admin.risk.ts ont été supprimés : doublons non protégés (authMiddleware
 // seul, sans hasPermission()) d'endpoints déjà servis en toute sécurité par admin.ts
 // (/fraud-cases, perm_customer_flag) et scoring.ts (/scoring) — aucune page admin-web ne les
