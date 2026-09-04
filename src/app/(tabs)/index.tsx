@@ -4,7 +4,6 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Dimensions,
   RefreshControl,
@@ -205,20 +204,6 @@ export default function DashboardScreen() {
               </View>
               <Ionicons name="chevron-forward" size={22} color={COLORS.textSecondary} />
             </TouchableOpacity>
-
-            <View style={styles.servicesHeader}>
-              <Text style={styles.sectionTitle}>Services & factures</Text>
-              <TouchableOpacity><Text style={styles.seeAllText}>Voir tout</Text></TouchableOpacity>
-            </View>
-            <View style={styles.servicesGridSquares}>
-              <ServiceSquareItem icon="cash" label="Micro-crédit" bgColor="#1E3A8A15" color="#1E3A8A" onPress={() => router.push('/credit')} styles={styles} />
-              <ServiceSquareItem icon="card" label="Paiement x3" bgColor="#F59E0B15" color="#F59E0B" onPress={() => router.push('/bnpl')} styles={styles} />
-              <ServiceSquareItem icon="trending-up" label="Crypto" bgColor="#10B98115" color="#10B981" onPress={() => router.push('/crypto')} styles={styles} />
-              <ServiceSquareItem icon="flash" label="Factures" bgColor="#FFB02015" color="#FFB020" disabled={!appConfig.seegEnabled} onPress={() => router.push('/billers')} styles={styles} />
-              <ServiceSquareItem icon="phone-portrait" label="Recharge" bgColor="#2563FF15" color="#2563FF" onPress={() => router.push('/services/airtime')} styles={styles} />
-              <ServiceSquareItem icon="water" label="Eau" bgColor="#EF444415" color="#EF4444" onPress={() => Alert.alert('Bientôt disponible', "Le paiement des factures d'eau sera bientôt activé.")} styles={styles} />
-              <ServiceSquareItem icon="earth" label="Internat." bgColor="#00C27A15" color="#00C27A" onPress={() => router.push('/remit')} styles={styles} />
-            </View>
 
             {/* Transactions récentes */}
             <View style={styles.transactionsHeader}>
