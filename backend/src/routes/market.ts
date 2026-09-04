@@ -106,11 +106,19 @@ router.post('/buy/:id', authMiddleware, async (req: AuthRequest, res) => {
         const settings = await getSystemSettings();
 
         const { escrowTx, seller } = await prisma.$transaction(async (tx) => {
-            // Lock Listing
-            await tx.marketListing.update({
-                where: { id: listing.id },
+            // Verrou atomique sur l'annonce (updateMany + count===0, comme
+            // admin.market.ts pour EscrowTransaction.status) : un simple `update({ where:
+            // { id } })` n'a aucune précondition sur `isActive` et réussit toujours, même si
+            // l'annonce vient d'être verrouillée par un autre achat concurrent — deux
+            // acheteurs scannant/achetant la même annonce en même temps passaient tous deux
+            // le contrôle `listing.isActive` (lu hors transaction) et créaient chacun un
+            // escrow LOCKED distinct sur le même article, le vendeur ne pouvant livrer qu'à
+            // un seul des deux.
+            const claimed = await tx.marketListing.updateMany({
+                where: { id: listing.id, isActive: true },
                 data: { isActive: false }
             });
+            if (claimed.count === 0) throw new Error("Cette annonce vient d'être achetée par quelqu'un d'autre.");
 
             // Plafonds AML/KYC — cet achat débitait le portefeuille de l'acheteur sans passer
             // par aucun contrôle de plafond, contrairement aux rails de paiement équivalents.
@@ -171,7 +179,10 @@ router.post('/buy/:id', authMiddleware, async (req: AuthRequest, res) => {
 
         res.json({ success: true, escrowTx, message: "Achat sécurisé ! Les fonds sont bloqués chez Mongain." });
     } catch (e: any) {
-        res.status(500).json({ error: friendlyErrorMessage(e) });
+        // 400 + message réel : un rejet métier (annonce déjà vendue, plafond AML, solde
+        // insuffisant détecté dans la transaction) ne doit pas remonter comme une panne
+        // serveur générique — même convention que le reste des rails de paiement.
+        res.status(400).json({ error: friendlyErrorMessage(e) });
     }
 });
 
