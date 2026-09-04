@@ -10,7 +10,7 @@ jest.mock('../../prisma', () => ({
         user: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn(), create: jest.fn() },
         wallet: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn(), create: jest.fn() },
         systemAccount: { upsert: jest.fn() },
-        transaction: { create: jest.fn(), findMany: jest.fn(), updateMany: jest.fn() },
+        transaction: { create: jest.fn(), findMany: jest.fn(), updateMany: jest.fn(), aggregate: jest.fn() },
         notification: { create: jest.fn() },
         systemSettings: { findFirst: jest.fn() },
         $executeRaw: jest.fn(),
@@ -22,7 +22,13 @@ jest.mock('../../prisma', () => ({
 jest.mock('../../services/LimitEngine', () => ({
     LimitEngine: {
         verifyAndIncrementConsumption: jest.fn().mockResolvedValue(true),
-        getApplicableLimits: jest.fn().mockResolvedValue({ effectiveDaily: 50000 })
+        getApplicableLimits: jest.fn().mockResolvedValue({ effectiveDaily: 50000 }),
+        // Ajouté avec le calcul de frais cumulé sur les retraits AGENT (wallet.ts
+        // /client-initiated-withdraw, /qr-cash-out) — sans ce mock, l'appel réel plantait
+        // ("calculateWithdrawalFee is not a function") puisque LimitEngine est entièrement
+        // mocké dans ce fichier. 0 par défaut : aucun test existant ne dépend d'un frais
+        // agence non nul calculé par cette fonction.
+        calculateWithdrawalFee: jest.fn().mockResolvedValue(0)
     }
 }));
 
@@ -74,6 +80,11 @@ describe('Wallet Routes', () => {
             if (args.select && args.select.jwtVersion) return { id: 'user123', isActive: true, jwtVersion: 0 };
             return null;
         });
+        // LimitEngine.calculateWithdrawalFee (retrait AGENT, qr-cash-out) agrège les retraits
+        // QROUT déjà effectués aujourd'hui — par défaut, aucun retrait préalable, pour ne pas
+        // changer le calcul de frais que les tests existants attendent déjà (montant courant
+        // seul face au seuil).
+        (prisma.transaction.aggregate as jest.Mock).mockResolvedValue({ _sum: { amount: 0 } });
     });
 
     describe('GET /wallet/balance', () => {

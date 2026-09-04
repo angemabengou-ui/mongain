@@ -198,14 +198,31 @@ export class LimitEngine {
         });
     }
 
-    // NOTE : une précédente version de calculateWithdrawalFee() a été retirée ici —
-    // elle n'était appelée nulle part dans le code (confirmé par recherche globale).
-    // Elle calculait une taxe progressive basée sur le cumul des retraits COUT-/QROUT-
-    // du jour, contrairement au calcul actuel dans wallet.ts (qr-cash-out,
-    // client-initiated-withdraw) qui ne regarde que le montant de la transaction en
-    // cours. Un client peut donc aujourd'hui fractionner un gros retrait en plusieurs
-    // retraits QR sous le seuil pour éviter la taxe agence — ce report de conception
-    // (accumuler par jour comme le fait déjà l'anti-fractionnement bloquant de
-    // CashOperationService.executeCashOut) nécessite une décision produit avant d'être
-    // réintégré, plutôt que d'être deviné ici.
+    /**
+     * Anti-Fractionnement (Taxation centralisée)
+     * Calcule la taxe sur un retrait en tenant compte du cumul journalier du client.
+     * Si le client a déjà épuisé son quota gratuit du jour, TOUT nouveau retrait est taxé.
+     */
+    static async calculateWithdrawalFee(tx: any, walletId: string, amount: number, settings: any): Promise<number> {
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+
+        const todaysWithdrawals = await tx.transaction.aggregate({
+            where: {
+                senderWalletId: walletId,
+                reference: { startsWith: 'QROUT' }, // Both client-initiated and agent-initiated use QROUT or similar
+                createdAt: { gte: startOfDay },
+                status: 'COMPLETED'
+            },
+            _sum: { amount: true }
+        });
+
+        const sumToday = todaysWithdrawals._sum.amount || 0;
+        const threshold = settings.agencyWithdrawThreshold;
+
+        // La partie du montant actuel qui dépasse la franchise restante pour aujourd'hui
+        const taxableAmount = Math.max(0, (sumToday + amount) - Math.max(sumToday, threshold));
+
+        return taxableAmount * settings.agencyTaxWithdraw;
+    }
 }

@@ -148,20 +148,8 @@ router.post('/qr-cash-out', authMiddleware, async (req: AuthRequest, res) => {
 
         if (branch.balance < amount) return res.status(400).json({ error: 'Liquidité de caisse insuffisante actuellement pour la remise.' });
 
-        // Frais Centralisés (TODO: Enrober dans LimitEngine anti-fractionnement)
+        // Frais Centralisés : LimitEngine anti-fractionnement activé
         const settings = await prisma.systemSettings.findFirst();
-        // Marginal sur le seul dépassement du seuil, pas sur le montant entier une fois
-        // celui-ci franchi — sinon un retrait de 500 001 FCFA payait des frais sur la
-        // totalité alors qu'un retrait de 499 999 FCFA restait gratuit (effet de seuil
-        // abrupt). Même formule que /client-initiated-withdraw plus bas, désormais la
-        // référence commune aux deux chemins.
-        let feeAmount = 0;
-        if (settings && amount > settings.agencyWithdrawThreshold) {
-            feeAmount = (amount - settings.agencyWithdrawThreshold) * settings.agencyTaxWithdraw;
-        }
-
-        const totalDebit = amount + feeAmount;
-        if (client.wallet.balance < totalDebit) return res.status(400).json({ error: 'Solde insuffisant pour ce retrait (incluant les frais de réseau).' });
 
         // Transaction Ledger 100% Atomique — gardes atomiques (balance: gte) sur les deux
         // décréments : les contrôles ci-dessus (client.wallet.balance, branch.balance) lisent
@@ -179,6 +167,14 @@ router.post('/qr-cash-out', authMiddleware, async (req: AuthRequest, res) => {
             // — sans ça, un client Tier 0 pouvait contourner sa limite journalière/mensuelle
             // en retirant via QR guichet plutôt que par un transfert P2P classique.
             await LimitEngine.verifyAndIncrementConsumption(tx, client.id, client.wallet!.id, amount, settings);
+
+            // Calcul de frais basé sur le cumul (DOIT être dans $transaction pour l'intégrité)
+            const feeAmount = await LimitEngine.calculateWithdrawalFee(tx, client.wallet!.id, amount, settings);
+            const totalDebit = amount + feeAmount;
+
+            if (client.wallet!.balance < totalDebit) {
+                throw new Error(`Solde insuffisant pour ce retrait (incluant ${feeAmount} FCFA de frais de réseau).`);
+            }
 
             await tx.wallet.update({ where: { id: client.wallet!.id, balance: { gte: totalDebit } }, data: { balance: { decrement: totalDebit } } });
             await tx.wallet.update({ where: { id: branch.wallet!.id }, data: { balance: { increment: amount } } });
@@ -680,19 +676,9 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
             if (agent.role === 'MERCHANT') {
                 fee = amount * settings.taxWithdraw;
                 merchantReward = amount * settings.rewardMerchant;
-                // Si un admin configure rewardMerchant > taxWithdraw (commission marchand plus
-                // élevée que les frais qui la financent), `corporateCut = fee - merchantReward`
-                // plus bas devient négatif et le garde-fou `if (corporateCut > 0)` ne prélève
-                // alors RIEN pour compenser — le marchand est crédité `amount + merchantReward`
-                // pour un débit client de seulement `amount + fee` : de la monnaie électronique
-                // créée à partir de rien à chaque retrait. Plafonné ici pour que la commission
-                // ne puisse jamais dépasser les frais qui la financent, quelle que soit la
-                // configuration en base.
                 if (merchantReward > fee) merchantReward = fee;
             } else if (agent.role === 'AGENT') {
-                if (amount > settings.agencyWithdrawThreshold) {
-                    fee = (amount - settings.agencyWithdrawThreshold) * settings.agencyTaxWithdraw;
-                }
+                fee = await LimitEngine.calculateWithdrawalFee(tx, sender.wallet.id, amount, settings);
             }
 
             const totalRequired = amount + fee;

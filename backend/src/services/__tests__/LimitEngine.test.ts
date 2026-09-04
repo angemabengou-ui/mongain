@@ -241,3 +241,54 @@ describe('LimitEngine.verifyAndIncrementConsumption', () => {
         expect(tx.wallet.update).toHaveBeenCalled();
     });
 });
+
+describe('LimitEngine.calculateWithdrawalFee', () => {
+    const feeSettings = { agencyWithdrawThreshold: 500000, agencyTaxWithdraw: 0.01 };
+
+    const buildFeeTx = (sumToday: number) => ({
+        transaction: {
+            aggregate: jest.fn().mockResolvedValue({ _sum: { amount: sumToday } }),
+        },
+    });
+
+    it('ne devrait rien facturer si le cumul du jour + le retrait restent sous le seuil', async () => {
+        const tx = buildFeeTx(0);
+        const fee = await LimitEngine.calculateWithdrawalFee(tx as any, 'wallet_1', 400000, feeSettings);
+        expect(fee).toBe(0);
+    });
+
+    it('devrait facturer uniquement la part qui dépasse le seuil, au premier retrait du jour', async () => {
+        const tx = buildFeeTx(0);
+        // 500 000 franchise + 100 000 taxables => 100 000 * 1% = 1000
+        const fee = await LimitEngine.calculateWithdrawalFee(tx as any, 'wallet_1', 600000, feeSettings);
+        expect(fee).toBe(1000);
+    });
+
+    it('devrait facturer la totalité du retrait si la franchise du jour est déjà épuisée', async () => {
+        // Le client a déjà retiré 500 000 FCFA aujourd'hui (franchise consommée) : tout
+        // nouveau retrait est désormais taxé en entier, pas seulement son dépassement propre.
+        const tx = buildFeeTx(500000);
+        const fee = await LimitEngine.calculateWithdrawalFee(tx as any, 'wallet_1', 100000, feeSettings);
+        expect(fee).toBe(1000);
+    });
+
+    it('ne devrait taxer que la part du retrait courant qui dépasse la franchise restante', async () => {
+        // 300 000 déjà retirés aujourd'hui, franchise 500 000 => 200 000 de marge restante.
+        // Un retrait de 250 000 dépasse cette marge de 50 000 => 50 000 * 1% = 500.
+        const tx = buildFeeTx(300000);
+        const fee = await LimitEngine.calculateWithdrawalFee(tx as any, 'wallet_1', 250000, feeSettings);
+        expect(fee).toBe(500);
+    });
+
+    it('ne devrait jamais renvoyer un montant négatif quand aucun retrait n\'a encore eu lieu', async () => {
+        const tx = buildFeeTx(0);
+        const fee = await LimitEngine.calculateWithdrawalFee(tx as any, 'wallet_1', 1000, feeSettings);
+        expect(fee).toBe(0);
+    });
+
+    it('devrait traiter un cumul journalier absent (aucun retrait trouvé) comme zéro', async () => {
+        const tx = { transaction: { aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }) } };
+        const fee = await LimitEngine.calculateWithdrawalFee(tx as any, 'wallet_1', 600000, feeSettings);
+        expect(fee).toBe(1000);
+    });
+});
