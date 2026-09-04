@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -29,13 +29,20 @@ export default function TontineCreateScreen() {
     const [frequency, setFrequency] = useState<'WEEKLY' | 'MONTHLY'>('MONTHLY');
     const [isPublic, setIsPublic] = useState(false);
     const [loading, setLoading] = useState(false);
+    // Garde synchrone (même pattern que tontine-detail.tsx/vault-detail.tsx) : le seul état
+    // `loading` React ne suffit pas contre un double-tap rapide, `setLoading(true)` n'étant
+    // commité qu'au rendu suivant — /tontine/create n'est pas idempotent (chaque appel crée
+    // un nouveau club), un double-tap avant ce rendu créait deux clubs distincts.
+    const creatingRef = useRef(false);
 
     const handleCreate = async () => {
+        if (creatingRef.current) return;
         const amt = contribution.replace(/\s/g, '').replace(',', '.');
         if (!name.trim() || !amt || Number(amt) <= 0) {
             Alert.alert('Informations manquantes', 'Donnez un nom et un montant de cotisation valide.');
             return;
         }
+        creatingRef.current = true;
         setLoading(true);
         try {
             await apiCreateTontine(name.trim(), Number(amt), frequency, isPublic);
@@ -43,6 +50,7 @@ export default function TontineCreateScreen() {
         } catch (e: any) {
             Alert.alert('Échec', e.message || 'Impossible de créer le club.');
         } finally {
+            creatingRef.current = false;
             setLoading(false);
         }
     };

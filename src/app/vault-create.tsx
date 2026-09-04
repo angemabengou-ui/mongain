@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -31,12 +31,18 @@ export default function VaultCreateScreen() {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [loading, setLoading] = useState(false);
+    // Garde synchrone (même pattern que tontine-create.tsx/vault-detail.tsx) : /vaults n'est
+    // pas idempotent (chaque appel crée une nouvelle caisse) ; le seul état `loading` React
+    // ne suffit pas contre un double-tap avant que son changement ne soit commité au rendu.
+    const creatingRef = useRef(false);
 
     const handleCreate = async () => {
+        if (creatingRef.current) return;
         if (!name.trim()) {
             Alert.alert('Nom requis', 'Donnez un nom à votre caisse (ex : Caisse Mariage).');
             return;
         }
+        creatingRef.current = true;
         setLoading(true);
         try {
             await apiCreateVault({ name: name.trim(), description: description.trim() || undefined });
@@ -44,6 +50,7 @@ export default function VaultCreateScreen() {
         } catch (e: any) {
             Alert.alert('Échec', e.message || 'Impossible de créer la caisse.');
         } finally {
+            creatingRef.current = false;
             setLoading(false);
         }
     };
