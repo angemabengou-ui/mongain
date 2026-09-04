@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator, Animated, Dimensions, StyleSheet,
     Text, TouchableOpacity, View
@@ -9,6 +9,7 @@ import {
 import QRCode from 'react-native-qrcode-svg';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
+import { apiLookupUser } from '../services/api';
 
 const { width, height } = Dimensions.get('window');
 const SCAN_FRAME_SIZE = width * 0.65;
@@ -68,6 +69,18 @@ export default function QrScreen() {
 
     const [scanError, setScanError] = useState<string | null>(null);
 
+    // Sans ce reset, revenir en arrière depuis transfer-confirm.tsx/client-withdraw-desk.tsx
+    // après un scan réussi (router.push, cet écran reste monté dessous) laissait `scanned`
+    // bloqué à `true` pour toujours — seule la branche ERREUR du scan le remettait à `false`
+    // (après son setTimeout de 3s). onBarcodeScanned devient alors `undefined` en permanence
+    // (ligne du CameraView plus bas) : pointer la caméra sur n'importe quel QR, y compris un
+    // autre, ne faisait plus rien, sans le moindre message. Remonter le scanner exigeait de
+    // quitter et rouvrir complètement cet écran.
+    useFocusEffect(useCallback(() => {
+        setScanned(false);
+        setScanError(null);
+    }, []));
+
     const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
         if (scanned) return;
         setScanned(true);
@@ -79,72 +92,94 @@ export default function QrScreen() {
         };
 
         if (data.startsWith('mongain://user')) {
-            try {
-                const qs = data.split('?')[1];
-                const urlParams = new URLSearchParams(qs);
-                const targetPhone = urlParams.get('phone');
-                const targetName = urlParams.get('name') || targetPhone;
-                const targetRole = urlParams.get('role');
-                const qrAction = urlParams.get('action'); // 'pay' or 'withdraw' (added for merchants)
+            (async () => {
+                try {
+                    const qs = data.split('?')[1];
+                    const urlParams = new URLSearchParams(qs);
+                    const targetPhone = urlParams.get('phone');
+                    const qrAction = urlParams.get('action'); // 'pay' or 'withdraw' (added for merchants)
 
-                if (!targetPhone) {
-                    showError('QR Code invalide : Numéro manquant.');
-                    return;
-                }
-
-                // --- UNIVERSAL DISPATCHER LOGIC --- //
-
-                // Un retrait ne peut se faire qu'auprès d'un Agent : si l'utilisateur est entré
-                // dans le scanner spécifiquement pour retirer (?intent=withdraw) mais que le QR
-                // scanné n'appartient pas à un Agent, on refuse plutôt que de basculer
-                // silencieusement vers un transfert P2P classique (qui enverrait de l'argent au
-                // lieu d'en retirer — voir withdraw.tsx qui pointe ici avec intent=withdraw).
-                // Un retrait ne peut se faire qu'auprès d'un Agent ou d'un Marchand :
-                // si l'intent explicite est withdraw OR si le QR scanné contient action=withdraw.
-                const isWithdrawalIntent = intent === 'withdraw' || qrAction === 'withdraw';
-                if (isWithdrawalIntent && targetRole !== 'AGENT' && targetRole !== 'MERCHANT') {
-                    showError("Vous ne pouvez retirer de l'argent qu'auprès d'un Agent ou d'un Marchand.");
-                    return;
-                }
-
-                // 1. If scanned by an AGENT -> Agent wants to deposit digital money to Client!
-                if (user?.role === 'AGENT') {
-                    if (targetRole === 'AGENT') {
-                        showError("Un Agent ne peut pas scanner un autre Agent au guichet.");
+                    if (!targetPhone) {
+                        showError('QR Code invalide : Numéro manquant.');
                         return;
                     }
-                    // Goto universal agent dashboard to handle the client (Deposit)
-                    router.replace({ pathname: '/agent-action', params: { clientPhone: targetPhone, clientName: targetName, action: 'DEPOSIT' } });
-                    return;
-                }
 
-                // 2. If User scans a MERCHANT -> Payment OR Withdrawal depending on the QR!
-                if (targetRole === 'MERCHANT') {
-                    if (isWithdrawalIntent) {
-                        // `agentRole` : sans lui, l'écran de retrait appliquait toujours la
-                        // formule Agent (seuil + taux marginal) même face à un Marchand, qui a
-                        // sa propre formule (taux plein dès le premier franc, sans seuil) —
-                        // affichant "GRATUIT" alors que le serveur facture réellement.
-                        router.replace({ pathname: '/client-withdraw-desk', params: { agentPhone: targetPhone, agentName: targetName, agentRole: targetRole } });
-                    } else {
-                        router.push({ pathname: '/transfer-confirm', params: { receiverPhone: targetPhone, receiverName: targetName, isMerchant: 'true' } });
+                    // Le nom et le rôle affichés/utilisés pour le routage ne viennent JAMAIS du
+                    // contenu brut du QR (contrairement à avant) : n'importe qui peut fabriquer
+                    // un QR "mongain://user?phone=<numéro réel>&name=<faux nom de confiance>"
+                    // (ex: un autocollant marchand substitué). Le flux de saisie manuelle
+                    // (transfer.tsx) vérifie déjà le nom via apiLookupUser avant confirmation —
+                    // le scan doit offrir la même garantie : le nom vu sur l'écran de
+                    // confirmation appartient réellement à ce numéro, jamais une valeur que
+                    // l'attaquant contrôle. L'argent n'aurait de toute façon jamais pu partir
+                    // ailleurs que vers ce numéro (revérifié côté serveur), mais sans cette
+                    // vérification l'utilisateur pouvait croire payer quelqu'un d'autre que la
+                    // personne réellement associée à ce numéro.
+                    let verified;
+                    try {
+                        verified = await apiLookupUser(targetPhone);
+                    } catch {
+                        showError('Compte introuvable pour ce QR Code.');
+                        return;
                     }
-                    return;
+
+                    const targetName = verified.name;
+                    const targetRole = verified.role;
+
+                    // --- UNIVERSAL DISPATCHER LOGIC --- //
+
+                    // Un retrait ne peut se faire qu'auprès d'un Agent : si l'utilisateur est entré
+                    // dans le scanner spécifiquement pour retirer (?intent=withdraw) mais que le QR
+                    // scanné n'appartient pas à un Agent, on refuse plutôt que de basculer
+                    // silencieusement vers un transfert P2P classique (qui enverrait de l'argent au
+                    // lieu d'en retirer — voir withdraw.tsx qui pointe ici avec intent=withdraw).
+                    // Un retrait ne peut se faire qu'auprès d'un Agent ou d'un Marchand :
+                    // si l'intent explicite est withdraw OR si le QR scanné contient action=withdraw.
+                    const isWithdrawalIntent = intent === 'withdraw' || qrAction === 'withdraw';
+                    if (isWithdrawalIntent && targetRole !== 'AGENT' && targetRole !== 'MERCHANT') {
+                        showError("Vous ne pouvez retirer de l'argent qu'auprès d'un Agent ou d'un Marchand.");
+                        return;
+                    }
+
+                    // 1. If scanned by an AGENT -> Agent wants to deposit digital money to Client!
+                    if (user?.role === 'AGENT') {
+                        if (targetRole === 'AGENT') {
+                            showError("Un Agent ne peut pas scanner un autre Agent au guichet.");
+                            return;
+                        }
+                        // Goto universal agent dashboard to handle the client (Deposit)
+                        router.replace({ pathname: '/agent-action', params: { clientPhone: targetPhone, clientName: targetName, action: 'DEPOSIT' } });
+                        return;
+                    }
+
+                    // 2. If User scans a MERCHANT -> Payment OR Withdrawal depending on the QR!
+                    if (targetRole === 'MERCHANT') {
+                        if (isWithdrawalIntent) {
+                            // `agentRole` : sans lui, l'écran de retrait appliquait toujours la
+                            // formule Agent (seuil + taux marginal) même face à un Marchand, qui a
+                            // sa propre formule (taux plein dès le premier franc, sans seuil) —
+                            // affichant "GRATUIT" alors que le serveur facture réellement.
+                            router.replace({ pathname: '/client-withdraw-desk', params: { agentPhone: targetPhone, agentName: targetName, agentRole: targetRole } });
+                        } else {
+                            router.push({ pathname: '/transfer-confirm', params: { receiverPhone: targetPhone, receiverName: targetName, isMerchant: 'true' } });
+                        }
+                        return;
+                    }
+
+                    // 3. If User scans an AGENT -> Withdraw at the Agent's Desk
+                    if (targetRole === 'AGENT') {
+                        // Client initiates a withdrawal by sending digital cash to the Agent
+                        router.replace({ pathname: '/client-withdraw-desk', params: { agentPhone: targetPhone, agentName: targetName, agentRole: targetRole } });
+                        return;
+                    }
+
+                    // 4. Default: User scans a User -> P2P Transfer
+                    router.push({ pathname: '/transfer-confirm', params: { receiverPhone: targetPhone, receiverName: targetName, isMerchant: 'false' } });
+
+                } catch (e) {
+                    showError('Le QR Code est corrompu ou illisible.');
                 }
-
-                // 3. If User scans an AGENT -> Withdraw at the Agent's Desk
-                if (targetRole === 'AGENT') {
-                    // Client initiates a withdrawal by sending digital cash to the Agent
-                    router.replace({ pathname: '/client-withdraw-desk', params: { agentPhone: targetPhone, agentName: targetName, agentRole: targetRole } });
-                    return;
-                }
-
-                // 4. Default: User scans a User -> P2P Transfer
-                router.push({ pathname: '/transfer-confirm', params: { receiverPhone: targetPhone, receiverName: targetName, isMerchant: 'false' } });
-
-            } catch (e) {
-                showError('Le QR Code est corrompu ou illisible.');
-            }
+            })();
         } else {
             showError("Ce QR Code n'est pas reconnu par le réseau Mongain.");
         }
