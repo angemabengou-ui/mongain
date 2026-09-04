@@ -4,6 +4,7 @@ import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { LimitEngine } from '../services/LimitEngine';
 import { getSystemAccount } from '../services/systemAccounts';
+import { friendlyErrorMessage } from '../utils/errors';
 import logger from '../utils/logger';
 import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
@@ -158,7 +159,11 @@ router.post('/send', authMiddleware, async (req: AuthRequest, res) => {
 
     } catch (error: any) {
         logger.error(`[Remittance Engine] ${error.message}`);
-        return res.status(500).json({ error: 'Erreur réseau internationale.' });
+        // Le message réel (plafond AML dépassé, solde insuffisant détecté dans la transaction,
+        // course perdue sur la garde atomique...) était toujours remplacé par un "Erreur réseau
+        // internationale." générique en 500 — l'utilisateur n'avait aucune indication de la
+        // vraie cause d'un rejet métier, présenté à tort comme une panne serveur.
+        return res.status(400).json({ error: friendlyErrorMessage(error, 'Erreur réseau internationale.') });
     }
 });
 
