@@ -63,7 +63,7 @@ export default function VerifyLoginOtpScreen() {
                         </View>
                         <Text style={styles.title}>Double Authentification</Text>
                         <Text style={styles.subtitle}>
-                            Un code de sécurité à 4 chiffres vous a été envoyé par SMS au <Text style={{ fontWeight: '700', color: COLORS.textPrimary }}>{phone}</Text>.
+                            Un code de sécurité à 4 chiffres vous a été envoyé par SMS au <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: '700', color: COLORS.textPrimary }}>{phone}</Text>.
                         </Text>
 
                         {error ? (
@@ -78,7 +78,7 @@ export default function VerifyLoginOtpScreen() {
                             <Ionicons name="keypad-outline" size={20} color={COLORS.textSecondary} style={styles.inputIcon} />
                             <TextInput
                                 style={styles.input}
-                                placeholder="••••"
+                                placeholder="⬢⬢⬢⬢"
                                 keyboardType="number-pad"
                                 maxLength={4}
                                 value={otpCode}
@@ -109,17 +109,18 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     scroll: { flexGrow: 1, padding: 24, justifyContent: 'center' },
     header: { flexDirection: 'row', alignItems: 'center', marginBottom: 32 },
     backButton: { marginRight: 16 },
-    headerTitle: { fontSize: 22, fontWeight: '800', color: '#fff' },
+    headerTitle: { fontSize: 22, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', color: '#fff' },
     card: { backgroundColor: COLORS.surface, borderRadius: 24, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.1, shadowRadius: 24, elevation: 8 },
     iconWrap: { alignSelf: 'center', marginBottom: 16, backgroundColor: COLORS.primary + '15', padding: 16, borderRadius: 50 },
-    title: { fontSize: 24, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 8, textAlign: 'center' },
+    title: { fontSize: 24, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', color: COLORS.textPrimary, marginBottom: 8, textAlign: 'center' },
     subtitle: { fontSize: 15, color: COLORS.textSecondary, marginBottom: 32, textAlign: 'center', lineHeight: 22 },
     errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEE2E2', borderRadius: 12, padding: 12, marginBottom: 16 },
     errorText: { color: COLORS.error, fontSize: 14, marginLeft: 8, flex: 1 },
-    label: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary, marginBottom: 8 },
+    label: { fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: COLORS.textPrimary, marginBottom: 8 },
     inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'transparent', borderRadius: 16, paddingHorizontal: 16, height: 56, marginBottom: 24, borderWidth: 1, borderColor: COLORS.border },
     inputIcon: { marginRight: 12 },
-    input: { flex: 1, fontSize: 20, color: COLORS.textPrimary, fontWeight: '700', letterSpacing: 4 },
+    input: { flex: 1, fontSize: 20, color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', letterSpacing: 4 },
     btn: { backgroundColor: COLORS.primary, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-    btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+    btnText: { color: '#fff', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
 });
+

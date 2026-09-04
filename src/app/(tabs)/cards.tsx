@@ -154,7 +154,7 @@ export default function CardsScreen() {
                                 {isFrozen && (
                                     <View style={styles.frozenFilter}>
                                         <Ionicons name="snow" color="#fff" size={40} style={{ opacity: 0.8 }} />
-                                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>CARTE GELÉE</Text>
+                                        <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>CARTE GELÉE</Text>
                                     </View>
                                 )}
 
@@ -179,18 +179,18 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#0f172a' },
     scroll: { padding: 24, paddingBottom: 60 },
     header: { marginBottom: 32, marginTop: 20 },
-    title: { color: '#ffffff', fontSize: 32, fontWeight: '800', marginBottom: 8 },
+    title: { color: '#ffffff', fontSize: 32, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', marginBottom: 8 },
     subtitle: { color: '#94a3b8', fontSize: 16 },
     emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 80 },
     emptyText: { color: '#94a3b8', fontSize: 16, marginBottom: 24 },
     issueButton: { backgroundColor: '#2563EB', paddingHorizontal: 24, paddingVertical: 16, borderRadius: 12 },
-    issueButtonText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+    issueButtonText: { color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 16 },
     cardContainer: { marginBottom: 40, borderRadius: 20, overflow: 'hidden' },
     cardGlass: { padding: 24, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-    bankName: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '700', letterSpacing: 2 },
+    bankName: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', letterSpacing: 2 },
     balanceRow: { marginBottom: 24 },
-    balanceValue: { color: '#fff', fontSize: 24, fontWeight: '800' },
+    balanceValue: { color: '#fff', fontSize: 24, fontFamily: 'Satoshi-SemiBold', fontWeight: '800' },
     cardNumberRow: { marginBottom: 32 },
     cardNumber: { color: '#fff', fontSize: 22, letterSpacing: 3, fontFamily: 'monospace' },
     cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
@@ -201,5 +201,6 @@ const styles = StyleSheet.create({
     actionBtn: { flex: 1, backgroundColor: 'rgba(255,255,255,0.1)', padding: 14, borderRadius: 12, alignItems: 'center' },
     actionBtnDanger: { backgroundColor: 'rgba(239, 68, 68, 0.2)' },
     actionBtnUnfreeze: { backgroundColor: 'rgba(16, 185, 129, 0.2)' },
-    actionText: { color: '#fff', fontWeight: '600', fontSize: 14 }
+    actionText: { color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '600', fontSize: 14 }
 });
+

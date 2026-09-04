@@ -92,7 +92,7 @@ export default function ReceiptScreen() {
                         
                         ${(!isDeposit && !isWithdraw) ? `
                             <div class="detail-row">
-                                <span class="detail-label">${isIncoming ? 'De' : 'À'}</span>
+                                <span class="detail-label">${isIncoming ? 'De' : 'ì'}</span>
                                 <span class="detail-value">${counterpart || '-'}</span>
                             </div>
                             <div class="detail-row">
@@ -175,7 +175,7 @@ export default function ReceiptScreen() {
                     <View style={styles.detailsContainer}>
                         {!isDeposit && !isWithdraw && (
                             <>
-                                <DetailRow label={isIncoming ? 'De' : 'À'} value={counterpart as string} icon="person-outline" styles={styles} colors={COLORS} />
+                                <DetailRow label={isIncoming ? 'De' : 'ì'} value={counterpart as string} icon="person-outline" styles={styles} colors={COLORS} />
                                 <DetailRow label="Numéro" value={counterpartPhone as string} icon="call-outline" styles={styles} colors={COLORS} />
                             </>
                         )}
@@ -224,7 +224,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         paddingHorizontal: 20, paddingTop: 16, paddingBottom: 32,
     },
     backButton: { padding: 8, marginLeft: -8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 20 },
-    headerTitle: { color: '#fff', fontSize: 18, fontWeight: '600' },
+    headerTitle: { color: '#fff', fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
     content: { paddingHorizontal: 20, paddingBottom: 40 },
     receiptCard: {
         backgroundColor: '#fff', borderRadius: 24, padding: 24, marginTop: -10,
@@ -233,13 +233,13 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     },
     receiptHeader: { alignItems: 'center', marginBottom: 24 },
     iconWrapper: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-    receiptTitle: { fontSize: 16, color: COLORS.textSecondary, marginBottom: 8, fontWeight: '500' },
-    receiptAmount: { fontSize: 32, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 12 },
+    receiptTitle: { fontSize: 16, color: COLORS.textSecondary, marginBottom: 8, fontFamily: 'Satoshi-Regular' },
+    receiptAmount: { fontSize: 32, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary, marginBottom: 12 },
     statusBadge: {
         flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.success + '15',
         paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, gap: 6,
     },
-    statusText: { color: COLORS.success, fontSize: 13, fontWeight: '700' },
+    statusText: { color: COLORS.success, fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
     dashLine: {
         width: '100%', height: 1, backgroundColor: 'transparent',
@@ -250,17 +250,18 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     detailRowLeft: { flexDirection: 'row', alignItems: 'center' },
     detailIcon: { marginRight: 8 },
-    detailLabel: { fontSize: 14, color: COLORS.textSecondary },
+    detailLabel: { fontSize: 14, fontFamily: 'Satoshi-Regular', color: COLORS.textSecondary },
     detailRowRight: { flexDirection: 'row', alignItems: 'center', flex: 1, justifyContent: 'flex-end', paddingLeft: 16 },
-    detailValue: { fontSize: 14, fontWeight: '700', color: COLORS.textPrimary, textAlign: 'right' },
+    detailValue: { fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary, textAlign: 'right' },
 
     watermarkContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 32, opacity: 0.8 },
-    watermarkText: { color: COLORS.textSecondary, fontSize: 13, fontWeight: '600' },
+    watermarkText: { color: COLORS.textSecondary, fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
     footer: { padding: 20, backgroundColor: COLORS.background },
     actionBtn: {
         backgroundColor: COLORS.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         height: 56, borderRadius: 16, gap: 8,
     },
-    actionBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+    actionBtnText: { color: '#fff', fontSize: 17, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 });
+

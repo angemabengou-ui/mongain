@@ -12,42 +12,44 @@ import { useColorScheme } from 'react-native';
 // pour les actions clés.
 export const Colors = {
   light: {
-    primary: '#2563EB',
-    primaryDark: '#1D4ED8',
-    accent: '#F59E0B',
+    primary: '#2563FF',      // Brand Blue
+    primaryDark: '#103AB5',
+    accent: '#FFB020',       // Brand Orange
     background: '#f7f9fd',
     surface: '#ffffff',
-    textPrimary: '#101827',
+    textPrimary: '#0A0F1C',  // Brand Dark
     textSecondary: '#5f6b7a',
     textHeader: '#ffffff',
     border: '#e2e8f5',
     error: '#DC2626',
-    success: '#059669',
-    warning: '#D97706',
+    success: '#00C27A',      // Brand Green
+    warning: '#FFB020',
+    purple: '#7E3AF2',       // Brand Purple
     remaining: '#F0F3FA',
-    text: '#101827',
+    text: '#0A0F1C',
     backgroundElement: '#f0f3fa',
     backgroundSelected: '#dbeafe'
   },
   dark: {
-    primary: '#60A5FA',
-    primaryDark: '#2563EB',
-    accent: '#FBBF24',
-    background: '#0a0a0f',
+    primary: '#2563FF',      // Brand Blue
+    primaryDark: '#4A7FF0',
+    accent: '#FFB020',
+    background: '#0A0F1C',   // Brand Dark as background
     surface: '#151822',
     textPrimary: '#ffffff',
     textSecondary: '#9ca3b5',
     textHeader: '#ffffff',
     border: '#242a3a',
     error: '#f87171',
-    success: '#34d399',
-    warning: '#fbbf24',
+    success: '#00C27A',
+    warning: '#FFB020',
+    purple: '#7E3AF2',
     remaining: '#242a3a',
     text: '#ffffff',
     backgroundElement: '#1c2130',
     backgroundSelected: '#1e3a5f'
   },
-} as const;
+};
 
 export const useAppTheme = () => {
   const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';

@@ -303,7 +303,7 @@ export default function VaultDetailScreen() {
 
     if (loading || !vault) {
         return (
-            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
                 <View style={styles.centerFill}><ActivityIndicator color="#fff" size="large" /></View>
             </SafeAreaView>
         );
@@ -313,12 +313,12 @@ export default function VaultDetailScreen() {
     const historyTx = vault.transactions.filter((t: any) => t.status !== 'PENDING');
 
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
             <ScreenHeader
                 title={vault.name}
                 onBack={() => router.back()}
                 rightIcon={myRole?.isAdmin ? 'settings-outline' : undefined}
-                onRightPress={myRole?.isAdmin ? () => router.push({ pathname: '/vault-settings' as any, params: { id } }) : undefined}
+                onRightPress={myRole?.isAdmin ? () => router.push({ pathname: '/vault-settings', params: { id } }) : undefined}
             />
 
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.content, { backgroundColor: COLORS.background }]}>
@@ -429,7 +429,7 @@ export default function VaultDetailScreen() {
                                             {transferRecipient ? (
                                                 <View style={styles.recipientFound}>
                                                     <Ionicons name="checkmark-circle" size={16} color={COLORS.success} />
-                                                    <Text style={{ color: COLORS.success, fontSize: 13, fontWeight: '600', marginLeft: 6 }}>{transferRecipient.name}</Text>
+                                                    <Text style={{ color: COLORS.success, fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', marginLeft: 6 }}>{transferRecipient.name}</Text>
                                                 </View>
                                             ) : transferPhone.replace(/\s/g, '').length >= 8 && !transferLookupLoading ? (
                                                 <Text style={[styles.helper, { color: COLORS.error, marginTop: 6 }]}>Aucun compte Mongain trouvé avec ce numéro.</Text>
@@ -450,7 +450,7 @@ export default function VaultDetailScreen() {
                                                         style={[styles.memberPick, { borderColor: selectedTreasurerId === m.userId ? COLORS.primary : COLORS.border }]}
                                                         onPress={() => setSelectedTreasurerId(m.userId)}
                                                     >
-                                                        <Text style={{ color: COLORS.textPrimary, fontWeight: '600' }}>{m.user.name}</Text>
+                                                        <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' }}>{m.user.name}</Text>
                                                         {selectedTreasurerId === m.userId && <Ionicons name="checkmark-circle" size={18} color={COLORS.primary} />}
                                                     </TouchableOpacity>
                                                 ))}
@@ -502,23 +502,23 @@ export default function VaultDetailScreen() {
                                     <View key={tx.id} style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
                                         <View style={styles.cardRow}>
                                             <View>
-                                                <Text style={{ color: COLORS.textPrimary, fontWeight: '700', fontSize: 15 }}>{tx.amount.toLocaleString('fr-FR')} FCFA</Text>
+                                                <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 15 }}>{tx.amount.toLocaleString('fr-FR')} FCFA</Text>
                                                 <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2 }}>Demandé par {tx.requestedBy.name}</Text>
                                             </View>
-                                            <Text style={{ color: COLORS.primary, fontWeight: '700', fontSize: 13 }}>{tx.approvals.length}/{required}</Text>
+                                            <Text style={{ color: COLORS.primary, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 13 }}>{tx.approvals.length}/{required}</Text>
                                         </View>
                                         {tx.reason && (
                                             <Text style={{ color: COLORS.textPrimary, fontSize: 13, marginTop: 10, fontStyle: 'italic' }}>« {tx.reason} »</Text>
                                         )}
                                         {missingRequired.length > 0 && (
-                                            <Text style={{ color: COLORS.error, fontSize: 12, marginTop: 8, fontWeight: '600' }}>
+                                            <Text style={{ color: COLORS.error, fontSize: 12, marginTop: 8, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' }}>
                                                 En attente de la validation obligatoire de : {missingRequired.map((m: any) => m.user.name).join(', ')}
                                             </Text>
                                         )}
                                         {tx.destinationType === 'TRANSFER' && (
                                             <View style={[styles.transferTag, { backgroundColor: COLORS.error + '15' }]}>
                                                 <Ionicons name="arrow-redo-outline" size={13} color={COLORS.error} />
-                                                <Text style={{ color: COLORS.error, fontSize: 11.5, fontWeight: '700', marginLeft: 4 }}>Envoi direct vers un tiers</Text>
+                                                <Text style={{ color: COLORS.error, fontSize: 11.5, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginLeft: 4 }}>Envoi direct vers un tiers</Text>
                                             </View>
                                         )}
                                         {myRole?.isValidator && !iApproved && (
@@ -532,7 +532,7 @@ export default function VaultDetailScreen() {
                                                     : <Text style={styles.inlineBtnText}>Approuver</Text>}
                                             </TouchableOpacity>
                                         )}
-                                        {iApproved && <Text style={{ color: COLORS.success, fontSize: 12.5, marginTop: 8, fontWeight: '600' }}>Vous avez déjà approuvé</Text>}
+                                        {iApproved && <Text style={{ color: COLORS.success, fontSize: 12.5, marginTop: 8, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' }}>Vous avez déjà approuvé</Text>}
                                     </View>
                                 );
                             })}
@@ -547,7 +547,7 @@ export default function VaultDetailScreen() {
                                 {myVouchers.map((v: any) => (
                                     <View key={v.id} style={[styles.memberRow, { borderColor: COLORS.border }]}>
                                         <View>
-                                            <Text style={{ color: COLORS.textPrimary, fontWeight: '700' }}>{v.amount.toLocaleString('fr-FR')} FCFA</Text>
+                                            <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>{v.amount.toLocaleString('fr-FR')} FCFA</Text>
                                             <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2 }}>
                                                 Émis le {new Date(v.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
                                             </Text>
@@ -576,10 +576,10 @@ export default function VaultDetailScreen() {
                         {vault.members.map((m: any) => (
                             <View key={m.id} style={[styles.memberRow, { borderColor: COLORS.border }]}>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={{ color: COLORS.textPrimary, fontWeight: '600' }}>
+                                    <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' }}>
                                         {m.user.name}{m.userId === user?.id ? ' (Vous)' : ''}
                                     </Text>
-                                    <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2, fontWeight: '500' }}>
+                                    <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2, fontFamily: 'Satoshi-Regular' }}>
                                         Total versé : {m.totalDeposited?.toLocaleString('fr-FR') || 0} FCFA
                                     </Text>
                                     <Text style={{ color: COLORS.textSecondary, fontSize: 11.5, marginTop: 2 }}>{m.user.phone}</Text>
@@ -587,7 +587,7 @@ export default function VaultDetailScreen() {
                                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, maxWidth: '45%', justifyContent: 'flex-end' }}>
                                     {roleBadges(m).map((b) => (
                                         <View key={b} style={[styles.roleBadge, { backgroundColor: COLORS.primary + '15' }]}>
-                                            <Text style={{ color: COLORS.primary, fontSize: 10.5, fontWeight: '700' }}>{b}</Text>
+                                            <Text style={{ color: COLORS.primary, fontSize: 10.5, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>{b}</Text>
                                         </View>
                                     ))}
                                 </View>
@@ -608,10 +608,10 @@ export default function VaultDetailScreen() {
                                 {historyTx.map((tx: any) => (
                                     <View key={tx.id} style={[styles.memberRow, { borderColor: COLORS.border }]}>
                                         <View>
-                                            <Text style={{ color: COLORS.textPrimary, fontWeight: '600' }}>{tx.type === 'DEPOSIT' ? 'Dépôt' : 'Retrait'}</Text>
+                                            <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' }}>{tx.type === 'DEPOSIT' ? 'Dépôt' : 'Retrait'}</Text>
                                             <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2 }}>{tx.requestedBy.name}</Text>
                                         </View>
-                                        <Text style={{ color: tx.type === 'DEPOSIT' ? COLORS.success : COLORS.textPrimary, fontWeight: '700' }}>
+                                        <Text style={{ color: tx.type === 'DEPOSIT' ? COLORS.success : COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>
                                             {tx.type === 'DEPOSIT' ? '+' : '-'}{tx.amount.toLocaleString('fr-FR')} F
                                         </Text>
                                     </View>
@@ -641,7 +641,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     inlineInput: { flex: 1, height: 42, paddingHorizontal: 12, fontSize: 15 },
     inlineBtn: { paddingHorizontal: 18, height: 42, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
     inlineBtnFull: { marginTop: 16, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-    inlineBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+    inlineBtnText: { color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 14 },
     disabled: { opacity: 0.5 },
 
     card: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 10 },
@@ -650,10 +650,10 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     howItWorksText: { flex: 1, fontSize: 12.5, lineHeight: 18 },
 
     input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, height: 48, fontSize: 15, marginBottom: 14 },
-    label: { fontSize: 12.5, fontWeight: '600', marginBottom: 8 },
+    label: { fontSize: 12.5, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', marginBottom: 8 },
     toggleRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
     toggleBtn: { flex: 1, paddingVertical: 11, borderRadius: 10, borderWidth: 1, alignItems: 'center' },
-    toggleText: { fontSize: 13, fontWeight: '700' },
+    toggleText: { fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
     helper: { fontSize: 12.5, lineHeight: 18 },
     recipientFound: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
     memberPick: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
@@ -665,5 +665,6 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     roleBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
 
     leaveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 32, paddingVertical: 14 },
-    leaveBtnText: { fontSize: 14, fontWeight: '700' },
+    leaveBtnText: { fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
 });
+

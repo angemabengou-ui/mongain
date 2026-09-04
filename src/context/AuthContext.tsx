@@ -6,6 +6,7 @@ import { apiGetMe, apiGetSystemSettings, apiLogin, apiLogoutServer, apiRegister,
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
+import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 Notifications.setNotificationHandler({
@@ -165,6 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         await deleteToken();
         await deleteRefreshToken();
+        try { await SecureStore.deleteItemAsync('mongain_user_cache'); } catch (e) { }
         setToken(null);
         setUser(null);
     };
@@ -217,20 +219,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 const storedToken = await getToken();
                 if (storedToken) {
                     setToken(storedToken);
-                    // Récupérer le profil complet depuis le backend
+
+                    // 1. Charger rapidement le profil hors ligne (évite l'écran blanc ou le logout intempestif)
+                    try {
+                        const cachedRaw = await SecureStore.getItemAsync('mongain_user_cache');
+                        if (cachedRaw) {
+                            setUser(JSON.parse(cachedRaw));
+                        }
+                    } catch (e) { }
+
+                    // 2. Tenter de rafraîchir en ligne (réel réseau)
                     const me = await apiGetMe();
                     setUser(me);
+                    await SecureStore.setItemAsync('mongain_user_cache', JSON.stringify(me));
                     await fetchSettings();
                 }
-            } catch {
-                // Token invalide ou expiré → nettoyer
-                try {
-                    await deleteToken();
-                } catch (e) {
-                    // Ignore secure store delete errors
+            } catch (e: any) {
+                // VUL-FR-02 : Render free tier met le serveur en veille après inactivité. 
+                // Le réveil prend ~20s. Si l'utilisateur ouvre l'app à ce moment-là, un 
+                // timeout réseau (AbortError) se produisait et ce catch était exécuté, 
+                // EFFACANT SA SESSION DÉFINITIVEMENT. Il est crucial de ne purger que sur un VRAI 401.
+                const errorMessage = e?.message || '';
+                const isNetworkError = errorMessage.includes('hors ligne') || errorMessage.includes('trop de temps') || errorMessage.includes('AbortError');
+
+                if (!isNetworkError) {
+                    // Token invalide ou expiré (401/403) → nettoyer
+                    try {
+                        await deleteToken();
+                        await SecureStore.deleteItemAsync('mongain_user_cache');
+                    } catch (e) {
+                        // Ignore secure store delete errors
+                    }
+                    setToken(null);
+                    setUser(null);
+                } else {
+                    console.log('Mode hors ligne (timeout réveil serveur). Session conservée en cache.');
                 }
-                setToken(null);
-                setUser(null);
             } finally {
                 setIsLoading(false);
             }
@@ -251,6 +275,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (res.refreshToken) await saveRefreshToken(res.refreshToken);
             setToken(res.token);
             setUser(res.user);
+            await SecureStore.setItemAsync('mongain_user_cache', JSON.stringify(res.user));
             await fetchSettings();
             return { success: true };
         }
@@ -263,6 +288,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await saveRefreshToken(refreshToken);
         setToken(newToken);
         setUser(newUser);
+        await SecureStore.setItemAsync('mongain_user_cache', JSON.stringify(newUser));
         await fetchSettings();
     };
 
@@ -272,6 +298,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await saveRefreshToken(refreshToken);
         setToken(newToken);
         setUser(newUser);
+        await SecureStore.setItemAsync('mongain_user_cache', JSON.stringify(newUser));
         await fetchSettings();
     };
 
@@ -284,6 +311,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await saveRefreshToken(refreshToken);
         setToken(newToken);
         setUser(newUser);
+        await SecureStore.setItemAsync('mongain_user_cache', JSON.stringify(newUser));
         await fetchSettings();
     };
 

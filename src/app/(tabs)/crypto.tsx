@@ -128,7 +128,7 @@ export default function CryptoScreen() {
                                         </View>
                                         <View style={{ alignItems: 'flex-end' }}>
                                             <Text style={styles.assetPrice}>{m.priceXAF.toLocaleString()} XAF</Text>
-                                            <Text style={{ color: isPositive ? '#10B981' : '#EF4444', fontWeight: 'bold' }}>
+                                            <Text style={{ color: isPositive ? '#10B981' : '#EF4444', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>
                                                 {isPositive ? '+' : ''}{m.change24h}%
                                             </Text>
                                         </View>
@@ -167,19 +167,20 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#0f172a' },
     scroll: { padding: 24, paddingBottom: 60 },
     header: { marginBottom: 32, marginTop: 20 },
-    title: { color: '#ffffff', fontSize: 32, fontWeight: '800', marginBottom: 8 },
+    title: { color: '#ffffff', fontSize: 32, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', marginBottom: 8 },
     subtitle: { color: '#94a3b8', fontSize: 16 },
     portfolioGlass: { padding: 30, borderRadius: 24, marginBottom: 40, borderBottomWidth: 4, borderBottomColor: '#A855F7', backgroundColor: 'rgba(168, 85, 247, 0.05)' },
-    portfolioLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '700', letterSpacing: 2, marginBottom: 12 },
-    portfolioValue: { color: '#fff', fontSize: 40, fontWeight: '800' },
-    sectionTitle: { color: '#fff', fontSize: 20, fontWeight: '700', marginBottom: 20 },
+    portfolioLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', letterSpacing: 2, marginBottom: 12 },
+    portfolioValue: { color: '#fff', fontSize: 40, fontFamily: 'Satoshi-SemiBold', fontWeight: '800' },
+    sectionTitle: { color: '#fff', fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginBottom: 20 },
     assetCard: { padding: 20, backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 20, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
     assetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-    assetName: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
+    assetName: { color: '#fff', fontSize: 24, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
     assetOwned: { color: '#94a3b8', fontSize: 13, marginTop: 4 },
-    assetPrice: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
+    assetPrice: { color: '#fff', fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 4 },
     actionRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
     input: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', padding: 12, borderRadius: 12, color: '#fff', borderBottomWidth: 2, borderBottomColor: '#3B82F6' },
     btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 12, gap: 8, paddingHorizontal: 16 },
-    btnText: { color: '#fff', fontWeight: 'bold', fontSize: 12 }
+    btnText: { color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', fontSize: 12 }
 });
+

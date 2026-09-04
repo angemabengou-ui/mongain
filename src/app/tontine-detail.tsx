@@ -240,7 +240,7 @@ export default function TontineDetailScreen() {
                             // Confirmation explicite du résultat — avant ce correctif, la liste se
                             // réordonnait silencieusement et rien n'indiquait que le tirage avait
                             // eu lieu ni ce qu'il avait donné.
-                            const newOrderNames = shuffled.map((p: any) => p.user.name).join(' → ');
+                            const newOrderNames = shuffled.map((p: any) => p.user.name).join(' —  ');
                             Alert.alert('Tirage effectué', `Nouvel ordre : ${newOrderNames}`);
                             load();
                         } catch (e: any) {
@@ -351,7 +351,7 @@ export default function TontineDetailScreen() {
 
     if (loading || !group) {
         return (
-            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
                 <View style={styles.centerFill}><ActivityIndicator color="#fff" size="large" /></View>
             </SafeAreaView>
         );
@@ -390,12 +390,12 @@ export default function TontineDetailScreen() {
     const nextPayoutDate = new Date(referenceDate.getTime() + cycleDays * 24 * 60 * 60 * 1000);
 
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
             <ScreenHeader
                 title={group.name}
                 onBack={() => router.back()}
                 rightIcon={isCreator ? 'settings-outline' : undefined}
-                onRightPress={isCreator ? () => router.push({ pathname: '/tontine-settings' as any, params: { id } }) : undefined}
+                onRightPress={isCreator ? () => router.push({ pathname: '/tontine-settings', params: { id } }) : undefined}
             />
 
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.content, { backgroundColor: COLORS.background }]}>
@@ -422,7 +422,7 @@ export default function TontineDetailScreen() {
                                 <Text style={{ color: COLORS.textSecondary, fontSize: 12.5 }}>
                                     {myAmountPaid > 0 ? `Déjà versé : ${myAmountPaid.toLocaleString('fr-FR')} FCFA` : 'Votre part pour ce tour'}
                                 </Text>
-                                <Text style={{ color: COLORS.textPrimary, fontWeight: '700', fontSize: 13 }}>Reste : {myRemaining.toLocaleString('fr-FR')} FCFA</Text>
+                                <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 13 }}>Reste : {myRemaining.toLocaleString('fr-FR')} FCFA</Text>
                             </View>
                             <View style={{ flexDirection: 'row', gap: 8 }}>
                                 <TextInput
@@ -473,11 +473,11 @@ export default function TontineDetailScreen() {
                                     // systématiquement (POST /renewal-vote exige status ACTIVE, voir
                                     // tontine.ts) avec un message d'erreur sans rapport ("vous ne faites
                                     // pas partie de ce club").
-                                    <Text style={[styles.howItWorksText, { color: COLORS.primary, fontWeight: '700', marginTop: 8 }]}>
+                                    <Text style={[styles.howItWorksText, { color: COLORS.primary, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginTop: 8 }]}>
                                         Vous êtes en pause dans ce club — vous ne participez pas à ce vote de relance.
                                     </Text>
                                 ) : myParticipant?.renewalVote ? (
-                                    <Text style={[styles.howItWorksText, { color: COLORS.primary, fontWeight: '700', marginTop: 8 }]}>
+                                    <Text style={[styles.howItWorksText, { color: COLORS.primary, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginTop: 8 }]}>
                                         Votre réponse : {myParticipant.renewalVote === 'YES' ? 'je continue ✓' : 'je ne continue pas'} — en attente des autres membres.
                                     </Text>
                                 ) : (
@@ -540,7 +540,7 @@ export default function TontineDetailScreen() {
                     {isCreator && cycles.length === 0 && activeParticipants.length > 1 && (
                         <TouchableOpacity style={[styles.shuffleBtn, { borderColor: COLORS.primary }]} onPress={handleShuffle}>
                             <Ionicons name="shuffle" size={16} color={COLORS.primary} />
-                            <Text style={{ color: COLORS.primary, fontSize: 12.5, fontWeight: '700', marginLeft: 6 }}>Tirage au sort équitable</Text>
+                            <Text style={{ color: COLORS.primary, fontSize: 12.5, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginLeft: 6 }}>Tirage au sort équitable</Text>
                         </TouchableOpacity>
                     )}
 
@@ -556,17 +556,17 @@ export default function TontineDetailScreen() {
                             return (
                                 <TouchableOpacity key={p.id} activeOpacity={0.7} onPress={() => setSelectedParticipant(p)} style={[styles.memberRow, { borderColor: COLORS.border }, isMe && { backgroundColor: COLORS.primary + '08' }]}>
                                     <View style={[styles.orderCircle, { backgroundColor: isCurrentTurn ? COLORS.primary : COLORS.border }, isPast && { opacity: 0.5 }]}>
-                                        {isPast ? <Ionicons name="checkmark" size={14} color={COLORS.textPrimary} /> : <Text style={{ color: isCurrentTurn ? '#fff' : COLORS.textPrimary, fontSize: 12, fontWeight: '800' }}>{p.payoutOrder}</Text>}
+                                        {isPast ? <Ionicons name="checkmark" size={14} color={COLORS.textPrimary} /> : <Text style={{ color: isCurrentTurn ? '#fff' : COLORS.textPrimary, fontSize: 12, fontFamily: 'Satoshi-SemiBold', fontWeight: '800' }}>{p.payoutOrder}</Text>}
                                     </View>
                                     <View style={{ flex: 1, marginLeft: 12 }}>
-                                        <Text style={{ color: COLORS.textPrimary, fontWeight: '600' }}>{p.user.name}{isMe ? ' (Vous)' : ''}</Text>
+                                        <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' }}>{p.user.name}{isMe ? ' (Vous)' : ''}</Text>
                                         <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2 }}>{p.user.phone}</Text>
                                         {/* Visible directement, sans avoir à cliquer : le statut du tour en cours
                                             (montant inclus), l'info la plus consultée au quotidien. Le clic reste
                                             nécessaire seulement pour l'historique complet (voir la modale). Chacun
                                             pouvant cotiser en plusieurs dépôts d'un montant libre (voir bouton
                                             "Cotiser"), ce montant est un CUMUL, pas un simple oui/non. */}
-                                        <Text style={{ color: isComplete ? COLORS.success : paidAmount > 0 ? COLORS.warning : COLORS.textSecondary, fontSize: 12, fontWeight: '700', marginTop: 3 }}>
+                                        <Text style={{ color: isComplete ? COLORS.success : paidAmount > 0 ? COLORS.warning : COLORS.textSecondary, fontSize: 12, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginTop: 3 }}>
                                             Ce tour : {isComplete
                                                 ? `versé · ${group.contribution.toLocaleString('fr-FR')} FCFA`
                                                 : paidAmount > 0
@@ -576,7 +576,7 @@ export default function TontineDetailScreen() {
                                     </View>
                                     {rel.total > 0 && (
                                         <View style={[styles.statusPill, { backgroundColor: (rel.paid === rel.total ? COLORS.success : COLORS.warning) + '18' }]}>
-                                            <Text style={{ color: rel.paid === rel.total ? COLORS.success : COLORS.warning, fontSize: 10.5, fontWeight: '700' }}>{rel.paid}/{rel.total}</Text>
+                                            <Text style={{ color: rel.paid === rel.total ? COLORS.success : COLORS.warning, fontSize: 10.5, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>{rel.paid}/{rel.total}</Text>
                                         </View>
                                     )}
                                     {isCreator && (
@@ -616,18 +616,18 @@ export default function TontineDetailScreen() {
                                 return (
                                     <TouchableOpacity key={c.id} activeOpacity={0.7} onPress={() => setSelectedCycle(c)} style={[styles.memberRow, { borderColor: COLORS.border }]}>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={{ color: COLORS.textPrimary, fontWeight: '600' }}>Cycle #{c.cycleNumber}{beneficiary ? ` — ${beneficiary.user.name}` : ''}</Text>
+                                            <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' }}>Cycle #{c.cycleNumber}{beneficiary ? ` — ${beneficiary.user.name}` : ''}</Text>
                                             <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2 }}>
                                                 {new Date(c.executedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })} · {c.totalCollected.toLocaleString('fr-FR')} FCFA collectés
                                             </Text>
                                         </View>
                                         {c.status === 'PAYOUT_FAILED' ? (
                                             <View style={[styles.contributionBadge, { backgroundColor: COLORS.error + '18' }]}>
-                                                <Text style={{ color: COLORS.error, fontSize: 10.5, fontWeight: '700' }}>Versement bloqué</Text>
+                                                <Text style={{ color: COLORS.error, fontSize: 10.5, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>Versement bloqué</Text>
                                             </View>
                                         ) : c.status === 'PARTIAL' && (
                                             <View style={[styles.contributionBadge, { backgroundColor: COLORS.warning + '18' }]}>
-                                                <Text style={{ color: COLORS.warning, fontSize: 10.5, fontWeight: '700' }}>Échecs</Text>
+                                                <Text style={{ color: COLORS.warning, fontSize: 10.5, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>Échecs</Text>
                                             </View>
                                         )}
                                         <Ionicons name="chevron-forward" size={16} color={COLORS.textSecondary} style={{ marginLeft: 8 }} />
@@ -654,7 +654,7 @@ export default function TontineDetailScreen() {
                                 <>
                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={{ color: COLORS.textPrimary, fontWeight: '700', fontSize: 16 }}>{selectedParticipant.user.name}</Text>
+                                            <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 16 }}>{selectedParticipant.user.name}</Text>
                                             <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2 }}>{selectedParticipant.user.phone}</Text>
                                         </View>
                                         <TouchableOpacity onPress={() => setSelectedParticipant(null)}>
@@ -665,27 +665,27 @@ export default function TontineDetailScreen() {
                                     <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
                                         <View style={[styles.ledgerSummaryBox, { backgroundColor: COLORS.success + '12' }]}>
                                             <Text style={{ color: COLORS.textSecondary, fontSize: 11 }}>Total versé</Text>
-                                            <Text style={{ color: COLORS.success, fontWeight: '700', fontSize: 16, marginTop: 2 }}>{ledger.totalPaid.toLocaleString('fr-FR')} FCFA</Text>
+                                            <Text style={{ color: COLORS.success, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 16, marginTop: 2 }}>{ledger.totalPaid.toLocaleString('fr-FR')} FCFA</Text>
                                         </View>
                                         {ledger.totalOwed > 0 && (
                                             <View style={[styles.ledgerSummaryBox, { backgroundColor: COLORS.error + '12' }]}>
                                                 <Text style={{ color: COLORS.textSecondary, fontSize: 11 }}>Total dû</Text>
-                                                <Text style={{ color: COLORS.error, fontWeight: '700', fontSize: 16, marginTop: 2 }}>{ledger.totalOwed.toLocaleString('fr-FR')} FCFA</Text>
+                                                <Text style={{ color: COLORS.error, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 16, marginTop: 2 }}>{ledger.totalOwed.toLocaleString('fr-FR')} FCFA</Text>
                                             </View>
                                         )}
                                     </View>
 
-                                    <Text style={{ color: COLORS.textSecondary, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', marginTop: 18, marginBottom: 8 }}>Historique par cycle</Text>
+                                    <Text style={{ color: COLORS.textSecondary, fontSize: 12, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', textTransform: 'uppercase', marginTop: 18, marginBottom: 8 }}>Historique par cycle</Text>
                                     <ScrollView style={{ maxHeight: 260 }}>
                                         {ledger.rows.length === 0 ? (
                                             <Text style={{ color: COLORS.textSecondary, fontSize: 13 }}>Aucun cycle exécuté pour l'instant.</Text>
                                         ) : ledger.rows.map((r) => (
                                             <View key={r.cycleNumber} style={[styles.memberRow, { borderColor: COLORS.border, paddingVertical: 10 }]}>
-                                                <Text style={{ color: COLORS.textPrimary, fontSize: 13, fontWeight: '600', flex: 1 }}>
+                                                <Text style={{ color: COLORS.textPrimary, fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', flex: 1 }}>
                                                     Cycle #{r.cycleNumber}{r.isBeneficiary ? ' 🎉' : ''}
                                                 </Text>
                                                 {r.status ? (
-                                                    <Text style={{ color: r.status === 'PAID' ? COLORS.success : r.status === 'PARTIAL' ? COLORS.warning : COLORS.error, fontSize: 12.5, fontWeight: '700' }}>
+                                                    <Text style={{ color: r.status === 'PAID' ? COLORS.success : r.status === 'PARTIAL' ? COLORS.warning : COLORS.error, fontSize: 12.5, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>
                                                         {r.status === 'PAID'
                                                             ? `Versé · ${r.amount.toLocaleString('fr-FR')} FCFA`
                                                             : r.status === 'PARTIAL'
@@ -714,7 +714,7 @@ export default function TontineDetailScreen() {
                                 <>
                                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={{ color: COLORS.textPrimary, fontWeight: '700', fontSize: 16 }}>Cycle #{selectedCycle.cycleNumber}</Text>
+                                            <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 16 }}>Cycle #{selectedCycle.cycleNumber}</Text>
                                             <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2 }}>
                                                 {new Date(selectedCycle.executedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
                                             </Text>
@@ -727,24 +727,24 @@ export default function TontineDetailScreen() {
                                     <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
                                         <View style={[styles.ledgerSummaryBox, { backgroundColor: COLORS.success + '12' }]}>
                                             <Text style={{ color: COLORS.textSecondary, fontSize: 11 }}>Collecté</Text>
-                                            <Text style={{ color: COLORS.success, fontWeight: '700', fontSize: 16, marginTop: 2 }}>{selectedCycle.totalCollected.toLocaleString('fr-FR')} FCFA</Text>
+                                            <Text style={{ color: COLORS.success, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 16, marginTop: 2 }}>{selectedCycle.totalCollected.toLocaleString('fr-FR')} FCFA</Text>
                                         </View>
                                         <View style={[styles.ledgerSummaryBox, { backgroundColor: COLORS.background }]}>
                                             <Text style={{ color: COLORS.textSecondary, fontSize: 11 }}>Attendu</Text>
-                                            <Text style={{ color: COLORS.textPrimary, fontWeight: '700', fontSize: 16, marginTop: 2 }}>{selectedCycle.totalExpected.toLocaleString('fr-FR')} FCFA</Text>
+                                            <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 16, marginTop: 2 }}>{selectedCycle.totalExpected.toLocaleString('fr-FR')} FCFA</Text>
                                         </View>
                                     </View>
 
-                                    <Text style={{ color: COLORS.textSecondary, fontSize: 12, fontWeight: '700', textTransform: 'uppercase', marginTop: 18, marginBottom: 8 }}>Cotisation par membre</Text>
+                                    <Text style={{ color: COLORS.textSecondary, fontSize: 12, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', textTransform: 'uppercase', marginTop: 18, marginBottom: 8 }}>Cotisation par membre</Text>
                                     <ScrollView style={{ maxHeight: 260 }}>
                                         {breakdown.length === 0 ? (
                                             <Text style={{ color: COLORS.textSecondary, fontSize: 13 }}>Aucune cotisation enregistrée pour ce cycle.</Text>
                                         ) : breakdown.map((b: any) => (
                                             <View key={b.participantId} style={[styles.memberRow, { borderColor: COLORS.border, paddingVertical: 10 }]}>
-                                                <Text style={{ color: COLORS.textPrimary, fontSize: 13, fontWeight: '600', flex: 1 }}>
+                                                <Text style={{ color: COLORS.textPrimary, fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', flex: 1 }}>
                                                     {b.name}{b.isBeneficiary ? ' 🎉' : ''}
                                                 </Text>
-                                                <Text style={{ color: b.status === 'PAID' ? COLORS.success : b.status === 'PARTIAL' ? COLORS.warning : COLORS.error, fontSize: 12.5, fontWeight: '700' }}>
+                                                <Text style={{ color: b.status === 'PAID' ? COLORS.success : b.status === 'PARTIAL' ? COLORS.warning : COLORS.error, fontSize: 12.5, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>
                                                     {b.status === 'PAID'
                                                         ? `Versé · ${b.amount.toLocaleString('fr-FR')} FCFA`
                                                         : b.status === 'PARTIAL'
@@ -774,11 +774,11 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     howItWorksBox: { flexDirection: 'row', alignItems: 'flex-start', borderRadius: 14, padding: 14, marginBottom: 4 },
     howItWorksText: { flex: 1, fontSize: 12.5, lineHeight: 18 },
     renewalVoteBtn: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', minHeight: 38 },
-    renewalVoteBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+    renewalVoteBtnText: { color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 13 },
     contributeCard: { borderRadius: 16, borderWidth: 1, padding: 14, marginTop: 4, marginBottom: 4 },
-    contributeInput: { flex: 1, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, height: 46, fontSize: 15, fontWeight: '600' },
+    contributeInput: { flex: 1, borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, height: 46, fontSize: 15, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' },
     contributeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 12, paddingHorizontal: 18, minHeight: 46 },
-    contributeBtnText: { color: '#fff', fontWeight: '700', fontSize: 14.5 },
+    contributeBtnText: { color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 14.5 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 },
     modalCard: { borderRadius: 18, padding: 20, maxHeight: '80%' },
     ledgerSummaryBox: { flex: 1, borderRadius: 12, padding: 12 },
@@ -791,5 +791,6 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     statusPill: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8 },
 
     leaveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 32, paddingVertical: 14 },
-    leaveBtnText: { fontSize: 14, fontWeight: '700' },
+    leaveBtnText: { fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
 });
+

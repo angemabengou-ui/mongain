@@ -48,7 +48,7 @@ export default function TontineCreateScreen() {
     };
 
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
                     <Ionicons name="close" size={26} color="#fff" />
@@ -100,7 +100,7 @@ export default function TontineCreateScreen() {
 
                     <View style={[styles.publicRow, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
                         <View style={{ flex: 1, marginRight: 12 }}>
-                            <Text style={{ color: COLORS.textPrimary, fontWeight: '700', fontSize: 14 }}>Club public</Text>
+                            <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 14 }}>Club public</Text>
                             <Text style={[styles.helper, { color: COLORS.textSecondary, marginTop: 4 }]}>
                                 Visible dans « Découvrir des tontines » — n'importe qui peut le rejoindre sans invitation. Laissez désactivé pour un club privé, sur invitation uniquement.
                             </Text>
@@ -126,20 +126,21 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     safeArea: { flex: 1 },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 12 },
     backBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-    headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
+    headerTitle: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', color: '#fff' },
     content: { flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
     scrollContent: { padding: 24, paddingBottom: 60 },
 
-    label: { fontSize: 13, fontWeight: '600', marginBottom: 8, marginTop: 18 },
+    label: { fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', marginBottom: 8, marginTop: 18 },
     input: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, height: 54, fontSize: 15 },
 
     toggleRow: { flexDirection: 'row', gap: 10 },
     toggleBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, borderWidth: 1, alignItems: 'center' },
-    toggleText: { fontSize: 13.5, fontWeight: '700' },
+    toggleText: { fontSize: 13.5, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
     helper: { fontSize: 12.5, lineHeight: 18, marginTop: 10 },
     publicRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 14, padding: 16, marginTop: 24 },
 
     submitBtn: { marginTop: 32, paddingVertical: 17, borderRadius: 16, alignItems: 'center' },
     submitBtnDisabled: { opacity: 0.5 },
-    submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+    submitBtnText: { color: '#fff', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
 });
+

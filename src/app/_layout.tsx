@@ -1,3 +1,5 @@
+import { Outfit_400Regular, Outfit_600SemiBold } from '@expo-google-fonts/outfit';
+import { useFonts } from 'expo-font';
 import { Stack, useRootNavigationState, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -18,8 +20,20 @@ function RootLayoutNav() {
   const segments = useSegments();
   const rootNavigationState = useRootNavigationState();
 
+  const [fontsLoaded, fontError] = useFonts({
+    'Satoshi-Regular': Outfit_400Regular,
+    'Satoshi-SemiBold': Outfit_600SemiBold,
+  });
+
   useEffect(() => {
-    if (isLoading || !rootNavigationState?.key) return;
+    // Doit attendre CHACUNE de ces trois conditions séparément (OR des "pas encore prêt"),
+    // pas la combinaison précédente ((isLoading || !key) && !fontsLoaded && !fontError) : dès
+    // que les polices finissaient de charger (fontsLoaded=true) alors que la session était
+    // encore en cours de restauration (isLoading=true), le membre droit du && devenait faux et
+    // la garde ne bloquait plus — le routage se décidait sur token===null (valeur initiale) et
+    // redirigeait vers /auth/login même pour un utilisateur déjà connecté, avant que
+    // restoreSession() (AuthContext) n'ait fini de relire le token stocké.
+    if (isLoading || !rootNavigationState?.key || (!fontsLoaded && !fontError)) return;
 
     const inAuthGroup = segments[0] === 'auth';
 

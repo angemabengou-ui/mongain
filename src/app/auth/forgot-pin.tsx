@@ -37,7 +37,7 @@ export default function ForgotPinScreen() {
             const formattedPhone = phone.startsWith('+') ? phone : `+241${phone.replace(/\s+/g, '')}`;
             await apiRequestResetOTP(formattedPhone);
             // Redirige vers reset
-            router.push({ pathname: '/auth/reset-pin' as any, params: { phone: formattedPhone } });
+            router.push({ pathname: '/auth/reset-pin', params: { phone: formattedPhone } });
         } catch (e: any) {
             setError(e.message || "Une erreur s'est produite");
         } finally {
@@ -110,17 +110,18 @@ function getStyles(COLORS: any) {
         backButton: { position: 'absolute', top: 16, left: 16, zIndex: 10, padding: 8 },
         header: { alignItems: 'center', marginBottom: 40, marginTop: 40 },
         logo: { width: 80, height: 80, borderRadius: 24, backgroundColor: '#E0F7FA', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-        appName: { fontSize: 28, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 8, letterSpacing: -0.5 },
+        appName: { fontSize: 28, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', color: COLORS.textPrimary, marginBottom: 8, letterSpacing: -0.5 },
         tagline: { fontSize: 16, color: COLORS.textSecondary, textAlign: 'center', paddingHorizontal: 20 },
         card: { backgroundColor: COLORS.surface, borderRadius: 24, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.05, shadowRadius: 20, elevation: 5 },
-        label: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary, marginBottom: 8 },
+        label: { fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: COLORS.textPrimary, marginBottom: 8 },
         inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 16, marginBottom: 20, height: 56 },
-        prefix: { fontSize: 16, fontWeight: '600', color: COLORS.textPrimary, marginRight: 8, paddingRight: 8, borderRightWidth: 1, borderRightColor: COLORS.border },
+        prefix: { fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: COLORS.textPrimary, marginRight: 8, paddingRight: 8, borderRightWidth: 1, borderRightColor: COLORS.border },
         input: { flex: 1, fontSize: 16, color: COLORS.textPrimary, height: '100%' },
         btn: { backgroundColor: COLORS.primary, height: 56, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 10, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
         btnDisabled: { backgroundColor: '#94a3b8', shadowOpacity: 0 },
-        btnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
+        btnText: { color: '#ffffff', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
         errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF2F2', padding: 12, borderRadius: 8, marginBottom: 20, borderWidth: 1, borderColor: '#FECACA' },
         errorText: { color: COLORS.error, fontSize: 14, marginLeft: 8, flex: 1 }
     });
 }
+

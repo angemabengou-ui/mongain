@@ -92,10 +92,10 @@ export default function AssistantScreen() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#0f172a' },
     header: { paddingHorizontal: 24, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    title: { color: '#ffffff', fontSize: 22, fontWeight: '800' },
+    title: { color: '#ffffff', fontSize: 22, fontFamily: 'Satoshi-SemiBold', fontWeight: '800' },
     statusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(16, 185, 129, 0.1)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12 },
     statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981', marginRight: 6 },
-    statusText: { color: '#10B981', fontSize: 12, fontWeight: '700' },
+    statusText: { color: '#10B981', fontSize: 12, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
     chatScroll: { padding: 24, gap: 16 },
     messageBubble: { maxWidth: '85%', padding: 16, borderRadius: 20, flexDirection: 'row' },
     userBubble: { backgroundColor: '#3B82F6', alignSelf: 'flex-end', borderBottomRightRadius: 4 },
@@ -106,3 +106,4 @@ const styles = StyleSheet.create({
     input: { flex: 1, backgroundColor: 'rgba(255,255,255,0.05)', color: '#fff', paddingHorizontal: 20, paddingVertical: 14, borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', fontSize: 15 },
     sendBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#A855F7', justifyContent: 'center', alignItems: 'center', shadowColor: '#A855F7', shadowOpacity: 0.4, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } }
 });
+

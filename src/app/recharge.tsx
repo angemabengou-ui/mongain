@@ -88,24 +88,24 @@ const styles = StyleSheet.create({
     safeArea: { flex: 1 },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 },
     backButton: { padding: 8, marginLeft: -8 },
-    headerTitle: { fontSize: 20, fontWeight: '800' },
+    headerTitle: { fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
     container: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 60 },
 
     heroSection: { marginVertical: 24, alignItems: 'center' },
-    heroTitle: { fontSize: 28, fontWeight: '900', marginBottom: 8, letterSpacing: -0.5 },
-    heroSubtitle: { fontSize: 16 },
+    heroTitle: { fontSize: 28, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 8, letterSpacing: -0.5 },
+    heroSubtitle: { fontSize: 15, fontFamily: 'Satoshi-Regular' },
 
-    sectionHeader: { fontSize: 13, fontWeight: '700', marginBottom: 12, marginLeft: 16, letterSpacing: 0.5 },
+    sectionHeader: { fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 12, marginLeft: 16, letterSpacing: 0.5 },
 
     listContainer: { borderRadius: 20, overflow: 'hidden', borderWidth: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 8, elevation: 1 },
     listItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 16, borderBottomWidth: 1 },
     lastListItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 16, borderBottomWidth: 0 },
     listIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
     listTextWrap: { flex: 1, marginRight: 8 },
-    listTitle: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
-    listDesc: { fontSize: 13, lineHeight: 18 },
+    listTitle: { fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 4 },
+    listDesc: { fontSize: 13, fontFamily: 'Satoshi-Regular', lineHeight: 18 },
 
     infoBox: { flexDirection: 'row', alignItems: 'flex-start', padding: 20, borderRadius: 20, borderWidth: 1 },
-    infoTitle: { fontSize: 16, fontWeight: '800', marginBottom: 4 },
-    infoText: { fontSize: 13, fontWeight: '500', lineHeight: 20 }
+    infoTitle: { fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 4 },
+    infoText: { fontSize: 13, fontFamily: 'Satoshi-Regular', lineHeight: 20 }
 });

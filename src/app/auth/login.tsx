@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    Image,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -14,9 +16,9 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
 
-import { useAppTheme } from '../../constants/theme';
 export default function LoginScreen() {
     const insets = useSafeAreaInsets();
     const COLORS = useAppTheme();
@@ -68,85 +70,87 @@ export default function LoginScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.safeArea}>
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
-                <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-                    {/* Header */}
-                    <View style={styles.header}>
-                        <View style={styles.logo}>
-                            <Ionicons name="wallet" size={36} color={COLORS.primary} />
+        <LinearGradient colors={['#0F172A', '#112240', '#2563FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.flex}>
+            <SafeAreaView style={styles.flex}>
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
+                    <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+                        {/* Header */}
+                        <View style={styles.header}>
+                            <Image source={require('../../../assets/images/logo-glow.png')} style={{ width: 80, height: 80, borderRadius: 24, marginBottom: 12, resizeMode: 'cover' }} />
+                            <Text style={styles.appName}>Mongain</Text>
+                            <Text style={styles.tagline}>L'argent mobile au Gabon</Text>
                         </View>
-                        <Text style={styles.appName}>Mongain</Text>
-                        <Text style={styles.tagline}>L'argent mobile au Gabon</Text>
-                    </View>
 
-                    {/* Formulaire */}
-                    <View style={styles.card}>
-                        <Text style={styles.title}>Connexion</Text>
+                        {/* Formulaire */}
+                        <View style={styles.card}>
+                            <Text style={styles.title}>Connexion</Text>
 
-                        {error ? (
-                            <View style={styles.errorBox}>
-                                <Ionicons name="alert-circle-outline" size={18} color={COLORS.error} />
-                                <Text style={styles.errorText}>{error}</Text>
+                            {error ? (
+                                <View style={styles.errorBox}>
+                                    <Ionicons name="alert-circle-outline" size={18} color={COLORS.error} />
+                                    <Text style={styles.errorText}>{error}</Text>
+                                </View>
+                            ) : null}
+
+                            <Text style={styles.label}>Numéro, E-mail ou Pseudo</Text>
+                            <View style={[styles.inputContainer, { paddingLeft: 16 }]}>
+                                <Ionicons name="person-circle-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 8 }} />
+                                <TextInput
+                                    style={[styles.input, { flex: 1 }]}
+                                    placeholder="Numéro Mobile, @pseudo ou E-mail"
+                                    keyboardType="default"
+                                    autoCapitalize="none"
+                                    value={phone}
+                                    onChangeText={setPhone}
+                                    placeholderTextColor={COLORS.textSecondary}
+                                />
                             </View>
-                        ) : null}
 
-                        <Text style={styles.label}>Numéro, E-mail ou Pseudo</Text>
-                        <View style={[styles.inputContainer, { paddingLeft: 16 }]}>
-                            <Ionicons name="person-circle-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 8 }} />
-                            <TextInput
-                                style={[styles.input, { flex: 1 }]}
-                                placeholder="Numéro Mobile, @pseudo ou E-mail"
-                                keyboardType="default"
-                                autoCapitalize="none"
-                                value={phone}
-                                onChangeText={setPhone}
-                                placeholderTextColor={COLORS.textSecondary}
-                            />
-                        </View>
+                            <Text style={styles.label}>Code PIN (4 chiffres)</Text>
+                            <View style={styles.inputContainer}>
+                                <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} style={styles.inputIcon} />
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="⬢⬢⬢⬢"
+                                    keyboardType="number-pad"
+                                    secureTextEntry={!showPin}
+                                    maxLength={4}
+                                    value={pin}
+                                    onChangeText={setPin}
+                                    placeholderTextColor={COLORS.textSecondary}
+                                />
+                                <TouchableOpacity onPress={() => setShowPin(!showPin)} style={styles.eyeBtn}>
+                                    <Ionicons name={showPin ? 'eye-off-outline' : 'eye-outline'} size={20} color={COLORS.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
 
-                        <Text style={styles.label}>Code PIN (4 chiffres)</Text>
-                        <View style={styles.inputContainer}>
-                            <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} style={styles.inputIcon} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="••••"
-                                keyboardType="number-pad"
-                                secureTextEntry={!showPin}
-                                maxLength={4}
-                                value={pin}
-                                onChangeText={setPin}
-                                placeholderTextColor={COLORS.textSecondary}
-                            />
-                            <TouchableOpacity onPress={() => setShowPin(!showPin)} style={styles.eyeBtn}>
-                                <Ionicons name={showPin ? 'eye-off-outline' : 'eye-outline'} size={20} color={COLORS.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <TouchableOpacity style={styles.btn} onPress={handleLogin} disabled={loading}>
-                            {loading ? (
-                                <ActivityIndicator color="#fff" />
-                            ) : (
-                                <Text style={styles.btnText}>Se connecter</Text>
-                            )}
-                        </TouchableOpacity>
-
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 24 }}>
-                            <TouchableOpacity onPress={() => router.push('/auth/forgot-pin')}>
-                                <Text style={{ color: '#F59E0B', fontSize: 14, fontWeight: '700' }}>Code PIN oublié ?</Text>
+                            <TouchableOpacity onPress={handleLogin} disabled={loading} activeOpacity={0.8}>
+                                <LinearGradient colors={['#2563FF', '#1D4ED8']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.btn}>
+                                    {loading ? (
+                                        <ActivityIndicator color="#fff" />
+                                    ) : (
+                                        <Text style={styles.btnText}>Se connecter</Text>
+                                    )}
+                                </LinearGradient>
                             </TouchableOpacity>
 
-                            <TouchableOpacity onPress={() => router.push('/auth/register')}>
-                                <Text style={styles.linkText}>
-                                    Ou <Text style={styles.linkBold}>Créer un compte</Text>
-                                </Text>
-                            </TouchableOpacity>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 24 }}>
+                                <TouchableOpacity onPress={() => router.push('/auth/forgot-pin')}>
+                                    <Text style={{ color: '#FFB020', fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>Code PIN oublié ?</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity onPress={() => router.push('/auth/register')}>
+                                    <Text style={styles.linkText}>
+                                        Ou <Text style={styles.linkBold}>Créer un compte</Text>
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
-                    </View>
-                </ScrollView>
-                {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
-            </KeyboardAvoidingView>
-        </SafeAreaView>
+                    </ScrollView>
+                    {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
+                </KeyboardAvoidingView>
+            </SafeAreaView>
+        </LinearGradient>
     );
 }
 
@@ -171,11 +175,12 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     appName: {
         color: '#fff',
         fontSize: 32,
-        fontWeight: '800',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
         letterSpacing: -0.5,
     },
     tagline: {
         color: 'rgba(255,255,255,0.75)',
+        fontFamily: 'Satoshi-Regular',
         fontSize: 15,
         marginTop: 4,
     },
@@ -188,7 +193,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     },
     title: {
         fontSize: 24,
-        fontWeight: '700',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
         color: COLORS.textPrimary,
         marginBottom: 24,
     },
@@ -201,10 +206,10 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         marginBottom: 16,
         gap: 8,
     },
-    errorText: { color: COLORS.error, fontSize: 14, flex: 1 },
+    errorText: { color: COLORS.error, fontSize: 13, fontFamily: 'Satoshi-Regular', flex: 1 },
     label: {
-        fontSize: 14,
-        fontWeight: '600',
+        fontSize: 13,
+        fontFamily: 'Satoshi-SemiBold',
         color: COLORS.textSecondary,
         marginBottom: 8,
         marginTop: 4,
@@ -222,7 +227,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     },
     prefix: {
         fontSize: 15,
-        fontWeight: '600',
+        fontFamily: 'Satoshi-SemiBold',
         color: COLORS.textSecondary,
         marginRight: 12,
         borderRightWidth: 1,
@@ -230,10 +235,9 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         paddingRight: 12,
     },
     inputIcon: { marginRight: 8 },
-    input: { flex: 1, fontSize: 16, color: COLORS.textPrimary, height: '100%' },
+    input: { flex: 1, fontSize: 16, fontFamily: 'Satoshi-Regular', color: COLORS.textPrimary, height: '100%' },
     eyeBtn: { padding: 4 },
     btn: {
-        backgroundColor: COLORS.primary,
         height: 56,
         borderRadius: 16,
         justifyContent: 'center',
@@ -245,8 +249,9 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         shadowRadius: 12,
         elevation: 6,
     },
-    btnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+    btnText: { color: '#fff', fontSize: 17, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
     linkBtn: { marginTop: 20, alignItems: 'center' },
-    linkText: { color: COLORS.textSecondary, fontSize: 14 },
-    linkBold: { color: COLORS.primary, fontWeight: '700' },
+    linkText: { color: COLORS.textSecondary, fontFamily: 'Satoshi-Regular', fontSize: 14 },
+    linkBold: { color: COLORS.primary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 });
+

@@ -49,7 +49,7 @@ export default function VaultsListScreen() {
                     <Ionicons name="arrow-back" size={24} color="#fff" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Caisses Communes</Text>
-                <TouchableOpacity style={styles.headerBtn} onPress={() => router.push('/vault-create' as any)}>
+                <TouchableOpacity style={styles.headerBtn} onPress={() => router.push('/vault-create')}>
                     <Ionicons name="add" size={26} color="#fff" />
                 </TouchableOpacity>
             </View>
@@ -78,7 +78,7 @@ export default function VaultsListScreen() {
                                 <Text style={[styles.emptySubtitle, { color: COLORS.textSecondary }]}>
                                     Créez une caisse commune pour gérer un fonds partagé avec vos proches.
                                 </Text>
-                                <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: COLORS.primary }]} onPress={() => router.push('/vault-create' as any)}>
+                                <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: COLORS.primary }]} onPress={() => router.push('/vault-create')}>
                                     <Text style={styles.primaryBtnText}>Créer une caisse</Text>
                                 </TouchableOpacity>
                             </View>
@@ -90,7 +90,7 @@ export default function VaultsListScreen() {
                                         key={v.id}
                                         style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}
                                         activeOpacity={0.7}
-                                        onPress={() => router.push({ pathname: '/vault-detail' as any, params: { id: v.vault.id } })}
+                                        onPress={() => router.push({ pathname: '/vault-detail', params: { id: v.vault.id } })}
                                     >
                                         <View style={styles.cardRow}>
                                             <View style={[styles.cardIcon, { backgroundColor: COLORS.primary + '15' }]}>
@@ -135,7 +135,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         paddingHorizontal: 12, paddingVertical: 12,
     },
     headerBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-    headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
+    headerTitle: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', color: '#fff' },
     content: { flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
     centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     scrollContent: { padding: 20, paddingBottom: 60 },
@@ -143,19 +143,20 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
 
     emptyState: { alignItems: 'center', paddingTop: 40, paddingHorizontal: 12 },
     emptyIconCircle: { width: 88, height: 88, borderRadius: 44, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-    emptyTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
+    emptyTitle: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginBottom: 8 },
     emptySubtitle: { fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
     primaryBtn: { paddingVertical: 14, paddingHorizontal: 28, borderRadius: 14 },
-    primaryBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+    primaryBtnText: { color: '#fff', fontSize: 15, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
 
     card: { borderRadius: 18, borderWidth: 1, padding: 16, marginBottom: 14 },
     cardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     cardIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-    cardTitle: { fontSize: 15, fontWeight: '700' },
+    cardTitle: { fontSize: 15, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
     cardMeta: { fontSize: 12, marginTop: 2 },
     cardDivider: { height: 1, marginVertical: 14 },
     cardLabel: { fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 },
-    cardBalance: { fontSize: 18, fontWeight: '800' },
+    cardBalance: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: '800' },
     pendingBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
-    pendingText: { fontSize: 12, fontWeight: '700' },
+    pendingText: { fontSize: 12, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
 });
+

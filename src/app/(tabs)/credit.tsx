@@ -261,9 +261,8 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: 28,
-        fontWeight: 'bold',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
         color: '#111827',
-        fontFamily: 'Inter-Bold',
     },
     subtitle: {
         fontSize: 16,
@@ -298,8 +297,7 @@ const styles = StyleSheet.create({
     },
     scoreText: {
         fontSize: 20,
-        fontWeight: 'bold',
-        fontFamily: 'Inter-Bold',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
     },
     gaugeBackground: {
         height: 12,
@@ -319,10 +317,9 @@ const styles = StyleSheet.create({
     },
     sectionTitle: {
         fontSize: 18,
-        fontWeight: '600',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: '600',
         color: '#111827',
         marginBottom: 15,
-        fontFamily: 'Inter-SemiBold',
     },
     activeLoanContainer: {
         marginTop: 10,
@@ -371,8 +368,7 @@ const styles = StyleSheet.create({
     loanTotalValue: {
         color: '#FFFFFF',
         fontSize: 20,
-        fontWeight: 'bold',
-        fontFamily: 'Inter-Bold',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
     },
     repayButton: {
         backgroundColor: '#FFFFFF',
@@ -384,8 +380,7 @@ const styles = StyleSheet.create({
     repayButtonText: {
         color: '#1E3A8A',
         fontSize: 16,
-        fontWeight: '600',
-        fontFamily: 'Inter-SemiBold',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: '600',
     },
     actionContainer: {
         marginTop: 10,
@@ -407,9 +402,8 @@ const styles = StyleSheet.create({
     eligibleTitle: {
         fontSize: 22,
         color: '#2A9D8F',
-        fontWeight: 'bold',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
         marginBottom: 10,
-        fontFamily: 'Inter-Bold',
     },
     eligibleDesc: {
         fontSize: 15,
@@ -422,9 +416,8 @@ const styles = StyleSheet.create({
     eligibleAmount: {
         fontSize: 32,
         color: '#111827',
-        fontWeight: 'bold',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
         marginBottom: 25,
-        fontFamily: 'Inter-Bold',
     },
     applyButton: {
         backgroundColor: '#1E3A8A',
@@ -436,8 +429,7 @@ const styles = StyleSheet.create({
     applyButtonText: {
         color: '#FFFFFF',
         fontSize: 16,
-        fontWeight: '600',
-        fontFamily: 'Inter-SemiBold',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: '600',
     },
     ineligibleCard: {
         backgroundColor: '#F9FAFB',
@@ -450,9 +442,8 @@ const styles = StyleSheet.create({
     ineligibleTitle: {
         fontSize: 20,
         color: '#4B5563',
-        fontWeight: 'bold',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
         marginBottom: 15,
-        fontFamily: 'Inter-SemiBold',
     },
     ineligibleDesc: {
         fontSize: 14,
@@ -462,3 +453,4 @@ const styles = StyleSheet.create({
         fontFamily: 'Inter-Regular',
     },
 });
+

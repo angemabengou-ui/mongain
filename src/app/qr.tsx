@@ -114,7 +114,7 @@ export default function QrScreen() {
                         return;
                     }
                     // Goto universal agent dashboard to handle the client (Deposit)
-                    router.replace({ pathname: '/agent-action' as any, params: { clientPhone: targetPhone, clientName: targetName, action: 'DEPOSIT' } });
+                    router.replace({ pathname: '/agent-action', params: { clientPhone: targetPhone, clientName: targetName, action: 'DEPOSIT' } });
                     return;
                 }
 
@@ -254,23 +254,6 @@ export default function QrScreen() {
                         <Ionicons name="close" size={26} color="#fff" />
                     </TouchableOpacity>
 
-                    {!scanOnly && (
-                        <View style={styles.floatingTogglePill}>
-                            <TouchableOpacity
-                                style={[styles.toggleBtn, mode === 'scan' && styles.toggleBtnActive]}
-                                onPress={() => setMode('scan')}
-                            >
-                                <Text style={[styles.toggleText, mode === 'scan' && styles.toggleTextActive]}>Scanner</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.toggleBtn, mode === 'receive' && styles.toggleBtnActive]}
-                                onPress={() => setMode('receive')}
-                            >
-                                <Text style={[styles.toggleText, mode === 'receive' && styles.toggleTextActive]}>Recevoir</Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
-
                     <View style={{ width: 44 }} />
                 </View>
             </SafeAreaView>
@@ -291,8 +274,8 @@ const styles = StyleSheet.create({
 
     toggleBtn: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 26 },
     toggleBtnActive: { backgroundColor: '#ffffff', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 4 },
-    toggleText: { color: '#ffffff', fontWeight: '600', fontSize: 13 },
-    toggleTextActive: { color: '#000000', fontWeight: '700' },
+    toggleText: { color: '#ffffff', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', fontSize: 13 },
+    toggleTextActive: { color: '#000000', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
     // Transparent Cutout Logic
     maskContainer: { ...StyleSheet.absoluteFillObject },
@@ -308,27 +291,27 @@ const styles = StyleSheet.create({
     topRight: { top: -2, right: -2, borderTopWidth: 4, borderRightWidth: 4, borderTopRightRadius: 20 },
     bottomLeft: { bottom: -2, left: -2, borderBottomWidth: 4, borderLeftWidth: 4, borderBottomLeftRadius: 20 },
     bottomRight: { bottom: -2, right: -2, borderBottomWidth: 4, borderRightWidth: 4, borderBottomRightRadius: 20 },
-    scanInstruction: { color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center', opacity: 0.9 },
+    scanInstruction: { color: '#fff', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', textAlign: 'center', opacity: 0.9 },
 
     // Status & Error
     errorBanner: { position: 'absolute', left: 20, right: 20, backgroundColor: 'rgba(239, 68, 68, 0.95)', borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16, zIndex: 100, shadowColor: '#ef4444', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 8 },
-    errorBannerText: { color: '#fff', fontSize: 14, fontWeight: '700', flex: 1 },
+    errorBannerText: { color: '#fff', fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', flex: 1 },
 
     // Permissions
     permissionMessage: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: COLORS.background },
-    permissionTitle: { color: '#fff', fontSize: 24, fontWeight: '800', marginBottom: 12 },
-    permissionSubtitle: { color: '#a0aec0', fontSize: 15, textAlign: 'center', marginBottom: 30, lineHeight: 22 },
+    permissionTitle: { color: '#fff', fontSize: 24, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 12 },
+    permissionSubtitle: { color: '#a0aec0', fontSize: 15, textAlign: 'center', marginBottom: 30, lineHeight: 22, fontFamily: 'Satoshi-Regular' },
     permissionBtn: { backgroundColor: COLORS.primary, paddingHorizontal: 40, paddingVertical: 16, borderRadius: 20, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 6 },
-    permissionBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+    permissionBtnText: { color: '#fff', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
     // Receive Mode
     receiveWrapper: { flex: 1, padding: 24, justifyContent: 'center', backgroundColor: COLORS.background },
     qrCard: { backgroundColor: COLORS.surface, borderRadius: 32, padding: 28, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.25, shadowRadius: 30, elevation: 15 },
     qrHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 28, alignSelf: 'stretch', backgroundColor: '#f8f9fa', padding: 16, borderRadius: 20 },
     qrAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center' },
-    qrInitials: { fontSize: 18, fontWeight: '800', color: '#fff' },
-    qrName: { fontSize: 18, fontWeight: '800', color: COLORS.textPrimary },
-    qrPhone: { fontSize: 14, fontWeight: '500', color: COLORS.textSecondary, marginTop: 2 },
+    qrInitials: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: '#fff' },
+    qrName: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary },
+    qrPhone: { fontSize: 14, fontFamily: 'Satoshi-Regular', color: COLORS.textSecondary, marginTop: 2 },
     qrCodeWrapper: { padding: 20, backgroundColor: '#fff', borderRadius: 24, marginBottom: 28, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 4 },
-    qrFooterText: { color: COLORS.textSecondary, fontSize: 14, fontWeight: '500', textAlign: 'center', lineHeight: 22 },
+    qrFooterText: { color: COLORS.textSecondary, fontSize: 14, fontFamily: 'Satoshi-Regular', textAlign: 'center', lineHeight: 22 },
 });

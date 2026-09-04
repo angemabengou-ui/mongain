@@ -49,7 +49,7 @@ export default function VaultCreateScreen() {
     };
 
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
                     <Ionicons name="close" size={26} color="#fff" />
@@ -73,7 +73,7 @@ export default function VaultCreateScreen() {
                     <Text style={[styles.label, { color: COLORS.textSecondary }]}>Description (optionnel)</Text>
                     <TextInput
                         style={[styles.input, { color: COLORS.textPrimary, backgroundColor: COLORS.surface, borderColor: COLORS.border, height: 90, textAlignVertical: 'top', paddingTop: 14 }]}
-                        placeholder="À quoi servira cette caisse ?"
+                        placeholder="ì quoi servira cette caisse ?"
                         placeholderTextColor={COLORS.textSecondary}
                         value={description}
                         onChangeText={setDescription}
@@ -105,11 +105,11 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     safeArea: { flex: 1 },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 12 },
     backBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-    headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
+    headerTitle: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', color: '#fff' },
     content: { flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
     scrollContent: { padding: 24, paddingBottom: 60 },
 
-    label: { fontSize: 13, fontWeight: '600', marginBottom: 8, marginTop: 18 },
+    label: { fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', marginBottom: 8, marginTop: 18 },
     input: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 16, height: 54, fontSize: 15 },
 
     infoBox: { flexDirection: 'row', alignItems: 'flex-start', borderRadius: 14, padding: 14, marginTop: 24 },
@@ -117,5 +117,6 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
 
     submitBtn: { marginTop: 32, paddingVertical: 17, borderRadius: 16, alignItems: 'center' },
     submitBtnDisabled: { opacity: 0.5 },
-    submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+    submitBtnText: { color: '#fff', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
 });
+

@@ -108,7 +108,7 @@ export default function PayScreen() {
                             <Text style={styles.label}>Code PIN du client (saisi par le client, pas par vous)</Text>
                             <TextInput
                                 style={styles.input}
-                                placeholder="••••"
+                                placeholder="⬢⬢⬢⬢"
                                 placeholderTextColor="#64748b"
                                 keyboardType="numeric"
                                 secureTextEntry
@@ -136,11 +136,11 @@ export default function PayScreen() {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#0f172a' },
     header: { padding: 24, paddingBottom: 12 },
-    title: { color: '#ffffff', fontSize: 32, fontWeight: '800' },
+    title: { color: '#ffffff', fontSize: 32, fontFamily: 'Satoshi-SemiBold', fontWeight: '800' },
     tabContainer: { flexDirection: 'row', paddingHorizontal: 24, marginBottom: 20 },
     tab: { flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: 'rgba(255,255,255,0.1)', flexDirection: 'row', justifyContent: 'center', gap: 8 },
     tabActive: { borderBottomColor: '#3B82F6' },
-    tabText: { color: '#94a3b8', fontSize: 16, fontWeight: '600' },
+    tabText: { color: '#94a3b8', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' },
     tabTextActive: { color: '#ffffff' },
     scroll: { padding: 24 },
     subtitle: { color: '#94a3b8', fontSize: 16, textAlign: 'center', marginBottom: 40 },
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     // QR Gen Visuals
     qrView: { alignItems: 'center' },
     qrBox: { width: 300, height: 350, borderRadius: 24, padding: 30, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', alignItems: 'center' },
-    qrFooter: { color: 'rgba(255,255,255,0.3)', marginTop: 40, fontSize: 12, fontWeight: 'bold' },
+    qrFooter: { color: 'rgba(255,255,255,0.3)', marginTop: 40, fontSize: 12, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
     qrMock: { width: 200, height: 200, backgroundColor: '#fff', borderRadius: 16, padding: 20, position: 'relative' },
     qrCornerTopLeft: { position: 'absolute', top: 15, left: 15, width: 40, height: 40, borderWidth: 8, borderColor: '#000', borderRadius: 8 },
     qrCornerTopRight: { position: 'absolute', top: 15, right: 15, width: 40, height: 40, borderWidth: 8, borderColor: '#000', borderRadius: 8 },
@@ -158,8 +158,9 @@ const styles = StyleSheet.create({
     // Scan View Visuals
     scanView: { alignItems: 'stretch' },
     inputGroup: { marginBottom: 24 },
-    label: { color: '#94a3b8', marginBottom: 8, fontSize: 14, fontWeight: '600' },
+    label: { color: '#94a3b8', marginBottom: 8, fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' },
     input: { backgroundColor: 'rgba(0,0,0,0.3)', color: '#fff', padding: 16, borderRadius: 12, fontSize: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
     actionBtn: { backgroundColor: '#3B82F6', borderRadius: 16, padding: 18, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 10 },
-    actionBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' }
+    actionBtnText: { color: '#fff', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '800' }
 });
+

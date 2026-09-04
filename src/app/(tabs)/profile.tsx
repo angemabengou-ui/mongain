@@ -32,7 +32,6 @@ export default function ProfileScreen() {
     const [currency, setCurrency] = useState(user?.wallet?.currency ?? 'FCFA');
     const [userData, setUserData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const [actionLoading, setActionLoading] = useState(false);
     const [appLockEnabled, setAppLockEnabled] = useState(true);
 
     const fetchProfileData = async () => {
@@ -88,41 +87,15 @@ export default function ProfileScreen() {
         setAppLockEnabled(value);
     };
 
-    const harvestMockPoints = async () => {
-        try {
-            setActionLoading(true);
-            await request('POST', '/api/loyalty/simulate-earn', {}, true);
-            await fetchProfileData();
-            Alert.alert("Bravo !", "Vous venez de gagner automatiquement 5,000 MP = 500 XAF de récompenses.");
-        } catch (e: any) {
-            Alert.alert("Erreur", "Génération des points échouée");
-        } finally {
-            setActionLoading(false);
-        }
-    };
-
-    const convertPoints = async () => {
-        const lp = userData?.loyaltyPoints || 0;
-        if (lp < 1000) return Alert.alert("Points insuffisants", "Vous devez avoir au minimum 1,000 MP pour les échanger contre du XAF.");
-        try {
-            setActionLoading(true);
-            await request('POST', '/api/loyalty/convert', { pointsToConvert: lp }, true);
-            await fetchProfileData();
-            Alert.alert("Jackpot !", `Vous avez échangé ${lp.toLocaleString()} MP. L'argent a été viré instantanément sur votre solde XAF.`);
-        } catch (e: any) {
-            Alert.alert("Erreur", e.response?.data?.error || "Conversion échouée");
-        } finally {
-            setActionLoading(false);
-        }
-    };
-
-    const initials = userData?.name
-        ? userData.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+    const authName = userData?.name || user?.name;
+    const authEmail = userData?.email || user?.email;
+    const initials = authName
+        ? authName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
         : '??';
 
     return (
-        <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
-            <ScrollView contentContainerStyle={[styles.container, { paddingBottom: tabBarHeight + 20 }]} showsVerticalScrollIndicator={false}>
+        <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'top']}>
+            <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
                 <View style={styles.heroHeader}>
                     <View style={styles.headerTop}>
@@ -137,34 +110,14 @@ export default function ProfileScreen() {
                             <Text style={styles.avatarText}>{initials}</Text>
                         </View>
                         <View>
-                            <Text style={styles.userName}>{userData?.name ?? '...'}</Text>
-                            <Text style={styles.userRole}>{userData?.email ?? '...'}</Text>
+                            <Text style={styles.userName}>{authName ?? '...'}</Text>
+                            <Text style={styles.userRole}>{authEmail ?? '...'}</Text>
                         </View>
                     </View>
                 </View>
 
-                <View style={styles.contentContainer}>
+                <View style={[styles.contentContainer, { paddingBottom: tabBarHeight + 40 }]}>
 
-                    <View style={styles.rewardsCard}>
-                        <View style={styles.rewardsHeader}>
-                            <Ionicons name="sparkles" size={24} color="#F59E0B" />
-                            <Text style={styles.rewardsTitle}>Mongain Rewards (V11)</Text>
-                        </View>
-                        <Text style={styles.rewardsPoints}>{(userData?.loyaltyPoints || 0).toLocaleString()} <Text style={{ fontSize: 16 }}>MP</Text></Text>
-                        <Text style={styles.rewardsSubtitle}>Vos actions vous rapportent de l'argent réel. 1000 MP = 100 XAF.</Text>
-
-                        <View style={styles.rewardsActions}>
-                            <TouchableOpacity style={[styles.rewardBtn, styles.rewardBtnClaim]} onPress={harvestMockPoints} disabled={actionLoading}>
-                                <Ionicons name="add-circle" size={16} color="#fff" />
-                                <Text style={styles.rewardBtnText}>Gagner 5,000 MP (Mock)</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity style={[styles.rewardBtn, styles.rewardBtnConvert]} onPress={convertPoints} disabled={actionLoading}>
-                                <Ionicons name="cash" size={16} color="#000" />
-                                <Text style={[styles.rewardBtnText, { color: '#000' }]}>Convertir en XAF</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
 
                     <Text style={styles.sectionTitle}>Aperçu</Text>
                     <View style={styles.balanceCard}>
@@ -180,14 +133,14 @@ export default function ProfileScreen() {
                     {limits && !limits.skip && (
                         <View style={styles.limitsCard}>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                <Text style={{ fontSize: 13, fontWeight: '700', color: COLORS.textPrimary }}>Plafond Journalier</Text>
-                                <Text style={{ fontSize: 13, fontWeight: '600', color: COLORS.textSecondary }}>{(limits.dailySpend / limits.dailyLimit * 100).toFixed(0)}%</Text>
+                                <Text style={{ fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', color: COLORS.textPrimary }}>Plafond Journalier</Text>
+                                <Text style={{ fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: COLORS.textSecondary }}>{(limits.dailySpend / limits.dailyLimit * 100).toFixed(0)}%</Text>
                             </View>
                             <View style={{ width: '100%', height: 8, backgroundColor: COLORS.border, borderRadius: 4, overflow: 'hidden' }}>
                                 <View style={{ width: `${Math.min(100, (limits.dailySpend / limits.dailyLimit) * 100)}%`, height: '100%', backgroundColor: limits.dailySpend > limits.dailyLimit * 0.8 ? '#ef4444' : '#10b981', borderRadius: 4 }} />
                             </View>
                             <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 8 }}>
-                                Dépensé : <Text style={{ fontWeight: 'bold', color: COLORS.textPrimary }}>{limits.dailySpend.toLocaleString('fr-FR')}</Text> / {limits.dailyLimit.toLocaleString('fr-FR')} FCFA
+                                Dépensé : <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary }}>{limits.dailySpend.toLocaleString('fr-FR')}</Text> / {limits.dailyLimit.toLocaleString('fr-FR')} FCFA
                             </Text>
                         </View>
                     )}
@@ -195,9 +148,15 @@ export default function ProfileScreen() {
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Compte</Text>
                         <MenuItem icon="person-outline" label="Informations personnelles" onPress={() => router.push('/profile-edit')} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
-                        <MenuItem icon="qr-code-outline" label="Mon code QR" sublabel="Pour recevoir un paiement" onPress={() => router.push('/receive-qr' as any)} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
-                        <MenuItem icon="pie-chart-outline" label="Aperçu des dépenses" sublabel="Vos dépenses par catégorie ce mois-ci" onPress={() => router.push('/insights' as any)} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
-                        <MenuItem icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications' as any)} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
+                        <MenuItem icon="qr-code-outline" label="Mon code QR" sublabel="Pour recevoir un paiement" onPress={() => router.push('/receive-qr')} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
+                        <MenuItem icon="pie-chart-outline" label="Aperçu des dépenses" sublabel="Vos dépenses par catégorie ce mois-ci" onPress={() => router.push('/insights')} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
+                        <MenuItem icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications')} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
+                        {/* merchant-hub.tsx est un écran complet et fonctionnel, mais aucun menu
+                            ne le liait jamais — même pour les comptes MERCHANT auxquels il est
+                            destiné. */}
+                        {user?.role === 'MERCHANT' && (
+                            <MenuItem icon="storefront-outline" label="Espace Marchand" sublabel="Ventes, commissions et retraits" onPress={() => router.push('/merchant-hub')} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
+                        )}
                     </View>
 
                     <View style={styles.section}>
@@ -283,7 +242,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         paddingHorizontal: 20,
     },
     headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-    headerTitle: { fontSize: 26, fontWeight: '800', color: '#fff', letterSpacing: 0.5 },
+    headerTitle: { fontSize: 26, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: '#fff', letterSpacing: 0.5 },
     editBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
 
     avatarSection: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 10 },
@@ -293,9 +252,9 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         justifyContent: 'center', alignItems: 'center',
         shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5,
     },
-    avatarText: { fontSize: 24, fontWeight: '900', color: COLORS.primary },
-    userName: { fontSize: 20, fontWeight: '800', color: '#fff' },
-    userRole: { fontSize: 14, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
+    avatarText: { fontSize: 24, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.primary },
+    userName: { fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: '#fff' },
+    userRole: { fontSize: 14, fontFamily: 'Satoshi-Regular', color: 'rgba(255,255,255,0.7)' },
 
     contentContainer: {
         flex: 1,
@@ -311,27 +270,27 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         borderRadius: 20, padding: 20, borderWidth: 1, borderColor: COLORS.primary + '30',
     },
     balanceRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
-    balanceLabel: { fontSize: 14, fontWeight: '600', color: COLORS.textSecondary },
-    balanceAmount: { fontSize: 32, fontWeight: '800', color: COLORS.textPrimary },
-    balanceCurrency: { fontSize: 18, fontWeight: '600', color: COLORS.textSecondary },
+    balanceLabel: { fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textSecondary },
+    balanceAmount: { fontSize: 32, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary },
+    balanceCurrency: { fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textSecondary },
 
     limitsCard: { marginTop: 12, padding: 18, backgroundColor: COLORS.surface, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border },
 
     section: { marginTop: 28 },
-    sectionTitle: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
+    sectionTitle: { fontSize: 12, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
     settingValueContainer: { flexDirection: 'row', alignItems: 'center' },
-    settingValue: { color: '#ffffff', fontSize: 16, marginRight: 8 },
+    settingValue: { color: '#ffffff', fontSize: 16, marginRight: 8, fontFamily: 'Satoshi-Regular' },
 
     rewardsCard: { marginBottom: 32, padding: 24, borderRadius: 24, backgroundColor: 'rgba(245, 158, 11, 0.05)', borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.3)', shadowColor: '#F59E0B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10 },
     rewardsHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
-    rewardsTitle: { color: '#FCD34D', fontSize: 20, fontWeight: '800' },
-    rewardsPoints: { color: '#fff', fontSize: 40, fontWeight: '900', marginBottom: 4 },
-    rewardsSubtitle: { color: 'rgba(255,255,255,0.6)', fontSize: 13, marginBottom: 20 },
+    rewardsTitle: { color: '#FCD34D', fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
+    rewardsPoints: { color: '#fff', fontSize: 40, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 4 },
+    rewardsSubtitle: { color: 'rgba(255,255,255,0.6)', fontSize: 13, fontFamily: 'Satoshi-Regular', marginBottom: 20 },
     rewardsActions: { flexDirection: 'column', gap: 10 },
     rewardBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 16, gap: 8 },
     rewardBtnClaim: { backgroundColor: 'rgba(255,255,255,0.1)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
     rewardBtnConvert: { backgroundColor: '#FCD34D' },
-    rewardBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14, textTransform: 'uppercase' },
+    rewardBtnText: { color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', fontSize: 14, textTransform: 'uppercase' },
 
     menuItem: {
         flexDirection: 'row', alignItems: 'center',
@@ -342,8 +301,8 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     menuItemStatic: { opacity: 0.75 },
     menuIconWrap: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
     menuTextWrap: { flex: 1 },
-    menuLabel: { fontSize: 15, fontWeight: '600', color: COLORS.textPrimary },
-    menuSublabel: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+    menuLabel: { fontSize: 15, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary },
+    menuSublabel: { fontSize: 12, fontFamily: 'Satoshi-Regular', color: COLORS.textSecondary, marginTop: 2 },
 
     logoutBtn: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
@@ -351,5 +310,6 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         backgroundColor: COLORS.error + '12', borderRadius: 16, height: 56, gap: 10,
         borderWidth: 1, borderColor: COLORS.error + '30',
     },
-    logoutText: { fontSize: 16, fontWeight: '700', color: COLORS.error },
+    logoutText: { fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.error },
 });
+

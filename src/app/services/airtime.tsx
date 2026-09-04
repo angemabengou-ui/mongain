@@ -44,9 +44,10 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     scroll: { flexGrow: 1, padding: 24 },
     header: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
     backButton: { marginRight: 16 },
-    headerTitle: { fontSize: 24, fontWeight: '800', color: COLORS.textPrimary },
+    headerTitle: { fontSize: 24, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', color: COLORS.textPrimary },
     card: { backgroundColor: COLORS.surface, borderRadius: 24, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 4 },
     iconWrap: { backgroundColor: COLORS.primary + '15', padding: 16, borderRadius: 50, marginBottom: 12 },
-    title: { fontSize: 22, fontWeight: '800', color: COLORS.textPrimary },
+    title: { fontSize: 22, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', color: COLORS.textPrimary },
     subtitle: { fontSize: 14, color: COLORS.textSecondary, marginTop: 4 },
 });
+

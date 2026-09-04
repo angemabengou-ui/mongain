@@ -128,7 +128,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     },
     headerTitle: {
         flex: 1, textAlign: 'center',
-        fontSize: 18, fontWeight: '700',
+        fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
         color: COLORS.textPrimary,
     },
     container: {
@@ -142,7 +142,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     },
     greeting: {
         fontSize: 24,
-        fontWeight: '800',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
         color: COLORS.textPrimary,
         marginBottom: 8,
         textAlign: 'center',
@@ -153,6 +153,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         textAlign: 'center',
         lineHeight: 22,
         marginBottom: 30,
+        fontFamily: 'Satoshi-Regular'
     },
     inputCard: {
         backgroundColor: COLORS.surface,
@@ -166,7 +167,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     },
     inputLabel: {
         fontSize: 14,
-        fontWeight: '700',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
         color: COLORS.textSecondary,
         marginBottom: 8,
         marginTop: 15,
@@ -180,6 +181,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         padding: 16,
         fontSize: 16,
         color: COLORS.textPrimary,
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold'
     },
     textArea: {
         height: 120,
@@ -201,6 +203,6 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     submitBtnText: {
         color: COLORS.surface,
         fontSize: 16,
-        fontWeight: '700',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
     },
 });

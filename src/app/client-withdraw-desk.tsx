@@ -133,14 +133,14 @@ export default function ClientWithdrawDeskScreen() {
 
     if (!user) {
         return (
-            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
                 <ActivityIndicator color={COLORS.surface} size="large" />
             </SafeAreaView>
         );
     }
 
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
     },
     headerTitle: {
         fontSize: 20,
-        fontWeight: 'bold',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
         color: '#fff',
     },
     content: {
@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
     },
     title: {
         fontSize: 24,
-        fontWeight: '800',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: '800',
         color: '#111827',
         marginBottom: 10,
         textAlign: 'center',
@@ -340,11 +340,11 @@ const styles = StyleSheet.create({
     avatarText: {
         color: '#fff',
         fontSize: 18,
-        fontWeight: 'bold',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
     },
     userName: {
         fontSize: 16,
-        fontWeight: 'bold',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
         color: '#111827',
     },
     userPhone: {
@@ -364,19 +364,19 @@ const styles = StyleSheet.create({
     },
     currencyLabel: {
         fontSize: 20,
-        fontWeight: 'bold',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
         marginRight: 15,
     },
     input: {
         flex: 1,
         fontSize: 32,
-        fontWeight: 'bold',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
         textAlign: 'right',
         color: '#111827',
     },
     feeText: {
         fontSize: 14,
-        fontWeight: '600',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: '600',
     },
     confirmBtn: {
         flexDirection: 'row',
@@ -398,6 +398,7 @@ const styles = StyleSheet.create({
     confirmBtnText: {
         color: '#fff',
         fontSize: 18,
-        fontWeight: 'bold',
+        fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
     }
 });
+

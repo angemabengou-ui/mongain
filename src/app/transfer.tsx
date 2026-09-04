@@ -224,30 +224,30 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20, paddingVertical: 16,
     },
     backButton: { padding: 8, marginLeft: -12 },
-    headerTitle: { fontSize: 20, fontWeight: '800' },
+    headerTitle: { fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
     content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 12, paddingBottom: 60 },
 
     actionGrid: { flexDirection: 'row', gap: 16, marginBottom: 32 },
     actionCard: { flex: 1, borderRadius: 20, padding: 20, alignItems: 'center', borderWidth: 1 },
     actionIconWrap: { width: 56, height: 56, borderRadius: 28, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-    actionCardTitle: { fontSize: 16, fontWeight: '800', marginBottom: 4 },
-    actionCardSub: { fontSize: 13, color: '#94a3b8', fontWeight: '500' },
+    actionCardTitle: { fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 4 },
+    actionCardSub: { fontSize: 13, color: '#94a3b8', fontFamily: 'Satoshi-Regular' },
 
-    sectionTitle: { fontSize: 14, fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', marginBottom: 12, marginLeft: 4, letterSpacing: 1 },
+    sectionTitle: { fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', marginBottom: 12, marginLeft: 4, letterSpacing: 1 },
 
     inputContainer: {
         flexDirection: 'row', alignItems: 'center',
         borderRadius: 16, paddingHorizontal: 16, height: 60, marginBottom: 16,
         borderWidth: 1.5,
     },
-    prefix: { fontSize: 17, fontWeight: '800', marginRight: 12, paddingRight: 12, borderRightWidth: 1, borderRightColor: '#e2e8f0' },
-    input: { flex: 1, fontSize: 18, fontWeight: '700', height: '100%', letterSpacing: 1 },
+    prefix: { fontSize: 17, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginRight: 12, paddingRight: 12, borderRightWidth: 1, borderRightColor: '#e2e8f0' },
+    input: { flex: 1, fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', height: '100%', letterSpacing: 1 },
 
     errorBox: {
         flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEE2E2',
         borderRadius: 12, padding: 16, marginVertical: 8, gap: 10,
     },
-    errorText: { color: '#E11D48', fontSize: 14, flex: 1, fontWeight: '500', lineHeight: 20 },
+    errorText: { color: '#E11D48', fontSize: 13, flex: 1, fontFamily: 'Satoshi-Regular', lineHeight: 20 },
 
     recipientCard: {
         borderRadius: 20, padding: 20, marginTop: 12,
@@ -258,17 +258,17 @@ const styles = StyleSheet.create({
         width: 52, height: 52, borderRadius: 26,
         justifyContent: 'center', alignItems: 'center',
     },
-    recipientInitial: { fontSize: 20, fontWeight: '800' },
+    recipientInitial: { fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
     recipientInfo: { flex: 1 },
-    recipientName: { fontSize: 18, fontWeight: '800', marginBottom: 4 },
-    recipientPhone: { fontSize: 14, color: '#94a3b8', fontWeight: '500' },
+    recipientName: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 4 },
+    recipientPhone: { fontSize: 14, color: '#94a3b8', fontFamily: 'Satoshi-Regular' },
     checkBadge: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
     merchantBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF3C7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, alignSelf: 'flex-start', marginTop: 16, gap: 6 },
-    merchantText: { color: '#D97706', fontSize: 12, fontWeight: '700' },
+    merchantText: { color: '#D97706', fontSize: 12, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
     sendButton: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         height: 60, borderRadius: 16, marginTop: 32,
     },
-    sendButtonText: { fontSize: 17, fontWeight: '800' },
+    sendButtonText: { fontSize: 17, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 });

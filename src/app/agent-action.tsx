@@ -243,7 +243,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16, backgroundColor: COLORS.primary,
     },
     backBtn: { padding: 8, marginLeft: -8 },
-    headerTitle: { color: '#ffffff', fontSize: 20, fontWeight: '700' },
+    headerTitle: { color: '#ffffff', fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
     headerSpacer: {
         alignItems: 'center', justifyContent: 'center',
         paddingVertical: 12, backgroundColor: COLORS.primary, marginBottom: 24, paddingHorizontal: 20
@@ -253,7 +253,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         justifyContent: 'center', alignItems: 'center', marginBottom: 16,
         shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 8
     },
-    headerSubtitle: { color: '#ffffff', fontSize: 22, fontWeight: '800', marginBottom: 8 },
+    headerSubtitle: { color: '#ffffff', fontSize: 22, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', marginBottom: 8 },
     headerDesc: { color: 'rgba(255,255,255,0.85)', fontSize: 14, textAlign: 'center', lineHeight: 20 },
 
     card: {
@@ -263,19 +263,19 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     },
     userBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface, padding: 16, borderRadius: 16, marginBottom: 24, borderWidth: 1, borderColor: COLORS.border },
     avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-    avatarText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-    userName: { fontSize: 16, fontWeight: 'bold', color: COLORS.textPrimary },
+    avatarText: { color: '#fff', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
+    userName: { fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary },
     userPhone: { fontSize: 14, color: COLORS.textSecondary, marginTop: 2 },
 
-    label: { fontSize: 14, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 8, marginTop: 4 },
+    label: { fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', color: COLORS.textSecondary, marginBottom: 8, marginTop: 4 },
     inputContainer: {
         flexDirection: 'row', alignItems: 'center',
         backgroundColor: COLORS.surface,
         borderWidth: 1, borderColor: COLORS.border,
         borderRadius: 16, paddingHorizontal: 16, height: 64, marginBottom: 20,
     },
-    currencyLabel: { fontSize: 18, fontWeight: '800', marginRight: 15, color: COLORS.textPrimary },
-    amountInput: { flex: 1, fontSize: 32, fontWeight: '800', textAlign: 'right', color: COLORS.textPrimary },
+    currencyLabel: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', marginRight: 15, color: COLORS.textPrimary },
+    amountInput: { flex: 1, fontSize: 32, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', textAlign: 'right', color: COLORS.textPrimary },
     pinInput: { flex: 1, fontSize: 18, letterSpacing: 4, color: COLORS.textPrimary, height: '100%' },
 
     buttonRow: { flexDirection: 'row', gap: 12, marginTop: 12 },
@@ -289,5 +289,6 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 16, elevation: 6,
     },
     disabledButton: { opacity: 0.5, elevation: 0, shadowOpacity: 0 },
-    saveButtonText: { color: '#fff', fontSize: 17, fontWeight: '800' }
+    saveButtonText: { color: '#fff', fontSize: 17, fontFamily: 'Satoshi-SemiBold', fontWeight: '800' }
 });
+

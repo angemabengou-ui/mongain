@@ -115,7 +115,7 @@ export default function TontineSettingsScreen() {
 
     if (loading || !group) {
         return (
-            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
                 <View style={styles.centerFill}><ActivityIndicator color="#fff" size="large" /></View>
             </SafeAreaView>
         );
@@ -123,7 +123,7 @@ export default function TontineSettingsScreen() {
 
     if (!isCreator) {
         return (
-            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
                 <ScreenHeader title="Paramètres" onBack={() => router.back()} />
                 <View style={[styles.content, { backgroundColor: COLORS.background }]}>
                     <View style={styles.centerFill}>
@@ -137,7 +137,7 @@ export default function TontineSettingsScreen() {
     }
 
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
             <ScreenHeader title={`Paramètres — ${group.name}`} onBack={() => router.back()} />
 
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.content, { backgroundColor: COLORS.background }]}>
@@ -193,7 +193,7 @@ export default function TontineSettingsScreen() {
                     <SectionHeading colors={COLORS} title="Visibilité" />
                     <View style={[styles.publicRow, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
                         <View style={{ flex: 1, marginRight: 12 }}>
-                            <Text style={{ color: COLORS.textPrimary, fontWeight: '700', fontSize: 14 }}>Club public</Text>
+                            <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 14 }}>Club public</Text>
                             <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 4, lineHeight: 18 }}>
                                 Visible dans « Découvrir des tontines » — n'importe qui peut le rejoindre sans invitation.
                             </Text>
@@ -234,14 +234,15 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
 
     toggleRow: { flexDirection: 'row', gap: 10 },
     toggleBtn: { flex: 1, paddingVertical: 13, borderRadius: 12, borderWidth: 1, alignItems: 'center' },
-    toggleText: { fontSize: 13.5, fontWeight: '700' },
+    toggleText: { fontSize: 13.5, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
 
     publicRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 14, padding: 16 },
 
     submitBtn: { marginTop: 32, paddingVertical: 17, borderRadius: 16, alignItems: 'center' },
     submitBtnDisabled: { opacity: 0.5 },
-    submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+    submitBtnText: { color: '#fff', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
 
     dissolveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 20, paddingVertical: 14 },
-    dissolveBtnText: { fontSize: 14, fontWeight: '700' },
+    dissolveBtnText: { fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
 });
+

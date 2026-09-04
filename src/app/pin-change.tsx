@@ -162,26 +162,26 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16, backgroundColor: COLORS.primary,
     },
     backButton: { padding: 8, marginLeft: -8 },
-    headerTitle: { color: '#ffffff', fontSize: 20, fontWeight: '700' },
+    headerTitle: { color: '#ffffff', fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
     headerSpacer: {
         alignItems: 'center', justifyContent: 'center',
         paddingVertical: 28, backgroundColor: COLORS.primary, marginBottom: 16
     },
-    headerSubtitle: { color: 'rgba(255,255,255,0.8)', fontSize: 15, marginTop: 12, fontWeight: '500' },
+    headerSubtitle: { color: 'rgba(255,255,255,0.8)', fontSize: 15, marginTop: 12, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
     card: {
         flexGrow: 1, backgroundColor: COLORS.background,
         borderTopLeftRadius: 36, borderTopRightRadius: 36,
         padding: 28, paddingTop: 32
     },
-    title: { fontSize: 24, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 28 },
-    label: { fontSize: 14, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 8, marginTop: 4 },
+    title: { fontSize: 24, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary, marginBottom: 28 },
+    label: { fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textSecondary, marginBottom: 8, marginTop: 4 },
     inputContainer: {
         flexDirection: 'row', alignItems: 'center',
         backgroundColor: COLORS.surface,
         borderWidth: 1, borderColor: COLORS.border,
         borderRadius: 16, paddingHorizontal: 16, height: 58, marginBottom: 20,
     },
-    input: { flex: 1, fontSize: 18, letterSpacing: 4, color: COLORS.textPrimary, height: '100%' },
+    input: { flex: 1, fontSize: 18, letterSpacing: 4, color: COLORS.textPrimary, height: '100%', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
     saveButton: {
         backgroundColor: COLORS.primary, height: 58, borderRadius: 16,
         justifyContent: 'center', alignItems: 'center', marginTop: 16,
@@ -192,5 +192,5 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         elevation: 6,
     },
     disabledButton: { opacity: 0.5, elevation: 0, shadowOpacity: 0 },
-    saveButtonText: { color: '#fff', fontSize: 18, fontWeight: '800' }
+    saveButtonText: { color: '#fff', fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }
 });

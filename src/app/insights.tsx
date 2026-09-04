@@ -53,7 +53,7 @@ export default function InsightsScreen() {
         // confirmé — le compter ici gonflerait le total affiché avant même que l'argent ait
         // effectivement bougé.
         const monthTx = transactions.filter(tx => isSameMonth(tx.createdAt, now) && tx.status === 'COMPLETED');
-        const spent = monthTx.filter(tx => tx.type === 'outgoing');
+        const spent = monthTx.filter(tx => tx.type === 'outgoing' && getTransactionCategory(tx) !== 'FEE');
         const received = monthTx.filter(tx => tx.type === 'incoming');
 
         const byCategory = new Map<TransactionCategory, CategoryTotal>();
@@ -147,17 +147,17 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         backgroundColor: COLORS.surface,
     },
     backBtn: { padding: 4 },
-    headerTitle: { fontSize: 18, fontWeight: '800', color: COLORS.textPrimary },
+    headerTitle: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', color: COLORS.textPrimary },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     container: { padding: 20, paddingBottom: 40 },
     summaryRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
     summaryCard: { flex: 1, borderRadius: 16, padding: 16 },
-    summaryLabel: { fontSize: 12, fontWeight: '700', marginBottom: 6 },
-    summaryValue: { fontSize: 16, fontWeight: '800' },
-    sectionTitle: { fontSize: 16, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 4 },
+    summaryLabel: { fontSize: 12, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginBottom: 6 },
+    summaryValue: { fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '800' },
+    sectionTitle: { fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', color: COLORS.textPrimary, marginBottom: 4 },
     sectionSubtitle: { fontSize: 12, color: COLORS.textSecondary, marginBottom: 16 },
     emptyWrap: { alignItems: 'center', marginTop: 60 },
-    emptyText: { marginTop: 12, fontSize: 14, color: COLORS.textSecondary, fontWeight: '600' },
+    emptyText: { marginTop: 12, fontSize: 14, color: COLORS.textSecondary, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' },
     categoryCard: {
         backgroundColor: COLORS.surface, borderRadius: 16, padding: 16, marginBottom: 12,
         shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 1,
@@ -165,9 +165,10 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     categoryHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
     categoryLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     categoryIconWrap: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-    categoryLabel: { fontSize: 14, fontWeight: '700', color: COLORS.textPrimary },
-    categoryAmount: { fontSize: 14, fontWeight: '800', color: COLORS.textPrimary },
+    categoryLabel: { fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', color: COLORS.textPrimary },
+    categoryAmount: { fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', color: COLORS.textPrimary },
     barTrack: { height: 8, borderRadius: 4, backgroundColor: COLORS.border, overflow: 'hidden' },
     barFill: { height: '100%', borderRadius: 4 },
     categoryMeta: { fontSize: 11, color: COLORS.textSecondary, marginTop: 6 },
 });
+

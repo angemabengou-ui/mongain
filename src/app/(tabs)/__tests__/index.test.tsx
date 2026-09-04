@@ -24,11 +24,9 @@ jest.mock('../../../context/AuthContext', () => ({
 
 const mockApiGetBalance = jest.fn();
 const mockApiGetTransactions = jest.fn();
-const mockApiGetMerchantStats = jest.fn();
 jest.mock('../../../services/api', () => ({
     apiGetBalance: (...args: any[]) => mockApiGetBalance(...args),
     apiGetTransactions: (...args: any[]) => mockApiGetTransactions(...args),
-    apiGetMerchantStats: (...args: any[]) => mockApiGetMerchantStats(...args),
 }));
 
 import DashboardScreen from '../index';
@@ -47,7 +45,7 @@ describe('(tabs)/index (DashboardScreen)', () => {
 
         await render(<DashboardScreen />);
 
-        expect(await screen.findByText("Aucune transaction pour l'instant.")).toBeTruthy();
+        expect(await screen.findByText("Aucune transaction.")).toBeTruthy();
         expect(screen.getByText('Jean Dupont')).toBeTruthy();
     });
 
@@ -68,7 +66,11 @@ describe('(tabs)/index (DashboardScreen)', () => {
         expect(screen.getByText('Échoué')).toBeTruthy();
     });
 
-    it('shows the merchant "Caisse du Jour" panel for MERCHANT users', async () => {
+    // Le panneau "Caisse du Jour" (ventes/commission du jour) a été retiré de l'accueil et
+    // déplacé vers merchant-hub.tsx (voir profile.tsx, menu "Espace Marchand" — jusque-là
+    // orphelin, aucun écran ne le liait). L'accueil ne doit donc plus jamais rendre ni
+    // récupérer ces stats, pour un compte MERCHANT comme pour un USER normal.
+    it('renders the dashboard the same way for a MERCHANT account, without fetching merchant stats here anymore', async () => {
         mockUseAuth.mockReturnValue({
             user: { ...baseUser, role: 'MERCHANT' },
             logout: jest.fn(),
@@ -76,22 +78,10 @@ describe('(tabs)/index (DashboardScreen)', () => {
         });
         mockApiGetBalance.mockResolvedValue({ balance: 5000, currency: 'FCFA' });
         mockApiGetTransactions.mockResolvedValue([]);
-        mockApiGetMerchantStats.mockResolvedValue({ todaySalesAmount: 10000, todayCommission: 100, allTimeCommission: 900 });
 
         await render(<DashboardScreen />);
 
-        expect(await screen.findByText('Caisse du Jour')).toBeTruthy();
-        expect(mockApiGetMerchantStats).toHaveBeenCalled();
-    });
-
-    it('does not fetch merchant stats for a plain USER', async () => {
-        mockApiGetBalance.mockResolvedValue({ balance: 1000, currency: 'FCFA' });
-        mockApiGetTransactions.mockResolvedValue([]);
-
-        await render(<DashboardScreen />);
-
-        await screen.findByText("Aucune transaction pour l'instant.");
-        expect(mockApiGetMerchantStats).not.toHaveBeenCalled();
+        expect(await screen.findByText("Aucune transaction.")).toBeTruthy();
         expect(screen.queryByText('Caisse du Jour')).toBeNull();
     });
 
@@ -100,14 +90,14 @@ describe('(tabs)/index (DashboardScreen)', () => {
         mockApiGetTransactions.mockResolvedValue([]);
 
         await render(<DashboardScreen />);
-        await screen.findByText("Aucune transaction pour l'instant.");
+        await screen.findByText("Aucune transaction.");
 
-        expect(screen.queryByText('••••••••')).toBeNull();
+        expect(screen.queryByText('⬢⬢⬢⬢⬢⬢⬢⬢')).toBeNull();
 
-        const eyeIcon = screen.getByText('eye-off-outline');
+        const eyeIcon = screen.getByText('eye-outline');
         fireEvent.press(eyeIcon);
 
-        expect(await screen.findByText('••••••••')).toBeTruthy();
+        expect(await screen.findByText('⬢⬢⬢⬢⬢⬢⬢⬢')).toBeTruthy();
     });
 
     it('navigates to the transfer screen when "Envoyer" is pressed', async () => {
@@ -115,7 +105,7 @@ describe('(tabs)/index (DashboardScreen)', () => {
         mockApiGetTransactions.mockResolvedValue([]);
 
         await render(<DashboardScreen />);
-        await screen.findByText("Aucune transaction pour l'instant.");
+        await screen.findByText("Aucune transaction.");
 
         fireEvent.press(screen.getByText('Envoyer'));
         expect(mockPush).toHaveBeenCalledWith('/transfer');

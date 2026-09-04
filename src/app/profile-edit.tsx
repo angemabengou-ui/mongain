@@ -148,14 +148,14 @@ export default function ProfileEditScreen() {
 
                     {/* Section KYC */}
                     <View style={{ marginTop: 10, padding: 16, backgroundColor: COLORS.surface, borderRadius: 12, borderWidth: 1, borderColor: user?.kycStatus === 'APPROVED' ? '#10b981' : COLORS.border, marginBottom: 24 }}>
-                        <Text style={{ fontSize: 16, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 4 }}>Vérification d'Identité (KYC)</Text>
+                        <Text style={{ fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary, marginBottom: 4 }}>Vérification d'Identité (KYC)</Text>
                         {user?.kycStatus === 'APPROVED' ? (
-                            <Text style={{ color: '#10b981', fontWeight: '600', marginTop: 5 }}>✅ Compte Certifié (Plafonds maximaux)</Text>
+                            <Text style={{ color: '#10b981', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginTop: 5 }}>✅ Compte Certifié (Plafonds maximaux)</Text>
                         ) : user?.kycStatus === 'PENDING' ? (
-                            <Text style={{ color: '#f59e0b', fontWeight: '600', marginTop: 5 }}>⏳ Dossier en cours de validation</Text>
+                            <Text style={{ color: '#f59e0b', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginTop: 5 }}>⏳ Dossier en cours de validation</Text>
                         ) : (
                             <>
-                                <Text style={{ color: COLORS.textSecondary, marginBottom: 16, fontSize: 13 }}>Compte standard plafonné (Max 50.000 FCFA/jour). Envoyez vos documents pour l'augmenter.</Text>
+                                <Text style={{ color: COLORS.textSecondary, marginBottom: 16, fontSize: 13, fontFamily: 'Satoshi-Regular' }}>Compte standard plafonné (Max 50.000 FCFA/jour). Envoyez vos documents pour l'augmenter.</Text>
 
                                 <ScrollView horizontal style={{ marginBottom: 15 }} showsHorizontalScrollIndicator={false}>
                                     <TouchableOpacity style={[styles.docPicker, documents.idCardFront && { borderColor: '#10b981' }]} onPress={() => pickImage('idCardFront')}>
@@ -190,7 +190,7 @@ export default function ProfileEditScreen() {
                                     </TouchableOpacity>
                                 </ScrollView>
                                 {documents.idCardFront && documents.idCardBack && documents.selfie && (
-                                    <Text style={{ color: '#10b981', fontSize: 12, marginBottom: 15, fontWeight: 'bold' }}>Dossier complet ! Enregistrez pour soumettre.</Text>
+                                    <Text style={{ color: '#10b981', fontSize: 12, marginBottom: 15, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>Dossier complet ! Enregistrez pour soumettre.</Text>
                                 )}
                             </>
                         )}
@@ -221,28 +221,28 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         borderBottomWidth: 1, borderBottomColor: COLORS.border,
     },
     backButton: { padding: 8, marginLeft: -8 },
-    headerTitle: { color: COLORS.textPrimary, fontSize: 18, fontWeight: '600' },
+    headerTitle: { color: COLORS.textPrimary, fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
     formContainer: { padding: 24, flexGrow: 1 },
-    label: { fontSize: 16, fontWeight: '600', color: COLORS.textPrimary, marginBottom: 8 },
+    label: { fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary, marginBottom: 8 },
     inputContainer: {
         flexDirection: 'row', alignItems: 'center',
         backgroundColor: COLORS.surface,
         borderWidth: 1, borderColor: COLORS.border,
         borderRadius: 12, paddingHorizontal: 16, height: 56, marginBottom: 16,
     },
-    input: { flex: 1, fontSize: 16, color: COLORS.textPrimary },
-    infoText: { fontSize: 14, color: COLORS.textSecondary, marginBottom: 32, lineHeight: 20 },
+    input: { flex: 1, fontSize: 16, color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
+    infoText: { fontSize: 14, color: COLORS.textSecondary, marginBottom: 32, lineHeight: 20, fontFamily: 'Satoshi-Regular' },
     saveButton: {
         backgroundColor: COLORS.primary, height: 56, borderRadius: 16,
         justifyContent: 'center', alignItems: 'center',
     },
     disabledButton: { opacity: 0.5 },
-    saveButtonText: { color: COLORS.surface, fontSize: 18, fontWeight: '700' },
+    saveButtonText: { color: COLORS.surface, fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
     docPicker: {
         width: 100, height: 100, backgroundColor: COLORS.primary + '11', borderRadius: 12,
         borderWidth: 1, borderColor: COLORS.primary + '33', borderStyle: 'dashed',
         justifyContent: 'center', alignItems: 'center', marginRight: 15
     },
-    docLabel: { fontSize: 11, fontWeight: '600', color: COLORS.primary, marginTop: 5 },
+    docLabel: { fontSize: 11, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.primary, marginTop: 5 },
     docImage: { width: '100%', height: '100%', borderRadius: 12 }
 });

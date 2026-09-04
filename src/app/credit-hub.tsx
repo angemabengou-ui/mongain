@@ -5,36 +5,30 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenHeader from '../components/ui/ScreenHeader';
 import { useAppTheme } from '../constants/theme';
-import { apiGetSystemSettings, apiGetTontineGroups, apiGetVaults } from '../services/api';
+import { apiGetActiveLoans } from '../services/api';
 
-// Point d'entrée unique pour Caisse Commune + Tontine — avant, deux petites icônes
-// noyées dans « Services & Factures » au même niveau qu'Électricité/Crédit Air,
-// aucune des deux n'étant plus visible ou explicite que l'autre malgré leur importance
-// (ce sont de vrais outils de gestion d'argent en groupe, pas de simples paiements de
-// factures). Regroupées ici avec une phrase d'explication simple par carte, sans jargon.
-export default function EpargneHubScreen() {
+// Point d'entrée unique pour Crédit + BNPL + Crypto — les trois écrans existaient déjà
+// (backend fonctionnel, PIN sécurisé) mais aucun n'était atteignable depuis l'app : Crédit et
+// Crypto étaient déclarés comme onglets cachés (href: null) sans jamais être poussés depuis
+// nulle part, et BNPL n'avait aucun lien du tout. Regroupés ici comme Caisse Commune + Tontine
+// le sont déjà dans epargne-hub.tsx (même schéma), mais sous l'angle "produits individuels"
+// plutôt que "argent en groupe" — Crédit/BNPL empruntent, Crypto investit, aucun des trois
+// n'implique d'autres membres.
+export default function CreditHubScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
     const COLORS = useAppTheme();
     const styles = getStyles(COLORS);
 
-    const [vaultsCount, setVaultsCount] = useState<number | null>(null);
-    const [tontinesCount, setTontinesCount] = useState<number | null>(null);
-    const [tontineEnabled, setTontineEnabled] = useState(true);
+    const [activeLoansCount, setActiveLoansCount] = useState<number | null>(null);
 
     const load = useCallback(async () => {
         try {
-            const [vaultsRes, tontinesRes, settings] = await Promise.all([
-                apiGetVaults().catch(() => ({ data: [] })),
-                apiGetTontineGroups().catch(() => ({ data: { myParticipations: [] } })),
-                apiGetSystemSettings().catch(() => null),
-            ]);
-            setVaultsCount((vaultsRes.data || []).length);
-            setTontinesCount((tontinesRes.data?.myParticipations || []).filter((p: any) => p.status !== 'LEFT').length);
-            if (settings) setTontineEnabled(settings.tontineEnabled ?? true);
+            const loans = await apiGetActiveLoans();
+            setActiveLoansCount((loans || []).length);
         } catch {
-            // Les compteurs sont un simple indicatif — une caisse/tontine reste
-            // accessible via sa carte même si le chargement du badge échoue.
+            // Le compteur est un simple indicatif — la carte reste accessible même si le
+            // chargement du badge échoue.
         }
     }, []);
 
@@ -42,59 +36,67 @@ export default function EpargneHubScreen() {
 
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
-            <ScreenHeader title="Mon Épargne" onBack={() => router.back()} />
+            <ScreenHeader title="Crédit & Investissements" onBack={() => router.back()} />
 
             <View style={[styles.content, { backgroundColor: COLORS.background }]}>
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                     <Text style={[styles.intro, { color: COLORS.textSecondary }]}>
-                        Gérez votre argent en groupe, en toute simplicité.
+                        Empruntez ou faites fructifier votre argent, individuellement.
                     </Text>
 
                     <TouchableOpacity
                         style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}
                         activeOpacity={0.8}
-                        onPress={() => router.push('/services/vaults')}
+                        onPress={() => router.push('/credit')}
                     >
-                        <View style={[styles.cardIcon, { backgroundColor: '#F59E0B15' }]}>
-                            <Ionicons name="shield-checkmark" size={30} color="#F59E0B" />
+                        <View style={[styles.cardIcon, { backgroundColor: '#1E3A8A15' }]}>
+                            <Ionicons name="cash" size={30} color="#1E3A8A" />
                         </View>
                         <View style={{ flex: 1 }}>
                             <View style={styles.cardTitleRow}>
-                                <Text style={[styles.cardTitle, { color: COLORS.textPrimary }]}>Caisse Commune</Text>
-                                {vaultsCount !== null && vaultsCount > 0 && (
-                                    <View style={[styles.countBadge, { backgroundColor: '#F59E0B18' }]}>
-                                        <Text style={[styles.countBadgeText, { color: '#F59E0B' }]}>{vaultsCount}</Text>
+                                <Text style={[styles.cardTitle, { color: COLORS.textPrimary }]}>Crédit Mongain</Text>
+                                {activeLoansCount !== null && activeLoansCount > 0 && (
+                                    <View style={[styles.countBadge, { backgroundColor: '#1E3A8A18' }]}>
+                                        <Text style={[styles.countBadgeText, { color: '#1E3A8A' }]}>{activeLoansCount}</Text>
                                     </View>
                                 )}
                             </View>
                             <Text style={[styles.cardDesc, { color: COLORS.textSecondary }]}>
-                                Une cagnotte commune avec vos proches — personne ne retire seul.
+                                Un micro-crédit instantané selon votre score de confiance.
                             </Text>
                         </View>
                         <Ionicons name="chevron-forward" size={22} color={COLORS.textSecondary} />
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border }, !tontineEnabled && styles.cardDisabled]}
+                        style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}
                         activeOpacity={0.8}
-                        onPress={() => tontineEnabled && router.push('/services/tontine')}
+                        onPress={() => router.push('/bnpl')}
                     >
-                        <View style={[styles.cardIcon, { backgroundColor: '#10B98115' }]}>
-                            <Ionicons name="sync" size={30} color="#10B981" />
+                        <View style={[styles.cardIcon, { backgroundColor: '#F59E0B15' }]}>
+                            <Ionicons name="card" size={30} color="#F59E0B" />
                         </View>
                         <View style={{ flex: 1 }}>
-                            <View style={styles.cardTitleRow}>
-                                <Text style={[styles.cardTitle, { color: COLORS.textPrimary }]}>Tontine</Text>
-                                {tontinesCount !== null && tontinesCount > 0 && (
-                                    <View style={[styles.countBadge, { backgroundColor: '#10B98118' }]}>
-                                        <Text style={[styles.countBadgeText, { color: '#10B981' }]}>{tontinesCount}</Text>
-                                    </View>
-                                )}
-                            </View>
+                            <Text style={[styles.cardTitle, { color: COLORS.textPrimary }]}>Achat en plusieurs fois</Text>
                             <Text style={[styles.cardDesc, { color: COLORS.textSecondary }]}>
-                                {tontineEnabled
-                                    ? "Cotisez à tour de rôle, chacun reçoit la cagnotte complète à son tour."
-                                    : 'Temporairement indisponible.'}
+                                Payez un achat en plusieurs échéances (BNPL).
+                            </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={22} color={COLORS.textSecondary} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}
+                        activeOpacity={0.8}
+                        onPress={() => router.push('/crypto')}
+                    >
+                        <View style={[styles.cardIcon, { backgroundColor: '#10B98115' }]}>
+                            <Ionicons name="trending-up" size={30} color="#10B981" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.cardTitle, { color: COLORS.textPrimary }]}>Crypto</Text>
+                            <Text style={[styles.cardDesc, { color: COLORS.textSecondary }]}>
+                                Achetez et vendez du BTC, ETH ou USDT depuis votre solde.
                             </Text>
                         </View>
                         <Ionicons name="chevron-forward" size={22} color={COLORS.textSecondary} />
@@ -113,7 +115,6 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     intro: { fontSize: 14, lineHeight: 20, marginBottom: 20, fontFamily: 'Satoshi-Regular' },
 
     card: { flexDirection: 'row', alignItems: 'center', borderRadius: 20, borderWidth: 1, padding: 18, marginBottom: 16 },
-    cardDisabled: { opacity: 0.5 },
     cardIcon: { width: 56, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
     cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
     cardTitle: { fontSize: 17, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },

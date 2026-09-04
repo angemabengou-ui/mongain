@@ -57,7 +57,7 @@ export default function TontineDiscoverScreen() {
                         setJoiningId(group.id);
                         try {
                             await apiJoinTontine(group.id);
-                            router.replace({ pathname: '/tontine-detail' as any, params: { id: group.id } });
+                            router.replace({ pathname: '/tontine-detail', params: { id: group.id } });
                         } catch (e: any) {
                             Alert.alert('Échec', e.message || "Impossible de rejoindre ce club.");
                         } finally {
@@ -84,7 +84,7 @@ export default function TontineDiscoverScreen() {
                     <Ionicons name="search" size={16} color={COLORS.textSecondary} />
                     <TextInput
                         style={{ flex: 1, marginLeft: 8, color: COLORS.textPrimary, fontSize: 14 }}
-                        placeholder="Rechercher un club public…"
+                        placeholder="Rechercher un club public⬦"
                         placeholderTextColor={COLORS.textSecondary}
                         value={query}
                         onChangeText={setQuery}
@@ -131,7 +131,7 @@ export default function TontineDiscoverScreen() {
                                     <View>
                                         <Text style={[styles.cardLabel, { color: COLORS.textSecondary }]}>Cotisation</Text>
                                         <Text style={[styles.cardBalance, { color: COLORS.textPrimary }]}>
-                                            {g.contribution.toLocaleString('fr-FR')} FCFA <Text style={{ fontSize: 12, fontWeight: '600', color: COLORS.textSecondary }}>/ {g.frequency === 'MONTHLY' ? 'mois' : 'semaine'}</Text>
+                                            {g.contribution.toLocaleString('fr-FR')} FCFA <Text style={{ fontSize: 12, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: COLORS.textSecondary }}>/ {g.frequency === 'MONTHLY' ? 'mois' : 'semaine'}</Text>
                                         </Text>
                                     </View>
                                     <TouchableOpacity
@@ -156,7 +156,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     safeArea: { flex: 1 },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 12 },
     headerBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-    headerTitle: { fontSize: 17, fontWeight: '700', color: '#fff' },
+    headerTitle: { fontSize: 17, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', color: '#fff' },
     content: { flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 16 },
     centerFill: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     scrollContent: { padding: 20, paddingTop: 4, paddingBottom: 60 },
@@ -165,17 +165,18 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
 
     emptyState: { alignItems: 'center', paddingTop: 40, paddingHorizontal: 12 },
     emptyIconCircle: { width: 88, height: 88, borderRadius: 44, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-    emptyTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
+    emptyTitle: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginBottom: 8 },
     emptySubtitle: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
 
     card: { borderRadius: 18, borderWidth: 1.5, padding: 16, marginBottom: 14 },
     cardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     cardIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-    cardTitle: { fontSize: 15, fontWeight: '700' },
+    cardTitle: { fontSize: 15, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
     cardMeta: { fontSize: 12, marginTop: 2 },
     cardDivider: { height: 1, marginVertical: 14 },
     cardLabel: { fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 },
-    cardBalance: { fontSize: 17, fontWeight: '800' },
+    cardBalance: { fontSize: 17, fontFamily: 'Satoshi-SemiBold', fontWeight: '800' },
     joinBtn: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, minWidth: 96, alignItems: 'center' },
-    joinBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+    joinBtnText: { color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 13 },
 });
+

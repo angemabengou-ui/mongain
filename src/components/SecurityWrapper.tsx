@@ -183,57 +183,63 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
     // -- Écran de chargement suspense --
     if (token && isEvaluating) {
         return (
-            <View style={[styles.container, { backgroundColor: COLORS.background }]}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
+            <View style={{ flex: 1 }} {...panResponder.panHandlers}>
+                {children}
+                <View style={[styles.container, StyleSheet.absoluteFill, { backgroundColor: COLORS.background, zIndex: 9999, elevation: 9999 }]}>
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                </View>
             </View>
         );
     }
 
     if (token && isLocked) {
         return (
-            <View style={[styles.container, { backgroundColor: COLORS.background }]}>
-                <View style={styles.iconContainer}>
-                    <Ionicons name="lock-closed" size={64} color={COLORS.primary} />
+            <View style={{ flex: 1 }} {...panResponder.panHandlers}>
+                {children}
+                <View style={[styles.container, StyleSheet.absoluteFill, { backgroundColor: COLORS.background, zIndex: 9999, elevation: 9999 }]}>
+                    <View style={styles.iconContainer}>
+                        <Ionicons name="lock-closed" size={64} color={COLORS.primary} />
+                    </View>
+                    <Text style={[styles.title, { color: COLORS.textPrimary }]}>Application Verrouillée</Text>
+
+                    {requiresPinFallback ? (
+                        <View style={{ width: '100%', alignItems: 'center' }}>
+                            <Text style={styles.subtitle}>Saisissez votre code PIN Mongain pour déverrouiller l'application.</Text>
+
+                            {pinError ? (
+                                <Text style={{ color: '#E11D48', marginBottom: 12, fontWeight: '600' }}>{pinError}</Text>
+                            ) : null}
+
+                            <TextInput
+                                style={[styles.pinInput, { color: COLORS.textPrimary, borderColor: COLORS.border }]}
+                                value={pinCode}
+                                onChangeText={setPinCode}
+                                keyboardType="numeric"
+                                secureTextEntry={true}
+                                maxLength={4}
+                                placeholder="****"
+                                placeholderTextColor={COLORS.textSecondary}
+                                autoFocus={true}
+                            />
+
+                            <TouchableOpacity
+                                style={[styles.unlockBtn, { backgroundColor: COLORS.primary }]}
+                                onPress={handleVerifyPin}
+                                disabled={pinLoading || pinCode.length < 4}
+                            >
+                                {pinLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.unlockText}>Valider</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        <View style={{ width: '100%', alignItems: 'center' }}>
+                            <Text style={styles.subtitle}>Pour des raisons de sécurité, veuillez utiliser la biométrie pour continuer.</Text>
+                            <TouchableOpacity style={[styles.unlockBtn, { backgroundColor: COLORS.primary }]} onPress={handleUnlock}>
+                                <Ionicons name="finger-print" size={24} color="#fff" />
+                                <Text style={styles.unlockText}>Déverrouiller</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
                 </View>
-                <Text style={[styles.title, { color: COLORS.textPrimary }]}>Application Verrouillée</Text>
-
-                {requiresPinFallback ? (
-                    <View style={{ width: '100%', alignItems: 'center' }}>
-                        <Text style={styles.subtitle}>Saisissez votre code PIN Mongain pour déverrouiller l'application.</Text>
-
-                        {pinError ? (
-                            <Text style={{ color: '#E11D48', marginBottom: 12, fontWeight: '600' }}>{pinError}</Text>
-                        ) : null}
-
-                        <TextInput
-                            style={[styles.pinInput, { color: COLORS.textPrimary, borderColor: COLORS.border }]}
-                            value={pinCode}
-                            onChangeText={setPinCode}
-                            keyboardType="numeric"
-                            secureTextEntry={true}
-                            maxLength={4}
-                            placeholder="****"
-                            placeholderTextColor={COLORS.textSecondary}
-                            autoFocus={true}
-                        />
-
-                        <TouchableOpacity
-                            style={[styles.unlockBtn, { backgroundColor: COLORS.primary }]}
-                            onPress={handleVerifyPin}
-                            disabled={pinLoading || pinCode.length < 4}
-                        >
-                            {pinLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.unlockText}>Valider</Text>}
-                        </TouchableOpacity>
-                    </View>
-                ) : (
-                    <View style={{ width: '100%', alignItems: 'center' }}>
-                        <Text style={styles.subtitle}>Pour des raisons de sécurité, veuillez utiliser la biométrie pour continuer.</Text>
-                        <TouchableOpacity style={[styles.unlockBtn, { backgroundColor: COLORS.primary }]} onPress={handleUnlock}>
-                            <Ionicons name="finger-print" size={24} color="#fff" />
-                            <Text style={styles.unlockText}>Déverrouiller</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
             </View>
         );
     }

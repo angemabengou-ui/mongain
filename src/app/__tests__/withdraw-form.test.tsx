@@ -63,7 +63,7 @@ describe('WithdrawFormScreen', () => {
 
         await fireEvent.changeText(getByPlaceholderText('Ex: 077... ou 066...'), '77000000');
         await fireEvent.changeText(getByPlaceholderText('0'), '100');
-        await fireEvent.changeText(getByPlaceholderText('••••'), '1234');
+        await fireEvent.changeText(getByPlaceholderText('⬢⬢⬢⬢'), '1234');
         await fireEvent.press(getByText('Valider le Retrait'));
 
         await waitFor(() => {
@@ -78,7 +78,7 @@ describe('WithdrawFormScreen', () => {
 
         await fireEvent.changeText(getByPlaceholderText('Ex: 077... ou 066...'), '77000000');
         await fireEvent.changeText(getByPlaceholderText('0'), '1000');
-        await fireEvent.changeText(getByPlaceholderText('••••'), '12');
+        await fireEvent.changeText(getByPlaceholderText('⬢⬢⬢⬢'), '12');
         await fireEvent.press(getByText('Valider le Retrait'));
 
         await waitFor(() => {
@@ -95,7 +95,7 @@ describe('WithdrawFormScreen', () => {
 
         await fireEvent.changeText(getByPlaceholderText('Ex: 077... ou 066...'), '77000000');
         await fireEvent.changeText(getByPlaceholderText('0'), '1000');
-        await fireEvent.changeText(getByPlaceholderText('••••'), '1234');
+        await fireEvent.changeText(getByPlaceholderText('⬢⬢⬢⬢'), '1234');
         await fireEvent.press(getByText('Valider le Retrait'));
 
         await waitFor(() => {
@@ -114,7 +114,7 @@ describe('WithdrawFormScreen', () => {
 
         await fireEvent.changeText(getByPlaceholderText('Ex: 077... ou 066...'), '77000000');
         await fireEvent.changeText(getByPlaceholderText('0'), '1000');
-        await fireEvent.changeText(getByPlaceholderText('••••'), '1234');
+        await fireEvent.changeText(getByPlaceholderText('⬢⬢⬢⬢'), '1234');
         await fireEvent.press(getByText('Valider le Retrait'));
 
         await waitFor(() => {

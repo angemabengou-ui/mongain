@@ -261,10 +261,10 @@ export default function TransferConfirmScreen() {
                 <Text style={styles.successTitle}>Transfert réussi !</Text>
                 <Text style={styles.successSubtitle}>
                     Vous avez envoyé{'\n'}
-                    <Text style={{ fontWeight: '800', color: COLORS.textPrimary }}>
+                    <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: '800', color: COLORS.textPrimary }}>
                         {success.amount.toLocaleString('fr-FR')} FCFA
                     </Text>
-                    {'\n'}à <Text style={{ fontWeight: '800', color: COLORS.textPrimary }}>{success.receiverName}</Text>
+                    {'\n'}à <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: '800', color: COLORS.textPrimary }}>{success.receiverName}</Text>
                 </Text>
                 {!success.isVoucher && (
                     <View style={styles.remainingCard}>
@@ -278,7 +278,7 @@ export default function TransferConfirmScreen() {
                     <Text style={styles.doneBtnText}>Partager le reçu (PDF)</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={[styles.doneBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.border }]} onPress={() => router.replace('/(tabs)' as any)}>
+                <TouchableOpacity style={[styles.doneBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.border }]} onPress={() => router.replace('/(tabs)')}>
                     <Text style={[styles.doneBtnText, { color: COLORS.textPrimary }]}>Terminer</Text>
                 </TouchableOpacity>
             </SafeAreaView>
@@ -355,16 +355,16 @@ export default function TransferConfirmScreen() {
                             <View style={{ backgroundColor: 'rgba(29, 197, 233, 0.05)', padding: 16, borderRadius: 16, marginTop: 12, borderWidth: 1, borderColor: 'rgba(29, 197, 233, 0.2)' }}>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
                                     <Text style={{ color: COLORS.textSecondary }}>Montant envoyé</Text>
-                                    <Text style={{ color: COLORS.textPrimary, fontWeight: '600' }}>{cleanedAmount.toLocaleString('fr-FR')} FCFA</Text>
+                                    <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' }}>{cleanedAmount.toLocaleString('fr-FR')} FCFA</Text>
                                 </View>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
                                     <Text style={{ color: '#F59E0B' }}>Frais ({taxRate * 100}%)</Text>
-                                    <Text style={{ color: '#F59E0B', fontWeight: '600' }}>{p2pFee.toLocaleString('fr-FR')} FCFA</Text>
+                                    <Text style={{ color: '#F59E0B', fontFamily: 'Satoshi-SemiBold', fontWeight: '600' }}>{p2pFee.toLocaleString('fr-FR')} FCFA</Text>
                                 </View>
                                 <View style={{ width: '100%', height: 1, backgroundColor: COLORS.border || '#e2e8f0', marginVertical: 4 }} />
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-                                    <Text style={{ color: COLORS.textPrimary, fontWeight: '700' }}>Total à débiter</Text>
-                                    <Text style={{ color: COLORS.textPrimary, fontWeight: '800', fontSize: 16 }}>{totalDebit.toLocaleString('fr-FR')} FCFA</Text>
+                                    <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>Total à débiter</Text>
+                                    <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', fontSize: 16 }}>{totalDebit.toLocaleString('fr-FR')} FCFA</Text>
                                 </View>
                             </View>
                         );
@@ -389,7 +389,7 @@ export default function TransferConfirmScreen() {
                         <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 8 }} />
                         <TextInput
                             style={styles.input}
-                            placeholder="••••"
+                            placeholder="⬢⬢⬢⬢"
                             keyboardType="number-pad"
                             secureTextEntry={!showPin}
                             maxLength={4}
@@ -430,14 +430,14 @@ export default function TransferConfirmScreen() {
                                 >
                                     <Ionicons name="lock-closed" size={24} color="#F59E0B" style={{ marginRight: 12 }} />
                                     <View style={{ flex: 1 }}>
-                                        <Text style={{ fontWeight: '700', fontSize: 16, color: COLORS.textPrimary }}>
+                                        <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 16, color: COLORS.textPrimary }}>
                                             {v.vault?.name}
                                         </Text>
                                         <Text style={{ color: COLORS.textSecondary }}>Bon pré-approuvé</Text>
                                     </View>
                                     <View style={{ alignItems: 'flex-end' }}>
-                                        <Text style={{ fontWeight: '800', color: '#10B981', fontSize: 16 }}>{v.amount.toLocaleString()} F</Text>
-                                        <Text style={{ color: '#F59E0B', fontSize: 12, fontWeight: '700', marginTop: 2 }}>UTILISER</Text>
+                                        <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: '800', color: '#10B981', fontSize: 16 }}>{v.amount.toLocaleString()} F</Text>
+                                        <Text style={{ color: '#F59E0B', fontSize: 12, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginTop: 2 }}>UTILISER</Text>
                                     </View>
                                 </TouchableOpacity>
                             ))}
@@ -459,7 +459,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
     },
     backButton: { padding: 8, marginLeft: -8 },
-    headerTitle: { fontSize: 18, fontWeight: '700', color: COLORS.textPrimary },
+    headerTitle: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary },
     content: { padding: 24 },
 
     // Destinataire
@@ -474,36 +474,36 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         backgroundColor: COLORS.primary + '20', justifyContent: 'center', alignItems: 'center',
         borderWidth: 2, borderColor: COLORS.primary + '40',
     },
-    recipientInitial: { fontSize: 20, fontWeight: '800', color: COLORS.primary },
-    recipientLabel: { fontSize: 12, color: COLORS.textSecondary, marginBottom: 2 },
-    recipientName: { fontSize: 17, fontWeight: '700', color: COLORS.textPrimary },
-    recipientPhone: { fontSize: 13, color: COLORS.textSecondary, marginTop: 2 },
+    recipientInitial: { fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.primary },
+    recipientLabel: { fontSize: 12, color: COLORS.textSecondary, fontFamily: 'Satoshi-Regular', marginBottom: 2 },
+    recipientName: { fontSize: 17, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary },
+    recipientPhone: { fontSize: 13, color: COLORS.textSecondary, fontFamily: 'Satoshi-Regular', marginTop: 2 },
 
     errorBox: {
         flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEE2E2',
         borderRadius: 12, padding: 12, marginBottom: 16, gap: 8,
     },
-    errorText: { color: COLORS.error, fontSize: 14, flex: 1 },
-    label: { fontSize: 14, fontWeight: '600', color: COLORS.textSecondary, marginBottom: 8, marginTop: 4 },
+    errorText: { color: COLORS.error, fontSize: 14, flex: 1, fontFamily: 'Satoshi-Regular' },
+    label: { fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textSecondary, marginBottom: 8, marginTop: 4 },
     inputContainer: {
         flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.surface,
         borderRadius: 16, paddingHorizontal: 16, height: 56, marginBottom: 12,
         borderWidth: 1, borderColor: '#e2e8f0',
     },
-    currencyPrefix: { fontSize: 15, fontWeight: '700', color: COLORS.textPrimary, marginRight: 12, borderRightWidth: 1, borderRightColor: '#cbd5e1', paddingRight: 12 },
-    input: { flex: 1, fontSize: 18, color: COLORS.textPrimary, fontWeight: '600', height: '100%' },
+    currencyPrefix: { fontSize: 15, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary, marginRight: 12, borderRightWidth: 1, borderRightColor: '#cbd5e1', paddingRight: 12 },
+    input: { flex: 1, fontSize: 18, color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', height: '100%' },
     amountShortcuts: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
     shortcutPill: {
         paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
         backgroundColor: COLORS.primary + '15', borderWidth: 1, borderColor: COLORS.primary + '30',
     },
-    shortcutText: { color: COLORS.primary, fontWeight: '600', fontSize: 13 },
+    shortcutText: { color: COLORS.primary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', fontSize: 13 },
     sendBtn: {
         backgroundColor: COLORS.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         height: 56, borderRadius: 16, marginTop: 8,
         shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 12, elevation: 6,
     },
-    sendBtnText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+    sendBtnText: { color: '#fff', fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
     voucherCard: {
         flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEEFC2',
@@ -513,18 +513,19 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
 
     // Succès
     successIconWrap: { marginBottom: 24 },
-    successTitle: { fontSize: 28, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 12, textAlign: 'center' },
-    successSubtitle: { fontSize: 17, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 26, marginBottom: 24 },
+    successTitle: { fontSize: 28, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary, marginBottom: 12, textAlign: 'center' },
+    successSubtitle: { fontSize: 17, color: COLORS.textSecondary, fontFamily: 'Satoshi-Regular', textAlign: 'center', lineHeight: 26, marginBottom: 24 },
     remainingCard: {
         backgroundColor: COLORS.surface, borderRadius: 20, paddingHorizontal: 32, paddingVertical: 20,
         alignItems: 'center', marginBottom: 32,
         shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 3,
     },
-    remainingLabel: { fontSize: 13, color: COLORS.textSecondary, marginBottom: 6 },
-    remainingAmount: { fontSize: 26, fontWeight: '800', color: COLORS.textPrimary },
+    remainingLabel: { fontSize: 13, color: COLORS.textSecondary, fontFamily: 'Satoshi-Regular', marginBottom: 6 },
+    remainingAmount: { fontSize: 26, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary },
     doneBtn: {
         backgroundColor: COLORS.primary, paddingHorizontal: 48, paddingVertical: 16, borderRadius: 16,
         shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 5,
     },
-    doneBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+    doneBtnText: { color: '#fff', fontSize: 17, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 });
+

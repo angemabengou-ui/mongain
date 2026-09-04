@@ -116,10 +116,10 @@ export default function WithdrawScreen() {
                         {generating ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Générer le code</Text>}
                     </TouchableOpacity>
                     <TouchableOpacity style={{ marginTop: 16, alignItems: 'center' }} onPress={() => { setShowAmountModal(false); setCodeAmount(''); }} disabled={generating}>
-                        <Text style={{ color: COLORS.textSecondary, fontWeight: '600' }}>Annuler</Text>
+                        <Text style={{ color: COLORS.textSecondary, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' }}>Annuler</Text>
                     </TouchableOpacity>
                     {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
-            </KeyboardAvoidingView>
+                </KeyboardAvoidingView>
             </SafeAreaView>
         );
     }
@@ -140,7 +140,7 @@ export default function WithdrawScreen() {
                     <Text style={styles.codeText}>{expired ? '— — —' : token}</Text>
                 </View>
 
-                <Text style={[styles.codeGenSubtitle, { color: '#EF4444', fontWeight: 'bold' }]}>
+                <Text style={[styles.codeGenSubtitle, { color: '#EF4444', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }]}>
                     {expired ? 'CODE EXPIRÉ' : `EXPIRATION DANS ${formatCountdown(remainingSeconds)}`}
                 </Text>
 
@@ -237,32 +237,33 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     safeArea: { flex: 1, backgroundColor: COLORS.background },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16, backgroundColor: COLORS.background },
     backButton: { padding: 8, marginLeft: -8 },
-    headerTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textPrimary },
+    headerTitle: { fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary },
     container: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 60 },
 
     balanceSection: { alignItems: 'center', marginVertical: 32 },
-    balanceLabel: { fontSize: 14, color: COLORS.textSecondary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1 },
-    balanceAmount: { fontSize: 44, fontWeight: '900', color: COLORS.textPrimary, marginVertical: 8, letterSpacing: -1 },
+    balanceLabel: { fontSize: 14, color: COLORS.textSecondary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1 },
+    balanceAmount: { fontSize: 44, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary, marginVertical: 8, letterSpacing: -1 },
 
-    sectionHeader: { fontSize: 13, fontWeight: '700', color: COLORS.textSecondary, marginTop: 24, marginBottom: 12, marginLeft: 16, letterSpacing: 0.5 },
+    sectionHeader: { fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textSecondary, marginTop: 24, marginBottom: 12, marginLeft: 16, letterSpacing: 0.5 },
 
     listContainer: { backgroundColor: COLORS.surface, borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: COLORS.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 8, elevation: 1 },
     listItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: COLORS.border },
     lastListItem: { borderBottomWidth: 0 },
     listIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
     listTextWrap: { flex: 1, marginRight: 8 },
-    listTitle: { fontSize: 16, fontWeight: '700', color: COLORS.textPrimary, marginBottom: 4 },
-    listDesc: { fontSize: 13, color: COLORS.textSecondary, lineHeight: 18 },
+    listTitle: { fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary, marginBottom: 4 },
+    listDesc: { fontSize: 13, color: COLORS.textSecondary, fontFamily: 'Satoshi-Regular', lineHeight: 18 },
 
     inputBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderRadius: 15, paddingHorizontal: 20, height: 70, width: '100%', backgroundColor: COLORS.surface },
-    currencyLabel: { fontSize: 20, fontWeight: 'bold', marginRight: 15, color: COLORS.textPrimary },
-    input: { flex: 1, fontSize: 32, fontWeight: 'bold', textAlign: 'right', color: COLORS.textPrimary },
+    currencyLabel: { fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginRight: 15, color: COLORS.textPrimary },
+    input: { flex: 1, fontSize: 32, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', textAlign: 'right', color: COLORS.textPrimary },
 
     iconWrap: { justifyContent: 'center', alignItems: 'center' },
-    codeGenTitle: { fontSize: 24, fontWeight: '800', color: COLORS.textPrimary, textAlign: 'center' },
-    codeGenSubtitle: { fontSize: 15, color: COLORS.textSecondary, textAlign: 'center' },
+    codeGenTitle: { fontSize: 24, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary, textAlign: 'center' },
+    codeGenSubtitle: { fontSize: 15, color: COLORS.textSecondary, fontFamily: 'Satoshi-Regular', textAlign: 'center' },
     codeContainer: { paddingHorizontal: 40, paddingVertical: 20, borderRadius: 20, marginVertical: 32, borderWidth: 2, borderColor: '#10B981', backgroundColor: '#10B98110' },
-    codeText: { fontSize: 48, fontWeight: '900', color: COLORS.textPrimary, letterSpacing: 5 },
+    codeText: { fontSize: 48, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary, letterSpacing: 5 },
     btn: { backgroundColor: '#10B981', height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', shadowColor: '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
-    btnText: { color: '#fff', fontSize: 16, fontWeight: '700' }
+    btnText: { color: '#fff', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }
 });
+

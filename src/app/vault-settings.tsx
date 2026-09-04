@@ -146,7 +146,7 @@ export default function VaultSettingsScreen() {
 
     if (loading || !vault) {
         return (
-            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
                 <View style={styles.centerFill}><ActivityIndicator color="#fff" size="large" /></View>
             </SafeAreaView>
         );
@@ -154,7 +154,7 @@ export default function VaultSettingsScreen() {
 
     if (!myRole?.isAdmin) {
         return (
-            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
                 <ScreenHeader title="Paramètres" onBack={() => router.back()} />
                 <View style={[styles.content, { backgroundColor: COLORS.background }]}>
                     <View style={styles.centerFill}>
@@ -168,7 +168,7 @@ export default function VaultSettingsScreen() {
     }
 
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
             <ScreenHeader title={`Paramètres — ${vault.name}`} onBack={() => router.back()} />
 
             <View style={[styles.content, { backgroundColor: COLORS.background }]}>
@@ -213,7 +213,7 @@ export default function VaultSettingsScreen() {
                                 <Ionicons name="remove" size={20} color={COLORS.textPrimary} />
                             </TouchableOpacity>
                             <View style={styles.stepperValue}>
-                                {thresholdLoading ? <ActivityIndicator color={COLORS.primary} /> : <Text style={{ color: COLORS.textPrimary, fontSize: 22, fontWeight: '800' }}>{vault.requiredApprovals}</Text>}
+                                {thresholdLoading ? <ActivityIndicator color={COLORS.primary} /> : <Text style={{ color: COLORS.textPrimary, fontSize: 22, fontFamily: 'Satoshi-SemiBold', fontWeight: '800' }}>{vault.requiredApprovals}</Text>}
                             </View>
                             <TouchableOpacity
                                 style={[styles.stepperBtn, { borderColor: COLORS.border }, thresholdLoading && styles.disabled]}
@@ -246,7 +246,7 @@ export default function VaultSettingsScreen() {
                                         activeOpacity={0.7}
                                     >
                                         <View style={{ flex: 1 }}>
-                                            <Text style={{ color: COLORS.textPrimary, fontWeight: '600' }}>
+                                            <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' }}>
                                                 {m.user.name}{m.userId === user?.id ? ' (Vous)' : ''}
                                             </Text>
                                             <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2 }}>{m.user.phone}</Text>
@@ -271,7 +271,7 @@ export default function VaultSettingsScreen() {
                                                             onPress={() => handleToggleRole(m, rt.key)}
                                                             disabled={isBusy}
                                                         >
-                                                            <Text style={{ color: active ? COLORS.primary : COLORS.textSecondary, fontSize: 12.5, fontWeight: '700' }}>{rt.label}</Text>
+                                                            <Text style={{ color: active ? COLORS.primary : COLORS.textSecondary, fontSize: 12.5, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>{rt.label}</Text>
                                                         </TouchableOpacity>
                                                     );
                                                 })}
@@ -312,10 +312,10 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     helper: { fontSize: 12.5, lineHeight: 18 },
     disabled: { opacity: 0.4 },
 
-    label: { fontSize: 12.5, fontWeight: '600', marginBottom: 8 },
+    label: { fontSize: 12.5, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', marginBottom: 8 },
     input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, height: 48, fontSize: 15, marginBottom: 16 },
     saveBtn: { paddingVertical: 13, borderRadius: 12, alignItems: 'center' },
-    saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+    saveBtnText: { color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 14 },
 
     stepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24 },
     stepperBtn: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
@@ -327,3 +327,4 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5 },
     requiredRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(128,128,128,0.2)' },
 });
+

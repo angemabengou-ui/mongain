@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
@@ -39,7 +38,7 @@ function StatusPill({ status, colors }: { status: string; colors: ReturnType<typ
     const color = map[status] || colors.textSecondary;
     return (
         <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: color + '18' }}>
-            <Text style={{ color, fontSize: 10.5, fontWeight: '700' }}>{PAYOUT_STATUS_LABELS[status] || status}</Text>
+            <Text style={{ color, fontSize: 10.5, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>{PAYOUT_STATUS_LABELS[status] || status}</Text>
         </View>
     );
 }
@@ -103,7 +102,7 @@ export default function MerchantHubScreen() {
 
     if (loading || !stats) {
         return (
-            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
                 <View style={styles.centerFill}><ActivityIndicator color="#fff" size="large" /></View>
             </SafeAreaView>
         );
@@ -114,7 +113,7 @@ export default function MerchantHubScreen() {
     const availableBalance = payoutSource === 'SALES' ? stats.balance : stats.commissionBalance;
 
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
             <ScreenHeader title="Mon Commerce" onBack={() => router.back()} />
 
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={[styles.content, { backgroundColor: COLORS.background }]}>
@@ -196,8 +195,8 @@ export default function MerchantHubScreen() {
                                 {pendingPayouts.map((p: any) => (
                                     <View key={p.id} style={[styles.row, { borderColor: COLORS.border }]}>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={{ color: COLORS.textPrimary, fontWeight: '700' }}>{p.amount.toLocaleString('fr-FR')} FCFA</Text>
-                                            <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2 }}>{p.sourceAccount === 'SALES' ? 'Ventes / Paiements' : 'Commission'}</Text>
+                                            <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>{p.amount.toLocaleString('fr-FR')} FCFA</Text>
+                                            <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2, fontFamily: 'Satoshi-Regular' }}>{p.sourceAccount === 'SALES' ? 'Ventes / Paiements' : 'Commission'}</Text>
                                         </View>
                                         <StatusPill status={p.status} colors={COLORS} />
                                     </View>
@@ -213,8 +212,8 @@ export default function MerchantHubScreen() {
                                 {historyPayouts.map((p: any) => (
                                     <View key={p.id} style={[styles.row, { borderColor: COLORS.border }]}>
                                         <View style={{ flex: 1 }}>
-                                            <Text style={{ color: COLORS.textPrimary, fontWeight: '700' }}>{p.amount.toLocaleString('fr-FR')} FCFA</Text>
-                                            <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2 }}>{p.sourceAccount === 'SALES' ? 'Ventes / Paiements' : 'Commission'}</Text>
+                                            <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>{p.amount.toLocaleString('fr-FR')} FCFA</Text>
+                                            <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2, fontFamily: 'Satoshi-Regular' }}>{p.sourceAccount === 'SALES' ? 'Ventes / Paiements' : 'Commission'}</Text>
                                         </View>
                                         <StatusPill status={p.status} colors={COLORS} />
                                     </View>
@@ -241,10 +240,10 @@ export default function MerchantHubScreen() {
                         ) : transactions.map((tx: any) => (
                             <View key={tx.id} style={[styles.row, { borderColor: COLORS.border }]}>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={{ color: COLORS.textPrimary, fontWeight: '600' }}>{tx.reference?.startsWith('REWARD-') ? 'Commission' : tx.reference?.startsWith('MPAYOUT-') ? 'Retrait' : 'Vente'}</Text>
-                                    <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2 }}>{new Date(tx.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</Text>
+                                    <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>{tx.reference?.startsWith('REWARD-') ? 'Commission' : tx.reference?.startsWith('MPAYOUT-') ? 'Retrait' : 'Vente'}</Text>
+                                    <Text style={{ color: COLORS.textSecondary, fontSize: 12.5, marginTop: 2, fontFamily: 'Satoshi-Regular' }}>{new Date(tx.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</Text>
                                 </View>
-                                <Text style={{ color: COLORS.textPrimary, fontWeight: '700' }}>{tx.amount.toLocaleString('fr-FR')} FCFA</Text>
+                                <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>{tx.amount.toLocaleString('fr-FR')} FCFA</Text>
                             </View>
                         ))}
                     </View>
@@ -264,14 +263,14 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     card: { borderRadius: 16, borderWidth: 1, padding: 16, marginTop: 12 },
     row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 10, borderBottomWidth: 1 },
 
-    input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, height: 48, fontSize: 15, marginBottom: 14 },
-    label: { fontSize: 12.5, fontWeight: '600', marginBottom: 8 },
-    helper: { fontSize: 12.5, lineHeight: 18 },
+    input: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 14, height: 48, fontSize: 15, marginBottom: 14, fontFamily: 'Satoshi-Regular' },
+    label: { fontSize: 12.5, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 8 },
+    helper: { fontSize: 12.5, lineHeight: 18, fontFamily: 'Satoshi-Regular' },
     toggleRow: { flexDirection: 'row', gap: 10, marginTop: 12, marginBottom: 10 },
     toggleBtn: { flex: 1, paddingVertical: 11, borderRadius: 10, borderWidth: 1, alignItems: 'center' },
-    toggleText: { fontSize: 13, fontWeight: '700' },
+    toggleText: { fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
     inlineBtnFull: { marginTop: 6, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-    inlineBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+    inlineBtnText: { color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', fontSize: 14 },
     disabled: { opacity: 0.5 },
 });

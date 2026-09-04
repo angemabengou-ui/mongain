@@ -70,7 +70,7 @@ export default function NotificationsScreen() {
                 <Text style={styles.headerTitle}>Notifications</Text>
                 {notifications.some(n => !n.isRead) ? (
                     <TouchableOpacity onPress={() => handleMarkAsRead()}>
-                        <Text style={{ fontSize: 13, color: COLORS.primary, fontWeight: '700' }}>Tout lire</Text>
+                        <Text style={{ fontSize: 13, color: COLORS.primary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>Tout lire</Text>
                     </TouchableOpacity>
                 ) : <View style={{ width: 50 }} />}
             </View>
@@ -102,7 +102,7 @@ export default function NotificationsScreen() {
                                         <Ionicons name={icon as any} size={22} color={color} />
                                     </View>
                                     <View style={styles.textWrap}>
-                                        <Text style={[styles.title, !n.isRead && { fontWeight: '800' }]}>{n.title}</Text>
+                                        <Text style={[styles.title, !n.isRead && { fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }]}>{n.title}</Text>
                                         <Text style={styles.body}>{n.body}</Text>
                                         <Text style={styles.time}>{new Date(n.createdAt).toLocaleString('fr-FR')}</Text>
                                     </View>
@@ -125,11 +125,11 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         backgroundColor: COLORS.surface
     },
     backBtn: { padding: 4 },
-    headerTitle: { fontSize: 18, fontWeight: '800', color: COLORS.textPrimary },
+    headerTitle: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     container: { padding: 20 },
     emptyWrap: { alignItems: 'center', marginTop: 100 },
-    emptyText: { marginTop: 16, fontSize: 16, color: COLORS.textSecondary, fontWeight: '600' },
+    emptyText: { marginTop: 16, fontSize: 16, color: COLORS.textSecondary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
     card: {
         flexDirection: 'row', backgroundColor: COLORS.surface, borderRadius: 16,
@@ -144,8 +144,8 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
         width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginRight: 16
     },
     textWrap: { flex: 1 },
-    title: { fontSize: 15, fontWeight: '600', color: COLORS.textPrimary, marginBottom: 4 },
-    body: { fontSize: 13, color: COLORS.textSecondary, lineHeight: 18, marginBottom: 6 },
-    time: { fontSize: 11, color: COLORS.textSecondary, fontWeight: '500' },
+    title: { fontSize: 15, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary, marginBottom: 4 },
+    body: { fontSize: 13, color: COLORS.textSecondary, lineHeight: 18, marginBottom: 6, fontFamily: 'Satoshi-Regular' },
+    time: { fontSize: 11, color: COLORS.textSecondary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
     unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.primary, marginLeft: 10 }
 });

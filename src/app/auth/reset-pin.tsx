@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
     ActivityIndicator,
+    Image,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
@@ -81,9 +82,7 @@ export default function ResetPinScreen() {
                     </TouchableOpacity>
 
                     <View style={styles.header}>
-                        <View style={styles.logo}>
-                            <Ionicons name="shield-checkmark" size={36} color={COLORS.primary} />
-                        </View>
+                        <Image source={require('../../../assets/images/logo-glow.png')} style={{ width: 80, height: 80, borderRadius: 24, marginBottom: 12, resizeMode: 'cover' }} />
                         <Text style={styles.appName}>Nouveau Code PIN</Text>
                         <Text style={styles.tagline}>Saisissez le code SMS reçu par le {phone}</Text>
                     </View>
@@ -115,7 +114,7 @@ export default function ResetPinScreen() {
                             <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} style={styles.inputIcon} />
                             <TextInput
                                 style={styles.input}
-                                placeholder="••••"
+                                placeholder="⬢⬢⬢⬢"
                                 keyboardType="number-pad"
                                 secureTextEntry={!showPin}
                                 maxLength={4}
@@ -155,18 +154,19 @@ function getStyles(COLORS: any) {
         backButton: { position: 'absolute', top: 16, left: 16, zIndex: 10, padding: 8 },
         header: { alignItems: 'center', marginBottom: 40, marginTop: 40 },
         logo: { width: 80, height: 80, borderRadius: 24, backgroundColor: '#E0F7FA', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-        appName: { fontSize: 26, fontWeight: '800', color: COLORS.textPrimary, marginBottom: 8, letterSpacing: -0.5 },
+        appName: { fontSize: 26, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', color: COLORS.textPrimary, marginBottom: 8, letterSpacing: -0.5 },
         tagline: { fontSize: 14, color: COLORS.textSecondary, textAlign: 'center', paddingHorizontal: 20 },
         card: { backgroundColor: COLORS.surface, borderRadius: 24, padding: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.05, shadowRadius: 20, elevation: 5 },
-        label: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary, marginBottom: 8 },
+        label: { fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: COLORS.textPrimary, marginBottom: 8 },
         inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'transparent', borderWidth: 1, borderColor: COLORS.border, borderRadius: 12, paddingHorizontal: 16, marginBottom: 20, height: 56 },
         inputIcon: { marginRight: 12 },
         input: { flex: 1, fontSize: 16, color: COLORS.textPrimary, height: '100%', letterSpacing: 2 },
         eyeIcon: { padding: 8 },
         btn: { backgroundColor: COLORS.primary, height: 56, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 10, shadowColor: COLORS.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
         btnDisabled: { backgroundColor: '#94a3b8', shadowOpacity: 0 },
-        btnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
+        btnText: { color: '#ffffff', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
         errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF2F2', padding: 12, borderRadius: 8, marginBottom: 20, borderWidth: 1, borderColor: '#FECACA' },
         errorText: { color: COLORS.error, fontSize: 14, marginLeft: 8, flex: 1 }
     });
 }
+

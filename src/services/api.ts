@@ -211,7 +211,8 @@ export const request = async (method: string, path: string, body?: object, auth 
             throw new Error('Le serveur met trop de temps à répondre (il est peut-être en train de redémarrer). Veuillez réessayer dans un instant.');
         }
         if (isConnectionFailure) {
-            throw new Error('Vous êtes hors ligne 📡. Veuillez vérifier votre connexion internet.');
+            // Afficher l'IP ciblée aide au debug local
+            throw new Error(`Vous êtes hors ligne 📡. Impossible de joindre ${BASE_URL} (Vérifiez votre réseau/IP)`);
         }
         throw e;
     } finally {

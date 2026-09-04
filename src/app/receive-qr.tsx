@@ -181,10 +181,10 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     safeArea: { flex: 1, backgroundColor: COLORS.surface },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20 },
     backButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: '800', color: COLORS.textPrimary },
+    headerTitle: { fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary },
     container: { paddingHorizontal: 24, paddingVertical: 20, paddingBottom: 40, alignItems: 'center' },
 
-    instructions: { fontSize: 15, color: COLORS.textSecondary, textAlign: 'center', marginBottom: 24, paddingHorizontal: 20, lineHeight: 22 },
+    instructions: { fontSize: 15, color: COLORS.textSecondary, textAlign: 'center', marginBottom: 24, paddingHorizontal: 20, lineHeight: 22, fontFamily: 'Satoshi-Regular' },
 
     card: {
         width: '100%',
@@ -203,16 +203,16 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     },
     cardTop: { flexDirection: 'row', width: '100%', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
     appBrandRow: { flexDirection: 'row', alignItems: 'center' },
-    brandText: { fontSize: 18, fontWeight: '900', color: '#10B981', marginLeft: 8, letterSpacing: 1 },
-    roleBadge: { backgroundColor: '#334155', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, color: '#fff', fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+    brandText: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: '#10B981', marginLeft: 8, letterSpacing: 1 },
+    roleBadge: { backgroundColor: '#334155', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, color: '#fff', fontSize: 10, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', letterSpacing: 1 },
 
     qrWrapper: { padding: 15, backgroundColor: COLORS.surface, borderRadius: 24, marginBottom: 24 },
 
-    userName: { fontSize: 24, fontWeight: '900', color: COLORS.textPrimary, textAlign: 'center' },
-    userPhone: { fontSize: 18, fontWeight: '600', color: COLORS.textSecondary, textAlign: 'center', marginTop: 8, letterSpacing: 2 },
-    merchantDesc: { fontSize: 12, marginTop: 12, fontWeight: 'bold' },
+    userName: { fontSize: 24, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary, textAlign: 'center' },
+    userPhone: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textSecondary, textAlign: 'center', marginTop: 8, letterSpacing: 2 },
+    merchantDesc: { fontSize: 12, marginTop: 12, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
     shareButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#4F46E5', paddingHorizontal: 24, paddingVertical: 16, borderRadius: 20, width: '100%', justifyContent: 'center', marginTop: 20 },
     printButton: { backgroundColor: '#0F172A' },
-    shareButtonText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+    shareButtonText: { color: '#fff', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 });

@@ -9,6 +9,14 @@ jest.mock('expo-splash-screen', () => ({
     hideAsync: jest.fn(),
 }));
 
+// La vraie police (Outfit, chargée via @expo-google-fonts) se résout de façon asynchrone :
+// sans ce mock, useFonts() renvoie fontsLoaded=false au tout premier rendu de la toute
+// première suite exécutée, bloquant la garde de _layout.tsx (voir son commentaire) et
+// empêchant tout redirect — un faux négatif propre à l'environnement de test, pas un bug de
+// l'app (les suites suivantes profitent d'un cache module déjà résolu et passaient déjà).
+jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
+jest.mock('@expo-google-fonts/outfit', () => ({ Outfit_400Regular: 'Outfit_400Regular', Outfit_600SemiBold: 'Outfit_600SemiBold' }));
+
 const mockReplace = jest.fn();
 const mockUseSegments = jest.fn(() => [] as string[]);
 const mockUseRootNavigationState = jest.fn(() => ({ key: 'root' }));

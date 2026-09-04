@@ -104,7 +104,7 @@ export default function SplitScreen() {
                         <View style={styles.pendingSection}>
                             <View style={styles.sectionHeader}>
                                 <Ionicons name="alert-circle" size={20} color="#EF4444" />
-                                <Text style={styles.sectionTitle}>À rembourser</Text>
+                                <Text style={styles.sectionTitle}>ì rembourser</Text>
                             </View>
 
                             {pendingSplits.map(req => (
@@ -168,27 +168,28 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#0f172a' },
     header: { padding: 20, flexDirection: 'row', alignItems: 'center', gap: 16 },
     backBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12 },
-    title: { color: '#ffffff', fontSize: 24, fontWeight: '800' },
+    title: { color: '#ffffff', fontSize: 24, fontFamily: 'Satoshi-SemiBold', fontWeight: '800' },
 
     scroll: { padding: 20 },
 
     pendingSection: { marginBottom: 32 },
     sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
-    sectionTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+    sectionTitle: { color: '#fff', fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
     pendingCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(239, 68, 68, 0.2)' },
-    pendingName: { color: '#fff', fontSize: 16, fontWeight: '600' },
-    pendingAmount: { color: '#EF4444', fontSize: 18, fontWeight: '900', marginTop: 4 },
+    pendingName: { color: '#fff', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' },
+    pendingAmount: { color: '#EF4444', fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: '900', marginTop: 4 },
     payBtn: { backgroundColor: '#EF4444', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
-    payBtnText: { color: '#fff', fontWeight: 'bold' },
+    payBtnText: { color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
     createBox: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 24, padding: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
     createHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
-    createTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+    createTitle: { color: '#fff', fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
     createDesc: { color: '#94a3b8', fontSize: 14, marginBottom: 24, lineHeight: 20 },
 
-    label: { color: '#cbd5e1', fontSize: 13, fontWeight: '600', marginBottom: 8 },
+    label: { color: '#cbd5e1', fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', marginBottom: 8 },
     input: { backgroundColor: 'rgba(0,0,0,0.3)', color: '#fff', padding: 16, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
 
     submitBtn: { backgroundColor: '#6366f1', borderRadius: 16, padding: 18, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, marginTop: 10 },
-    submitBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' }
+    submitBtnText: { color: '#fff', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }
 });
+

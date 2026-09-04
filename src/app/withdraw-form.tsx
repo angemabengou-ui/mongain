@@ -93,7 +93,7 @@ export default function WithdrawFormScreen() {
                 <Text style={[styles.title, { color: COLORS.textPrimary, textAlign: 'center' }]}>Retrait Effectué !</Text>
                 <Text style={[styles.subtitle, { textAlign: 'center', marginTop: 16, fontSize: 15, lineHeight: 24, color: COLORS.textSecondary }]}>
                     Votre demande est en cours de traitement.
-                    Vous allez recevoir un SMS de confirmation de {providerName} au <Text style={{ fontWeight: '800', color: COLORS.textPrimary }}>{confirmedPhone}</Text>.
+                    Vous allez recevoir un SMS de confirmation de {providerName} au <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: '800', color: COLORS.textPrimary }}>{confirmedPhone}</Text>.
                 </Text>
 
                 <TouchableOpacity style={[styles.btn, { backgroundColor: COLORS.primary, width: '100%', marginTop: 40 }]} onPress={() => router.replace('/')}>
@@ -144,7 +144,7 @@ export default function WithdrawFormScreen() {
                     <View style={[styles.inputContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
                         <Text style={[styles.prefix, { color: COLORS.textPrimary, borderRightWidth: 0, paddingRight: 0 }]}>FCFA</Text>
                         <TextInput
-                            style={[styles.input, { color: COLORS.textPrimary, fontSize: 32, fontWeight: '800', textAlign: 'right' }]}
+                            style={[styles.input, { color: COLORS.textPrimary, fontSize: 32, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', textAlign: 'right' }]}
                             placeholder="0"
                             keyboardType="number-pad"
                             value={amount}
@@ -162,7 +162,7 @@ export default function WithdrawFormScreen() {
                     <View style={[styles.inputContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
                         <TextInput
                             style={[styles.input, { color: COLORS.textPrimary, textAlign: 'center', fontSize: 24, letterSpacing: 8 }]}
-                            placeholder="••••"
+                            placeholder="⬢⬢⬢⬢"
                             keyboardType="number-pad"
                             maxLength={4}
                             secureTextEntry={true}
@@ -194,22 +194,23 @@ const styles = StyleSheet.create({
 
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 },
     backButton: { padding: 8, marginLeft: -12 },
-    headerTitle: { fontSize: 18, fontWeight: '800' },
+    headerTitle: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
     infoPullBox: { flexDirection: 'row', alignItems: 'center', padding: 20, borderRadius: 20, borderWidth: 1, marginBottom: 32 },
-    infoPullTitle: { fontSize: 15, fontWeight: '800', marginBottom: 6 },
-    infoPullText: { fontSize: 13, lineHeight: 20, fontWeight: '500' },
+    infoPullTitle: { fontSize: 15, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 6 },
+    infoPullText: { fontSize: 13, lineHeight: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
-    label: { fontSize: 14, fontWeight: '700', marginBottom: 8, marginLeft: 4 },
-    feeText: { fontSize: 12.5, marginTop: -8, marginBottom: 16, marginLeft: 4 },
+    label: { fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 8, marginLeft: 4 },
+    feeText: { fontSize: 12.5, marginTop: -8, marginBottom: 16, marginLeft: 4, fontFamily: 'Satoshi-Regular' },
     inputContainer: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, paddingHorizontal: 16, height: 64, marginBottom: 16, borderWidth: 1.5 },
-    prefix: { fontSize: 17, fontWeight: '800', marginRight: 12, paddingRight: 12, borderRightWidth: 1, borderRightColor: '#e2e8f0' },
-    input: { flex: 1, fontSize: 18, fontWeight: '700', height: '100%', letterSpacing: 1 },
+    prefix: { fontSize: 17, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginRight: 12, paddingRight: 12, borderRightWidth: 1, borderRightColor: '#e2e8f0' },
+    input: { flex: 1, fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', height: '100%', letterSpacing: 1 },
 
     btn: { height: 60, borderRadius: 16, justifyContent: 'center', alignItems: 'center', shadowColor: '#2563EB', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 15, elevation: 8, marginTop: 16 },
-    btnText: { color: '#ffffff', fontSize: 17, fontWeight: '800' },
+    btnText: { color: '#ffffff', fontSize: 17, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
     iconWrap: { justifyContent: 'center', alignItems: 'center' },
-    title: { fontSize: 22, fontWeight: '800' },
-    subtitle: { fontSize: 15 }
+    title: { fontSize: 22, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
+    subtitle: { fontSize: 15, fontFamily: 'Satoshi-Regular' }
 });
+

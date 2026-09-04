@@ -59,8 +59,8 @@ export default function MongainMarket() {
             <View style={{ padding: 20, paddingTop: 60, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#EEE' }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                     <View>
-                        <Text style={{ fontSize: 28, fontWeight: '900', color: '#1A1A1A' }}>Mongain Market</Text>
-                        <Text style={{ color: '#059669', fontWeight: '700', fontSize: 13, marginTop: 4 }}>
+                        <Text style={{ fontSize: 28, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: '#1A1A1A' }}>Mongain Market</Text>
+                        <Text style={{ color: '#059669', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', fontSize: 13, marginTop: 4 }}>
                             <Ionicons name="shield-checkmark" size={14} /> PAIEMENT 100% SÉCURISÉ
                         </Text>
                     </View>
@@ -80,26 +80,26 @@ export default function MongainMarket() {
 
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1A1A1A' }} numberOfLines={1}>{item.title}</Text>
-                                <Text style={{ fontSize: 13, color: '#666', marginTop: 4 }}>
+                                <Text style={{ fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: '#1A1A1A' }} numberOfLines={1}>{item.title}</Text>
+                                <Text style={{ fontSize: 13, color: '#666', marginTop: 4, fontFamily: 'Satoshi-Regular' }}>
                                     Vendeur Vérifié: {item.seller?.name || item.sellerId.substring(0, 8)}
                                 </Text>
                             </View>
-                            <Text style={{ fontSize: 20, fontWeight: '900', color: '#059669' }}>
+                            <Text style={{ fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: '#059669' }}>
                                 {item.price.toLocaleString()} F
                             </Text>
                         </View>
 
-                        <Text style={{ color: '#444', marginTop: 12, lineHeight: 20 }}>{item.description}</Text>
+                        <Text style={{ color: '#444', marginTop: 12, lineHeight: 20, fontFamily: 'Satoshi-Regular' }}>{item.description}</Text>
 
                         {user?.id !== item.sellerId ? (
                             <TouchableOpacity onPress={() => handleBuy(item)} style={{ backgroundColor: '#1A1A1A', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 16, flexDirection: 'row', justifyContent: 'center' }}>
                                 <Ionicons name="lock-closed" size={18} color="#FFF" style={{ marginRight: 8 }} />
-                                <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Acheter via Escrow</Text>
+                                <Text style={{ color: '#FFF', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>Acheter via Escrow</Text>
                             </TouchableOpacity>
                         ) : (
                             <View style={{ backgroundColor: '#F3F4F6', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 16 }}>
-                                <Text style={{ color: '#6B7280', fontSize: 14, fontWeight: 'bold' }}>Votre Annonce</Text>
+                                <Text style={{ color: '#6B7280', fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>Votre Annonce</Text>
                             </View>
                         )}
                     </View>
@@ -108,7 +108,7 @@ export default function MongainMarket() {
                 {listings.length === 0 && !refreshing && (
                     <View style={{ alignItems: 'center', marginTop: 40 }}>
                         <Ionicons name="basket-outline" size={64} color="#CBD5E1" />
-                        <Text style={{ color: '#94A3B8', marginTop: 16, fontSize: 16 }}>Le marché est vide pour le moment.</Text>
+                        <Text style={{ color: '#94A3B8', marginTop: 16, fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>Le marché est vide pour le moment.</Text>
                     </View>
                 )}
             </ScrollView>

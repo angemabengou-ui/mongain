@@ -13,11 +13,11 @@ module.exports = () => ({
     slug: 'mongain',
     version: '1.0.0',
     orientation: 'portrait',
-    icon: './assets/images/icon.png',
+    icon: './assets/images/logo-v2.png',
     scheme: 'mongain',
     userInterfaceStyle: 'automatic',
     ios: {
-      icon: './assets/images/logo-glow.png',
+      icon: './assets/images/logo-v2.png',
       bundleIdentifier: 'com.mongain.superapp',
     },
     android: {
@@ -34,7 +34,7 @@ module.exports = () => ({
       ],
       adaptiveIcon: {
         backgroundColor: '#130925',
-        foregroundImage: './assets/images/logo-glow.png',
+        foregroundImage: './assets/images/logo-v2.png',
       },
     },
     web: {
@@ -47,7 +47,7 @@ module.exports = () => ({
         'expo-splash-screen',
         {
           backgroundColor: '#0a0a0f',
-          image: './assets/images/logo-glow.png',
+          image: './assets/images/logo-v2.png',
           imageWidth: 200,
         },
       ],

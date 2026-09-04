@@ -145,8 +145,8 @@ export default function RemitScreen() {
                                     <View style={styles.quoteRow}><Text style={styles.quoteRowText}>Montant initial</Text><Text style={styles.quoteRowVal}>{amountStr} XAF</Text></View>
                                     <View style={styles.quoteRow}><Text style={styles.quoteRowText}>Frais (1.5%)</Text><Text style={styles.quoteRowVal}>{quote.fee} XAF</Text></View>
                                     <View style={[styles.quoteRow, { borderTopWidth: 1, borderColor: '#334155', paddingTop: 8, marginTop: 8 }]}>
-                                        <Text style={[styles.quoteRowText, { color: '#fff', fontWeight: 'bold' }]}>Total Débité</Text>
-                                        <Text style={[styles.quoteRowVal, { color: '#F43F5E', fontWeight: 'bold' }]}>- {quote.totalToDebit} XAF</Text>
+                                        <Text style={[styles.quoteRowText, { color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }]}>Total Débité</Text>
+                                        <Text style={[styles.quoteRowVal, { color: '#F43F5E', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }]}>- {quote.totalToDebit} XAF</Text>
                                     </View>
                                 </View>
                             </View>
@@ -177,13 +177,13 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#0f172a' },
     header: { padding: 20, flexDirection: 'row', alignItems: 'center', gap: 16 },
     backBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12 },
-    title: { color: '#ffffff', fontSize: 20, fontWeight: '800' },
+    title: { color: '#ffffff', fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: '800' },
 
     scroll: { padding: 20 },
     card: { backgroundColor: 'rgba(255,255,255,0.03)', borderRadius: 24, padding: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
 
-    label: { color: '#cbd5e1', fontSize: 13, fontWeight: '600', marginBottom: 8 },
-    inputXaf: { backgroundColor: '#1e293b', color: '#fff', padding: 20, borderRadius: 16, fontSize: 28, fontWeight: '800', textAlign: 'center' },
+    label: { color: '#cbd5e1', fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', marginBottom: 8 },
+    inputXaf: { backgroundColor: '#1e293b', color: '#fff', padding: 20, borderRadius: 16, fontSize: 28, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', textAlign: 'center' },
     inputAccount: { backgroundColor: '#1e293b', color: '#fff', padding: 16, borderRadius: 12, fontSize: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
 
     exchangeIconWrapper: { alignItems: 'center', marginVertical: 12 },
@@ -193,17 +193,18 @@ const styles = StyleSheet.create({
     currencyBtn: { flex: 1, minWidth: '48%', backgroundColor: '#1e293b', padding: 12, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10, borderWidth: 1, borderColor: 'transparent' },
     currencyBtnActive: { backgroundColor: 'rgba(99, 102, 241, 0.2)', borderColor: '#6366f1' },
     flagText: { fontSize: 20 },
-    currencyText: { color: '#94a3b8', fontSize: 16, fontWeight: 'bold' },
+    currencyText: { color: '#94a3b8', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
     quoteBox: { backgroundColor: 'rgba(16, 185, 129, 0.05)', borderRadius: 16, padding: 16, marginTop: 16, borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.3)' },
-    quoteConverted: { fontSize: 32, fontWeight: '900', color: '#10B981', textAlign: 'center' },
+    quoteConverted: { fontSize: 32, fontFamily: 'Satoshi-SemiBold', fontWeight: '900', color: '#10B981', textAlign: 'center' },
     quoteRate: { fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 16 },
 
     quoteDetails: { gap: 8 },
     quoteRow: { flexDirection: 'row', justifyContent: 'space-between' },
     quoteRowText: { color: '#94a3b8', fontSize: 14 },
-    quoteRowVal: { color: '#cbd5e1', fontSize: 14, fontWeight: '600' },
+    quoteRowVal: { color: '#cbd5e1', fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' },
 
     submitBtn: { backgroundColor: '#6366f1', borderRadius: 16, padding: 18, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, marginTop: 32 },
-    submitBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' }
+    submitBtnText: { color: '#fff', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }
 });
+

@@ -81,12 +81,12 @@ export default function RechargeFormScreen() {
                 </View>
                 <Text style={[styles.title, { color: COLORS.textPrimary, textAlign: 'center' }]}>Demande Envoyée !</Text>
                 <Text style={[styles.subtitle, { textAlign: 'center', marginTop: 16, fontSize: 15, lineHeight: 24, color: COLORS.textSecondary }]}>
-                    Une demande de prélèvement a été poussée vers le numéro <Text style={{ fontWeight: '800', color: COLORS.textPrimary }}>{confirmedPhone}</Text>.
+                    Une demande de prélèvement a été poussée vers le numéro <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: '800', color: COLORS.textPrimary }}>{confirmedPhone}</Text>.
                 </Text>
 
                 <View style={[styles.warningBox, { marginTop: 24, backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
                     <Ionicons name="warning" size={24} color="#D97706" style={{ marginRight: 12 }} />
-                    <Text style={{ flex: 1, fontSize: 13, color: '#D97706', fontWeight: '600' }}>
+                    <Text style={{ flex: 1, fontSize: 13, color: '#D97706', fontFamily: 'Satoshi-SemiBold', fontWeight: '600' }}>
                         Consultez ce téléphone et tapez votre Code Secret {providerName} pour valider la transaction (USSD).
                     </Text>
                 </View>
@@ -124,7 +124,7 @@ export default function RechargeFormScreen() {
                         </View>
                     </View>
 
-                    <Text style={[styles.label, { color: COLORS.textSecondary }]}>Numéro {providerName} (À DEBITER)</Text>
+                    <Text style={[styles.label, { color: COLORS.textSecondary }]}>Numéro {providerName} (ì DEBITER)</Text>
                     <View style={[styles.inputContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
                         <Text style={[styles.prefix, { color: COLORS.textPrimary }]}>+241</Text>
                         <TextInput
@@ -141,7 +141,7 @@ export default function RechargeFormScreen() {
                     <View style={[styles.inputContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
                         <Text style={[styles.prefix, { color: COLORS.textPrimary, borderRightWidth: 0, paddingRight: 0 }]}>FCFA</Text>
                         <TextInput
-                            style={[styles.input, { color: COLORS.textPrimary, fontSize: 32, fontWeight: '800', textAlign: 'right' }]}
+                            style={[styles.input, { color: COLORS.textPrimary, fontSize: 32, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', textAlign: 'right' }]}
                             placeholder="0"
                             keyboardType="number-pad"
                             value={amount}
@@ -177,25 +177,26 @@ const styles = StyleSheet.create({
 
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 },
     backButton: { padding: 8, marginLeft: -12 },
-    headerTitle: { fontSize: 18, fontWeight: '800' },
+    headerTitle: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
     infoPullBox: { flexDirection: 'row', alignItems: 'center', padding: 20, borderRadius: 20, borderWidth: 1, marginBottom: 32 },
-    infoPullTitle: { fontSize: 15, fontWeight: '800', marginBottom: 6 },
-    infoPullText: { fontSize: 13, lineHeight: 20, fontWeight: '500' },
+    infoPullTitle: { fontSize: 15, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 6 },
+    infoPullText: { fontSize: 13, lineHeight: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
-    label: { fontSize: 14, fontWeight: '700', marginBottom: 8, marginLeft: 4 },
+    label: { fontSize: 14, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 8, marginLeft: 4 },
     inputContainer: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, paddingHorizontal: 16, height: 64, marginBottom: 16, borderWidth: 1.5 },
-    prefix: { fontSize: 17, fontWeight: '800', marginRight: 12, paddingRight: 12, borderRightWidth: 1, borderRightColor: '#e2e8f0' },
-    input: { flex: 1, fontSize: 18, fontWeight: '700', height: '100%', letterSpacing: 1 },
+    prefix: { fontSize: 17, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginRight: 12, paddingRight: 12, borderRightWidth: 1, borderRightColor: '#e2e8f0' },
+    input: { flex: 1, fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', height: '100%', letterSpacing: 1 },
 
     btn: { height: 60, borderRadius: 16, justifyContent: 'center', alignItems: 'center', shadowColor: '#2563EB', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 15, elevation: 8, marginTop: 16 },
-    btnText: { color: '#ffffff', fontSize: 17, fontWeight: '800' },
+    btnText: { color: '#ffffff', fontSize: 17, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
     securityBadge: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 24, padding: 12 },
-    securityText: { fontSize: 12, color: '#10b981', marginLeft: 8, fontWeight: '600' },
+    securityText: { fontSize: 12, color: '#10b981', marginLeft: 8, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
 
     iconWrap: { justifyContent: 'center', alignItems: 'center' },
-    title: { fontSize: 22, fontWeight: '800' },
-    subtitle: { fontSize: 15 },
+    title: { fontSize: 22, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
+    subtitle: { fontSize: 15, fontFamily: 'Satoshi-Regular' },
     warningBox: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, borderWidth: 1 }
 });
+
