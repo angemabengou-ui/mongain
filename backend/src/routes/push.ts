@@ -13,7 +13,11 @@ let expo = new Expo();
 router.post('/broadcast', authMiddleware, async (req: AuthRequest, res) => {
     try {
         const admin = await prisma.staff.findUnique({ where: { id: req.userId } });
-        if (!admin || !hasPermission(admin, 'perm_analytics_view')) {
+        // perm_broadcast_send dédiée, pas perm_analytics_view (une permission de LECTURE que
+        // BRANCH_MANAGER/RISK/COMPLIANCE_CHECKER possèdent tous par défaut) : envoyer une
+        // notification de masse à TOUS les clients/agents/marchands de la plateforme n'a
+        // rien à voir avec le droit de consulter un tableau de bord.
+        if (!admin || !hasPermission(admin, 'perm_broadcast_send')) {
             return res.status(403).json({ error: 'Accès refusé. Privilèges manquants.' });
         }
 

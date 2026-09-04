@@ -66,6 +66,12 @@ export const ALL_PERMISSIONS = [
     // ── Rapports & Analytique ──────────────────────────────────────────────
     'perm_analytics_view',          // Voir le tableau de bord analytique (MacroStats)
     'perm_audit_log_view',          // Voir les journaux d'audit
+    // ── Communications ──────────────────────────────────────────────────────
+    // push.ts POST /broadcast (notification de masse à TOUS les clients/agents/marchands)
+    // était jusqu'ici gardé par perm_analytics_view — une permission de LECTURE (voir le
+    // tableau de bord analytique), que BRANCH_MANAGER/RISK/COMPLIANCE_CHECKER possèdent tous
+    // par défaut sans avoir vocation à envoyer des communications de masse.
+    'perm_broadcast_send',
 ] as const;
 
 export type Permission = typeof ALL_PERMISSIONS[number];
@@ -259,5 +265,9 @@ export const PERMISSION_GROUPS: { label: string; perms: Permission[] }[] = [
     {
         label: 'Rapports & Audit',
         perms: ['perm_analytics_view', 'perm_audit_log_view'],
+    },
+    {
+        label: 'Communications',
+        perms: ['perm_broadcast_send'],
     },
 ];

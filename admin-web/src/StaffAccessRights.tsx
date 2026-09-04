@@ -58,6 +58,7 @@ const PERM_LABELS: Record<string, string> = {
     perm_staff_permissions_edit: 'Modifier les droits d\'un employé',
     perm_analytics_view: 'Voir les tableaux de bord analytique',
     perm_audit_log_view: 'Voir les journaux d\'audit',
+    perm_broadcast_send: 'Envoyer une notification de masse (push broadcast)',
 };
 
 const PERM_GROUPS = [
@@ -72,6 +73,7 @@ const PERM_GROUPS = [
     { label: 'Trésorerie & Système', perms: ['perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_allocate', 'perm_treasury_approve', 'perm_reconciliation_resolve', 'perm_system_settings_view', 'perm_system_settings_edit', 'perm_system_settings_approve'] },
     { label: 'Personnel', perms: ['perm_staff_view', 'perm_staff_manage', 'perm_staff_permissions_edit'] },
     { label: 'Rapports & Audit', perms: ['perm_analytics_view', 'perm_audit_log_view'] },
+    { label: 'Communications', perms: ['perm_broadcast_send'] },
 ];
 
 const getRoleColor = (r: string) => {
