@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import express from 'express';
 import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
+import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
 import { LimitEngine } from '../services/LimitEngine';
 import { getSystemAccount } from '../services/systemAccounts';
@@ -24,7 +25,7 @@ const payBillSchema = z.object({
 // tout en affichant un faux jeton/succès — l'argent quitte vraiment le solde du client
 // sans que rien ne se passe réellement côté SEEG/Canal+. Désactivé tant que ce n'est pas
 // branché à un vrai fournisseur (même schéma que ENABLE_UNVERIFIED_CARD_TOPUP).
-router.post('/pay-bill', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/pay-bill', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     if (process.env.ENABLE_UNVERIFIED_EXTERNAL_SERVICES !== 'true') {
         return res.status(501).json({
             error: 'Le paiement de factures nécessite une intégration réelle avec le fournisseur (SEEG/Canal+). Cette fonctionnalité est désactivée tant que cette intégration n\'est pas en place.'
@@ -109,7 +110,7 @@ const topupSchema = z.object({
 // Même problème que /pay-bill ci-dessus : aucune intégration réelle avec Airtel/Moov pour
 // l'achat de crédit — le client est vraiment débité pour un crédit qui n'est jamais
 // réellement livré. Désactivé tant que ce n'est pas branché à un vrai agrégateur telecom.
-router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/topup', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     if (process.env.ENABLE_UNVERIFIED_EXTERNAL_SERVICES !== 'true') {
         return res.status(501).json({
             error: 'La recharge de crédit téléphonique nécessite une intégration réelle avec l\'opérateur (Airtel/Moov). Cette fonctionnalité est désactivée tant que cette intégration n\'est pas en place.'

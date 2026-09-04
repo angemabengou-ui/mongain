@@ -13,6 +13,10 @@ jest.mock('../../middleware/auth', () => ({
     }
 }));
 
+jest.mock('../../middleware/circuitBreaker', () => ({
+    circuitBreakerMiddleware: (req: any, res: any, next: any) => next(),
+}));
+
 // Import dynamique (await import('./wallet')) déclenché par POST /cancel dès qu'il y a au
 // moins un autre participant actif à notifier de la dissolution.
 jest.mock('../wallet', () => ({

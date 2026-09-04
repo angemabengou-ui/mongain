@@ -99,6 +99,21 @@ router.post('/gateway', async (req: Request, res: Response) => {
                 try {
                     // Injecting raw Prisma Tx for P2P since USSD bypasses CashOperationService
                     const settings = await getSystemSettings();
+
+                    // Même garde que circuitBreakerMiddleware (middleware/circuitBreaker.ts),
+                    // appliqué ici à la main : ce middleware répond en JSON (res.status(503).json),
+                    // incompatible avec le protocole USSD attendu par la passerelle télco (texte
+                    // brut préfixé CON/END) — le monter tel quel casserait la réponse pour TOUT
+                    // menu USSD, pas seulement ce transfert. Sans ce contrôle, ce transfert restait
+                    // le seul mouvement de fonds de toute l'application à rester opérationnel
+                    // pendant un arrêt d'urgence (maintenance globale ou Circuit Breaker).
+                    if (settings?.globalMaintenance) {
+                        return res.send(`END Mongain est en maintenance. Réessayez plus tard.`);
+                    }
+                    if (settings?.circuitBreaker) {
+                        return res.send(`END Opérations financières suspendues temporairement (verrouillage d'urgence).`);
+                    }
+
                     const fee = amount * (settings?.taxP2P || 0.01);
                     const totalRequired = amount + fee;
 

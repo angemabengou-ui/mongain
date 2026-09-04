@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
+import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
 import { LimitEngine } from '../services/LimitEngine';
 import { friendlyErrorMessage } from '../utils/errors';
@@ -17,7 +18,7 @@ const router = Router();
 const MAX_BNPL_AMOUNT = 50000;
 const DEFAULT_BNPL_INTEREST = 0.05; // 5% flat fee de repli si non configuré côté admin
 
-router.post('/apply', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/apply', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         if (!req.userId) return res.status(401).json({ error: "Unauthorized" });
         const { amountXaf, months, pin } = req.body;
@@ -134,7 +135,7 @@ router.post('/apply', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // BNPL Repay
-router.post('/repay', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/repay', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         if (!req.userId) return res.status(401).json({ error: "Unauthorized" });
         const { amountXaf, pin } = req.body;

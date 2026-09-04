@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
+import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
 import { LimitEngine } from '../services/LimitEngine';
 import { getSystemAccount } from '../services/systemAccounts';
@@ -15,7 +16,7 @@ const router = Router();
 // V17: UTILITY BILLERS (Facturiers SEEG/CANAL)
 // ==========================================
 
-router.post('/pay', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/pay', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         if (!req.userId) return res.status(401).json({ error: "Unauthorized" });
         const { provider, reference, amountXaf, pin } = req.body;

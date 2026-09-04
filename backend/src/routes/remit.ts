@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
+import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
 import { LimitEngine } from '../services/LimitEngine';
 import { getSystemAccount } from '../services/systemAccounts';
@@ -60,7 +61,7 @@ router.post('/quote', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
-router.post('/send', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/send', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         const parsed = remitSchema.safeParse(req.body);
         if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });

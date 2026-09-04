@@ -1,6 +1,7 @@
 import express from 'express';
 import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
 import { CashOperationService } from '../services/CashOperationService';
 import { hasPermission } from '../services/RBAC';
@@ -236,7 +237,7 @@ router.get('/info', requireBranchId, async (req: AuthRequest, res) => {
 
 // 4. Cash-In (Dépôt) — avec idempotence + branchId/tellerId
 // 4. Cash-In (Dépôt) — via CashOperationService
-router.post('/cash-in', requireBranchId, async (req: AuthRequest, res) => {
+router.post('/cash-in', requireBranchId, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = (req as any).staff;
         if (!hasPermission(staff, 'perm_cash_in')) {
@@ -270,7 +271,7 @@ router.post('/cash-in', requireBranchId, async (req: AuthRequest, res) => {
 });
 
 // 5. Cash-Out (Retrait Guichet) — via CashOperationService
-router.post('/cash-out', requireBranchId, async (req: AuthRequest, res) => {
+router.post('/cash-out', requireBranchId, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = (req as any).staff;
         if (!hasPermission(staff, 'perm_cash_out')) {
@@ -301,7 +302,7 @@ router.post('/cash-out', requireBranchId, async (req: AuthRequest, res) => {
 
 // 5bis. Cash-Out par Code Secret — le client génère un code (POST /api/wallet/generate-withdraw-code),
 // l'agent le saisit ici avec le téléphone du client pour valider et exécuter le retrait.
-router.post('/cash-out-code', requireBranchId, async (req: AuthRequest, res) => {
+router.post('/cash-out-code', requireBranchId, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         const staff = (req as any).staff;
         if (!hasPermission(staff, 'perm_cash_out')) {

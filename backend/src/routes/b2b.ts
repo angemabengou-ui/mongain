@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
+import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
 import { LimitEngine } from '../services/LimitEngine';
 import { friendlyErrorMessage } from '../utils/errors';
@@ -97,7 +98,7 @@ router.get('/invoices/my', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // Pay an Invoice (Customer)
-router.post('/invoices/:id/pay', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/invoices/:id/pay', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         const { pin } = req.body;
         const invoiceId = req.params.id as string;
@@ -207,7 +208,7 @@ router.post('/invoices/:id/reject', authMiddleware, async (req: AuthRequest, res
 // MASS PAYOUTS (PAYROLL)
 // ==========================================
 
-router.post('/payouts', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/payouts', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         const { name, entries } = req.body; // entries: [{ phone, amount }]
 

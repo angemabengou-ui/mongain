@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
+import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
 import { LimitEngine } from '../services/LimitEngine';
 import { getSystemAccount } from '../services/systemAccounts';
@@ -72,7 +73,7 @@ async function getEscrowWallet(tx: any) {
 }
 
 // Buy Item: Creates Escrow and Locks Funds
-router.post('/buy/:id', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/buy/:id', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         if (!req.userId) return res.status(401).json({ error: "Unauthorized" });
         const { pin } = req.body;
@@ -187,7 +188,7 @@ router.post('/buy/:id', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // Release Escrow (By Buyer upon receipt)
-router.post('/escrow/:id/release', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/escrow/:id/release', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         if (!req.userId) return res.status(401).json({ error: "Unauthorized" });
         const escrowId = req.params.id as string;

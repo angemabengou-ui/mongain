@@ -11,6 +11,10 @@ jest.mock('../../middleware/auth', () => ({
     }
 }));
 
+jest.mock('../../middleware/circuitBreaker', () => ({
+    circuitBreakerMiddleware: (req: any, res: any, next: any) => next(),
+}));
+
 // Mock bcryptjs pour contrôler la vérification du PIN sur /vouchers/:id/spend
 jest.mock('bcryptjs', () => ({
     compare: jest.fn()

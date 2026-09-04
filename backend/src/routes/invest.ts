@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
+import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
 import { LimitEngine } from '../services/LimitEngine';
 import { friendlyErrorMessage } from '../utils/errors';
@@ -17,7 +18,7 @@ const router = Router();
 const DEFAULT_APY = 0.05; // 5% base yield
 
 // Create a Staking Vault (Lock Funds)
-router.post('/stake', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/stake', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         if (!req.userId) return res.status(401).json({ error: "Unauthorized" });
         const { amount, lockMonths, pin } = req.body;
@@ -139,7 +140,7 @@ router.get('/vaults', authMiddleware, async (req: AuthRequest, res) => {
 // base le permettait). N'autorise le retrait qu'après `lockedUntil` : la promesse produit est
 // un blocage jusqu'à cette date, pas un retrait anticipé avec pénalité (mécanisme qui
 // n'existe nulle part ailleurs dans le code et relève d'une décision produit, pas d'un bug).
-router.post('/vaults/:id/withdraw', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/vaults/:id/withdraw', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         if (!req.userId) return res.status(401).json({ error: "Unauthorized" });
 

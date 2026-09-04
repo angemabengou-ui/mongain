@@ -1,5 +1,6 @@
 import express from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
+import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
 import { getCentralTreasury } from '../services/centralTreasury';
 import { LimitEngine } from '../services/LimitEngine';
@@ -70,7 +71,7 @@ router.get('/active', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // POST /api/credit/apply
-router.post('/apply', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/apply', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         const { amount, pin } = req.body;
         if (!amount || amount < 5000) {
@@ -174,7 +175,7 @@ router.post('/apply', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // POST /api/credit/repay
-router.post('/repay', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/repay', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         const { loanId, pin } = req.body;
 
