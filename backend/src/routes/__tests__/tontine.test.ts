@@ -1,7 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import { prisma } from '../../prisma';
-import { contributeNow, executeTontineCycle, getTontineVaultWallet, resolveRenewalPoll } from '../../services/tontineService';
+import { contributeNow, executeTontineCycle, resolveRenewalPoll } from '../../services/tontineService';
 import { sendPush } from '../wallet';
 import tontineRoutes from '../tontine';
 
@@ -420,7 +420,7 @@ describe('Tontine Routes', () => {
             // payoutOrder(1) < currentCycle(3) => déjà payé => dette due
             (prisma.tontineParticipant.findFirst as jest.Mock).mockResolvedValue({ id: 'p1', payoutOrder: 1 });
             (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({ id: 'group1', creatorId: 'someone_else', currentCycle: 3, contribution: 1000, name: 'Club A', status: 'ACTIVE' });
-            (prisma.tontineParticipant.count as jest.Mock).mockResolvedValue(2); // remainingBeneficiaries
+            (prisma.tontineParticipant.findMany as jest.Mock).mockResolvedValue([{ userId: 'b1' }, { userId: 'b2' }]); // remainingBeneficiaries
             (prisma.wallet.findUnique as jest.Mock).mockResolvedValue({ id: 'w1', balance: 500 });
 
             const res = await request(app).post('/tontine/leave').send({ groupId: 'group1' });
@@ -455,9 +455,8 @@ describe('Tontine Routes', () => {
         it('devrait régler la dette et quitter le club si le solde est suffisant', async () => {
             (prisma.tontineParticipant.findFirst as jest.Mock).mockResolvedValue({ id: 'p1', payoutOrder: 1 });
             (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({ id: 'group1', creatorId: 'someone_else', currentCycle: 2, contribution: 1000, name: 'Club A', status: 'ACTIVE' });
-            (prisma.tontineParticipant.count as jest.Mock).mockResolvedValue(1); // remainingBeneficiaries => debt = 1000
+            (prisma.tontineParticipant.findMany as jest.Mock).mockResolvedValue([{ userId: 'beneficiary1' }]); // remainingBeneficiaries => debt = 1000
             (prisma.wallet.findUnique as jest.Mock).mockResolvedValue({ id: 'w1', balance: 2000 });
-            (getTontineVaultWallet as jest.Mock).mockResolvedValue({ id: 'w_vault', balance: 0 });
             (prisma.wallet.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
             (prisma.wallet.update as jest.Mock).mockResolvedValue({});
             (prisma.transaction.create as jest.Mock).mockResolvedValue({});
@@ -471,6 +470,19 @@ describe('Tontine Routes', () => {
             expect(prisma.wallet.updateMany).toHaveBeenCalledWith({
                 where: { userId: 'test_user_id', balance: { gte: 1000 } },
                 data: { balance: { decrement: 1000 } }
+            });
+            // Bug réel corrigé : la dette doit être reversée DIRECTEMENT au bénéficiaire
+            // restant (group.contribution chacun), pas au coffre TONTINE_VAULT partagé par
+            // toutes les tontines de la plateforme, qui ne la redistribuait jamais.
+            expect(prisma.wallet.update).toHaveBeenCalledWith({
+                where: { id: 'w1' },
+                data: { balance: { increment: 1000 } }
+            });
+            expect(prisma.transaction.create).toHaveBeenCalledWith({
+                data: expect.objectContaining({ amount: 1000, receiverWalletId: 'w1' })
+            });
+            expect(prisma.notification.create).toHaveBeenCalledWith({
+                data: expect.objectContaining({ userId: 'beneficiary1', title: 'Compensation reçue' })
             });
         });
 
@@ -633,7 +645,9 @@ describe('Tontine Routes', () => {
 
         it('devrait réordonner les participants avec succès', async () => {
             (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({ id: 'group1', creatorId: 'test_user_id', status: 'ACTIVE' });
-            (prisma.tontineParticipant.findMany as jest.Mock).mockResolvedValue([{ id: 'p1' }, { id: 'p2' }]);
+            (prisma.tontineParticipant.findMany as jest.Mock)
+                .mockResolvedValueOnce([{ id: 'p1' }, { id: 'p2' }]) // IDOR guard : participants ciblés valides
+                .mockResolvedValueOnce([]); // aucun autre membre du groupe (donc aucun tour déjà pris)
             (prisma.tontineParticipant.update as jest.Mock).mockResolvedValue({});
 
             const res = await request(app)
@@ -642,6 +656,25 @@ describe('Tontine Routes', () => {
 
             expect(res.status).toBe(200);
             expect(prisma.tontineParticipant.update).toHaveBeenCalledTimes(2);
+        });
+
+        it('devrait retourner 400 si le nouveau tour est déjà détenu par un membre du groupe absent de la requête', async () => {
+            // Bug réel corrigé : sans ce contrôle, réordonner UNIQUEMENT le participant C vers
+            // le tour 2 pouvait entrer en collision avec le tour du participant B (non inclus
+            // dans cette requête) — executeTontineCycle n'a aucun tri et ne peut alors payer
+            // que l'un des deux, l'autre restant exclu de tout paiement pour toujours.
+            (prisma.tontineGroup.findUnique as jest.Mock).mockResolvedValue({ id: 'group1', creatorId: 'test_user_id', status: 'ACTIVE' });
+            (prisma.tontineParticipant.findMany as jest.Mock)
+                .mockResolvedValueOnce([{ id: 'p3' }]) // IDOR guard : p3 appartient bien au groupe
+                .mockResolvedValueOnce([{ payoutOrder: 2 }]); // participant B (absent de la requête) détient déjà le tour 2
+
+            const res = await request(app)
+                .post('/tontine/reorder')
+                .send({ groupId: 'group1', orderMap: [{ participantId: 'p3', newOrder: 2 }] });
+
+            expect(res.status).toBe(400);
+            expect(res.body.message).toContain('déjà occupé');
+            expect(prisma.tontineParticipant.update).not.toHaveBeenCalled();
         });
 
         it('devrait retourner 500 en cas d\'erreur serveur', async () => {

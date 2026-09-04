@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { hasPermission } from '../services/RBAC';
-import { contributeNow, executeTontineCycle, getTontineVaultWallet, resolveRenewalPoll } from '../services/tontineService';
+import { contributeNow, executeTontineCycle, resolveRenewalPoll } from '../services/tontineService';
 import { friendlyErrorMessage } from '../utils/errors';
 
 const router = express.Router();
@@ -376,16 +376,19 @@ router.post('/leave', authMiddleware, async (req: Request, res: Response) => {
         // autres membres qui, eux, n'ont pas encore été payés.
         const alreadyPaidOut = participant.payoutOrder < group.currentCycle;
         let debt = 0;
+        let remainingBeneficiaryUserIds: string[] = [];
 
         // Un club dissous n'exécutera plus jamais aucun cycle (voir POST /cancel) : réclamer
         // une dette "envers les membres qui n'ont pas encore eu leur tour" n'aurait ici aucun
         // moyen d'être un jour reversée à qui que ce soit — ce serait prélever de l'argent
         // pour rien plutôt qu'un vrai solde dû.
         if (alreadyPaidOut && group.status === 'ACTIVE') {
-            const remainingBeneficiaries = await prisma.tontineParticipant.count({
-                where: { tontineGroupId: groupId, status: 'ACTIVE', payoutOrder: { gte: group.currentCycle }, userId: { not: userId } }
+            const remainingBeneficiaries = await prisma.tontineParticipant.findMany({
+                where: { tontineGroupId: groupId, status: 'ACTIVE', payoutOrder: { gte: group.currentCycle }, userId: { not: userId } },
+                select: { userId: true }
             });
-            debt = remainingBeneficiaries * group.contribution;
+            remainingBeneficiaryUserIds = remainingBeneficiaries.map(p => p.userId);
+            debt = remainingBeneficiaryUserIds.length * group.contribution;
         }
 
         const myWallet = await prisma.wallet.findUnique({ where: { userId } });
@@ -397,31 +400,45 @@ router.post('/leave', authMiddleware, async (req: Request, res: Response) => {
             });
         }
 
-        // Récupéré hors transaction, comme le fait déjà executeTontineCycle
-        // (tontineService.ts) : cette fonction utilise le client Prisma global, pas
-        // `tx` — l'appeler depuis l'intérieur d'un $transaction() peut épuiser le
-        // pool de connexions (le client global attend une connexion que la
-        // transaction interactive retient) et fait expirer/fermer la transaction.
-        const vaultWallet = debt > 0 ? await getTontineVaultWallet() : null;
-
         await prisma.$transaction(async (tx) => {
-            if (debt > 0 && vaultWallet) {
+            if (debt > 0 && remainingBeneficiaryUserIds.length > 0) {
                 const debited = await tx.wallet.updateMany({
                     where: { userId, balance: { gte: debt } },
                     data: { balance: { decrement: debt } }
                 });
                 if (debited.count === 0) throw new Error('Solde insuffisant pour régler ce que vous devez au club.');
 
-                await tx.wallet.update({ where: { id: vaultWallet.id }, data: { balance: { increment: debt } } });
-                await tx.transaction.create({
-                    data: {
-                        amount: debt,
-                        senderWalletId: myWallet!.id,
-                        receiverWalletId: vaultWallet.id,
-                        status: 'COMPLETED',
-                        reference: `TONT_EXIT_G${groupId}_U${userId}`.slice(0, 40)
-                    }
-                });
+                // Reversé DIRECTEMENT à chacun des bénéficiaires restants (group.contribution
+                // par personne — exactement la somme que `debt` leur attribue) plutôt que dans
+                // le coffre TONTINE_VAULT partagé par TOUTES les tontines de la plateforme :
+                // executeTontineCycle calcule `totalPot` uniquement à partir des cotisations du
+                // cycle en cours, sans jamais lire ce coffre ni le redistribuer — l'argent y
+                // restait donc immobilisé pour toujours, comingé avec celui des autres clubs,
+                // pendant que CES bénéficiaires précis touchaient quand même une cagnotte
+                // réduite (N-1 cotisations au lieu de N) à leur tour, sans jamais recevoir la
+                // compensation que ce prélèvement était censé leur garantir.
+                for (const beneficiaryUserId of remainingBeneficiaryUserIds) {
+                    const beneficiaryWallet = await tx.wallet.findUnique({ where: { userId: beneficiaryUserId } });
+                    if (!beneficiaryWallet) continue; // un membre ACTIVE a toujours un wallet ; garde défensive uniquement
+                    await tx.wallet.update({ where: { id: beneficiaryWallet.id }, data: { balance: { increment: group.contribution } } });
+                    await tx.transaction.create({
+                        data: {
+                            amount: group.contribution,
+                            senderWalletId: myWallet!.id,
+                            receiverWalletId: beneficiaryWallet.id,
+                            status: 'COMPLETED',
+                            reference: `TONT_EXITSHARE_${participant.id}_${beneficiaryUserId}`
+                        }
+                    });
+                    await tx.notification.create({
+                        data: {
+                            userId: beneficiaryUserId,
+                            title: 'Compensation reçue',
+                            body: `Un membre de « ${group.name} » a quitté le club après avoir déjà reçu sa cagnotte : ${group.contribution.toLocaleString('fr-FR')} FCFA vous ont été reversés en compensation immédiate.`,
+                            type: 'TRANSACTION'
+                        }
+                    });
+                }
             }
 
             await tx.tontineParticipant.update({
@@ -568,6 +585,22 @@ router.post('/reorder', authMiddleware, async (req: Request, res: Response) => {
         });
         if (validParticipants.length !== participantIds.length) {
             return res.status(403).json({ success: false, message: "Un ou plusieurs participants n'appartiennent pas à ce groupe." });
+        }
+
+        // Le contrôle d'unicité ci-dessus (`new Set(newOrders)`) ne compare que les tours
+        // DEMANDÉS entre eux — il n'empêchait pas d'assigner un tour déjà détenu par un membre
+        // du groupe absent de cette requête. executeTontineCycle (tontineService.ts) sélectionne
+        // le bénéficiaire par un simple `.find(p => p.payoutOrder === currentCycle)`, sans tri :
+        // deux participants à égalité sur le même tour, un seul est payé (celui que Prisma
+        // renvoie en premier), l'autre garde ce même payoutOrder pour toujours (currentCycle
+        // ne fait qu'augmenter) — exclu à vie de tout paiement tout en continuant de cotiser.
+        const otherParticipants = await prisma.tontineParticipant.findMany({
+            where: { tontineGroupId: group.id, id: { notIn: participantIds } },
+            select: { payoutOrder: true }
+        });
+        const takenOrders = new Set(otherParticipants.map(p => p.payoutOrder));
+        if (newOrders.some((n: number) => takenOrders.has(n))) {
+            return res.status(400).json({ success: false, message: "Ce tour est déjà occupé par un autre membre du groupe." });
         }
 
         await prisma.$transaction(
