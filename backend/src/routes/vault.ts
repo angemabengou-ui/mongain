@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import express from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { LimitEngine } from '../services/LimitEngine';
 import { applyRoleChangeGuards, executeVaultWithdraw } from '../services/vaultService';
 import { sendPush } from './wallet';
 
@@ -369,6 +370,12 @@ router.post('/:id/deposit', authMiddleware, async (req: AuthRequest, res) => {
                 throw new Error(`Solde personnel insuffisant pour ce dépôt (incluant ${fee} FCFA de frais).`);
             }
 
+            // Plafonds AML/KYC — une caisse commune a plusieurs membres qui peuvent ensuite en
+            // faire sortir l'argent vers n'importe qui (destinationType TRANSFER sur
+            // /withdraw-request) : sans ce contrôle, un dépôt en caisse commune était un moyen
+            // de contourner intégralement ses propres plafonds de transfert personnels.
+            await LimitEngine.verifyAndIncrementConsumption(tx, req.userId!, userWallet.id, parsedAmount, settings);
+
             // Débit Wallet, Crédit Vault — garde atomique (balance: gte) : le contrôle
             // ci-dessus lit une balance non verrouillée, donc deux dépôts simultanés
             // (double-tap, deux appareils) pouvaient tous deux le passer et faire
@@ -499,6 +506,24 @@ router.post('/:id/withdraw-request', authMiddleware, async (req: AuthRequest, re
             }
             resolvedDestinationId = recipient.id;
             destinationLabel = recipient.name;
+        } else if (destinationType === 'TREASURER') {
+            // Contrairement à TRANSFER (n'importe quel numéro Mongain, donc résolu ci-dessus
+            // et jugé "le chemin le plus à risque" par le commentaire au-dessus), TREASURER
+            // désigne un trésorier DÉSIGNÉ du bureau de CETTE caisse — mais `destinationId`
+            // restait jusqu'ici la valeur brute envoyée par le client, jamais revérifiée
+            // contre les membres du vault. Un Initiator pouvait donc soumettre n'importe quel
+            // id utilisateur sous couvert de "TREASURER", inspirant une confiance illégitime
+            // aux commissaires (qui valident en pensant l'argent réservé au bureau) alors que
+            // les fonds partaient en réalité vers un tiers non-membre et non-trésorier.
+            const treasurer = await prisma.vaultMember.findFirst({
+                where: { vaultId, userId: String(destinationId), isTreasurer: true },
+                include: { user: { select: { id: true, name: true } } }
+            });
+            if (!treasurer) {
+                return res.status(400).json({ success: false, message: "Ce destinataire n'est pas un trésorier désigné de cette caisse." });
+            }
+            resolvedDestinationId = treasurer.user.id;
+            destinationLabel = treasurer.user.name;
         }
 
         // Seuil et commissaires obligatoires figés dès la création (voir commentaire sur

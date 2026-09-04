@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { LimitEngine } from '../services/LimitEngine';
 import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
+import { getSystemSettings } from './settings';
 import { sendPush } from './wallet';
 
 const router = Router();
@@ -53,7 +55,15 @@ router.post('/stake', authMiddleware, async (req: AuthRequest, res) => {
         const lockedUntil = new Date();
         lockedUntil.setMonth(lockedUntil.getMonth() + duration);
 
+        const settings = await getSystemSettings();
+
         await prisma.$transaction(async (tx) => {
+            // Plafonds AML/KYC — comme tout autre débit réel du wallet personnel
+            // (wallet.ts, market.ts, crypto.ts...), absent ici jusqu'à présent : un client
+            // Tier 0 pouvait bloquer un montant arbitraire en un seul virement vers ce
+            // produit d'épargne, sans passer par aucun contrôle de plafond journalier/mensuel.
+            await LimitEngine.verifyAndIncrementConsumption(tx, user.id, user.wallet!.id, stakeAmount, settings);
+
             // Debit Wallet
             await tx.wallet.update({
                 where: { id: user.wallet!.id, balance: { gte: stakeAmount } },

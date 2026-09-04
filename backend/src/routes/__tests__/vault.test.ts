@@ -21,6 +21,7 @@ jest.mock('../../prisma', () => ({
         vaultMember: {
             findMany: jest.fn(),
             findUnique: jest.fn(),
+            findFirst: jest.fn(),
             upsert: jest.fn(),
             update: jest.fn(),
             count: jest.fn(),
@@ -728,6 +729,45 @@ describe('Vault Routes', () => {
             expect(prisma.vaultTransaction.create).toHaveBeenCalledWith({
                 data: expect.objectContaining({ destinationType: 'TRANSFER', destinationId: 'recipient1' })
             });
+        });
+
+        it('devrait créer une demande TREASURER résolue vers un trésorier désigné du vault', async () => {
+            (prisma.vaultMember.findUnique as jest.Mock).mockResolvedValue({ isInitiator: true });
+            (prisma.vault.findUnique as jest.Mock).mockResolvedValue({ id: 'v1', balance: 1000, name: 'Caisse A' });
+            (prisma.vaultMember.findFirst as jest.Mock).mockResolvedValue({ userId: 'treasurer1', isTreasurer: true, user: { id: 'treasurer1', name: 'Awa' } });
+            (prisma.vaultTransaction.create as jest.Mock).mockResolvedValue({ id: 'tx1', status: 'PENDING' });
+            (prisma.vaultMember.findMany as jest.Mock).mockResolvedValue([]);
+
+            const res = await request(app)
+                .post('/vault/v1/withdraw-request')
+                .send({ amount: 100, reason: 'Remise au trésorier', destinationType: 'TREASURER', destinationId: 'treasurer1' });
+
+            expect(res.status).toBe(200);
+            expect(prisma.vaultMember.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+                where: { vaultId: 'v1', userId: 'treasurer1', isTreasurer: true }
+            }));
+            expect(prisma.vaultTransaction.create).toHaveBeenCalledWith({
+                data: expect.objectContaining({ destinationType: 'TREASURER', destinationId: 'treasurer1' })
+            });
+        });
+
+        it('devrait retourner 400 si le destinataire TREASURER n\'est pas un trésorier désigné de ce vault', async () => {
+            // Bug réel corrigé : sans cette vérification, `destinationId` n'était jamais
+            // revérifié contre les membres du vault sous couvert de "TREASURER" — n'importe
+            // quel id utilisateur passait, détournant potentiellement les fonds vers un tiers
+            // non-membre pendant que les commissaires valident en pensant l'argent réservé au
+            // bureau désigné.
+            (prisma.vaultMember.findUnique as jest.Mock).mockResolvedValue({ isInitiator: true });
+            (prisma.vault.findUnique as jest.Mock).mockResolvedValue({ id: 'v1', balance: 1000, name: 'Caisse A' });
+            (prisma.vaultMember.findFirst as jest.Mock).mockResolvedValue(null);
+
+            const res = await request(app)
+                .post('/vault/v1/withdraw-request')
+                .send({ amount: 100, reason: 'Détournement tenté', destinationType: 'TREASURER', destinationId: 'outsider_id' });
+
+            expect(res.status).toBe(400);
+            expect(res.body.message).toContain('trésorier désigné');
+            expect(prisma.vaultTransaction.create).not.toHaveBeenCalled();
         });
 
         it('devrait retourner 500 en cas d\'erreur serveur', async () => {
