@@ -2,7 +2,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useAuth } from '../context/AuthContext';
 import { request } from '../services/api';
+
+// Repli identique à DEFAULT_BNPL_INTEREST côté serveur (backend/src/routes/bnpl.ts) — utilisé
+// uniquement le temps que `settings` (AuthContext) charge, jamais comme valeur définitive.
+const DEFAULT_BNPL_INTEREST = 0.05;
 
 export default function BNPLScreen() {
     const [amount, setAmount] = useState('');
@@ -12,6 +17,13 @@ export default function BNPLScreen() {
     const [tab, setTab] = useState<'BORROW' | 'REPAY'>('BORROW');
 
     const router = useRouter();
+    const { settings } = useAuth();
+    // Le taux était codé en dur à 5% ici alors que le serveur (bnpl.ts) le lit depuis
+    // SystemSettings.bnplInterest, réglable par un admin — un changement de ce taux en
+    // production laissait cet écran afficher un aperçu de frais/dette totale entièrement
+    // faux (celui de l'ancien taux), sans jamais correspondre au contrat réellement créé
+    // côté serveur.
+    const bnplInterest = settings?.bnplInterest ?? DEFAULT_BNPL_INTEREST;
 
     const handleApply = async () => {
         if (!amount || !pin) return Alert.alert("Erreur", "Saisissez un montant et votre PIN.");
@@ -39,7 +51,7 @@ export default function BNPLScreen() {
         setLoading(false);
     };
 
-    const simFee = parseFloat(amount || '0') * 0.05;
+    const simFee = parseFloat(amount || '0') * bnplInterest;
     const simTotal = parseFloat(amount || '0') + simFee;
 
     return (
@@ -104,7 +116,7 @@ export default function BNPLScreen() {
                                     <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: '#1E293B' }}>{amount || '0'} F</Text>
                                 </View>
                                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                                    <Text style={{ color: '#64748B' }}>Frais (5%)</Text>
+                                    <Text style={{ color: '#64748B' }}>Frais ({(bnplInterest * 100).toLocaleString('fr-FR')}%)</Text>
                                     <Text style={{ color: '#F43F5E', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>+ {simFee} F</Text>
                                 </View>
                                 <View style={{ height: 1, backgroundColor: '#E2E8F0', marginVertical: 8 }}></View>
@@ -134,7 +146,7 @@ export default function BNPLScreen() {
                     >
                         {loading ? <ActivityIndicator color="#FFF" /> : (
                             <Text style={{ color: '#FFF', fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: '900' }}>
-                                {tab === 'BORROW' ? "Débloquer les Fonds" : "Payer ma Détourne"}
+                                {tab === 'BORROW' ? "Débloquer les Fonds" : "Payer ma Dette"}
                             </Text>
                         )}
                     </TouchableOpacity>
