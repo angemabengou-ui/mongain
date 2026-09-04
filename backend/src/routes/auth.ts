@@ -214,13 +214,16 @@ router.post('/register', async (req, res) => {
         const hashedPin = await bcrypt.hash(pin, 10);
         const accNum = '1000100001' + crypto.randomInt(10000000000, 100000000000).toString() + crypto.randomInt(10, 100).toString();
 
-        // Delete successful OTP record
-        await prisma.verificationCode.delete({ where: { phone_purpose: { phone, purpose: 'REGISTER' } } });
-
+        // Vérifié AVANT de consommer l'OTP : sinon un pseudo déjà pris faisait échouer
+        // l'inscription après suppression du code, forçant l'utilisateur à redemander tout
+        // un SMS juste pour corriger son pseudo alors que son numéro venait d'être vérifié.
         const existingUsername = await prisma.user.findFirst({ where: { username } });
         if (existingUsername) {
             return res.status(400).json({ error: 'Ce pseudo est déjà utilisé par un autre compte.' });
         }
+
+        // Delete successful OTP record
+        await prisma.verificationCode.delete({ where: { phone_purpose: { phone, purpose: 'REGISTER' } } });
 
         const { refreshToken, refreshTokenHash, refreshTokenExpiresAt } = issueRefreshToken();
         const user = await prisma.user.create({
