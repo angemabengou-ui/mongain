@@ -53,7 +53,12 @@ router.post('/quote', authMiddleware, async (req: AuthRequest, res) => {
         const netSourceAmount = amountXaf - fee;
         const convertedAmount = Number((netSourceAmount * rate).toFixed(2));
 
-        res.json({ convertedAmount, targetCurrency: destinationCurrency, rate, fee, totalToDebit: amountXaf });
+        // fxMarkup inclus : le client (remit.tsx) affichait jusqu'ici un pourcentage codé en
+        // dur ("Frais (1.5%)") qui ne correspondait déjà pas au défaut réel (2,5%), et
+        // divergeait plus encore dès qu'un admin ajustait forexMarkup depuis Settings — le
+        // montant `fee` en XAF restait, lui, toujours correct (calculé ici), seul le
+        // libellé de pourcentage affiché était faux.
+        res.json({ convertedAmount, targetCurrency: destinationCurrency, rate, fee, fxMarkup, totalToDebit: amountXaf });
     } catch (e: any) {
         logger.error(`[Remittance Quote] ${e.message}`);
         res.status(500).json({ error: 'Erreur de cotation.' });

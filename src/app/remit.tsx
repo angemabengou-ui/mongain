@@ -143,7 +143,7 @@ export default function RemitScreen() {
                                 <Text style={styles.quoteRate}>Taux d'échange : 1 XAF = {quote.rate} {quote.targetCurrency}</Text>
                                 <View style={styles.quoteDetails}>
                                     <View style={styles.quoteRow}><Text style={styles.quoteRowText}>Montant initial</Text><Text style={styles.quoteRowVal}>{amountStr} XAF</Text></View>
-                                    <View style={styles.quoteRow}><Text style={styles.quoteRowText}>Frais (1.5%)</Text><Text style={styles.quoteRowVal}>{quote.fee} XAF</Text></View>
+                                    <View style={styles.quoteRow}><Text style={styles.quoteRowText}>Frais ({((quote.fxMarkup ?? 0.025) * 100).toLocaleString('fr-FR')}%)</Text><Text style={styles.quoteRowVal}>{quote.fee} XAF</Text></View>
                                     <View style={[styles.quoteRow, { borderTopWidth: 1, borderColor: '#334155', paddingTop: 8, marginTop: 8 }]}>
                                         <Text style={[styles.quoteRowText, { color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }]}>Total Débité</Text>
                                         <Text style={[styles.quoteRowVal, { color: '#F43F5E', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }]}>- {quote.totalToDebit} XAF</Text>

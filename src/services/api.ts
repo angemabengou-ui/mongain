@@ -322,7 +322,12 @@ export const apiGetDailyLimits = () =>
 export const apiGetSystemSettings = () =>
     request('GET', '/api/settings', undefined, false) as Promise<{
         airtelEnabled: boolean, moovEnabled: boolean, seegEnabled: boolean, tontineEnabled: boolean,
-        taxP2P: number, taxWithdraw: number
+        taxP2P: number, taxWithdraw: number,
+        // Le JSON réel renvoyé par GET /api/settings (backend/src/routes/settings.ts) étale
+        // TOUT SystemSettings — ce type ne faisait qu'omettre ces deux champs de sa
+        // signature, ce qui masquait leur existence côté TypeScript sans rien changer à ce
+        // que le serveur renvoyait réellement.
+        bnplInterest?: number, forexMarkup?: number
     }>;
 
 export interface AppNotification {
