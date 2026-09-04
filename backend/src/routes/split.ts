@@ -2,9 +2,11 @@ import express from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
+import { LimitEngine } from '../services/LimitEngine';
 import { friendlyErrorMessage } from '../utils/errors';
 import logger from '../utils/logger';
 import { verifyUserPin } from '../utils/pinAuth';
+import { getSystemSettings } from './settings';
 
 const router = express.Router();
 
@@ -100,6 +102,8 @@ router.post('/pay/:id', authMiddleware, circuitBreakerMiddleware, async (req: Au
         const pinCheck = await verifyUserPin(payerForPin, pin);
         if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
+        const settings = await getSystemSettings();
+
         await prisma.$transaction(async (tx: any) => {
             const splitReq = await tx.splitRequest.findUnique({
                 where: { id: splitId },
@@ -121,6 +125,14 @@ router.post('/pay/:id', authMiddleware, circuitBreakerMiddleware, async (req: Au
             if (payer.wallet!.balance < splitReq.amount) {
                 throw new Error('Fonds insuffisants pour rembourser cette part.');
             }
+
+            // Anti-blanchiment : ce remboursement est un transfert P2P comme un autre (le
+            // payeur débite son wallet vers celui d'un tiers) mais, contrairement à /transfer,
+            // /pay/qr-scan, /remit/send et /wallet/push, ne passait par aucun contrôle de
+            // plafond KYC — un utilisateur pouvait donc contourner entièrement ses limites de
+            // transfert en faisant transiter l'argent par une demande de partage plutôt qu'un
+            // transfert classique.
+            await LimitEngine.verifyAndIncrementConsumption(tx, payer.id, payer.wallet!.id, splitReq.amount, settings);
 
             // Transfer Funds — garde atomique `balance: gte` : sans elle, deux requêtes
             // concurrentes sur /pay/:id passent toutes les deux le contrôle de solde ci-dessus
