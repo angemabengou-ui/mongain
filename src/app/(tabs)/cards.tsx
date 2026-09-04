@@ -16,8 +16,10 @@ export default function CardsScreen() {
         try {
             const res = await request('GET', '/api/wallet/cards', {}, true) as any[];
             setCards(res || []);
-        } catch (e) {
-            console.warn(e);
+        } catch (e: any) {
+            // Un échec silencieux (juste console.warn) rendait un chargement en échec
+            // indiscernable d'un compte sans aucune carte.
+            Alert.alert("Erreur", e.response?.data?.error || e.message || "Impossible de charger vos cartes.");
         } finally {
             setLoading(false);
         }
@@ -116,8 +118,16 @@ export default function CardsScreen() {
                 ) : (
                     cards.map((c, i) => {
                         const isFrozen = c.status === 'FROZEN';
+                        // Distinct de FROZEN (auto-gel réversible par le titulaire) : le backend
+                        // (cards.ts) refuse tout dégel d'une carte BLOCKED — décidé par le staff
+                        // sécurité, jamais par le client. Avant ce correctif, seul `isFrozen`
+                        // était vérifié : une carte BLOCKED s'affichait identique à une carte
+                        // active (pas d'overlay, bouton "Geler" comme si c'était une action
+                        // normale disponible), et l'utilisateur ne découvrait le blocage réel
+                        // qu'en tapant l'action et recevant un 403 du serveur.
+                        const isBlocked = c.status === 'BLOCKED';
                         return (
-                            <View key={c.id || i} style={[styles.cardContainer, isFrozen && { opacity: 0.7 }]}>
+                            <View key={c.id || i} style={[styles.cardContainer, (isFrozen || isBlocked) && { opacity: 0.7 }]}>
                                 <BlurView intensity={50} tint="dark" style={styles.cardGlass}>
                                     <View style={styles.cardHeader}>
                                         <Text style={styles.bankName}>MONGAIN VIRTUAL</Text>
@@ -151,7 +161,12 @@ export default function CardsScreen() {
                                     </View>
                                 </BlurView>
 
-                                {isFrozen && (
+                                {isBlocked ? (
+                                    <View style={styles.frozenFilter}>
+                                        <Ionicons name="shield-half" color="#fff" size={40} style={{ opacity: 0.8 }} />
+                                        <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>BLOQUÉE PAR LA SÉCURITÉ</Text>
+                                    </View>
+                                ) : isFrozen && (
                                     <View style={styles.frozenFilter}>
                                         <Ionicons name="snow" color="#fff" size={40} style={{ opacity: 0.8 }} />
                                         <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>CARTE GELÉE</Text>
@@ -162,9 +177,11 @@ export default function CardsScreen() {
                                     <TouchableOpacity style={styles.actionBtn} onPress={() => handleFund(c.id)} disabled={actionLoading}>
                                         <Text style={styles.actionText}>Recharger</Text>
                                     </TouchableOpacity>
-                                    <TouchableOpacity style={[styles.actionBtn, isFrozen ? styles.actionBtnUnfreeze : styles.actionBtnDanger]} onPress={() => handleFreeze(c.id, isFrozen)} disabled={actionLoading}>
-                                        <Text style={styles.actionText}>{isFrozen ? "Débloquer" : "Geler"}</Text>
-                                    </TouchableOpacity>
+                                    {!isBlocked && (
+                                        <TouchableOpacity style={[styles.actionBtn, isFrozen ? styles.actionBtnUnfreeze : styles.actionBtnDanger]} onPress={() => handleFreeze(c.id, isFrozen)} disabled={actionLoading}>
+                                            <Text style={styles.actionText}>{isFrozen ? "Débloquer" : "Geler"}</Text>
+                                        </TouchableOpacity>
+                                    )}
                                 </View>
                             </View>
                         );
