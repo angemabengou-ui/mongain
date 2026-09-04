@@ -176,12 +176,12 @@ export default function DashboardScreen() {
               </View>
 
               <View style={styles.balanceDivider} />
-              <TouchableOpacity style={styles.qrRow} onPress={() => router.push('/receive-qr')}>
+              <TouchableOpacity style={[styles.qrRow, { justifyContent: 'center' }]} onPress={() => router.push('/receive-qr')}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Ionicons name="qr-code-outline" size={18} color="#fff" />
-                  <Text style={styles.qrText}>Mon QR Code (Recevoir)</Text>
+                  <Text style={[styles.qrText, { marginRight: 8 }]}>Mon QR Code (Recevoir)</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#fff" />
                 </View>
-                <Ionicons name="chevron-forward" size={16} color="#fff" />
               </TouchableOpacity>
             </View>
 
@@ -211,7 +211,9 @@ export default function DashboardScreen() {
               <TouchableOpacity><Text style={styles.seeAllText}>Voir tout</Text></TouchableOpacity>
             </View>
             <View style={styles.servicesGridSquares}>
-              <ServiceSquareItem icon="trending-up" label="Crédits" bgColor="#1E3A8A15" color="#1E3A8A" onPress={() => router.push('/credit-hub')} styles={styles} />
+              <ServiceSquareItem icon="cash" label="Micro-crédit" bgColor="#1E3A8A15" color="#1E3A8A" onPress={() => router.push('/credit')} styles={styles} />
+              <ServiceSquareItem icon="card" label="Paiement x3" bgColor="#F59E0B15" color="#F59E0B" onPress={() => router.push('/bnpl')} styles={styles} />
+              <ServiceSquareItem icon="trending-up" label="Crypto" bgColor="#10B98115" color="#10B981" onPress={() => router.push('/crypto')} styles={styles} />
               <ServiceSquareItem icon="flash" label="Factures" bgColor="#FFB02015" color="#FFB020" disabled={!appConfig.seegEnabled} onPress={() => router.push('/billers')} styles={styles} />
               <ServiceSquareItem icon="phone-portrait" label="Recharge" bgColor="#2563FF15" color="#2563FF" onPress={() => router.push('/services/airtime')} styles={styles} />
               <ServiceSquareItem icon="water" label="Eau" bgColor="#EF444415" color="#EF4444" onPress={() => Alert.alert('Bientôt disponible', "Le paiement des factures d'eau sera bientôt activé.")} styles={styles} />
