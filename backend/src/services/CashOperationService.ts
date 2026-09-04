@@ -206,6 +206,13 @@ export class CashOperationService {
             await LimitEngine.verifyAndIncrementConsumption(tx, client.id, client.wallet.id, amount, settings);
 
             // 6. Anti-Fractionnement Check global (Toutes succursales confondues)
+            // Seule la branche BLOCK avait un effet réel : APPLY_FEE (pourtant la VALEUR PAR
+            // DÉFAUT en base, schema.prisma) et ALERT ne faisaient absolument rien — ni frais,
+            // ni alerte, ni RiskFlag — un fractionnement détecté passait alors normalement,
+            // rendant tout le contrôle anti-structuration inerte sur toute installation n'ayant
+            // pas explicitement basculé sur BLOCK.
+            const agencyRate = settings?.agencyTaxWithdraw ?? 0.01;
+            let antiFractioningPenalty = 0;
             if (settings) {
                 const hours = settings.antiFractioningWindowHours || 24;
                 const windowEnd = new Date();
@@ -236,6 +243,20 @@ export class CashOperationService {
                             }
                         });
                         throw new Error("Opération rejetée : Politique d'Anti-Fractionnement activée.");
+                    } else if (action === 'ALERT' || action === 'APPLY_FEE') {
+                        await tx.riskFlag.create({
+                            data: {
+                                userId: client.id, authorId: tellerId, type: 'ANTI_FRACTIONING',
+                                description: `${action === 'ALERT' ? 'Alerte' : 'Frais dissuasif appliqué'} sur Cash-Out de ${amount} suite dépassement du seuil par cumul (${combinedAmount} FCFA cumulés).`
+                            }
+                        });
+                        if (action === 'APPLY_FEE') {
+                            // Même formule que le taux marginal agence ci-dessous (taux déjà
+                            // configurable par l'admin, pas une valeur inventée ici) : appliqué
+                            // au seul dépassement du seuil anti-fractionnement, en plus des frais
+                            // normaux calculés plus bas.
+                            antiFractioningPenalty = (combinedAmount - settings.antiFractioningMaxAmount) * agencyRate;
+                        }
                     }
                 }
             }
@@ -246,8 +267,7 @@ export class CashOperationService {
             // appliquait ici par erreur — ce dernier reste réservé aux retraits chez un
             // marchand (wallet.ts /client-initiated-withdraw), un guichet différent.
             const threshold = settings?.agencyWithdrawThreshold ?? 500000;
-            const agencyRate = settings?.agencyTaxWithdraw ?? 0.01;
-            const fee = amount > threshold ? (amount - threshold) * agencyRate : 0;
+            const fee = (amount > threshold ? (amount - threshold) * agencyRate : 0) + antiFractioningPenalty;
             const totalToDeduct = amount + fee;
 
             if (client.wallet.balance < totalToDeduct) {
