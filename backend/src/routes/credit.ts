@@ -2,9 +2,11 @@ import express from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { getCentralTreasury } from '../services/centralTreasury';
+import { LimitEngine } from '../services/LimitEngine';
 import { getSystemAccount } from '../services/systemAccounts';
 import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
+import { getSystemSettings } from './settings';
 
 // `io` était importé de '../index' au niveau du module — comme CashOperationService.ts,
 // cela chargeait toute l'application (routes, serveur HTTP) comme effet de bord d'un simple
@@ -12,6 +14,20 @@ import { verifyUserPin } from '../utils/pinAuth';
 // handler (voir index.ts : `app.set('io', io)`).
 
 const router = express.Router();
+
+// Algo IA de décision simple : KYC 1+ et Points de fidélité >= 100. Extrait en fonction
+// partagée : /apply recalculait ces mêmes règles indépendamment et avait dérivé — plus de
+// seuil de 100 points, plus de plafond à 500k — laissant passer des prêts que /eligibility
+// annonçait pourtant refusés ou plafonnés.
+function computeCreditEligibility(user: { kycLevel: number; loyaltyPoints: number }) {
+    const eligible = user.kycLevel >= 1 && user.loyaltyPoints >= 100;
+    let maxAmount = 0;
+    if (eligible) {
+        maxAmount = 50000 + (user.loyaltyPoints * 50); // E.g., 100 points = 55,000 FCFA
+        if (maxAmount > 500000) maxAmount = 500000; // Cap at 500k
+    }
+    return { eligible, maxAmount };
+}
 
 // GET /api/credit/eligibility
 router.get('/eligibility', authMiddleware, async (req: AuthRequest, res) => {
@@ -25,14 +41,7 @@ router.get('/eligibility', authMiddleware, async (req: AuthRequest, res) => {
             return res.status(403).json({ eligible: false, message: 'Compte inactif.' });
         }
 
-        // Algo IA de décision simple : KYC 1+ et Points de fidélité > 100
-        const isEligible = user.kycLevel >= 1 && user.loyaltyPoints >= 100;
-
-        let maxAmount = 0;
-        if (isEligible) {
-            maxAmount = 50000 + (user.loyaltyPoints * 50); // E.g., 100 points = 55,000 FCFA
-            if (maxAmount > 500000) maxAmount = 500000; // Cap at 500k
-        }
+        const { eligible: isEligible, maxAmount } = computeCreditEligibility(user);
 
         // Taux fixe V14
         const interestRate = 0.05;
@@ -77,23 +86,37 @@ router.post('/apply', authMiddleware, async (req: AuthRequest, res) => {
         const pinCheck = await verifyUserPin(userForPin, pin);
         if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
+        const settings = await getSystemSettings();
+
         const result = await prisma.$transaction(async (tx) => {
             const user = await tx.user.findUnique({
                 where: { id: req.userId },
                 include: { wallet: true }
             });
             if (!user) throw new Error('Utilisateur non trouvé');
-            if (user.kycLevel < 1) throw new Error('KYC Niveau 1 requis pour le crédit.');
+
+            // Recalculées ici via la même fonction que GET /eligibility — la version
+            // précédente ne vérifiait que kycLevel, jamais le seuil de 100 points de fidélité,
+            // et recalculait maxAmount sans jamais appliquer le plafond de 500 000 FCFA :
+            // un utilisateur inéligible (< 100 points) pouvait quand même obtenir 50 000 FCFA,
+            // et un utilisateur très fidèle pouvait obtenir plus du double du plafond annoncé.
+            const { eligible, maxAmount } = computeCreditEligibility(user);
+            if (!eligible) throw new Error('Vous n\'êtes pas éligible au crédit (KYC Niveau 1 et 100 points de fidélité minimum requis).');
 
             const activeLoans = await tx.loan.count({
                 where: { userId: req.userId, status: 'ACTIVE' }
             });
             if (activeLoans > 0) throw new Error('Vous avez déjà un crédit en cours.');
 
-            const maxAmount = 50000 + (user.loyaltyPoints * 50);
             if (amount > maxAmount) {
                 throw new Error(`Montant non autorisé. Vous êtes éligible jusqu'à ${maxAmount} FCFA.`);
             }
+
+            // Plafonds AML/KYC — même raisonnement que bnpl.ts /apply (produit quasi-identique,
+            // qui applique déjà ce contrôle) : l'octroi de ce crédit injecte de l'argent réel et
+            // utilisable dans le wallet du client, sans jamais passer par aucun contrôle de
+            // plafond journalier/mensuel — absent ici jusqu'à présent.
+            await LimitEngine.verifyAndIncrementConsumption(tx, user.id, user.wallet!.id, amount, settings);
 
             const interestRate = 0.05;
             const totalOwed = amount + (amount * interestRate);
