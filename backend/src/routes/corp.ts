@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { authCorp, AuthRequest, JWT_SECRET } from '../middleware/auth';
 import { prisma } from '../prisma';
-import { sendSms } from '../services/sms';
+import { isSmsConfigured, sendSms } from '../services/sms';
 import { friendlyErrorMessage, withDbRetry } from '../utils/errors';
 import logger from '../utils/logger';
 
@@ -105,8 +105,11 @@ router.post('/login', loginLimiter, async (req, res) => {
             return res.status(400).json({ error: 'Aucun numéro de téléphone enregistré pour ce compte. Contactez un SUPER_ADMIN pour l\'ajouter avant de pouvoir vous connecter.' });
         }
 
-        // Même garde qu'auth.ts : jamais de mode démo en production, quelle que soit la config Twilio.
-        const useDemoMode = process.env.NODE_ENV !== 'production' && !process.env.TWILIO_ACCOUNT_SID;
+        // Même garde qu'auth.ts : jamais de mode démo en production. `!isSmsConfigured` (pas
+        // `!process.env.TWILIO_ACCOUNT_SID` seul) : reflète la VRAIE condition d'envoi de
+        // sms.ts, pour ne jamais générer un code aléatoire qui ne finit que dans les logs
+        // serveur pendant qu'un compte SID partiel traîne dans l'environnement.
+        const useDemoMode = process.env.NODE_ENV !== 'production' && !isSmsConfigured;
         const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes, comme le login client
 

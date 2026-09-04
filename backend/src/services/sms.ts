@@ -10,6 +10,15 @@ if (SMS_ENABLED && accountSid && authToken) {
     client = twilio(accountSid, authToken);
 }
 
+// Source de vérité unique pour "un vrai SMS partira-t-il ?" — auth.ts et corp.ts décidaient
+// chacun leur propre condition de mode démo (`!TWILIO_ACCOUNT_SID` seul), qui pouvait diverger
+// de celle-ci : un `TWILIO_ACCOUNT_SID` posé dans l'environnement (config partielle, secret
+// oublié) sans SMS_ENABLED=true ni TWILIO_AUTH_TOKEN désactivait leur mode démo (code aléatoire
+// au lieu de 1234) alors qu'aucun SMS n'était réellement envoyé — le code réel n'atterrissait
+// alors que dans les logs serveur (la branche "SMS SIMULATOR" ci-dessous), jamais visible pour
+// qui teste depuis l'écran de connexion.
+export const isSmsConfigured = !!(SMS_ENABLED && accountSid && authToken);
+
 export const sendSms = async (to: string, body: string) => {
     if (!SMS_ENABLED || !client) {
         console.log('\n=============================================');

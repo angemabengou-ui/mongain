@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { ACCESS_TOKEN_TTL, AuthRequest, JWT_SECRET, REFRESH_TOKEN_TTL_MS, authMiddleware, generateRefreshToken, hashRefreshToken } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { runKycVendorCheck } from '../services/kycVendorCheck';
-import { sendSms } from '../services/sms';
+import { isSmsConfigured, sendSms } from '../services/sms';
 import { friendlyErrorMessage, isDbConnectivityError, withDbRetry } from '../utils/errors';
 import logger from '../utils/logger';
 import { verifyUserPin } from '../utils/pinAuth';
@@ -86,10 +86,14 @@ router.post('/request-otp', smsLimiter, async (req, res) => {
         if (existingUser) return res.status(400).json({ error: 'Ce numéro est déjà inscrit.' });
 
         // Mode Démo Automatique : si Twilio n'est pas configuré, le code est toujours 1234
-        // Mode démo jamais atteignable en production, même si TWILIO_ACCOUNT_SID est absent par
+        // Mode démo jamais atteignable en production, même si isSmsConfigured est faux par
         // erreur de configuration : un code aléatoire non livrable est préférable à un code
-        // universel « 1234 » valide pour tout le monde.
-        const useDemoMode = process.env.NODE_ENV !== 'production' && !process.env.TWILIO_ACCOUNT_SID;
+        // universel « 1234 » valide pour tout le monde. isSmsConfigured (pas seulement
+        // TWILIO_ACCOUNT_SID) : un SID posé dans l'environnement sans SMS_ENABLED=true ni
+        // TWILIO_AUTH_TOKEN désactivait ce mode démo alors qu'aucun SMS n'était réellement
+        // envoyé — le vrai code n'atterrissait alors que dans les logs serveur (voir
+        // sms.ts), invisible pour qui teste depuis l'écran de connexion.
+        const useDemoMode = process.env.NODE_ENV !== 'production' && !isSmsConfigured;
         const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
@@ -130,10 +134,14 @@ router.post('/request-reset-otp', smsLimiter, async (req, res) => {
             return res.status(429).json({ error: 'Trop de demandes pour ce numéro. Réessayez dans 1 heure.' });
         }
 
-        // Mode démo jamais atteignable en production, même si TWILIO_ACCOUNT_SID est absent par
+        // Mode démo jamais atteignable en production, même si isSmsConfigured est faux par
         // erreur de configuration : un code aléatoire non livrable est préférable à un code
-        // universel « 1234 » valide pour tout le monde.
-        const useDemoMode = process.env.NODE_ENV !== 'production' && !process.env.TWILIO_ACCOUNT_SID;
+        // universel « 1234 » valide pour tout le monde. isSmsConfigured (pas seulement
+        // TWILIO_ACCOUNT_SID) : un SID posé dans l'environnement sans SMS_ENABLED=true ni
+        // TWILIO_AUTH_TOKEN désactivait ce mode démo alors qu'aucun SMS n'était réellement
+        // envoyé — le vrai code n'atterrissait alors que dans les logs serveur (voir
+        // sms.ts), invisible pour qui teste depuis l'écran de connexion.
+        const useDemoMode = process.env.NODE_ENV !== 'production' && !isSmsConfigured;
         const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
@@ -329,10 +337,14 @@ router.post('/login', loginLimiter, async (req, res) => {
             data: { failedPinAttempts: 0, lockedUntil: null },
         });
 
-        // Mode démo jamais atteignable en production, même si TWILIO_ACCOUNT_SID est absent par
+        // Mode démo jamais atteignable en production, même si isSmsConfigured est faux par
         // erreur de configuration : un code aléatoire non livrable est préférable à un code
-        // universel « 1234 » valide pour tout le monde.
-        const useDemoMode = process.env.NODE_ENV !== 'production' && !process.env.TWILIO_ACCOUNT_SID;
+        // universel « 1234 » valide pour tout le monde. isSmsConfigured (pas seulement
+        // TWILIO_ACCOUNT_SID) : un SID posé dans l'environnement sans SMS_ENABLED=true ni
+        // TWILIO_AUTH_TOKEN désactivait ce mode démo alors qu'aucun SMS n'était réellement
+        // envoyé — le vrai code n'atterrissait alors que dans les logs serveur (voir
+        // sms.ts), invisible pour qui teste depuis l'écran de connexion.
+        const useDemoMode = process.env.NODE_ENV !== 'production' && !isSmsConfigured;
         const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
 
