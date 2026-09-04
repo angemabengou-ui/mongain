@@ -7,6 +7,13 @@ import { apiBuyMarketItem, apiGetMarketListings } from '../../services/api';
 export default function MongainMarket() {
     const [listings, setListings] = useState<any[]>([]);
     const [refreshing, setRefreshing] = useState(false);
+    // Id de l'annonce en cours d'achat, pas un simple booléen : bloque uniquement le bouton
+    // de CETTE annonce (une autre reste achetable pendant ce temps), et surtout empêche un
+    // double-tap rapide de déclencher deux /buy/:id pour le même article — la garde atomique
+    // côté serveur (market.ts) empêche un double débit réel, mais le perdant de cette
+    // course avec lui-même se voyait alors dire "cette annonce vient d'être achetée par
+    // quelqu'un d'autre", ce qui n'était pas le cas.
+    const [buyingId, setBuyingId] = useState<string | null>(null);
     const { user } = useAuth();
 
     // Simulate real photos
@@ -21,8 +28,10 @@ export default function MongainMarket() {
         try {
             const res = await apiGetMarketListings();
             setListings(res.listings || []);
-        } catch (error) {
-            console.error(error);
+        } catch (error: any) {
+            // Un échec silencieux (juste console.error) rendait un marché indisponible
+            // indiscernable d'un marché réellement vide.
+            Alert.alert('Erreur', error.response?.data?.error || error.message || "Impossible de charger le marché.");
         }
         setRefreshing(false);
     };
@@ -32,6 +41,7 @@ export default function MongainMarket() {
     }, []);
 
     const handleBuy = (item: any) => {
+        if (buyingId) return;
         Alert.prompt("Confirmation (Escrow)",
             `Acheter ${item.title} pour ${item.price} FCFA ?\n\nLes fonds seront bloqués de manière sécurisée par Mongain jusqu'à réception du produit.\n\nSaisissez votre code PIN :`,
             [
@@ -40,12 +50,21 @@ export default function MongainMarket() {
                     text: 'Acheter & Bloquer les fonds',
                     onPress: async (pin?: string) => {
                         if (!pin) return;
+                        setBuyingId(item.id);
                         try {
                             const res = await apiBuyMarketItem(item.id, pin);
                             Alert.alert("Succès !", res.message);
                             fetchListings();
                         } catch (e: any) {
                             Alert.alert('Erreur', e.response?.data?.error || e.message || "Erreur de paiement Escrow");
+                            // L'annonce peut avoir été vendue (à quelqu'un d'autre, ou par un
+                            // double-tap sur ce même bouton avant ce correctif) ou son état a
+                            // changé pour toute autre raison ayant fait échouer l'achat — sans
+                            // ce rafraîchissement, elle restait affichée comme achetable et
+                            // l'utilisateur pouvait retenter indéfiniment un article déjà mort.
+                            fetchListings();
+                        } finally {
+                            setBuyingId(null);
                         }
                     }
                 }
@@ -93,9 +112,9 @@ export default function MongainMarket() {
                         <Text style={{ color: '#444', marginTop: 12, lineHeight: 20, fontFamily: 'Satoshi-Regular' }}>{item.description}</Text>
 
                         {user?.id !== item.sellerId ? (
-                            <TouchableOpacity onPress={() => handleBuy(item)} style={{ backgroundColor: '#1A1A1A', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 16, flexDirection: 'row', justifyContent: 'center' }}>
+                            <TouchableOpacity onPress={() => handleBuy(item)} disabled={!!buyingId} style={{ backgroundColor: '#1A1A1A', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 16, flexDirection: 'row', justifyContent: 'center', opacity: buyingId && buyingId !== item.id ? 0.5 : 1 }}>
                                 <Ionicons name="lock-closed" size={18} color="#FFF" style={{ marginRight: 8 }} />
-                                <Text style={{ color: '#FFF', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>Acheter via Escrow</Text>
+                                <Text style={{ color: '#FFF', fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>{buyingId === item.id ? 'Achat en cours...' : 'Acheter via Escrow'}</Text>
                             </TouchableOpacity>
                         ) : (
                             <View style={{ backgroundColor: '#F3F4F6', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 16 }}>
