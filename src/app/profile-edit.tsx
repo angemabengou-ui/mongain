@@ -40,23 +40,30 @@ export default function ProfileEditScreen() {
 
     const pickImage = async (field: string) => {
         SecurityFlags.bypassAppLock = true;
-        let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
-            allowsEditing: true,
-            aspect: [4, 3],
-            quality: 0.1, // très basse qualité pour limiter la taille en Base64
-            base64: true
-        });
+        try {
+            let result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                aspect: [4, 3],
+                quality: 0.1, // très basse qualité pour limiter la taille en Base64
+                base64: true
+            });
 
-        // Timeout pour éviter que la transition de retour au premier plan (Foreground)
-        // ne déclenche la sécurité avant qu'on ait désactivé le flag
-        setTimeout(() => { SecurityFlags.bypassAppLock = false; }, 1000);
-
-        if (!result.canceled && result.assets[0].base64) {
-            setDocuments((prev: any) => ({
-                ...prev,
-                [field]: `data:image/jpeg;base64,${result.assets[0].base64}`
-            }));
+            if (!result.canceled && result.assets[0].base64) {
+                setDocuments((prev: any) => ({
+                    ...prev,
+                    [field]: `data:image/jpeg;base64,${result.assets[0].base64}`
+                }));
+            }
+        } finally {
+            // `finally`, pas seulement après l'`await` : si launchImageLibraryAsync lève
+            // (permission refusée, erreur native), le reset ci-dessous était sauté et
+            // bypassAppLock restait `true` pour toujours — désactivant silencieusement le
+            // verrouillage automatique sur mise en arrière-plan pour tout le reste de la
+            // session, bien au-delà de ce sélecteur d'image.
+            // Timeout pour éviter que la transition de retour au premier plan (Foreground)
+            // ne déclenche la sécurité avant qu'on ait désactivé le flag
+            setTimeout(() => { SecurityFlags.bypassAppLock = false; }, 1000);
         }
     };
 
