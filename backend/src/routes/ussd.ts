@@ -1,8 +1,10 @@
 import crypto from 'crypto';
 import { Request, Response, Router } from 'express';
 import { prisma } from '../prisma';
+import { LimitEngine } from '../services/LimitEngine';
 import { verifyUserPin } from '../utils/pinAuth';
 import logger from '../utils/logger';
+import { getSystemSettings } from './settings';
 
 const router = Router();
 
@@ -47,6 +49,15 @@ router.post('/gateway', async (req: Request, res: Response) => {
             return res.send(`END Bienvenue sur Mongain. Ce numéro n'est pas lié à un compte. Téléchargez l'app ou voir une agence.`);
         }
 
+        // authMiddleware bloque déjà tout accès app en 403 dès `isActive === false`
+        // (middleware/auth.ts) — le canal USSD, qui authentifie par numéro d'appelant confirmé
+        // par le télco plutôt que par JWT, n'avait aucun équivalent : un compte gelé par le
+        // back-office (perm_customer_freeze) restait pleinement opérationnel par USSD, y
+        // compris pour envoyer de l'argent, ce qui viderait entièrement l'effet du freeze.
+        if (user.isActive === false) {
+            return res.send(`END Votre compte a été suspendu. Contactez le support Mongain.`);
+        }
+
         // Parse text sequence (Empty = Step 1, "1" = Menu 1, "1*500*074..." = Send 500 etc)
         const inputs = (text || '').split('*');
         const lastInput = inputs[inputs.length - 1];
@@ -87,13 +98,22 @@ router.post('/gateway', async (req: Request, res: Response) => {
 
                 try {
                     // Injecting raw Prisma Tx for P2P since USSD bypasses CashOperationService
-                    const settings = await prisma.systemSettings.findFirst();
+                    const settings = await getSystemSettings();
                     const fee = amount * (settings?.taxP2P || 0.01);
                     const totalRequired = amount + fee;
 
                     if (user.wallet.balance < totalRequired) return res.send(`END Solde insuffisant (Frais: ${fee}F).`);
 
                     await prisma.$transaction(async (tx) => {
+                        // Anti-blanchiment : ce transfert n'appelait jusqu'ici jamais
+                        // LimitEngine (contrairement à /api/wallet/transfer, son équivalent
+                        // applicatif), donc ni les plafonds journaliers/mensuels par palier KYC
+                        // ni le contrôle anti-fractionnement ne s'appliquaient — un client
+                        // Tier 0 pouvait envoyer la totalité de son solde en une seule
+                        // opération USSD, quel que soit le montant, en contournant entièrement
+                        // ses limites.
+                        await LimitEngine.verifyAndIncrementConsumption(tx, user.id, user.wallet!.id, amount, settings);
+
                         await tx.wallet.update({
                             where: { id: user.wallet!.id, balance: { gte: totalRequired } },
                             data: { balance: { decrement: totalRequired } }
