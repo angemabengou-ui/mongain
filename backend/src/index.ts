@@ -3,7 +3,7 @@ import express from 'express';
 import helmet from 'helmet';
 import http from 'http';
 import { Server } from 'socket.io';
-import { initCronJobs } from './cron';
+import { executeTontineAutomations, initCronJobs } from './cron';
 import adminRoutes from './routes/admin';
 import adminMarketRoutes from './routes/admin.market';
 import adminMerchantsRoutes from './routes/admin.merchants';
@@ -14,19 +14,17 @@ import adminVaultsRoutes from './routes/admin.vaults';
 import agencyRoutes from './routes/agency';
 import aiRoutes from './routes/ai';
 import authRoutes from './routes/auth';
-import { executeTontineAutomations } from './cron';
 import b2bRoutes from './routes/b2b';
-import ussdRoutes from './routes/ussd';
-import marketRoutes from './routes/market';
-import investRoutes from './routes/invest';
-import gatewayRoutes from './routes/gateway';
 import billerRoutes from './routes/biller';
 import bnplRoutes from './routes/bnpl';
 import cardsRoutes from './routes/cards';
 import corpRoutes from './routes/corp';
 import creditRoutes from './routes/credit';
 import cryptoRoutes from './routes/crypto';
+import gatewayRoutes from './routes/gateway';
+import investRoutes from './routes/invest';
 import loyaltyRoutes from './routes/loyalty';
+import marketRoutes from './routes/market';
 import merchantRoutes from './routes/merchant';
 import notificationRoutes from './routes/notifications';
 import payRoutes from './routes/pay';
@@ -39,6 +37,7 @@ import settingsRoutes from './routes/settings';
 import splitRoutes from './routes/split';
 import tontineRoutes from './routes/tontine';
 import treasuryRoutes from './routes/treasury';
+import ussdRoutes from './routes/ussd';
 import vaultRoutes from './routes/vault';
 import walletRoutes from './routes/wallet';
 import webhookRoutes from './routes/webhooks';
@@ -74,7 +73,6 @@ const isProd = process.env.NODE_ENV === 'production';
 const extraAllowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
 
 function isOriginAllowed(origin: string | undefined): boolean {
-    // Pas d'origine (apps mobiles, curl, Postman, clients Socket.io natifs) : autorisé.
     if (!origin) return true;
     const allowed = [
         'http://localhost:5173',
@@ -85,8 +83,11 @@ function isOriginAllowed(origin: string | undefined): boolean {
         ...extraAllowedOrigins,
     ];
     if (allowed.includes(origin)) return true;
-    // Sous-domaines de preview (Vercel/Netlify/Render) : uniquement hors production.
-    // En production, seule la liste explicite ci-dessus (+ ALLOWED_ORIGINS) est acceptée.
+
+    if (!isProd && (origin.startsWith('http://192.168.') || origin.startsWith('http://10.'))) {
+        return true;
+    }
+
     if (!isProd && (origin.endsWith('.vercel.app') || origin.endsWith('.netlify.app') || origin.endsWith('.onrender.com'))) {
         return true;
     }
@@ -104,8 +105,10 @@ export const io = new Server(server, {
 
 app.set('io', io); // Makes it available to routes via req.app.get('io')
 
-// Security Middleware (XSS, Clickjacking, Sniffing prevention)
-app.use(helmet());
+app.use(helmet({
+    contentSecurityPolicy: isProd ? undefined : false,
+    crossOriginOpenerPolicy: isProd ? undefined : false
+}));
 
 app.use(cors({
     origin: (origin, callback) => {

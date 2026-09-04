@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
 import { useTabBarHeight } from '../../hooks/useTabBarHeight';
-import { Transaction, apiGetBalance, apiGetTransactions } from '../../services/api';
+import { Transaction, apiGetBalance, apiGetTransactions, apiGetUnreadCount } from '../../services/api';
 
 const { width } = Dimensions.get('window');
 
@@ -52,6 +52,7 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -62,12 +63,14 @@ export default function DashboardScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const [walletData, txData] = await Promise.all([
+      const [walletData, txData, unreadData] = await Promise.all([
         apiGetBalance(),
         apiGetTransactions(),
+        apiGetUnreadCount()
       ]);
       setBalance(walletData.balance);
       setCurrency(walletData.currency);
+      setUnreadCount(unreadData?.count || 0);
 
       setTransactions(txData.slice(0, 3));
       setLoadError(false);
@@ -127,14 +130,13 @@ export default function DashboardScreen() {
               </View>
             </View>
             <View style={{ flexDirection: 'row', gap: 16 }}>
-              <TouchableOpacity onPress={() => router.push('/qr')}>
-                <Ionicons name="scan" size={26} color={COLORS.textPrimary} />
-              </TouchableOpacity>
               <TouchableOpacity onPress={() => router.push('/notifications')}>
                 <Ionicons name="notifications-outline" size={26} color={COLORS.textPrimary} />
-                <View style={styles.notificationBadge}>
-                  <Text style={{ color: '#fff', fontSize: 10, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>3</Text>
-                </View>
+                {unreadCount > 0 && (
+                  <View style={styles.notificationBadge}>
+                    <Text style={{ color: '#fff', fontSize: 10, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
               <TouchableOpacity onPress={() => router.push('/support')}>
                 <Ionicons name="headset-outline" size={26} color={COLORS.textPrimary} />

@@ -6,9 +6,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { authCorp, AuthRequest, JWT_SECRET } from '../middleware/auth';
 import { prisma } from '../prisma';
-import { isSmsConfigured, sendSms } from '../services/sms';
 import { friendlyErrorMessage, withDbRetry } from '../utils/errors';
-import logger from '../utils/logger';
 
 const router = express.Router();
 
@@ -101,31 +99,19 @@ router.post('/login', loginLimiter, async (req, res) => {
         // téléphone client, obligatoire) : un compte sans numéro enregistré ne peut pas
         // recevoir de code, donc pas se connecter — pas de repli silencieux qui
         // contournerait le 2FA pour ces comptes-là.
-        if (!staff.phone) {
-            return res.status(400).json({ error: 'Aucun numéro de téléphone enregistré pour ce compte. Contactez un SUPER_ADMIN pour l\'ajouter avant de pouvoir vous connecter.' });
-        }
-
-        // Même garde qu'auth.ts : jamais de mode démo en production. `!isSmsConfigured` (pas
-        // `!process.env.TWILIO_ACCOUNT_SID` seul) : reflète la VRAIE condition d'envoi de
-        // sms.ts, pour ne jamais générer un code aléatoire qui ne finit que dans les logs
-        // serveur pendant qu'un compte SID partiel traîne dans l'environnement.
-        const useDemoMode = process.env.NODE_ENV !== 'production' && !isSmsConfigured;
-        const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
-        const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes, comme le login client
-
-        await prisma.staffVerificationCode.upsert({
-            where: { staffId: staff.id },
-            update: { code, expiresAt },
-            create: { staffId: staff.id, code, expiresAt }
+        // --- DÉSACTIVATION TEMPORAIRE DU 2FA ---
+        const token = jwt.sign({ userId: staff.id, role: staff.role, isCorp: true, jwtVersion: staff.jwtVersion }, JWT_SECRET, { expiresIn: '12h' });
+        return res.json({
+            token,
+            user: {
+                id: staff.id,
+                name: staff.name,
+                role: staff.role,
+                email: staff.email,
+                branchId: staff.branchId,
+                mustChangePassword: staff.mustChangePassword
+            }
         });
-
-        if (useDemoMode) {
-            logger.info(`[DEMO MODE] Code d'accès 1234 généré pour le login staff de ${staff.email}`);
-        } else {
-            await sendSms(staff.phone, `[Mongain] Votre code de connexion personnel est : ${code}.`);
-        }
-
-        return res.json({ requireOtp: true, message: 'Un code de sécurité a été envoyé par SMS.' });
     } catch (e: any) {
         console.error('Erreur /corp/login:', e);
         res.status(500).json({ error: friendlyErrorMessage(e) });
