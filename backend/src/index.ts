@@ -24,7 +24,6 @@ import cryptoRoutes from './routes/crypto';
 import gatewayRoutes from './routes/gateway';
 import investRoutes from './routes/invest';
 import loyaltyRoutes from './routes/loyalty';
-import marketRoutes from './routes/market';
 import merchantRoutes from './routes/merchant';
 import notificationRoutes from './routes/notifications';
 import payRoutes from './routes/pay';
@@ -198,7 +197,6 @@ app.use('/api/ussd', ussdRoutes);
 // seul, sans hasPermission()) d'endpoints déjà servis en toute sécurité par admin.ts
 // (/fraud-cases, perm_customer_flag) et scoring.ts (/scoring) — aucune page admin-web ne les
 // appelait, ils n'exposaient ces données qu'à un attaquant en JWT valide.
-app.use('/api/market', marketRoutes);
 app.use('/api/invest', investRoutes);
 app.use('/api/gateway', gatewayRoutes);
 app.use('/api/billers', billerRoutes);

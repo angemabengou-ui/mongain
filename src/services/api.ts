@@ -511,11 +511,6 @@ export const apiApplyCredit = (amount: number, pin: string) => request('POST', '
 export const apiRepayCredit = (loanId: string, pin: string) => request('POST', '/api/credit/repay', { loanId, pin }, true) as Promise<{ success: boolean, balance: number }>;
 
 
-// --- MARKET & ESCROW (V16) ---
-export const apiGetMarketListings = () => request('GET', '/api/market/listings', undefined, true) as Promise<{ success: boolean, listings: any[] }>;
-export const apiCreateListing = (data: { title: string, description: string, price: number }) => request('POST', '/api/market/listings', data, true) as Promise<{ success: boolean }>;
-export const apiBuyMarketItem = (id: string, pin: string) => request('POST', `/api/market/buy/${id}`, { pin }, true) as Promise<{ success: boolean, message: string }>;
-export const apiReleaseEscrow = (escrowId: string) => request('POST', `/api/market/escrow/${escrowId}/release`, undefined, true) as Promise<{ success: boolean }>;
 
 // --- 3D-SECURE & INVOICES (V21) ---
 export const apiGetMyInvoices = () => request('GET', '/api/b2b/invoices/my', undefined, true) as Promise<{ success: boolean, invoices: any[] }>;

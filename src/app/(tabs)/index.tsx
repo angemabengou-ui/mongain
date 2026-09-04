@@ -206,31 +206,16 @@ export default function DashboardScreen() {
               <Ionicons name="chevron-forward" size={22} color={COLORS.textSecondary} />
             </TouchableOpacity>
 
-            {/* Crédit & Investissements — mêmes écrans (crédit, BNPL, crypto) que ceux
-                déjà construits côté backend/mobile, jusqu'ici sans aucun point d'entrée. */}
-            <TouchableOpacity activeOpacity={0.8} onPress={() => router.push('/credit-hub')} style={styles.epargneCard}>
-              <View style={[styles.epargneIconFrame, { backgroundColor: '#1E3A8A15' }]}>
-                <Ionicons name="trending-up-outline" size={24} color="#1E3A8A" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.epargneTitle}>Crédit & Investissements</Text>
-                <Text style={styles.epargneSub}>Micro-crédit, achat en plusieurs fois, crypto</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={22} color={COLORS.textSecondary} />
-            </TouchableOpacity>
-
-            {/* Services & factures — "Électricité" pointait vers un écran "bientôt
-                disponible" (services/electricity.tsx) alors que /billers paie déjà
-                réellement SEEG ET Canal+ (backend/src/routes/biller.ts, fonctionnel). */}
             <View style={styles.servicesHeader}>
               <Text style={styles.sectionTitle}>Services & factures</Text>
               <TouchableOpacity><Text style={styles.seeAllText}>Voir tout</Text></TouchableOpacity>
             </View>
-            <View style={styles.servicesGrid}>
-              <ServiceItem icon="flash" label="Factures" color="#FFB020" disabled={!appConfig.seegEnabled} onPress={() => router.push('/billers')} styles={styles} />
-              <ServiceItem icon="phone-portrait" label="Forfait mobile" color="#2563FF" onPress={() => router.push('/services/airtime')} styles={styles} />
-              <ServiceItem icon="earth" label="International" color="#00C27A" onPress={() => router.push('/remit')} styles={styles} />
-              <ServiceItem icon="water" label="Eau" color="#EF4444" onPress={() => Alert.alert('Bientôt disponible', "Le paiement des factures d'eau sera bientôt activé.")} styles={styles} />
+            <View style={styles.servicesGridSquares}>
+              <ServiceSquareItem icon="trending-up" label="Crédits" bgColor="#1E3A8A15" color="#1E3A8A" onPress={() => router.push('/credit-hub')} styles={styles} />
+              <ServiceSquareItem icon="flash" label="Factures" bgColor="#FFB02015" color="#FFB020" disabled={!appConfig.seegEnabled} onPress={() => router.push('/billers')} styles={styles} />
+              <ServiceSquareItem icon="phone-portrait" label="Recharge" bgColor="#2563FF15" color="#2563FF" onPress={() => router.push('/services/airtime')} styles={styles} />
+              <ServiceSquareItem icon="water" label="Eau" bgColor="#EF444415" color="#EF4444" onPress={() => Alert.alert('Bientôt disponible', "Le paiement des factures d'eau sera bientôt activé.")} styles={styles} />
+              <ServiceSquareItem icon="earth" label="Internat." bgColor="#00C27A15" color="#00C27A" onPress={() => router.push('/remit')} styles={styles} />
             </View>
 
             {/* Transactions récentes */}
@@ -274,12 +259,12 @@ const ActionItem = ({ icon, label, color, bgColor, onPress, styles }: any) => (
   </TouchableOpacity>
 );
 
-const ServiceItem = ({ icon, label, color, onPress, styles, disabled }: any) => (
-  <TouchableOpacity style={[styles.serviceItemContainer, disabled && { opacity: 0.4 }]} activeOpacity={0.7} onPress={disabled ? undefined : onPress}>
-    <View style={[styles.serviceIconWrap]}>
-      <Ionicons name={icon} size={26} color={color} />
+const ServiceSquareItem = ({ icon, label, color, bgColor, onPress, styles, disabled }: any) => (
+  <TouchableOpacity style={[styles.serviceSquareItem, disabled && { opacity: 0.4 }]} activeOpacity={0.7} onPress={disabled ? undefined : onPress}>
+    <View style={[styles.actionIconContainer, { backgroundColor: bgColor }]}>
+      <Ionicons name={icon} size={24} color={color} />
     </View>
-    <Text style={styles.serviceLabel}>{label}</Text>
+    <Text style={styles.actionLabel}>{label}</Text>
   </TouchableOpacity>
 );
 
@@ -424,16 +409,14 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>, isDark: boolean) => S
   epargneSub: { fontSize: 12, fontFamily: 'Satoshi-Regular', color: COLORS.textSecondary },
 
   servicesHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  servicesGrid: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    backgroundColor: isDark ? COLORS.surface : '#ffffff',
-    borderRadius: 20, padding: 20,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 2,
-    marginBottom: 32,
+  servicesGridSquares: {
+    flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start',
+    backgroundColor: isDark ? COLORS.surface : 'transparent',
+    borderRadius: 20, padding: isDark ? 20 : 0,
+    paddingBottom: isDark ? 4 : 0,
+    marginBottom: 24,
   },
-  serviceItemContainer: { alignItems: 'center', width: '22%' },
-  serviceIconWrap: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 8, borderWidth: 1, borderColor: isDark ? '#242a3a' : '#f0f3fa' },
-  serviceLabel: { fontSize: 11, fontFamily: 'Satoshi-Regular', color: COLORS.textSecondary, textAlign: 'center' },
+  serviceSquareItem: { alignItems: 'center', width: '25%', marginBottom: 16 },
 
   transactionsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   seeAllText: { fontSize: 13, fontFamily: 'Satoshi-SemiBold', color: '#2563FF' },
