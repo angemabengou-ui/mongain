@@ -121,6 +121,7 @@ export default function TontineDetailScreen() {
     // plutôt que du dernier tour réellement voulu par l'utilisateur.
     const contributingRef = useRef(false);
     const votingRenewalRef = useRef(false);
+    const reorderingRef = useRef(false);
 
     const load = useCallback(async (isRefresh = false) => {
         if (!id) return;
@@ -198,6 +199,10 @@ export default function TontineDetailScreen() {
     };
 
     const handleReorder = async (participantId: string, direction: 'UP' | 'DOWN') => {
+        // Même garde synchrone que handleContribute/handleVoteRenewal ci-dessus : deux appuis
+        // rapides (haut puis bas, ou deux fois de suite) avant que `load()` n'ait rafraîchi
+        // l'ordre local enverraient chacun un orderMap calculé sur le même instantané périmé.
+        if (reorderingRef.current) return;
         const activeList = group.participants.filter((p: any) => p.status === 'ACTIVE');
         const index = activeList.findIndex((p: any) => p.id === participantId);
         if (index < 0) return;
@@ -208,11 +213,14 @@ export default function TontineDetailScreen() {
             { participantId: activeList[index].id, newOrder: activeList[swapWith].payoutOrder },
             { participantId: activeList[swapWith].id, newOrder: activeList[index].payoutOrder },
         ];
+        reorderingRef.current = true;
         try {
             await apiReorderTontine(id, orderMap);
             load();
         } catch (e: any) {
             Alert.alert('Échec', e.message || 'Impossible de réorganiser.');
+        } finally {
+            reorderingRef.current = false;
         }
     };
 
@@ -322,7 +330,13 @@ export default function TontineDetailScreen() {
         // vrai payoutOrder, alors que POST /tontine/leave (sans filtre de statut) lui
         // prélèvera quand même la dette réelle si son tour est déjà passé.
         const me = myParticipant;
-        const alreadyPaidOut = me && me.payoutOrder < group.currentCycle;
+        // group.status === 'ACTIVE' : un club dissous (POST /cancel) n'exécutera plus jamais
+        // aucun cycle, donc POST /tontine/leave ne prélève alors AUCUNE dette (voir le
+        // commentaire serveur : "réclamer une dette ... n'aurait ici aucun moyen d'être un
+        // jour reversée à qui que ce soit"). Cette condition manquait ici : l'estimation
+        // annonçait un prélèvement fictif à un membre quittant un club déjà dissous, alors
+        // que le serveur n'allait rien lui prélever du tout.
+        const alreadyPaidOut = group.status === 'ACTIVE' && me && me.payoutOrder < group.currentCycle;
         const remainingBeneficiaries = alreadyPaidOut
             ? activeParticipants.filter((p: any) => p.payoutOrder >= group.currentCycle && p.userId !== user?.id).length
             : 0;
