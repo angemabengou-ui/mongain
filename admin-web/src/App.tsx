@@ -16,6 +16,7 @@ import KycMod from './KycMod';
 import Ledger from './Ledger';
 import Login from './Login';
 import MacroStats from './MacroStats';
+import Marketplace from './Marketplace';
 import Merchants from './Merchants';
 import PushCenter from './PushCenter';
 import RiskScoring from './RiskScoring';
@@ -159,6 +160,7 @@ export default function App() {
       items: [
         { id: 'accounts', label: 'Clients & Personnel', reqPerms: ['perm_customer_view', 'perm_staff_view'] },
         { id: 'merchants', label: 'Comptes Marchands', reqPerms: ['perm_merchant_view'] },
+        { id: 'marketplace', label: 'Marketplace C2C', reqPerms: ['perm_market_view'] },
         { id: 'agency-center', label: 'Réseau d\'Agences', reqPerms: ['perm_branch_manage'] },
         // Pages fonctionnelles (vraies routes /api/b2b, /api/gateway) mais absentes du menu
         // depuis une réorganisation de la sidebar — inatteignables jusqu'ici pour quiconque
@@ -375,6 +377,7 @@ export default function App() {
           {activeTab === 'vaults' && hasPerm(['perm_vault_view']) && <Vaults token={token} hasPerm={hasPerm} initialSelectedId={searchTarget?.tab === 'vaults' ? searchTarget.id : undefined} />}
           {activeTab === 'tontines' && hasPerm(['perm_tontine_view']) && <Tontines token={token} hasPerm={hasPerm} initialSelectedId={searchTarget?.tab === 'tontines' ? searchTarget.id : undefined} />}
           {activeTab === 'merchants' && hasPerm(['perm_merchant_view']) && <Merchants token={token} hasPerm={hasPerm} initialSelectedId={searchTarget?.tab === 'merchants' ? searchTarget.id : undefined} />}
+          {activeTab === 'marketplace' && hasPerm(['perm_market_view']) && <Marketplace token={token} hasPerm={hasPerm} />}
 
           {activeTab === 'reclamations' && hasPerm(['perm_ticket_view', 'perm_ticket_resolve']) && <SupportCenter token={token} hasPerm={hasPerm} />}
           {activeTab === 'branch-dash' && hasPerm(['perm_branch_view']) && <BranchDashboard token={token} onNavigateToTreasury={hasPerm(['perm_treasury_view']) ? () => setActiveTab('treasury') : undefined} />}
@@ -402,7 +405,7 @@ export default function App() {
           {/* FALLBACK IF NOT AUTHORIZED TO VIEW TAB */}
           {![
             'dashboard', 'macro-stats', 'accounts', 'users', 'vaults', 'tontines',
-            'merchants', 'reclamations', 'branch-dash', 'agency-center', 'teller-terminal', 'kyc', 'ledger',
+            'merchants', 'marketplace', 'reclamations', 'branch-dash', 'agency-center', 'teller-terminal', 'kyc', 'ledger',
             'treasury', 'system-accounts', 'audit', 'error-logs', 'settings',
             // Onglets V6 + pages B2B/Dev/Wealth : absents ici, le message "non disponible"
             // s'affichait EN PLUS du contenu réel dès que l'un de ces 8 onglets était actif.
