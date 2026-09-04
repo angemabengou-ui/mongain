@@ -10,9 +10,8 @@ import GlobalSearch from './components/GlobalSearch';
 import { API_URL } from './config';
 import CryptoAdmin from './CryptoAdmin';
 import Dashboard from './Dashboard';
-import ErrorLogs from './ErrorLogs';
 import DevPortal from './DevPortal';
-import WealthManager from './WealthManager';
+import ErrorLogs from './ErrorLogs';
 import KycMod from './KycMod';
 import Ledger from './Ledger';
 import Login from './Login';
@@ -30,6 +29,7 @@ import Treasury from './Treasury';
 import Users from './Users';
 import Vaults from './Vaults';
 import VirtualCardsAdmin from './VirtualCards';
+import WealthManager from './WealthManager';
 
 // Un groupe ou un item est visible si l'une des permissions listées est possédée par l'utilisateur (OR logic).
 // Si le tableau est omis ou vide, l'accès est libre (ou géré par l'ancien système de hook global).
@@ -269,8 +269,8 @@ export default function App() {
   return (
     <div className="app-container">
       <div className="sidebar" style={{ width: 320, padding: 0, gap: 0, display: 'flex', flexDirection: 'column' }}>
-        <div className="sidebar-logo" style={{ padding: '32px 24px' }}>
-          <div className="logo-icon">M.</div>
+        <div className="sidebar-logo" style={{ padding: '32px 24px', display: 'flex', alignItems: 'center' }}>
+          <img src="/logo-glow.png" style={{ width: 44, height: 44, borderRadius: 12, marginRight: 12 }} alt="Mongain Logo" />
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <span>Mongain</span>
             <span style={{ fontSize: 11, color: 'var(--sidebar-text)', fontWeight: 500, letterSpacing: 0.5 }}>PORTAIL ÉQUIPE & OPÉRATIONS</span>
