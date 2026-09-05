@@ -12,6 +12,7 @@ module.exports = () => ({
     name: 'Mongain',
     slug: 'mongain',
     version: '1.0.0',
+    sdkVersion: '57.0.0',
     orientation: 'portrait',
     icon: './assets/images/logo-v2.png',
     scheme: 'mongain',

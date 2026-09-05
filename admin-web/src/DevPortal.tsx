@@ -33,71 +33,75 @@ export default function DevPortal({ token }: { token: string }) {
     };
 
     return (
-        <div className="p-8 max-w-5xl mx-auto">
-            <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900 flex items-center">
-                    <Code className="mr-3 text-indigo-600" size={32} /> Mongain Developer Portal
+        <div style={{ maxWidth: 1000, margin: '0 auto', paddingBottom: 60 }}>
+            <div style={{ marginBottom: 32 }}>
+                <h1 style={{ fontSize: 32, fontWeight: 800, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ background: 'var(--accent-bg)', color: 'var(--accent)', padding: 12, borderRadius: 12 }}><Code size={28} /></div>
+                    Mongain Developer Portal
                 </h1>
-                <p className="text-gray-500 mt-2 text-lg">Intégrez la puissance de Mongain Connect directement dans vos applications tierces.</p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: 16 }}>Intégrez la puissance de Mongain Connect directement dans vos applications tierces.</p>
             </div>
 
             {error && (
-                <div className="bg-red-50 text-red-700 p-4 rounded-lg mb-6 shadow-sm border border-red-100 flex items-center">
-                    <ShieldCheck className="mr-2" size={20} />
+                <div style={{ background: 'var(--danger-bg)', color: 'var(--danger)', padding: 16, borderRadius: 12, marginBottom: 24, display: 'flex', alignItems: 'center', gap: 12, fontWeight: 500 }}>
+                    <ShieldCheck size={20} />
                     {error}
                 </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-                    <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
-                        <Key className="mr-2 text-indigo-500" size={24} /> API Keys (Secrets)
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(400px, 1fr) minmax(400px, 1fr)', gap: 32 }}>
+                <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+                    <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <Key size={24} color="var(--accent)" /> API Keys (Secrets)
                     </h2>
-                    <p className="text-gray-600 mb-6">
-                        Générez un clée d'API `sk_live_...` pour lier votre boutique e-commerce.
-                        <strong> Attention: Elle ne sera affichée qu'une seule fois !</strong>
+                    <p style={{ color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.6 }}>
+                        Générez une clé d'API <code style={{ background: 'var(--bg-primary)', padding: '2px 6px', borderRadius: 4 }}>sk_live_...</code> pour lier votre boutique e-commerce.
+                        <b style={{ color: 'var(--danger)' }}> Attention: Elle ne sera affichée qu'une seule fois !</b>
                     </p>
 
                     {!apiKey ? (
                         <button
                             onClick={generateKey}
                             disabled={loading}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-lg w-full flex justify-center items-center transition-all"
+                            className="btn-primary"
+                            style={{ marginTop: 'auto', width: '100%', padding: '16px', fontSize: 16 }}
                         >
                             {loading ? "Génération en cours..." : "Révéler la Clé de Production"}
                         </button>
                     ) : (
-                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                            <label className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2 block">SECRET_KEY (Production)</label>
-                            <div className="flex items-center justify-between bg-white border border-gray-300 rounded p-2">
-                                <code className="text-gray-800 break-all text-sm font-mono">{apiKey}</code>
-                                <button onClick={copyToClipboard} className="ml-2 text-gray-400 hover:text-indigo-600 transition-colors p-2">
-                                    {copied ? <Check className="text-green-500" size={20} /> : <Copy size={20} />}
+                        <div style={{ background: 'var(--bg-primary)', padding: 16, borderRadius: 12, border: '1px solid var(--border)' }}>
+                            <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8, display: 'block' }}>SECRET KEY (PRODUCTION)</label>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 16px' }}>
+                                <code style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 14, wordBreak: 'break-all', color: 'var(--text-primary)' }}>{apiKey}</code>
+                                <button onClick={copyToClipboard} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex' }}>
+                                    {copied ? <Check size={20} color="var(--success)" /> : <Copy size={20} color="var(--text-secondary)" />}
                                 </button>
                             </div>
-                            <p className="text-red-500 text-xs mt-3 font-semibold">Stockez cette clé dans un endroit sécurisé. Vous ne pourrez plus la revoir.</p>
+                            <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 12, fontWeight: 600 }}>Stockez cette clé dans un endroit sécurisé. Vous ne pourrez plus la revoir.</p>
                         </div>
                     )}
                 </div>
 
-                <div className="bg-gradient-to-br from-gray-900 to-indigo-900 p-8 rounded-2xl text-white shadow-lg">
-                    <h2 className="text-xl font-bold mb-4 flex items-center">
-                        <ExternalLink className="mr-2 text-indigo-300" size={24} /> Documentation Rapide
+                <div className="card" style={{ background: 'linear-gradient(135deg, #0F2E33, #08171A)', color: 'white', border: 'none' }}>
+                    <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10, color: 'white' }}>
+                        <ExternalLink size={24} color="var(--accent-light)" /> Documentation Rapide
                     </h2>
-                    <p className="text-gray-300 mb-6 text-sm">
-                        Utilisez l'API `/api/gateway/charge` pour initier un paiement sur le téléphone de vos clients.
+                    <p style={{ color: '#B9D6DA', marginBottom: 24, fontSize: 14, lineHeight: 1.6 }}>
+                        Utilisez l'API <code style={{ background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: 4 }}>/api/gateway/charge</code> pour initier un paiement sur le téléphone de vos clients.
                     </p>
 
-                    <div className="bg-black/40 p-4 rounded-lg border border-white/10 font-mono text-xs text-gray-300 overflow-x-auto">
-                        <span className="text-green-400">POST</span> https://api.mongain.com/api/gateway/charge<br /><br />
-                        <span className="text-gray-500">Headers:</span><br />
-                        Authorization: Bearer <span className="text-yellow-300">sk_live_...</span><br /><br />
-                        <span className="text-gray-500">Body:</span><br />
-                        {`{
+                    <div style={{ background: 'rgba(0,0,0,0.4)', padding: 20, borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)', fontFamily: 'monospace', fontSize: 13, color: '#B9D6DA', overflowX: 'auto' }}>
+                        <span style={{ color: '#3FBE76', fontWeight: 700 }}>POST</span> https://api.mongain.com/api/gateway/charge<br /><br />
+                        <span style={{ color: '#9CA39D' }}>Headers:</span><br />
+                        Authorization: Bearer <span style={{ color: '#D9A64E' }}>sk_live_...</span><br /><br />
+                        <span style={{ color: '#9CA39D' }}>Body:</span><br />
+                        <pre style={{ margin: 0, fontFamily: 'monospace' }}>
+                            {`{
   "customerPhone": "074XXXXX",
   "amount": 15000,
   "orderId": "SHOP_102"
 }`}
+                        </pre>
                     </div>
                 </div>
             </div>

@@ -124,56 +124,58 @@ export default function HistoryScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Historique</Text>
-                <TouchableOpacity onPress={handleDownloadPDF} style={{ width: 40, height: 40, backgroundColor: COLORS.primary + '15', borderRadius: 20, justifyContent: 'center', alignItems: 'center' }}>
-                    <Ionicons name="download" size={20} color={COLORS.primary} />
+                <TouchableOpacity onPress={handleDownloadPDF} style={styles.downloadBtn}>
+                    <Ionicons name="download" size={20} color="#fff" />
                 </TouchableOpacity>
             </View>
 
-            <View style={styles.filterContainer}>
-                <FilterPill label="Tout" active={filter === 'all'} onPress={() => setFilter('all')} styles={styles} />
-                <FilterPill label="Envoyé" active={filter === 'outgoing'} onPress={() => setFilter('outgoing')} styles={styles} />
-                <FilterPill label="Reçu" active={filter === 'incoming'} onPress={() => setFilter('incoming')} styles={styles} />
-            </View>
+            <View style={styles.sheetContainer}>
+                <View style={styles.filterContainer}>
+                    <FilterPill label="Tout" active={filter === 'all'} onPress={() => setFilter('all')} styles={styles} />
+                    <FilterPill label="Envoyé" active={filter === 'outgoing'} onPress={() => setFilter('outgoing')} styles={styles} />
+                    <FilterPill label="Reçu" active={filter === 'incoming'} onPress={() => setFilter('incoming')} styles={styles} />
+                </View>
 
-            <FlatList
-                data={filtered}
-                keyExtractor={item => item.id}
-                contentContainerStyle={[styles.listContainer, { paddingBottom: tabBarHeight + 20 }]}
-                showsVerticalScrollIndicator={false}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
-                ListHeaderComponent={() => {
-                    if (loading) {
-                        return (
-                            <View style={{ padding: 50, alignItems: 'center' }}>
-                                <ActivityIndicator color={COLORS.primary} size="large" />
-                            </View>
-                        );
-                    }
-                    return <Text style={styles.dateSeparator}>Ce mois-ci — {filtered.length} transaction(s)</Text>;
-                }}
-                ListEmptyComponent={() => {
-                    if (!loading && filtered.length === 0) {
-                        return (
-                            <View style={styles.emptyContainer}>
-                                <Ionicons name="receipt-outline" size={48} color={COLORS.textSecondary} style={{ marginBottom: 12 }} />
-                                <Text style={styles.emptyText}>Aucune transaction pour l'instant.</Text>
-                            </View>
-                        );
-                    }
-                    return null;
-                }}
-                renderItem={({ item }) => (
-                    <View style={styles.transactionList}>
-                        <TransactionItem tx={item} styles={styles} colors={COLORS} />
-                    </View>
-                )}
-                initialNumToRender={10}
-                maxToRenderPerBatch={10}
-                windowSize={5}
-            />
+                <FlatList
+                    data={filtered}
+                    keyExtractor={item => item.id}
+                    contentContainerStyle={[styles.listContainer, { paddingBottom: tabBarHeight + 20 }]}
+                    showsVerticalScrollIndicator={false}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />}
+                    ListHeaderComponent={() => {
+                        if (loading) {
+                            return (
+                                <View style={{ padding: 50, alignItems: 'center' }}>
+                                    <ActivityIndicator color={COLORS.primary} size="large" />
+                                </View>
+                            );
+                        }
+                        return <Text style={styles.dateSeparator}>Ce mois-ci — {filtered.length} transaction(s)</Text>;
+                    }}
+                    ListEmptyComponent={() => {
+                        if (!loading && filtered.length === 0) {
+                            return (
+                                <View style={styles.emptyContainer}>
+                                    <Ionicons name="receipt-outline" size={48} color={COLORS.textSecondary} style={{ marginBottom: 12 }} />
+                                    <Text style={styles.emptyText}>Aucune transaction pour l'instant.</Text>
+                                </View>
+                            );
+                        }
+                        return null;
+                    }}
+                    renderItem={({ item }) => (
+                        <View style={styles.transactionList}>
+                            <TransactionItem tx={item} styles={styles} colors={COLORS} />
+                        </View>
+                    )}
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={10}
+                    windowSize={5}
+                />
+            </View>
         </SafeAreaView>
     );
 }
@@ -236,15 +238,22 @@ const TransactionItem = ({ tx, styles, colors }: any) => {
 };
 
 const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: COLORS.background },
+    safeArea: { flex: 1, backgroundColor: COLORS.primary },
     header: {
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-        paddingHorizontal: 20, paddingVertical: 20,
-        backgroundColor: COLORS.surface, elevation: 2,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4,
+        paddingHorizontal: 20, paddingTop: 10, paddingBottom: 24,
+        backgroundColor: COLORS.primary,
     },
-    headerTitle: { color: COLORS.textHeader, fontSize: 24, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
-    filterContainer: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: COLORS.background },
+    headerTitle: { color: '#ffffff', fontSize: 24, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
+    downloadBtn: { width: 40, height: 40, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+    sheetContainer: {
+        flex: 1,
+        backgroundColor: COLORS.background,
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        overflow: 'hidden'
+    },
+    filterContainer: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: 'transparent' },
     filterPill: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, backgroundColor: COLORS.surface, marginRight: 12, borderWidth: 1, borderColor: '#e2e8f0' },
     filterPillActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
     filterText: { color: COLORS.textSecondary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },

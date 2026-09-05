@@ -97,112 +97,115 @@ export default function TransferScreen() {
     };
 
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background }]}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
 
-                <View style={styles.header}>
+                <View style={[styles.header, { backgroundColor: COLORS.primary }]}>
                     <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                        <Ionicons name="arrow-back" size={28} color={COLORS.textPrimary} />
+                        <Ionicons name="arrow-back" size={28} color="#fff" />
                     </TouchableOpacity>
-                    <Text style={[styles.headerTitle, { color: COLORS.textPrimary }]}>Envoyer de l'argent</Text>
+                    <Text style={[styles.headerTitle, { color: '#fff' }]}>Envoyer de l'argent</Text>
                     <View style={{ width: 44 }} />
                 </View>
 
-                <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 60) }]} keyboardShouldPersistTaps="handled">
+                <View style={[styles.sheetWrapper, { backgroundColor: COLORS.background }]}>
 
-                    {/* Grille d'Actions Massives */}
-                    <View style={styles.actionGrid}>
-                        <TouchableOpacity style={[styles.actionCard, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]} onPress={() => router.push('/qr')}>
-                            <View style={[styles.actionIconWrap, { backgroundColor: '#3B82F615' }]}>
-                                <Ionicons name="qr-code" size={28} color="#3B82F6" />
-                            </View>
-                            <Text style={[styles.actionCardTitle, { color: COLORS.textPrimary }]}>Scanner QR</Text>
-                            <Text style={styles.actionCardSub}>Instantané</Text>
-                        </TouchableOpacity>
+                    <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 60) }]} keyboardShouldPersistTaps="handled">
 
-                        <TouchableOpacity style={[styles.actionCard, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]} onPress={() => setContactsModalVisible(true)}>
-                            <View style={[styles.actionIconWrap, { backgroundColor: '#8B5CF615' }]}>
-                                <Ionicons name="people" size={28} color="#8B5CF6" />
-                            </View>
-                            <Text style={[styles.actionCardTitle, { color: COLORS.textPrimary }]}>Mes Contacts</Text>
-                            <Text style={styles.actionCardSub}>Répertoire</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    <Text style={styles.sectionTitle}>Saisie Manuelle</Text>
-
-                    {/* Saisie manuelle Modernisée */}
-                    <View style={[styles.inputContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }, (isLooking || recipient) ? { borderColor: COLORS.primary } : null]}>
-                        <Text style={[styles.prefix, { color: COLORS.textPrimary }]}>+241</Text>
-                        <TextInput
-                            style={[styles.input, { color: COLORS.textPrimary }]}
-                            placeholder="Ex: 077..."
-                            keyboardType="phone-pad"
-                            placeholderTextColor={COLORS.textSecondary}
-                            value={phone}
-                            onChangeText={setPhone}
-                        />
-                        {isLooking ? (
-                            <ActivityIndicator size="small" color={COLORS.primary} style={{ padding: 8 }} />
-                        ) : phone.length > 0 ? (
-                            <TouchableOpacity onPress={() => { setPhone(''); setRecipient(null); setLookupError(''); }} style={{ padding: 8 }}>
-                                <Ionicons name="close-circle" size={22} color={COLORS.textSecondary} />
+                        {/* Grille d'Actions Massives */}
+                        <View style={styles.actionGrid}>
+                            <TouchableOpacity style={[styles.actionCard, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]} onPress={() => router.push('/qr')}>
+                                <View style={[styles.actionIconWrap, { backgroundColor: '#3B82F615' }]}>
+                                    <Ionicons name="qr-code" size={28} color="#3B82F6" />
+                                </View>
+                                <Text style={[styles.actionCardTitle, { color: COLORS.textPrimary }]}>Scanner QR</Text>
+                                <Text style={styles.actionCardSub}>Instantané</Text>
                             </TouchableOpacity>
-                        ) : null}
-                    </View>
 
-                    {/* Ligne d'erreur */}
-                    {lookupError ? (
-                        <View style={styles.errorBox}>
-                            <Ionicons name="alert-circle" size={20} color="#E11D48" />
-                            <Text style={styles.errorText}>{lookupError}</Text>
+                            <TouchableOpacity style={[styles.actionCard, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]} onPress={() => setContactsModalVisible(true)}>
+                                <View style={[styles.actionIconWrap, { backgroundColor: '#8B5CF615' }]}>
+                                    <Ionicons name="people" size={28} color="#8B5CF6" />
+                                </View>
+                                <Text style={[styles.actionCardTitle, { color: COLORS.textPrimary }]}>Mes Contacts</Text>
+                                <Text style={styles.actionCardSub}>Répertoire</Text>
+                            </TouchableOpacity>
                         </View>
-                    ) : null}
 
-                    {/* Carte Destinataire Validé */}
-                    {recipient && (
-                        <Animated.View style={[styles.recipientCard, {
-                            borderColor: COLORS.primary + '40',
-                            backgroundColor: COLORS.primary + '05',
-                            opacity: cardAnim,
-                            transform: [{ translateY: cardAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }]
-                        }]}>
-                            <View style={styles.recipientHeader}>
-                                <View style={[styles.recipientAvatar, { backgroundColor: COLORS.primary + '20' }]}>
-                                    <Text style={[styles.recipientInitial, { color: COLORS.primary }]}>
-                                        {recipient.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                                    </Text>
-                                </View>
-                                <View style={styles.recipientInfo}>
-                                    <Text style={[styles.recipientName, { color: COLORS.textPrimary }]}>{recipient.name}</Text>
-                                    <Text style={styles.recipientPhone}>{recipient.phone}</Text>
-                                </View>
-                                <View style={[styles.checkBadge, { backgroundColor: COLORS.primary }]}>
-                                    <Ionicons name="checkmark" size={16} color="#fff" />
-                                </View>
+                        <Text style={styles.sectionTitle}>Saisie Manuelle</Text>
+
+                        {/* Saisie manuelle Modernisée */}
+                        <View style={[styles.inputContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }, (isLooking || recipient) ? { borderColor: COLORS.primary } : null]}>
+                            <Text style={[styles.prefix, { color: COLORS.textPrimary }]}>+241</Text>
+                            <TextInput
+                                style={[styles.input, { color: COLORS.textPrimary }]}
+                                placeholder="Ex: 077..."
+                                keyboardType="phone-pad"
+                                placeholderTextColor={COLORS.textSecondary}
+                                value={phone}
+                                onChangeText={setPhone}
+                            />
+                            {isLooking ? (
+                                <ActivityIndicator size="small" color={COLORS.primary} style={{ padding: 8 }} />
+                            ) : phone.length > 0 ? (
+                                <TouchableOpacity onPress={() => { setPhone(''); setRecipient(null); setLookupError(''); }} style={{ padding: 8 }}>
+                                    <Ionicons name="close-circle" size={22} color={COLORS.textSecondary} />
+                                </TouchableOpacity>
+                            ) : null}
+                        </View>
+
+                        {/* Ligne d'erreur */}
+                        {lookupError ? (
+                            <View style={styles.errorBox}>
+                                <Ionicons name="alert-circle" size={20} color="#E11D48" />
+                                <Text style={styles.errorText}>{lookupError}</Text>
                             </View>
-                            {recipient.role === 'MERCHANT' && (
-                                <View style={styles.merchantBadge}>
-                                    <Ionicons name="business" size={14} color="#D97706" />
-                                    <Text style={styles.merchantText}>Compte Marchand</Text>
+                        ) : null}
+
+                        {/* Carte Destinataire Validé */}
+                        {recipient && (
+                            <Animated.View style={[styles.recipientCard, {
+                                borderColor: COLORS.primary + '40',
+                                backgroundColor: COLORS.primary + '05',
+                                opacity: cardAnim,
+                                transform: [{ translateY: cardAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }]
+                            }]}>
+                                <View style={styles.recipientHeader}>
+                                    <View style={[styles.recipientAvatar, { backgroundColor: COLORS.primary + '20' }]}>
+                                        <Text style={[styles.recipientInitial, { color: COLORS.primary }]}>
+                                            {recipient.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                                        </Text>
+                                    </View>
+                                    <View style={styles.recipientInfo}>
+                                        <Text style={[styles.recipientName, { color: COLORS.textPrimary }]}>{recipient.name}</Text>
+                                        <Text style={styles.recipientPhone}>{recipient.phone}</Text>
+                                    </View>
+                                    <View style={[styles.checkBadge, { backgroundColor: COLORS.primary }]}>
+                                        <Ionicons name="checkmark" size={16} color="#fff" />
+                                    </View>
                                 </View>
-                            )}
-                        </Animated.View>
-                    )}
+                                {recipient.role === 'MERCHANT' && (
+                                    <View style={styles.merchantBadge}>
+                                        <Ionicons name="business" size={14} color="#D97706" />
+                                        <Text style={styles.merchantText}>Compte Marchand</Text>
+                                    </View>
+                                )}
+                            </Animated.View>
+                        )}
 
-                    <View style={{ flex: 1 }} />
+                        <View style={{ flex: 1 }} />
 
-                    {/* Bouton Continuer */}
-                    <TouchableOpacity
-                        style={[styles.sendButton, !recipient && { backgroundColor: COLORS.surface, borderColor: COLORS.border, borderWidth: 1, shadowOpacity: 0 }, recipient && { backgroundColor: COLORS.primary }]}
-                        onPress={handleContinue}
-                        disabled={!recipient}
-                    >
-                        <Text style={[styles.sendButtonText, !recipient ? { color: COLORS.textSecondary } : { color: '#ffffff' }]}>Continuer vers le montant</Text>
-                        {recipient && <Ionicons name="arrow-forward" size={20} color="#fff" style={{ marginLeft: 8 }} />}
-                    </TouchableOpacity>
+                        {/* Bouton Continuer */}
+                        <TouchableOpacity
+                            style={[styles.sendButton, !recipient && { backgroundColor: COLORS.surface, borderColor: COLORS.border, borderWidth: 1, shadowOpacity: 0 }, recipient && { backgroundColor: COLORS.primary }]}
+                            onPress={handleContinue}
+                            disabled={!recipient}
+                        >
+                            <Text style={[styles.sendButtonText, !recipient ? { color: COLORS.textSecondary } : { color: '#ffffff' }]}>Continuer vers le montant</Text>
+                            {recipient && <Ionicons name="arrow-forward" size={20} color="#fff" style={{ marginLeft: 8 }} />}
+                        </TouchableOpacity>
 
-                </ScrollView>
+                    </ScrollView>
+                </View>
 
                 <ContactPickerModal
                     visible={contactsModalVisible}
@@ -225,7 +228,8 @@ const styles = StyleSheet.create({
     },
     backButton: { padding: 8, marginLeft: -12 },
     headerTitle: { fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
-    content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 12, paddingBottom: 60 },
+    sheetWrapper: { flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' },
+    content: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 60 },
 
     actionGrid: { flexDirection: 'row', gap: 16, marginBottom: 32 },
     actionCard: { flex: 1, borderRadius: 20, padding: 20, alignItems: 'center', borderWidth: 1 },

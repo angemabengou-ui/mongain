@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React from 'react';
 import { Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ScreenHeader from '../../components/ui/ScreenHeader';
@@ -19,14 +18,18 @@ export default function ServicesScreen() {
 
     return (
         <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-            <ScreenHeader title="Crédit & Investissement" onBack={() => router.push('/(tabs)')} />
-            <ScrollView contentContainerStyle={styles.scroll}>
-                <View style={styles.servicesGridSquares}>
-                    <ServiceSquareItem icon="cash" label="Micro-crédit" bgColor="#1E3A8A15" color="#1E3A8A" onPress={() => router.push('/credit')} styles={styles} />
-                    <ServiceSquareItem icon="card" label="Paiement x3" bgColor="#F59E0B15" color="#F59E0B" onPress={() => router.push('/bnpl')} styles={styles} />
-                    <ServiceSquareItem icon="trending-up" label="Crypto" bgColor="#10B98115" color="#10B981" onPress={() => router.push('/crypto')} styles={styles} />
-                </View>
-            </ScrollView>
+            <View style={styles.headerArea}>
+                <ScreenHeader title="Crédit & Investissement" onBack={() => router.push('/(tabs)')} />
+            </View>
+            <View style={styles.sheetContainer}>
+                <ScrollView contentContainerStyle={styles.scroll}>
+                    <View style={styles.servicesGridSquares}>
+                        <ServiceSquareItem icon="cash" label="Micro-crédit" bgColor={isDark ? "#1E3A8A40" : "#1E3A8A15"} color={isDark ? "#81A6FF" : "#1E3A8A"} onPress={() => router.push('/credit')} styles={styles} />
+                        <ServiceSquareItem icon="card" label="Paiement x3" bgColor={isDark ? "#F59E0B40" : "#F59E0B15"} color={isDark ? "#FBBF24" : "#F59E0B"} onPress={() => router.push('/bnpl')} styles={styles} />
+                        <ServiceSquareItem icon="trending-up" label="Crypto" bgColor={isDark ? "#10B98140" : "#10B98115"} color={isDark ? "#34D399" : "#10B981"} onPress={() => router.push('/crypto')} styles={styles} />
+                    </View>
+                </ScrollView>
+            </View>
         </SafeAreaView>
     );
 }
@@ -41,13 +44,21 @@ const ServiceSquareItem = ({ icon, label, color, bgColor, onPress, styles, disab
 );
 
 const getStyles = (COLORS: ReturnType<typeof useAppTheme>, isDark: boolean) => StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: COLORS.background },
+    safeArea: { flex: 1, backgroundColor: COLORS.primary },
+    headerArea: { paddingBottom: 24, paddingTop: 10 },
+    sheetContainer: {
+        flex: 1,
+        backgroundColor: COLORS.background,
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        overflow: 'hidden'
+    },
     scroll: { padding: 20 },
     servicesGridSquares: {
         flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start',
         backgroundColor: isDark ? COLORS.surface : 'transparent',
         borderRadius: 20, padding: isDark ? 20 : 0, gap: 8,
-        marginTop: 20
+        marginTop: 10
     },
     serviceSquareItem: { alignItems: 'center', width: '22%', marginBottom: 24 },
     actionIconContainer: { width: 64, height: 64, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>QR Code Expo Mongain</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: sans-serif; background: #f8fafc; color: #1e293b; margin: 0; }
+        .card { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); text-align: center; }
+        h1 { margin-top: 0; color: #0f172a; }
+        #qrcode { margin: 20px auto; border: 10px solid white; display: inline-block; }
+        .url { font-family: monospace; background: #e2e8f0; padding: 10px; border-radius: 8px; font-size: 18px; margin-bottom: 20px;}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Expo V57 - QR Code</h1>
+        <div class="url">exp://192.168.1.68:8081</div>
+        <div id="qrcode"></div>
+        <p>Scannez ceci avec l'application Expo Go</p>
+    </div>
+    <script>
+        new QRCode(document.getElementById("qrcode"), {
+            text: "exp://192.168.1.68:8081",
+            width: 256,
+            height: 256,
+            colorDark : "#000000",
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.M
+        });
+    </script>
+</body>
+</html>

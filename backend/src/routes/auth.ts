@@ -383,15 +383,29 @@ router.post('/verify-login-otp', async (req, res) => {
     const { phone, otpCode } = parsed.data;
 
     try {
-        const otpRecord = await withDbRetry(() => prisma.verificationCode.findUnique({ where: { phone_purpose: { phone, purpose: 'LOGIN' } } }));
+        // /login accepte aussi le pseudo ou l'email dans ce même champ "phone" (voir plus haut)
+        // et stocke alors le code OTP sous le vrai numéro du compte (targetPhone), pas sous la
+        // valeur saisie. Sans cette même résolution ici, un login par pseudo/email ne
+        // retrouvait jamais son code (phone_purpose introuvable) et échouait systématiquement
+        // avec "Code OTP expiré ou invalide", même en tapant le bon 1234 du mode démo.
+        const user = await withDbRetry(() => prisma.user.findFirst({
+            where: {
+                OR: [
+                    { phone },
+                    { username: phone.toLowerCase() },
+                    { email: phone.toLowerCase() }
+                ]
+            },
+            include: { wallet: true },
+        }));
+        if (!user) return res.status(404).json({ error: 'Compte introuvable.' });
+
+        const otpRecord = await withDbRetry(() => prisma.verificationCode.findUnique({ where: { phone_purpose: { phone: user.phone, purpose: 'LOGIN' } } }));
         if (!otpRecord || otpRecord.code !== otpCode || otpRecord.expiresAt < new Date()) {
             return res.status(400).json({ error: 'Code OTP expiré ou invalide.' });
         }
 
-        await prisma.verificationCode.delete({ where: { phone_purpose: { phone, purpose: 'LOGIN' } } });
-
-        const user = await prisma.user.findUnique({ where: { phone }, include: { wallet: true } });
-        if (!user) return res.status(404).json({ error: 'Compte introuvable.' });
+        await prisma.verificationCode.delete({ where: { phone_purpose: { phone: user.phone, purpose: 'LOGIN' } } });
 
         // Single Device Enforcement: Increment the jwtVersion
         const { refreshToken, refreshTokenHash, refreshTokenExpiresAt } = issueRefreshToken();

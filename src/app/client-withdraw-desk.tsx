@@ -24,6 +24,7 @@ export default function ClientWithdrawDeskScreen() {
     const router = useRouter();
     const { user, settings } = useAuth();
     const COLORS = useAppTheme();
+    const styles = getStyles(COLORS);
 
     const { agentPhone, agentName, agentRole } = useLocalSearchParams();
     const isMerchant = agentRole === 'MERCHANT';
@@ -31,31 +32,15 @@ export default function ClientWithdrawDeskScreen() {
     const [pin, setPin] = useState('');
     const [loading, setLoading] = useState(false);
     const [bioEnabled, setBioEnabled] = useState(false);
-    // Ref synchrone anti double-tap : voir transfer-confirm.tsx pour le détail du problème
-    // (deux appuis rapides peuvent tous deux lire `loading` avant le premier re-render).
     const submittingRef = useRef(false);
 
     useEffect(() => { isBiometricPinEnabled().then(setBioEnabled); }, []);
 
-    // Ce guichet gère les retraits chez un Agent ET chez un Marchand (qr.tsx route les deux
-    // ici avec les mêmes noms de params) — le backend (wallet.ts client-initiated-withdraw)
-    // applique une formule de frais DIFFÉRENTE selon le rôle réel de la contrepartie : un
-    // Marchand n'a ni seuil gratuit ni palier, le taux plein s'applique dès le premier franc.
-    // Utiliser toujours la formule Agent ici annonçait "GRATUIT" pour un retrait Marchand
-    // alors que le serveur facturait réellement des frais.
     const threshold = settings?.agencyWithdrawThreshold ?? 500000;
     const taxRate = isMerchant ? (settings?.taxWithdraw ?? 0.013) : (settings?.agencyTaxWithdraw ?? 0.01);
-    // keyboardType="numeric" n'empêche pas un espace ou une virgule de finir dans la
-    // valeur (collage, certains claviers IME) — sans ce nettoyage, parseFloat("50 000")
-    // vaut 50 et le retrait envoyé au serveur pouvait être 1000x plus petit que prévu.
     const cleanAmount = (v: string) => parseFloat(v.replace(/\s/g, '').replace(',', '.'));
     const numAmountPreview = cleanAmount(amount) || 0;
-    // Cas AGENT : le serveur (LimitEngine.calculateWithdrawalFee) taxe sur le CUMUL du jour,
-    // pas seulement le montant saisi ici — un client ayant déjà retiré 400 000 FCFA (sous le
-    // seuil, donc gratuit) puis retirant encore 300 000 FCFA voyait cette formule locale
-    // annoncer "GRATUIT" (300 000 < seuil) alors que le serveur facture réellement des frais
-    // sur le dépassement cumulé. `localFeeEstimate` reste affiché instantanément le temps que
-    // `agentFeePreview` (le vrai calcul, via /wallet/withdraw-fee-preview) revienne du réseau.
+
     const localFeeEstimate = isMerchant
         ? Math.ceil(numAmountPreview * taxRate)
         : (numAmountPreview > threshold ? Math.ceil((numAmountPreview - threshold) * taxRate) : 0);
@@ -72,8 +57,7 @@ export default function ClientWithdrawDeskScreen() {
                 const res = await apiGetWithdrawFeePreview(numAmountPreview);
                 if (!cancelled) setAgentFeePreview(res.fee);
             } catch {
-                // Best-effort : l'estimation locale (moins précise mais jamais bloquante)
-                // reste affichée si l'appel réseau échoue.
+                // Best-effort
             }
         }, 400);
         return () => { cancelled = true; clearTimeout(timeout); };
@@ -89,8 +73,6 @@ export default function ClientWithdrawDeskScreen() {
         try {
             const data = await apiClientInitiatedWithdraw(agentPhone as string, numAmount, usedPin);
 
-            // Propose l'activation du déverrouillage biométrique (même parcours de
-            // consentement que transfer-confirm.tsx — jamais activé silencieusement).
             if (!bioEnabled) {
                 Alert.alert(
                     'Activer Face ID / Empreinte ?',
@@ -108,12 +90,11 @@ export default function ClientWithdrawDeskScreen() {
                 );
             }
 
-            // Redirection to receipt ticket
             router.replace({
                 pathname: '/receipt',
                 params: {
                     id: data.data.transaction.id,
-                    type: 'outgoing', // Client is withdrawing (losing digital, gaining physical)
+                    type: 'outgoing',
                     amount: numAmount,
                     currency: 'FCFA',
                     status: 'COMPLETED',
@@ -168,7 +149,6 @@ export default function ClientWithdrawDeskScreen() {
 
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>
-            {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
                     <Ionicons name="arrow-back" size={28} color="#fff" />
@@ -177,7 +157,7 @@ export default function ClientWithdrawDeskScreen() {
                 <View style={{ width: 44 }} />
             </View>
 
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: '#f8f9fa', borderTopLeftRadius: 30, borderTopRightRadius: 30 }}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: COLORS.background, borderTopLeftRadius: 30, borderTopRightRadius: 30 }}>
                 <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
                     <View style={styles.card}>
                         <View style={styles.iconContainer}>
@@ -202,9 +182,9 @@ export default function ClientWithdrawDeskScreen() {
                         </View>
 
                         <View style={[styles.inputBox, { borderColor: COLORS.border, backgroundColor: COLORS.surface }]}>
-                            <Text style={[styles.currencyLabel, { color: COLORS.text }]}>FCFA</Text>
+                            <Text style={[styles.currencyLabel, { color: COLORS.textPrimary }]}>FCFA</Text>
                             <TextInput
-                                style={[styles.input, { color: COLORS.text }]}
+                                style={[styles.input, { color: COLORS.textPrimary }]}
                                 placeholder="0"
                                 placeholderTextColor={COLORS.textSecondary}
                                 keyboardType="numeric"
@@ -225,7 +205,7 @@ export default function ClientWithdrawDeskScreen() {
                         <View style={[styles.inputBox, { borderColor: COLORS.border, backgroundColor: COLORS.surface, height: 56, marginTop: 10, marginBottom: 0 }]}>
                             <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 10 }} />
                             <TextInput
-                                style={[styles.input, { fontSize: 20, textAlign: 'left', color: COLORS.text }]}
+                                style={[styles.input, { fontSize: 20, textAlign: 'left', color: COLORS.textPrimary }]}
                                 placeholder="Code PIN"
                                 placeholderTextColor={COLORS.textSecondary}
                                 keyboardType="number-pad"
@@ -267,7 +247,7 @@ export default function ClientWithdrawDeskScreen() {
                         </TouchableOpacity>
                     </View>
 
-                    <Text style={{ textAlign: 'center', color: '#6B7280', opacity: 0.8, marginTop: 15, fontSize: 13 }}>
+                    <Text style={{ textAlign: 'center', color: COLORS.textSecondary, opacity: 0.8, marginTop: 15, fontSize: 13 }}>
                         Montrez le reçu de succès à l'agent après validation.
                     </Text>
                 </ScrollView>
@@ -277,7 +257,7 @@ export default function ClientWithdrawDeskScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create({
     safeArea: {
         flex: 1,
     },
@@ -304,14 +284,14 @@ const styles = StyleSheet.create({
     },
     content: {
         flexGrow: 1,
-        backgroundColor: '#f8f9fa',
+        backgroundColor: COLORS.background,
         borderTopLeftRadius: 30,
         borderTopRightRadius: 30,
         padding: 20,
         paddingBottom: 150,
     },
     card: {
-        backgroundColor: '#fff',
+        backgroundColor: COLORS.surface,
         borderRadius: 20,
         padding: 25,
         alignItems: 'center',
@@ -327,7 +307,7 @@ const styles = StyleSheet.create({
         width: 80,
         height: 80,
         borderRadius: 40,
-        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        backgroundColor: COLORS.primary + '1A', // transparent primary
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 20,
@@ -335,13 +315,13 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 24,
         fontFamily: 'Satoshi-SemiBold', fontWeight: '800',
-        color: '#111827',
+        color: COLORS.textPrimary,
         marginBottom: 10,
         textAlign: 'center',
     },
     subtitle: {
         fontSize: 15,
-        color: '#6B7280',
+        color: COLORS.textSecondary,
         textAlign: 'center',
         marginBottom: 25,
         lineHeight: 22,
@@ -349,17 +329,19 @@ const styles = StyleSheet.create({
     userBox: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#F3F4F6',
+        backgroundColor: COLORS.background,
         padding: 15,
         borderRadius: 15,
         width: '100%',
         marginBottom: 25,
+        borderWidth: 1,
+        borderColor: COLORS.border,
     },
     avatar: {
         width: 45,
         height: 45,
         borderRadius: 22.5,
-        backgroundColor: '#10B981',
+        backgroundColor: COLORS.primary,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 15,
@@ -372,11 +354,11 @@ const styles = StyleSheet.create({
     userName: {
         fontSize: 16,
         fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
-        color: '#111827',
+        color: COLORS.textPrimary,
     },
     userPhone: {
         fontSize: 14,
-        color: '#6B7280',
+        color: COLORS.textSecondary,
         marginTop: 2,
     },
     inputBox: {
@@ -399,7 +381,6 @@ const styles = StyleSheet.create({
         fontSize: 32,
         fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
         textAlign: 'right',
-        color: '#111827',
     },
     feeText: {
         fontSize: 14,
@@ -411,14 +392,14 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         padding: 18,
         borderRadius: 16,
-        shadowColor: '#10B981',
+        shadowColor: COLORS.primary,
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.3,
         shadowRadius: 15,
         elevation: 8,
     },
     confirmBtnDisabled: {
-        backgroundColor: '#A7F3D0',
+        opacity: 0.5,
         shadowOpacity: 0,
         elevation: 0,
     },
@@ -428,4 +409,3 @@ const styles = StyleSheet.create({
         fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold',
     }
 });
-

@@ -152,83 +152,85 @@ export default function WithdrawScreen() {
     }
 
     return (
-        <SafeAreaView style={styles.safeArea}>
-            <View style={styles.header}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+            <View style={[styles.header, { backgroundColor: COLORS.primary }]}>
                 <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                    <Ionicons name="arrow-back" size={28} color={COLORS.textPrimary} />
+                    <Ionicons name="arrow-back" size={28} color="#fff" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Retrait</Text>
+                <Text style={[styles.headerTitle, { color: '#fff' }]}>Retrait</Text>
                 <View style={{ width: 44 }} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.container}>
-                <View style={styles.balanceSection}>
-                    <Text style={styles.balanceLabel}>Solde Retirable</Text>
-                    <Text style={styles.balanceAmount}>{balance.toLocaleString('fr-FR')} FCFA</Text>
-                    {balanceStale && (
-                        <Text style={{ fontSize: 12, color: '#F59E0B', marginTop: 4 }}>
-                            Solde peut-être obsolète — vérifiez votre connexion.
-                        </Text>
-                    )}
-                </View>
+            <View style={[styles.sheetWrapper, { backgroundColor: COLORS.background }]}>
+                <ScrollView contentContainerStyle={styles.container}>
+                    <View style={styles.balanceSection}>
+                        <Text style={styles.balanceLabel}>Solde Retirable</Text>
+                        <Text style={styles.balanceAmount}>{balance.toLocaleString('fr-FR')} FCFA</Text>
+                        {balanceStale && (
+                            <Text style={{ fontSize: 12, color: '#F59E0B', marginTop: 4 }}>
+                                Solde peut-être obsolète — vérifiez votre connexion.
+                            </Text>
+                        )}
+                    </View>
 
-                <Text style={styles.sectionHeader}>PAR CODE QR</Text>
+                    <Text style={styles.sectionHeader}>PAR CODE QR</Text>
 
-                <View style={styles.listContainer}>
-                    <TouchableOpacity style={styles.listItem} onPress={() => router.push('/qr?mode=scanOnly&intent=withdraw')}>
-                        <View style={[styles.listIcon, { backgroundColor: '#F59E0B15' }]}>
-                            <Ionicons name="scan" size={24} color="#F59E0B" />
-                        </View>
-                        <View style={styles.listTextWrap}>
-                            <Text style={styles.listTitle}>Scanner pour retirer</Text>
-                            <Text style={styles.listDesc}>Saisissez vous-même le montant à retirer.</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
-                    </TouchableOpacity>
-                </View>
+                    <View style={styles.listContainer}>
+                        <TouchableOpacity style={styles.listItem} onPress={() => router.push('/qr?mode=scanOnly&intent=withdraw')}>
+                            <View style={[styles.listIcon, { backgroundColor: '#F59E0B15' }]}>
+                                <Ionicons name="scan" size={24} color="#F59E0B" />
+                            </View>
+                            <View style={styles.listTextWrap}>
+                                <Text style={styles.listTitle}>Scanner pour retirer</Text>
+                                <Text style={styles.listDesc}>Saisissez vous-même le montant à retirer.</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
 
-                <Text style={styles.sectionHeader}>PAR CODE SECRET</Text>
+                    <Text style={styles.sectionHeader}>PAR CODE SECRET</Text>
 
-                <View style={styles.listContainer}>
-                    <TouchableOpacity style={styles.listItem} onPress={() => setShowAmountModal(true)}>
-                        <View style={[styles.listIcon, { backgroundColor: '#10B98115' }]}>
-                            <Ionicons name="lock-closed" size={24} color="#10B981" />
-                        </View>
-                        <View style={styles.listTextWrap}>
-                            <Text style={styles.listTitle}>Générer un Code (Guichet)</Text>
-                            <Text style={styles.listDesc}>Donnez votre numéro et le code généré au caissier.</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
-                    </TouchableOpacity>
-                </View>
+                    <View style={styles.listContainer}>
+                        <TouchableOpacity style={styles.listItem} onPress={() => setShowAmountModal(true)}>
+                            <View style={[styles.listIcon, { backgroundColor: '#10B98115' }]}>
+                                <Ionicons name="lock-closed" size={24} color="#10B981" />
+                            </View>
+                            <View style={styles.listTextWrap}>
+                                <Text style={styles.listTitle}>Générer un Code (Guichet)</Text>
+                                <Text style={styles.listDesc}>Donnez votre numéro et le code généré au caissier.</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
 
-                <Text style={styles.sectionHeader}>PORTEFEUILLES MOBILES ET BANQUES</Text>
+                    <Text style={styles.sectionHeader}>PORTEFEUILLES MOBILES ET BANQUES</Text>
 
-                <View style={styles.listContainer}>
-                    <TouchableOpacity onPress={() => router.push({ pathname: '/withdraw-form', params: { method: 'AIRTEL' } })} style={styles.listItem}>
-                        <View style={[styles.listIcon, { backgroundColor: '#EF444415' }]}>
-                            <Ionicons name="phone-portrait" size={24} color="#EF4444" />
-                        </View>
-                        <View style={styles.listTextWrap}>
-                            <Text style={styles.listTitle}>Vers Airtel Money</Text>
-                            <Text style={styles.listDesc}>Virement automatisé</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
-                    </TouchableOpacity>
+                    <View style={styles.listContainer}>
+                        <TouchableOpacity onPress={() => router.push({ pathname: '/withdraw-form', params: { method: 'AIRTEL' } })} style={styles.listItem}>
+                            <View style={[styles.listIcon, { backgroundColor: '#EF444415' }]}>
+                                <Ionicons name="phone-portrait" size={24} color="#EF4444" />
+                            </View>
+                            <View style={styles.listTextWrap}>
+                                <Text style={styles.listTitle}>Vers Airtel Money</Text>
+                                <Text style={styles.listDesc}>Virement automatisé</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                        </TouchableOpacity>
 
-                    <TouchableOpacity onPress={() => router.push({ pathname: '/withdraw-form', params: { method: 'MOOV' } })} style={[styles.listItem, styles.lastListItem]}>
-                        <View style={[styles.listIcon, { backgroundColor: '#3B82F615' }]}>
-                            <Ionicons name="phone-portrait-outline" size={24} color="#3B82F6" />
-                        </View>
-                        <View style={styles.listTextWrap}>
-                            <Text style={styles.listTitle}>Vers Moov Africa</Text>
-                            <Text style={styles.listDesc}>Virement automatisé</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
-                    </TouchableOpacity>
-                </View>
+                        <TouchableOpacity onPress={() => router.push({ pathname: '/withdraw-form', params: { method: 'MOOV' } })} style={[styles.listItem, styles.lastListItem]}>
+                            <View style={[styles.listIcon, { backgroundColor: '#3B82F615' }]}>
+                                <Ionicons name="phone-portrait-outline" size={24} color="#3B82F6" />
+                            </View>
+                            <View style={styles.listTextWrap}>
+                                <Text style={styles.listTitle}>Vers Moov Africa</Text>
+                                <Text style={styles.listDesc}>Virement automatisé</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
 
-            </ScrollView>
+                </ScrollView>
+            </View>
         </SafeAreaView>
     );
 }
@@ -238,7 +240,8 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16, backgroundColor: COLORS.background },
     backButton: { padding: 8, marginLeft: -8 },
     headerTitle: { fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary },
-    container: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 60 },
+    sheetWrapper: { flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' },
+    container: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 60 },
 
     balanceSection: { alignItems: 'center', marginVertical: 32 },
     balanceLabel: { fontSize: 14, color: COLORS.textSecondary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 1 },

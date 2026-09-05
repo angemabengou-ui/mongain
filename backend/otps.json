@@ -1,0 +1,42 @@
+[
+  {
+    "id": "efa71839-b151-48a8-932c-b2060c29ab21",
+    "phone": "+24177262483",
+    "purpose": "LOGIN",
+    "code": "1825",
+    "expiresAt": "2026-09-05T20:39:33.054Z",
+    "createdAt": "2026-09-05T20:34:33.055Z"
+  },
+  {
+    "id": "4d8fd199-1233-4286-8ab3-6e6b66ff3b7e",
+    "phone": "+24162779260",
+    "purpose": "LOGIN",
+    "code": "1735",
+    "expiresAt": "2026-09-04T22:18:23.690Z",
+    "createdAt": "2026-09-04T22:13:23.691Z"
+  },
+  {
+    "id": "a737d2c9-94fd-4fda-a896-0f9c8f35d3f2",
+    "phone": "+24177262483",
+    "purpose": "WITHDRAW_CODE",
+    "code": "533916:2000",
+    "expiresAt": "2026-09-04T22:09:39.410Z",
+    "createdAt": "2026-09-04T22:04:39.414Z"
+  },
+  {
+    "id": "906cb391-cc56-458e-b3ed-20c3c91e018f",
+    "phone": "+24177262483",
+    "purpose": "RESET_PIN",
+    "code": "1617",
+    "expiresAt": "2026-09-04T08:52:24.580Z",
+    "createdAt": "2026-09-04T08:42:24.581Z"
+  },
+  {
+    "id": "3b4cbf9d-8a37-456b-874f-e14a85b2b54e",
+    "phone": "+24174298928",
+    "purpose": "REGISTER",
+    "code": "1234",
+    "expiresAt": "2026-08-31T10:42:26.745Z",
+    "createdAt": "2026-08-31T10:32:26.746Z"
+  }
+]

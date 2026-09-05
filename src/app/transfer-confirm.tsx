@@ -287,164 +287,166 @@ export default function TransferConfirmScreen() {
 
     // ─── Écran de saisie ──────────────────────────────────────────
     return (
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
                 {/* Header */}
-                <View style={styles.header}>
+                <View style={[styles.header, { backgroundColor: COLORS.primary }]}>
                     <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                        <Ionicons name="arrow-back" size={28} color={COLORS.textPrimary} />
+                        <Ionicons name="arrow-back" size={28} color="#fff" />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>{isPayment ? 'Paiement Marchand' : 'Confirmation'}</Text>
+                    <Text style={[styles.headerTitle, { color: '#fff' }]}>{isPayment ? 'Paiement Marchand' : 'Confirmation'}</Text>
                     <View style={{ width: 28 }} />
                 </View>
 
-                <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 150 }]} keyboardShouldPersistTaps="handled">
-                    {/* Carte destinataire */}
-                    <View style={styles.recipientCard}>
-                        <View style={styles.recipientAvatar}>
-                            <Text style={styles.recipientInitial}>{initials}</Text>
-                        </View>
-                        <View>
-                            <Text style={styles.recipientLabel}>{isPayment ? 'Marchand (Bénéficiaire)' : 'Destinataire'}</Text>
-                            <Text style={styles.recipientName}>{receiverName || receiverPhone}</Text>
-                            <Text style={styles.recipientPhone}>{receiverPhone}</Text>
-                        </View>
-                    </View>
-
-                    {/* Erreur */}
-                    {error ? (
-                        <View style={styles.errorBox}>
-                            <Ionicons name="alert-circle-outline" size={18} color={COLORS.error} />
-                            <Text style={styles.errorText}>{error}</Text>
-                        </View>
-                    ) : null}
-
-                    {/* Montant */}
-                    <Text style={styles.label}>Montant (FCFA)</Text>
-                    <View style={styles.inputContainer}>
-                        <Text style={styles.currencyPrefix}>FCFA</Text>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="0"
-                            keyboardType="numeric"
-                            value={amount}
-                            onChangeText={setAmount}
-                            placeholderTextColor={COLORS.textSecondary}
-                        />
-                    </View>
-
-                    {(() => {
-                        // Même nettoyage que handleTransfer/handleBiometricAuth ci-dessus : un
-                        // Number(amount) brut renvoie NaN dès qu'un espace ou une virgule traîne
-                        // dans la saisie (collage, IME), ce qui masquait silencieusement cet
-                        // encart de frais au lieu d'afficher le montant réellement débité.
-                        const cleanedAmount = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
-                        if (!(cleanedAmount > 0)) return null;
-
-                        // Le backend (backend/src/routes/wallet.ts:435, POST /transfer) EXEMPTE
-                        // spécifiquement les expéditeurs AGENT (`fee = sender.role === 'AGENT' ?
-                        // 0 : amount * taxP2P`) — un dépôt guichet gratuit. Appliquer taxP2P sans
-                        // condition ici affichait des frais et un total à débiter faux pour un
-                        // agent. On vérifie via ?? au lieu de || pour éviter qu'un taux de 0%
-                        // (falsy) ne retombe à la valeur de repli.
-                        const taxRate = user?.role === 'AGENT' ? 0 : (settings?.taxP2P ?? 0.01);
-                        const p2pFee = Math.ceil(cleanedAmount * taxRate);
-                        const totalDebit = cleanedAmount + p2pFee;
-
-                        return (
-                            <View style={{ backgroundColor: 'rgba(29, 197, 233, 0.05)', padding: 16, borderRadius: 16, marginTop: 12, borderWidth: 1, borderColor: 'rgba(29, 197, 233, 0.2)' }}>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                                    <Text style={{ color: COLORS.textSecondary }}>Montant envoyé</Text>
-                                    <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' }}>{cleanedAmount.toLocaleString('fr-FR')} FCFA</Text>
-                                </View>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                                    <Text style={{ color: '#F59E0B' }}>Frais ({taxRate * 100}%)</Text>
-                                    <Text style={{ color: '#F59E0B', fontFamily: 'Satoshi-SemiBold', fontWeight: '600' }}>{p2pFee.toLocaleString('fr-FR')} FCFA</Text>
-                                </View>
-                                <View style={{ width: '100%', height: 1, backgroundColor: COLORS.border || '#e2e8f0', marginVertical: 4 }} />
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-                                    <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>Total à débiter</Text>
-                                    <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', fontSize: 16 }}>{totalDebit.toLocaleString('fr-FR')} FCFA</Text>
-                                </View>
+                <View style={[styles.sheetWrapper, { backgroundColor: COLORS.background }]}>
+                    <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 150 }]} keyboardShouldPersistTaps="handled">
+                        {/* Carte destinataire */}
+                        <View style={styles.recipientCard}>
+                            <View style={styles.recipientAvatar}>
+                                <Text style={styles.recipientInitial}>{initials}</Text>
                             </View>
-                        );
-                    })()}
+                            <View>
+                                <Text style={styles.recipientLabel}>{isPayment ? 'Marchand (Bénéficiaire)' : 'Destinataire'}</Text>
+                                <Text style={styles.recipientName}>{receiverName || receiverPhone}</Text>
+                                <Text style={styles.recipientPhone}>{receiverPhone}</Text>
+                            </View>
+                        </View>
 
-                    {/* Raccourcis */}
-                    <View style={styles.amountShortcuts}>
-                        {['5 000', '10 000', '25 000', '50 000'].map(v => (
-                            <TouchableOpacity
-                                key={v}
-                                style={styles.shortcutPill}
-                                onPress={() => setAmount(v.replace(/\s/g, ''))}
-                            >
-                                <Text style={styles.shortcutText}>{v}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
+                        {/* Erreur */}
+                        {error ? (
+                            <View style={styles.errorBox}>
+                                <Ionicons name="alert-circle-outline" size={18} color={COLORS.error} />
+                                <Text style={styles.errorText}>{error}</Text>
+                            </View>
+                        ) : null}
 
-                    {/* PIN */}
-                    <Text style={styles.label}>Code PIN</Text>
-                    <View style={styles.inputContainer}>
-                        <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 8 }} />
-                        <TextInput
-                            style={styles.input}
-                            placeholder="⬢⬢⬢⬢"
-                            keyboardType="number-pad"
-                            secureTextEntry={!showPin}
-                            maxLength={4}
-                            value={pin}
-                            onChangeText={setPin}
-                            placeholderTextColor={COLORS.textSecondary}
-                        />
-                        <TouchableOpacity onPress={() => setShowPin(!showPin)} style={{ padding: 4 }}>
-                            <Ionicons name={showPin ? 'eye-off-outline' : 'eye-outline'} size={20} color={COLORS.textSecondary} />
-                        </TouchableOpacity>
-                    </View>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginTop: 12 }}>
-                        {bioEnabled && (
-                            <TouchableOpacity style={[styles.sendBtn, { flex: 1, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.primary }]} onPress={handleBiometricAuth} disabled={loading}>
-                                <Ionicons name="finger-print" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
-                                <Text style={[styles.sendBtnText, { color: COLORS.primary }]}>Face ID</Text>
-                            </TouchableOpacity>
-                        )}
+                        {/* Montant */}
+                        <Text style={styles.label}>Montant (FCFA)</Text>
+                        <View style={styles.inputContainer}>
+                            <Text style={styles.currencyPrefix}>FCFA</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="0"
+                                keyboardType="numeric"
+                                value={amount}
+                                onChangeText={setAmount}
+                                placeholderTextColor={COLORS.textSecondary}
+                            />
+                        </View>
 
-                        <TouchableOpacity style={[styles.sendBtn, { flex: bioEnabled ? 2 : 1, backgroundColor: isPayment ? '#F59E0B' : COLORS.primary, borderWidth: 0 }]} onPress={handleTransfer} disabled={loading}>
-                            {loading ? <ActivityIndicator color="#fff" /> : (
-                                <>
-                                    <Ionicons name={isPayment ? "cart" : "send"} size={20} color="#fff" style={{ marginRight: 8 }} />
-                                    <Text style={styles.sendBtnText}>{isPayment ? 'Payer (PIN)' : 'Envoyer (PIN)'}</Text>
-                                </>
-                            )}
-                        </TouchableOpacity>
-                    </View>
+                        {(() => {
+                            // Même nettoyage que handleTransfer/handleBiometricAuth ci-dessus : un
+                            // Number(amount) brut renvoie NaN dès qu'un espace ou une virgule traîne
+                            // dans la saisie (collage, IME), ce qui masquait silencieusement cet
+                            // encart de frais au lieu d'afficher le montant réellement débité.
+                            const cleanedAmount = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
+                            if (!(cleanedAmount > 0)) return null;
 
-                    {vouchers.length > 0 && (
-                        <View style={{ marginTop: 32 }}>
-                            <Text style={styles.label}>Payer par Caisse Commune (Bons)</Text>
-                            {vouchers.map((v) => (
+                            // Le backend (backend/src/routes/wallet.ts:435, POST /transfer) EXEMPTE
+                            // spécifiquement les expéditeurs AGENT (`fee = sender.role === 'AGENT' ?
+                            // 0 : amount * taxP2P`) — un dépôt guichet gratuit. Appliquer taxP2P sans
+                            // condition ici affichait des frais et un total à débiter faux pour un
+                            // agent. On vérifie via ?? au lieu de || pour éviter qu'un taux de 0%
+                            // (falsy) ne retombe à la valeur de repli.
+                            const taxRate = user?.role === 'AGENT' ? 0 : (settings?.taxP2P ?? 0.01);
+                            const p2pFee = Math.ceil(cleanedAmount * taxRate);
+                            const totalDebit = cleanedAmount + p2pFee;
+
+                            return (
+                                <View style={{ backgroundColor: 'rgba(29, 197, 233, 0.05)', padding: 16, borderRadius: 16, marginTop: 12, borderWidth: 1, borderColor: 'rgba(29, 197, 233, 0.2)' }}>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                                        <Text style={{ color: COLORS.textSecondary }}>Montant envoyé</Text>
+                                        <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '600' }}>{cleanedAmount.toLocaleString('fr-FR')} FCFA</Text>
+                                    </View>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                                        <Text style={{ color: '#F59E0B' }}>Frais ({taxRate * 100}%)</Text>
+                                        <Text style={{ color: '#F59E0B', fontFamily: 'Satoshi-SemiBold', fontWeight: '600' }}>{p2pFee.toLocaleString('fr-FR')} FCFA</Text>
+                                    </View>
+                                    <View style={{ width: '100%', height: 1, backgroundColor: COLORS.border || '#e2e8f0', marginVertical: 4 }} />
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+                                        <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>Total à débiter</Text>
+                                        <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', fontSize: 16 }}>{totalDebit.toLocaleString('fr-FR')} FCFA</Text>
+                                    </View>
+                                </View>
+                            );
+                        })()}
+
+                        {/* Raccourcis */}
+                        <View style={styles.amountShortcuts}>
+                            {['5 000', '10 000', '25 000', '50 000'].map(v => (
                                 <TouchableOpacity
-                                    key={v.id}
-                                    style={styles.voucherCard}
-                                    onPress={() => handleSpendVoucher(v.id, v.amount)}
+                                    key={v}
+                                    style={styles.shortcutPill}
+                                    onPress={() => setAmount(v.replace(/\s/g, ''))}
                                 >
-                                    <Ionicons name="lock-closed" size={24} color="#F59E0B" style={{ marginRight: 12 }} />
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 16, color: COLORS.textPrimary }}>
-                                            {v.vault?.name}
-                                        </Text>
-                                        <Text style={{ color: COLORS.textSecondary }}>Bon pré-approuvé</Text>
-                                    </View>
-                                    <View style={{ alignItems: 'flex-end' }}>
-                                        <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: '800', color: '#10B981', fontSize: 16 }}>{v.amount.toLocaleString()} F</Text>
-                                        <Text style={{ color: '#F59E0B', fontSize: 12, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginTop: 2 }}>UTILISER</Text>
-                                    </View>
+                                    <Text style={styles.shortcutText}>{v}</Text>
                                 </TouchableOpacity>
                             ))}
                         </View>
-                    )}
-                </ScrollView>
-                {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
+
+                        {/* PIN */}
+                        <Text style={styles.label}>Code PIN</Text>
+                        <View style={styles.inputContainer}>
+                            <Ionicons name="lock-closed-outline" size={20} color={COLORS.textSecondary} style={{ marginRight: 8 }} />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="⬢⬢⬢⬢"
+                                keyboardType="number-pad"
+                                secureTextEntry={!showPin}
+                                maxLength={4}
+                                value={pin}
+                                onChangeText={setPin}
+                                placeholderTextColor={COLORS.textSecondary}
+                            />
+                            <TouchableOpacity onPress={() => setShowPin(!showPin)} style={{ padding: 4 }}>
+                                <Ionicons name={showPin ? 'eye-off-outline' : 'eye-outline'} size={20} color={COLORS.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginTop: 12 }}>
+                            {bioEnabled && (
+                                <TouchableOpacity style={[styles.sendBtn, { flex: 1, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.primary }]} onPress={handleBiometricAuth} disabled={loading}>
+                                    <Ionicons name="finger-print" size={20} color={COLORS.primary} style={{ marginRight: 8 }} />
+                                    <Text style={[styles.sendBtnText, { color: COLORS.primary }]}>Face ID</Text>
+                                </TouchableOpacity>
+                            )}
+
+                            <TouchableOpacity style={[styles.sendBtn, { flex: bioEnabled ? 2 : 1, backgroundColor: isPayment ? '#F59E0B' : COLORS.primary, borderWidth: 0 }]} onPress={handleTransfer} disabled={loading}>
+                                {loading ? <ActivityIndicator color="#fff" /> : (
+                                    <>
+                                        <Ionicons name={isPayment ? "cart" : "send"} size={20} color="#fff" style={{ marginRight: 8 }} />
+                                        <Text style={styles.sendBtnText}>{isPayment ? 'Payer (PIN)' : 'Envoyer (PIN)'}</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+
+                        {vouchers.length > 0 && (
+                            <View style={{ marginTop: 32 }}>
+                                <Text style={styles.label}>Payer par Caisse Commune (Bons)</Text>
+                                {vouchers.map((v) => (
+                                    <TouchableOpacity
+                                        key={v.id}
+                                        style={styles.voucherCard}
+                                        onPress={() => handleSpendVoucher(v.id, v.amount)}
+                                    >
+                                        <Ionicons name="lock-closed" size={24} color="#F59E0B" style={{ marginRight: 12 }} />
+                                        <View style={{ flex: 1 }}>
+                                            <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 16, color: COLORS.textPrimary }}>
+                                                {v.vault?.name}
+                                            </Text>
+                                            <Text style={{ color: COLORS.textSecondary }}>Bon pré-approuvé</Text>
+                                        </View>
+                                        <View style={{ alignItems: 'flex-end' }}>
+                                            <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: '800', color: '#10B981', fontSize: 16 }}>{v.amount.toLocaleString()} F</Text>
+                                            <Text style={{ color: '#F59E0B', fontSize: 12, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginTop: 2 }}>UTILISER</Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        )}
+                    </ScrollView>
+                    {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
+                </View>
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
@@ -455,12 +457,11 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     header: {
         flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
         paddingHorizontal: 20, paddingVertical: 16,
-        backgroundColor: COLORS.surface,
-        shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
     },
     backButton: { padding: 8, marginLeft: -8 },
-    headerTitle: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary },
-    content: { padding: 24 },
+    headerTitle: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
+    sheetWrapper: { flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' },
+    content: { padding: 24, paddingTop: 32 },
 
     // Destinataire
     recipientCard: {

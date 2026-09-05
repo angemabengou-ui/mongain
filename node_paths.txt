@@ -1,0 +1,6 @@
+D:\kimi\resources\resources\runtime\node.exe
+D:\tmp\nodejsextract\PFiles64\nodejs\node.exe
+D:\Users\om0886\Desktop\mongain\.node\node.exe
+D:\Users\om0886\Desktop\mongain\.node22\node.exe
+D:\Users\om0886\Desktop\mongain\.node22-new\node-v22.23.2-win-x64\node.exe
+D:\Users\om0886\Desktop\mongain\backend\node-v20.15.1-win-x64\node.exe

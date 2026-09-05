@@ -2,6 +2,8 @@ import axios from 'axios';
 import { CheckCircle, DollarSign, FileText, Plus, RefreshCw, Send, Users, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
+const fmt = (n: number) => n.toLocaleString('fr-GA');
+
 export default function B2BHub({ token }: { token: string }) {
     const [invoices, setInvoices] = useState<any[]>([]);
     const [payouts, setPayouts] = useState<any[]>([]);
@@ -73,97 +75,108 @@ export default function B2BHub({ token }: { token: string }) {
             case 'PAID':
             case 'COMPLETED':
             case 'SUCCESS':
-                return <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">{status}</span>;
+                return <span className="status-pill success">{status}</span>;
             case 'PENDING':
             case 'PROCESSING':
-                return <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-semibold">{status}</span>;
+                return <span className="status-pill warning">{status}</span>;
             default:
-                return <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">{status}</span>;
+                return <span className="status-pill danger">{status}</span>;
         }
     };
 
+    const tabStyle = (isActive: boolean) => ({
+        padding: '16px 24px',
+        background: isActive ? 'var(--text-primary)' : 'var(--bg-secondary)',
+        color: isActive ? 'var(--bg-primary)' : 'var(--text-secondary)',
+        border: `1px solid ${isActive ? 'var(--text-primary)' : 'var(--border)'}`,
+        borderRadius: 12,
+        fontWeight: 700,
+        fontSize: 15,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        boxShadow: isActive ? 'var(--shadow-md)' : 'none',
+        transition: 'all 0.2s ease'
+    });
+
     return (
-        <div className="p-8 max-w-7xl mx-auto">
-            <div className="flex justify-between items-center mb-8">
+        <div style={{ maxWidth: 1200, margin: '0 auto', paddingBottom: 60 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900 flex items-center">
-                        <DollarSign className="mr-3 text-blue-600" size={32} /> Mongain PRO
+                    <h1 style={{ fontSize: 32, fontWeight: 800, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ background: 'var(--accent-bg)', color: 'var(--accent)', padding: 12, borderRadius: 12 }}><DollarSign size={28} /></div>
+                        Mongain PRO
                     </h1>
-                    <p className="text-gray-500 mt-1">Plateforme Business : Facturation B2B & Payouts Massifs</p>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: 16 }}>Plateforme Business : Facturation B2B & Payouts Massifs</p>
                 </div>
                 <button
                     onClick={fetchB2B}
-                    className="flex items-center space-x-2 text-blue-600 hover:text-blue-800 bg-blue-50 px-4 py-2 rounded-lg"
+                    className="btn-primary"
+                    style={{ background: 'var(--accent-bg)', color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', boxShadow: 'none' }}
                 >
-                    <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
+                    <RefreshCw size={20} className={loading ? "spin" : ""} />
                     <span>Synchroniser</span>
                 </button>
             </div>
 
-            <div className="flex space-x-4 mb-8">
-                <button
-                    onClick={() => setActiveTab('INVOICES')}
-                    className={`flex items-center px-6 py-3 rounded-lg font-semibold transition-all ${activeTab === 'INVOICES' ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-gray-600 shadow border border-gray-200'}`}
-                >
-                    <FileText className="mr-2" size={20} /> Liens de Paiement (Invoices)
+            <div style={{ display: 'flex', gap: 16, marginBottom: 32 }}>
+                <button onClick={() => setActiveTab('INVOICES')} style={tabStyle(activeTab === 'INVOICES')}>
+                    <FileText size={20} /> Liens de Paiement (Invoices)
                 </button>
-                <button
-                    onClick={() => setActiveTab('PAYOUTS')}
-                    className={`flex items-center px-6 py-3 rounded-lg font-semibold transition-all ${activeTab === 'PAYOUTS' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-600 shadow border border-gray-200'}`}
-                >
-                    <Users className="mr-2" size={20} /> Paie Groupée (Mass Payouts)
+                <button onClick={() => setActiveTab('PAYOUTS')} style={tabStyle(activeTab === 'PAYOUTS')}>
+                    <Users size={20} /> Paie Groupée (Mass Payouts)
                 </button>
             </div>
 
             {activeTab === 'INVOICES' && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Invoice Generator */}
-                    <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                        <h2 className="text-xl font-bold text-gray-800 mb-6">Émettre une Facture</h2>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone Client</label>
-                                <input type="text" value={newInvoice.phone} onChange={e => setNewInvoice({ ...newInvoice, phone: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="Ex: 074XXXXX" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Montant (FCFA)</label>
-                                <input type="number" value={newInvoice.amount} onChange={e => setNewInvoice({ ...newInvoice, amount: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="Ex: 50000" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                                <input type="text" value={newInvoice.description} onChange={e => setNewInvoice({ ...newInvoice, description: e.target.value })} className="w-full border border-gray-300 rounded-lg p-3" placeholder="Motif de la facture..." />
-                            </div>
-                            <button onClick={handleCreateInvoice} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center">
-                                <Plus size={20} className="mr-2" /> Générer
-                            </button>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 32 }}>
+                    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                        <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>Émettre une Facture</h2>
+                        <div>
+                            <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, display: 'block' }}>Téléphone Client</label>
+                            <input type="text" value={newInvoice.phone} onChange={e => setNewInvoice({ ...newInvoice, phone: e.target.value })} placeholder="Ex: 074XXXXX" />
                         </div>
+                        <div>
+                            <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, display: 'block' }}>Montant (FCFA)</label>
+                            <input type="number" value={newInvoice.amount} onChange={e => setNewInvoice({ ...newInvoice, amount: e.target.value })} placeholder="Ex: 50000" />
+                        </div>
+                        <div>
+                            <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, display: 'block' }}>Description</label>
+                            <input type="text" value={newInvoice.description} onChange={e => setNewInvoice({ ...newInvoice, description: e.target.value })} placeholder="Motif de la facture..." />
+                        </div>
+                        <button onClick={handleCreateInvoice} className="btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px', marginTop: 'auto' }}>
+                            <Plus size={20} /> Générer
+                        </button>
                     </div>
 
-                    {/* Invoices List */}
-                    <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
-                        <h2 className="text-xl font-bold text-gray-800 mb-6">Historique des Factures</h2>
-                        <table className="min-w-full text-left border-collapse">
+                    <div className="table-container">
+                        <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--border)' }}>
+                            <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>Historique des Factures</h2>
+                        </div>
+                        <table style={{ width: '100%' }}>
                             <thead>
-                                <tr className="border-b border-gray-100 text-gray-500 text-sm">
-                                    <th className="pb-3 px-4">Référence</th>
-                                    <th className="pb-3 px-4">Date</th>
-                                    <th className="pb-3 px-4">Client</th>
-                                    <th className="pb-3 px-4">Montant</th>
-                                    <th className="pb-3 px-4">Statut</th>
+                                <tr>
+                                    <th>Référence</th>
+                                    <th>Date</th>
+                                    <th>Client</th>
+                                    <th>Montant</th>
+                                    <th>Statut</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {invoices.map((inv: any) => (
-                                    <tr key={inv.id} className="border-b border-gray-50 hover:bg-gray-50">
-                                        <td className="py-4 px-4 font-mono text-sm uppercase text-gray-600">{inv.id.split('-')[0]}</td>
-                                        <td className="py-4 px-4 text-sm text-gray-700">{new Date(inv.createdAt).toLocaleDateString()}</td>
-                                        <td className="py-4 px-4 font-semibold text-gray-900">{inv.customerPhone}</td>
-                                        <td className="py-4 px-4 font-bold text-blue-600">{inv.amount.toLocaleString()} FCFA</td>
-                                        <td className="py-4 px-4">
-                                            <StatusBadge status={inv.status} />
-                                        </td>
+                                    <tr key={inv.id}>
+                                        <td style={{ fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{inv.id.split('-')[0]}</td>
+                                        <td>{new Date(inv.createdAt).toLocaleDateString('fr-GA')}</td>
+                                        <td style={{ fontWeight: 600 }}>{inv.customerPhone}</td>
+                                        <td style={{ fontWeight: 800, color: 'var(--accent)' }}>{fmt(inv.amount)} FCFA</td>
+                                        <td><StatusBadge status={inv.status} /></td>
                                     </tr>
                                 ))}
+                                {invoices.length === 0 && (
+                                    <tr><td colSpan={5} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>Aucune facture émise.</td></tr>
+                                )}
                             </tbody>
                         </table>
                     </div>
@@ -171,68 +184,68 @@ export default function B2BHub({ token }: { token: string }) {
             )}
 
             {activeTab === 'PAYOUTS' && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Generator */}
-                    <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-indigo-100">
-                        <h2 className="text-xl font-bold text-gray-800 mb-6">Lancer une Paie</h2>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Nom du Batch</label>
-                                <input type="text" value={payoutName} onChange={e => setPayoutName(e.target.value)} className="w-full border border-gray-300 rounded-lg p-3" placeholder="Ex: Salaires Mars 2026" />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 32 }}>
+                    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                        <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>Lancer une Paie (Mass Payout)</h2>
+                        <div>
+                            <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, display: 'block' }}>Nom du Batch</label>
+                            <input type="text" value={payoutName} onChange={e => setPayoutName(e.target.value)} placeholder="Ex: Salaires Mars 2026" />
+                        </div>
+
+                        <div style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Bénéficiaires</label>
+                                <button onClick={() => setPayoutEntries([...payoutEntries, { phone: '', amount: '' }])} style={{ background: 'none', border: 'none', color: 'var(--accent)', fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                                    <Plus size={16} style={{ marginRight: 4 }} /> Ajouter
+                                </button>
                             </div>
 
-                            <div className="border border-indigo-100 rounded-lg p-4 bg-indigo-50/30">
-                                <h3 className="font-semibold text-indigo-900 mb-3 flex items-center justify-between">
-                                    Bénéficiaires
-                                    <button onClick={() => setPayoutEntries([...payoutEntries, { phone: '', amount: '' }])} className="text-indigo-600 text-sm font-bold flex items-center hover:underline">
-                                        <Plus size={16} className="mr-1" /> Ajouter
-                                    </button>
-                                </h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                                 {payoutEntries.map((e, idx) => (
-                                    <div key={idx} className="flex space-x-2 mb-2">
+                                    <div key={idx} style={{ display: 'flex', gap: 8 }}>
                                         <input type="text" value={e.phone} onChange={evt => {
                                             const ne = [...payoutEntries]; ne[idx].phone = evt.target.value; setPayoutEntries(ne);
-                                        }} className="w-1/2 border border-gray-300 rounded-md p-2 text-sm" placeholder="Téléphone" />
+                                        }} style={{ flex: 1, padding: '10px 12px' }} placeholder="Téléphone" />
                                         <input type="number" value={e.amount} onChange={evt => {
                                             const ne = [...payoutEntries]; ne[idx].amount = evt.target.value; setPayoutEntries(ne);
-                                        }} className="w-1/2 border border-gray-300 rounded-md p-2 text-sm" placeholder="Montant" />
+                                        }} style={{ flex: 1, padding: '10px 12px' }} placeholder="Montant" />
                                     </div>
                                 ))}
                             </div>
-
-                            <button onClick={handleCreatePayout} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center">
-                                <Send size={20} className="mr-2" /> Exécuter le Transfert
-                            </button>
                         </div>
+
+                        <button onClick={handleCreatePayout} className="btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px', marginTop: 'auto' }}>
+                            <Send size={20} /> Exécuter le Transfert
+                        </button>
                     </div>
 
-                    {/* Batches */}
-                    <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 overflow-x-auto">
-                        <h2 className="text-xl font-bold text-gray-800 mb-6">Logs de Distribution</h2>
-                        <div className="space-y-4">
+                    <div className="card" style={{ padding: 32 }}>
+                        <h2 style={{ fontSize: 20, fontWeight: 800, margin: '0 0 24px' }}>Logs de Distribution</h2>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                             {payouts.map((bulk: any) => (
-                                <div key={bulk.id} className="border border-gray-200 rounded-xl p-4">
-                                    <div className="flex justify-between items-center mb-4">
+                                <div key={bulk.id} style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 20, background: 'var(--bg-secondary)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                                         <div>
-                                            <h4 className="font-bold text-lg text-gray-900">{bulk.name}</h4>
-                                            <p className="text-sm text-gray-500">{new Date(bulk.createdAt).toLocaleString()}</p>
+                                            <h4 style={{ fontSize: 16, fontWeight: 800, margin: '0 0 4px' }}>{bulk.name}</h4>
+                                            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{new Date(bulk.createdAt).toLocaleString('fr-GA')}</p>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="font-black text-xl text-indigo-600">{bulk.totalAmount.toLocaleString()} FCFA</p>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--text-primary)', marginBottom: 4 }}>{fmt(bulk.totalAmount)} FCFA</div>
                                             <StatusBadge status={bulk.status} />
                                         </div>
                                     </div>
-                                    <div className="bg-gray-50 rounded-lg p-3 text-sm">
-                                        <table className="w-full text-left">
+
+                                    <div style={{ background: 'var(--bg-primary)', borderRadius: 8, padding: 12 }}>
+                                        <table style={{ width: '100%', fontSize: 13 }}>
                                             <tbody>
                                                 {bulk.entries.map((entry: any) => (
-                                                    <tr key={entry.id} className="border-b border-gray-200 last:border-0">
-                                                        <td className="py-2 text-gray-700">{entry.phone}</td>
-                                                        <td className="py-2 font-semibold text-gray-900">{entry.amount.toLocaleString()} FCFA</td>
-                                                        <td className="py-2 text-right text-xs">
-                                                            {entry.status === 'SUCCESS' ? <span className="text-green-600 flex items-center justify-end"><CheckCircle size={14} className="mr-1" /> Validé</span> : null}
-                                                            {entry.status === 'FAILED' ? <span className="text-red-500 flex items-center justify-end" title={entry.errorReason}><XCircle size={14} className="mr-1" /> Erreur</span> : null}
-                                                            {entry.status === 'PENDING' ? <span className="text-yellow-600">En cours...</span> : null}
+                                                    <tr key={entry.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                                                        <td style={{ padding: '8px 0', color: 'var(--text-secondary)' }}>{entry.phone}</td>
+                                                        <td style={{ padding: '8px 0', fontWeight: 600 }}>{fmt(entry.amount)} FCFA</td>
+                                                        <td style={{ padding: '8px 0', textAlign: 'right' }}>
+                                                            {entry.status === 'SUCCESS' && <span style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}><CheckCircle size={14} /> Validé</span>}
+                                                            {entry.status === 'FAILED' && <span style={{ color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }} title={entry.errorReason}><XCircle size={14} /> Erreur</span>}
+                                                            {entry.status === 'PENDING' && <span style={{ color: 'var(--warning)' }}>En cours...</span>}
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -241,7 +254,7 @@ export default function B2BHub({ token }: { token: string }) {
                                     </div>
                                 </div>
                             ))}
-                            {payouts.length === 0 && <p className="text-gray-500 text-center py-8">Aucun historique de paie massive.</p>}
+                            {payouts.length === 0 && <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px 0' }}>Aucun historique de paie massive.</div>}
                         </div>
                     </div>
                 </div>

@@ -27,59 +27,62 @@ export default function RechargeScreen() {
     };
 
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background }]}>
-            <View style={[styles.header, { backgroundColor: COLORS.background }]}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
+            <View style={[styles.header, { backgroundColor: COLORS.primary }]}>
                 <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                    <Ionicons name="arrow-back" size={28} color={COLORS.textPrimary} />
+                    <Ionicons name="arrow-back" size={28} color="#fff" />
                 </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: COLORS.textPrimary }]}>Dépôt</Text>
+                <Text style={[styles.headerTitle, { color: '#fff' }]}>Dépôt</Text>
                 <View style={{ width: 44 }} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.container}>
+            <View style={[styles.sheetWrapper, { backgroundColor: COLORS.background }]}>
 
-                <View style={styles.heroSection}>
-                    <Text style={[styles.heroTitle, { color: COLORS.textPrimary }]}>Alimenter mon compte Mongain</Text>
-                    <Text style={[styles.heroSubtitle, { color: COLORS.textSecondary }]}>Sélectionnez l'origine des fonds</Text>
-                </View>
+                <ScrollView contentContainerStyle={styles.container}>
 
-                <Text style={[styles.sectionHeader, { color: COLORS.textSecondary }]}>PRÉLÈVEMENT MOBILE MONEY</Text>
-
-                <View style={[styles.listContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
-                    <TouchableOpacity style={[styles.listItem, { borderBottomColor: COLORS.border }, !appConfig.airtelEnabled && { opacity: 0.4 }]} onPress={() => handlePress('Airtel', appConfig.airtelEnabled)}>
-                        <View style={[styles.listIcon, { backgroundColor: '#EF444415' }]}>
-                            <Ionicons name="phone-portrait" size={24} color="#EF4444" />
-                        </View>
-                        <View style={styles.listTextWrap}>
-                            <Text style={[styles.listTitle, { color: COLORS.textPrimary }]}>Airtel Money</Text>
-                            <Text style={[styles.listDesc, { color: COLORS.textSecondary }]}>Débité depuis votre solde Airtel.</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity style={[styles.lastListItem, !appConfig.moovEnabled && { opacity: 0.4 }]} onPress={() => handlePress('Moov', appConfig.moovEnabled)}>
-                        <View style={[styles.listIcon, { backgroundColor: '#3B82F615' }]}>
-                            <Ionicons name="phone-portrait-outline" size={24} color="#3B82F6" />
-                        </View>
-                        <View style={styles.listTextWrap}>
-                            <Text style={[styles.listTitle, { color: COLORS.textPrimary }]}>Moov Africa</Text>
-                            <Text style={[styles.listDesc, { color: COLORS.textSecondary }]}>Débité depuis votre solde Moov.</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
-                    </TouchableOpacity>
-                </View>
-
-                <Text style={[styles.sectionHeader, { color: COLORS.textSecondary, marginTop: 32 }]}>PAR DÉPÔT EN AGENCE</Text>
-
-                <View style={[styles.infoBox, { backgroundColor: COLORS.primary + '10', borderColor: COLORS.primary + '20' }]}>
-                    <Ionicons name="information-circle" size={28} color={COLORS.primary} style={{ marginRight: 12 }} />
-                    <View style={{ flex: 1 }}>
-                        <Text style={[styles.infoTitle, { color: COLORS.primary }]}>Numéro Utilisateur Mongain</Text>
-                        <Text style={[styles.infoText, { color: COLORS.primary }]}>Pour déposer du Cash, rendez-vous chez un Agent Mongain et communiquez-lui simplement votre numéro de profil.</Text>
+                    <View style={styles.heroSection}>
+                        <Text style={[styles.heroTitle, { color: COLORS.textPrimary }]}>Alimenter mon compte Mongain</Text>
+                        <Text style={[styles.heroSubtitle, { color: COLORS.textSecondary }]}>Sélectionnez l'origine des fonds</Text>
                     </View>
-                </View>
 
-            </ScrollView>
+                    <Text style={[styles.sectionHeader, { color: COLORS.textSecondary }]}>PRÉLÈVEMENT MOBILE MONEY</Text>
+
+                    <View style={[styles.listContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
+                        <TouchableOpacity style={[styles.listItem, { borderBottomColor: COLORS.border }, !appConfig.airtelEnabled && { opacity: 0.4 }]} onPress={() => handlePress('Airtel', appConfig.airtelEnabled)}>
+                            <View style={[styles.listIcon, { backgroundColor: '#EF444415' }]}>
+                                <Ionicons name="phone-portrait" size={24} color="#EF4444" />
+                            </View>
+                            <View style={styles.listTextWrap}>
+                                <Text style={[styles.listTitle, { color: COLORS.textPrimary }]}>Airtel Money</Text>
+                                <Text style={[styles.listDesc, { color: COLORS.textSecondary }]}>Débité depuis votre solde Airtel.</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity style={[styles.lastListItem, !appConfig.moovEnabled && { opacity: 0.4 }]} onPress={() => handlePress('Moov', appConfig.moovEnabled)}>
+                            <View style={[styles.listIcon, { backgroundColor: '#3B82F615' }]}>
+                                <Ionicons name="phone-portrait-outline" size={24} color="#3B82F6" />
+                            </View>
+                            <View style={styles.listTextWrap}>
+                                <Text style={[styles.listTitle, { color: COLORS.textPrimary }]}>Moov Africa</Text>
+                                <Text style={[styles.listDesc, { color: COLORS.textSecondary }]}>Débité depuis votre solde Moov.</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
+
+                    <Text style={[styles.sectionHeader, { color: COLORS.textSecondary, marginTop: 32 }]}>PAR DÉPÔT EN AGENCE</Text>
+
+                    <View style={[styles.infoBox, { backgroundColor: COLORS.primary + '10', borderColor: COLORS.primary + '20' }]}>
+                        <Ionicons name="information-circle" size={28} color={COLORS.primary} style={{ marginRight: 12 }} />
+                        <View style={{ flex: 1 }}>
+                            <Text style={[styles.infoTitle, { color: COLORS.primary }]}>Numéro Utilisateur Mongain</Text>
+                            <Text style={[styles.infoText, { color: COLORS.primary }]}>Pour déposer du Cash, rendez-vous chez un Agent Mongain et communiquez-lui simplement votre numéro de profil.</Text>
+                        </View>
+                    </View>
+
+                </ScrollView>
+            </View>
         </SafeAreaView>
     );
 }
@@ -89,7 +92,8 @@ const styles = StyleSheet.create({
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 },
     backButton: { padding: 8, marginLeft: -8 },
     headerTitle: { fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
-    container: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 60 },
+    sheetWrapper: { flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' },
+    container: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 60 },
 
     heroSection: { marginVertical: 24, alignItems: 'center' },
     heroTitle: { fontSize: 28, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 8, letterSpacing: -0.5 },

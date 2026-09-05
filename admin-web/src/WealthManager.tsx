@@ -3,6 +3,8 @@ import { CheckCircle, Landmark, RefreshCw, ShieldAlert, TrendingUp, Users } from
 import { useEffect, useState } from 'react';
 import { API_URL } from './config';
 
+const fmt = (n: number) => n.toLocaleString('fr-GA');
+
 export default function WealthManager({ token }: { token: string }) {
     const [vaults, setVaults] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
@@ -31,105 +33,109 @@ export default function WealthManager({ token }: { token: string }) {
     }, [token]);
 
     return (
-        <div className="p-8 max-w-7xl mx-auto">
-            <div className="flex justify-between items-center mb-8">
+        <div style={{ maxWidth: 1200, margin: '0 auto', paddingBottom: 60 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900 flex items-center">
-                        <Landmark className="mr-3 text-emerald-600" size={32} /> Mongain Wealth Management
+                    <h1 style={{ fontSize: 32, fontWeight: 800, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ background: 'var(--success-bg)', color: 'var(--success)', padding: 12, borderRadius: 12 }}><Landmark size={28} /></div>
+                        Mongain Wealth Management
                     </h1>
-                    <p className="text-gray-500 mt-1">Plateforme Trésorerie : Surveillance de l'AUM (Assets Under Management)</p>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: 16 }}>Plateforme Trésorerie : Surveillance de l'AUM (Assets Under Management)</p>
                 </div>
                 <button
                     onClick={fetchVaults}
-                    className="flex items-center space-x-2 text-emerald-600 hover:text-emerald-800 bg-emerald-50 px-4 py-2 rounded-lg"
+                    disabled={loading}
+                    className="btn-primary"
+                    style={{ background: 'var(--success-bg)', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', boxShadow: 'none' }}
                 >
-                    <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
+                    <RefreshCw size={20} className={loading ? "spin" : ""} />
                     <span>Actualiser DeFi</span>
                 </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-emerald-100 flex items-center">
-                    <div className="p-4 bg-emerald-100 rounded-full text-emerald-600 mr-4">
-                        <Landmark size={24} />
+            <div className="stats-grid">
+                <div className="stat-card">
+                    <div className="stat-header">
+                        <div className="stat-icon" style={{ background: 'var(--success-bg)', color: 'var(--success)' }}>
+                            <Landmark size={24} />
+                        </div>
                     </div>
                     <div>
-                        <p className="text-sm font-semibold text-gray-500">AUM (Fonds Verouillés)</p>
-                        <p className="text-2xl font-black text-gray-900">{stats.totalAum.toLocaleString()} FCFA</p>
+                        <div className="stat-label">AUM (Fonds Verouillés)</div>
+                        <div className="stat-value">{fmt(stats.totalAum)} FCFA</div>
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-100 flex items-center">
-                    <div className="p-4 bg-blue-100 rounded-full text-blue-600 mr-4">
-                        <Users size={24} />
+                <div className="stat-card">
+                    <div className="stat-header">
+                        <div className="stat-icon" style={{ background: 'var(--accent-bg)', color: 'var(--accent)' }}>
+                            <Users size={24} />
+                        </div>
                     </div>
                     <div>
-                        <p className="text-sm font-semibold text-gray-500">Stakers Actifs</p>
-                        <p className="text-2xl font-black text-gray-900">{stats.activeStakers}</p>
+                        <div className="stat-label">Stakers Actifs</div>
+                        <div className="stat-value">{stats.activeStakers}</div>
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-100 flex items-center">
-                    <div className="p-4 bg-purple-100 rounded-full text-purple-600 mr-4">
-                        <TrendingUp size={24} />
+                <div className="stat-card">
+                    <div className="stat-header">
+                        <div className="stat-icon" style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6' }}>
+                            <TrendingUp size={24} />
+                        </div>
                     </div>
                     <div>
-                        <p className="text-sm font-semibold text-gray-500">APY Moyen Global</p>
-                        <p className="text-2xl font-black text-gray-900">{stats.averageApy}%</p>
+                        <div className="stat-label">APY Moyen Global</div>
+                        <div className="stat-value">{stats.averageApy}%</div>
                     </div>
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="p-6 border-b border-gray-100">
-                    <h2 className="text-xl font-bold text-gray-800">Contrats Smart-Coffre Actifs</h2>
+            <div className="table-container">
+                <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--border)' }}>
+                    <h2 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>Contrats Smart-Coffre Actifs</h2>
                 </div>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full text-left border-collapse">
-                        <thead className="bg-gray-50">
-                            <tr className="text-gray-500 text-xs uppercase tracking-wider">
-                                <th className="py-3 px-6 font-semibold">Référence</th>
-                                <th className="py-3 px-6 font-semibold">Investisseur</th>
-                                <th className="py-3 px-6 font-semibold">Capital Locked</th>
-                                <th className="py-3 px-6 font-semibold">Rendement (APY)</th>
-                                <th className="py-3 px-6 font-semibold">Date de Maturité</th>
-                                <th className="py-3 px-6 font-semibold text-right">Statut</th>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                        <tr>
+                            <th>Référence</th>
+                            <th>Investisseur</th>
+                            <th>Capital Locked</th>
+                            <th>Rendement (APY)</th>
+                            <th>Date de Maturité</th>
+                            <th style={{ textAlign: 'right' }}>Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {vaults.map(v => (
+                            <tr key={v.id}>
+                                <td style={{ fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{v.id}</td>
+                                <td style={{ fontWeight: 700 }}>{v.user.name}</td>
+                                <td style={{ fontWeight: 800, color: 'var(--success)' }}>{fmt(v.amount)} FCFA</td>
+                                <td>
+                                    <span className="status-pill" style={{ background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6' }}>
+                                        {v.apy * 100}%
+                                    </span>
+                                </td>
+                                <td>{new Date(v.lockedUntil).toLocaleDateString('fr-GA')}</td>
+                                <td style={{ textAlign: 'right' }}>
+                                    <span className={`status-pill ${v.status === 'ACTIVE' ? 'success' : 'neutral'}`}>
+                                        {v.status === 'ACTIVE' && <CheckCircle size={14} style={{ marginRight: 4 }} />}
+                                        {v.status}
+                                    </span>
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {vaults.map(v => (
-                                <tr key={v.id} className="hover:bg-gray-50 transition-colors">
-                                    <td className="py-4 px-6 text-sm font-mono text-gray-600">{v.id}</td>
-                                    <td className="py-4 px-6 text-sm font-bold text-gray-900">{v.user.name}</td>
-                                    <td className="py-4 px-6 font-black text-emerald-600">{v.amount.toLocaleString()} FCFA</td>
-                                    <td className="py-4 px-6">
-                                        <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded font-bold text-sm">
-                                            {v.apy * 100}%
-                                        </span>
-                                    </td>
-                                    <td className="py-4 px-6 text-sm text-gray-700">
-                                        {new Date(v.lockedUntil).toLocaleDateString()}
-                                    </td>
-                                    <td className="py-4 px-6 text-right">
-                                        <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center justify-end w-max ml-auto ${v.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                                            }`}>
-                                            {v.status === 'ACTIVE' && <CheckCircle size={14} className="mr-1" />}
-                                            {v.status}
-                                        </span>
-                                    </td>
-                                </tr>
-                            ))}
-                            {vaults.length === 0 && !loading && (
-                                <tr>
-                                    <td colSpan={6} className="text-center py-8 text-gray-500">
-                                        <ShieldAlert size={48} className="mx-auto mb-4 text-gray-300" />
-                                        Aucun contrat d'investissement actif.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                        ))}
+                        {vaults.length === 0 && !loading && (
+                            <tr>
+                                <td colSpan={6} style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
+                                    <ShieldAlert size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
+                                    Aucun contrat d'investissement actif.
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
             </div>
         </div>
     );

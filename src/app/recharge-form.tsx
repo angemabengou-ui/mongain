@@ -99,72 +99,74 @@ export default function RechargeFormScreen() {
     }
 
     return (
-        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background }]}>
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
 
                 {/* Header Clean */}
-                <View style={[styles.header, { backgroundColor: COLORS.background }]}>
+                <View style={[styles.header, { backgroundColor: COLORS.primary }]}>
                     <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                        <Ionicons name="close" size={28} color={COLORS.textPrimary} />
+                        <Ionicons name="close" size={28} color="#fff" />
                     </TouchableOpacity>
-                    <Text style={[styles.headerTitle, { color: COLORS.textPrimary }]}>Dépôt par {providerName}</Text>
+                    <Text style={[styles.headerTitle, { color: '#fff' }]}>Dépôt par {providerName}</Text>
                     <View style={{ width: 44 }} />
                 </View>
 
-                <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+                <View style={[styles.sheetWrapper, { backgroundColor: COLORS.background }]}>
+                    <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
-                    {/* Alerte Explicative du Moteur PULL */}
-                    <View style={[styles.infoPullBox, { backgroundColor: providerColor + '15', borderColor: providerColor + '30' }]}>
-                        <Ionicons name="phone-portrait-outline" size={28} color={providerColor} style={{ marginRight: 16 }} />
-                        <View style={{ flex: 1 }}>
-                            <Text style={[styles.infoPullTitle, { color: providerColor }]}>Autorisation {providerName}</Text>
-                            <Text style={[styles.infoPullText, { color: COLORS.textPrimary }]}>
-                                Les fonds seront prélevés de votre solde Mobile Money. Une pop-up s'affichera sur ce numéro pour validation.
-                            </Text>
+                        {/* Alerte Explicative du Moteur PULL */}
+                        <View style={[styles.infoPullBox, { backgroundColor: providerColor + '15', borderColor: providerColor + '30' }]}>
+                            <Ionicons name="phone-portrait-outline" size={28} color={providerColor} style={{ marginRight: 16 }} />
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.infoPullTitle, { color: providerColor }]}>Autorisation {providerName}</Text>
+                                <Text style={[styles.infoPullText, { color: COLORS.textPrimary }]}>
+                                    Les fonds seront prélevés de votre solde Mobile Money. Une pop-up s'affichera sur ce numéro pour validation.
+                                </Text>
+                            </View>
                         </View>
-                    </View>
 
-                    <Text style={[styles.label, { color: COLORS.textSecondary }]}>Numéro {providerName} (ì DEBITER)</Text>
-                    <View style={[styles.inputContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
-                        <Text style={[styles.prefix, { color: COLORS.textPrimary }]}>+241</Text>
-                        <TextInput
-                            style={[styles.input, { color: COLORS.textPrimary }]}
-                            placeholder="Ex: 077... ou 066..."
-                            keyboardType="phone-pad"
-                            value={phoneToDebit}
-                            onChangeText={setPhoneToDebit}
-                            placeholderTextColor={COLORS.textSecondary}
-                        />
-                    </View>
+                        <Text style={[styles.label, { color: COLORS.textSecondary }]}>Numéro {providerName} (ì DEBITER)</Text>
+                        <View style={[styles.inputContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
+                            <Text style={[styles.prefix, { color: COLORS.textPrimary }]}>+241</Text>
+                            <TextInput
+                                style={[styles.input, { color: COLORS.textPrimary }]}
+                                placeholder="Ex: 077... ou 066..."
+                                keyboardType="phone-pad"
+                                value={phoneToDebit}
+                                onChangeText={setPhoneToDebit}
+                                placeholderTextColor={COLORS.textSecondary}
+                            />
+                        </View>
 
-                    <Text style={[styles.label, { color: COLORS.textSecondary, marginTop: 16 }]}>Montant à Transférer vers Mongain</Text>
-                    <View style={[styles.inputContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
-                        <Text style={[styles.prefix, { color: COLORS.textPrimary, borderRightWidth: 0, paddingRight: 0 }]}>FCFA</Text>
-                        <TextInput
-                            style={[styles.input, { color: COLORS.textPrimary, fontSize: 32, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', textAlign: 'right' }]}
-                            placeholder="0"
-                            keyboardType="number-pad"
-                            value={amount}
-                            onChangeText={setAmount}
-                            placeholderTextColor={COLORS.textSecondary}
-                        />
-                    </View>
+                        <Text style={[styles.label, { color: COLORS.textSecondary, marginTop: 16 }]}>Montant à Transférer vers Mongain</Text>
+                        <View style={[styles.inputContainer, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
+                            <Text style={[styles.prefix, { color: COLORS.textPrimary, borderRightWidth: 0, paddingRight: 0 }]}>FCFA</Text>
+                            <TextInput
+                                style={[styles.input, { color: COLORS.textPrimary, fontSize: 32, fontFamily: 'Satoshi-SemiBold', fontWeight: '800', textAlign: 'right' }]}
+                                placeholder="0"
+                                keyboardType="number-pad"
+                                value={amount}
+                                onChangeText={setAmount}
+                                placeholderTextColor={COLORS.textSecondary}
+                            />
+                        </View>
 
-                    <TouchableOpacity style={[styles.btn, { backgroundColor: COLORS.primary }]} onPress={handleRecharge} disabled={loading}>
-                        {loading ? (
-                            <ActivityIndicator color="#fff" />
-                        ) : (
-                            <Text style={styles.btnText}>Initier le Dépôt</Text>
-                        )}
-                    </TouchableOpacity>
+                        <TouchableOpacity style={[styles.btn, { backgroundColor: COLORS.primary }]} onPress={handleRecharge} disabled={loading}>
+                            {loading ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <Text style={styles.btnText}>Initier le Dépôt</Text>
+                            )}
+                        </TouchableOpacity>
 
-                    <View style={styles.securityBadge}>
-                        <Ionicons name="lock-closed" size={16} color="#10b981" />
-                        <Text style={styles.securityText}>Transaction chiffrée. Seul {providerName} traitera votre code pin.</Text>
-                    </View>
+                        <View style={styles.securityBadge}>
+                            <Ionicons name="lock-closed" size={16} color="#10b981" />
+                            <Text style={styles.securityText}>Transaction chiffrée. Seul {providerName} traitera votre code pin.</Text>
+                        </View>
 
-                </ScrollView>
-                {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
+                    </ScrollView>
+                    {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}
+                </View>
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
@@ -173,11 +175,12 @@ export default function RechargeFormScreen() {
 const styles = StyleSheet.create({
     safeArea: { flex: 1 },
     flex: { flex: 1 },
-    scroll: { flexGrow: 1, padding: 24, paddingTop: 8 },
+    scroll: { flexGrow: 1, padding: 24, paddingTop: 24 },
 
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16 },
     backButton: { padding: 8, marginLeft: -12 },
     headerTitle: { fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
+    sheetWrapper: { flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' },
 
     infoPullBox: { flexDirection: 'row', alignItems: 'center', padding: 20, borderRadius: 20, borderWidth: 1, marginBottom: 32 },
     infoPullTitle: { fontSize: 15, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 6 },

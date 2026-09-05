@@ -5,9 +5,29 @@ import { apiGetMe, apiGetSystemSettings, apiLogin, apiLogoutServer, apiRegister,
 
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+// Import dynamique pour éviter le crash natif d'expo-notifications sous Expo Go (SDK 53+)
+let Notifications: any = null;
+try {
+    if (Constants.appOwnership !== 'expo') {
+        Notifications = require('expo-notifications');
+    }
+} catch (e) {
+    console.warn("expo-notifications disabled in Expo Go");
+}
+
+if (!Notifications) {
+    Notifications = {
+        setNotificationHandler: () => { },
+        setNotificationChannelAsync: async () => { },
+        getPermissionsAsync: async () => ({ status: 'denied' }),
+        requestPermissionsAsync: async () => ({ status: 'denied' }),
+        getExpoPushTokenAsync: async () => ({ data: '' }),
+        scheduleNotificationAsync: async () => { },
+        AndroidImportance: { MAX: 5 }
+    };
+}
 
 Notifications.setNotificationHandler({
     handleNotification: async () => ({

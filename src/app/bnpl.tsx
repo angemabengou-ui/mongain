@@ -2,6 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAppTheme } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { request } from '../services/api';
 
@@ -16,13 +18,10 @@ export default function BNPLScreen() {
     const [loading, setLoading] = useState(false);
     const [tab, setTab] = useState<'BORROW' | 'REPAY'>('BORROW');
 
+    const insets = useSafeAreaInsets();
+    const COLORS = useAppTheme();
     const router = useRouter();
     const { settings } = useAuth();
-    // Le taux était codé en dur à 5% ici alors que le serveur (bnpl.ts) le lit depuis
-    // SystemSettings.bnplInterest, réglable par un admin — un changement de ce taux en
-    // production laissait cet écran afficher un aperçu de frais/dette totale entièrement
-    // faux (celui de l'ancien taux), sans jamais correspondre au contrat réellement créé
-    // côté serveur.
     const bnplInterest = settings?.bnplInterest ?? DEFAULT_BNPL_INTEREST;
 
     const handleApply = async () => {
@@ -55,104 +54,115 @@ export default function BNPLScreen() {
     const simTotal = parseFloat(amount || '0') + simFee;
 
     return (
-        <ScrollView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>
-            <View style={{ backgroundColor: '#1E1B4B', paddingTop: 60, paddingBottom: 40, paddingHorizontal: 20, borderBottomLeftRadius: 32, borderBottomRightRadius: 32 }}>
-                <TouchableOpacity onPress={() => router.back()} style={{ marginBottom: 16 }}>
-                    <Ionicons name="arrow-back" size={28} color="#FFF" />
+        <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.primary }}>
+            {/* Header Clean */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 16, backgroundColor: COLORS.primary }}>
+                <TouchableOpacity style={{ padding: 8, marginLeft: -12 }} onPress={() => router.back()}>
+                    <Ionicons name="close" size={28} color="#fff" />
                 </TouchableOpacity>
-                <Text style={{ fontSize: 32, fontFamily: 'Satoshi-SemiBold', fontWeight: '900', color: '#FFF' }}>Mongain BNPL</Text>
-                <Text style={{ fontSize: 16, color: '#A5B4FC', marginTop: 4 }}>Achetez maintenant. Payez plus tard.</Text>
+                <Text style={{ fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: '#fff' }}>Paiement x3</Text>
+                <View style={{ width: 44 }} />
             </View>
 
-            <View style={{ padding: 20, marginTop: -20 }}>
-                {/* Tabs */}
-                <View style={{ flexDirection: 'row', backgroundColor: '#FFF', borderRadius: 16, padding: 6, marginBottom: 24, elevation: 2, shadowOpacity: 0.05 }}>
-                    <TouchableOpacity
-                        onPress={() => setTab('BORROW')}
-                        style={[{ flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 12 }, tab === 'BORROW' && { backgroundColor: '#4F46E5' }]}
-                    >
-                        <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: tab === 'BORROW' ? '#FFF' : '#64748B' }}>Emprunter</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => setTab('REPAY')}
-                        style={[{ flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 12 }, tab === 'REPAY' && { backgroundColor: '#059669' }]}
-                    >
-                        <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: tab === 'REPAY' ? '#FFF' : '#64748B' }}>Rembourser</Text>
-                    </TouchableOpacity>
-                </View>
+            <View style={{ flex: 1, backgroundColor: COLORS.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' }}>
+                <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 24, paddingBottom: Math.max(insets.bottom, 60) }}>
 
-                {/* Form */}
-                <View style={{ backgroundColor: '#FFF', borderRadius: 24, padding: 24, elevation: 2, shadowOpacity: 0.05, shadowRadius: 10 }}>
-                    <Text style={{ color: '#1E293B', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 8, fontSize: 15 }}>
-                        {tab === 'BORROW' ? "Montant Désiré (FCFA)" : "Remboursement (FCFA)"}
-                    </Text>
-                    <TextInput
-                        style={{ backgroundColor: '#F1F5F9', borderRadius: 16, padding: 18, fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginBottom: 20, color: '#0F172A' }}
-                        placeholder="Ex: 25000"
-                        keyboardType="numeric"
-                        value={amount}
-                        onChangeText={setAmount}
-                    />
+                    <View style={{ marginBottom: 24 }}>
+                        <Text style={{ fontSize: 32, fontFamily: 'Satoshi-SemiBold', fontWeight: '900', color: COLORS.textPrimary }}>Mongain BNPL</Text>
+                        <Text style={{ fontSize: 16, color: COLORS.textSecondary, marginTop: 4 }}>Achetez maintenant. Payez plus tard.</Text>
+                    </View>
 
-                    {tab === 'BORROW' && (
-                        <>
-                            <Text style={{ color: '#1E293B', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 8, fontSize: 15 }}>Amortissement (Mois)</Text>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 }}>
-                                {[1, 2, 3, 4].map((m) => (
-                                    <TouchableOpacity
-                                        key={m}
-                                        onPress={() => setMonths(m)}
-                                        style={[{ padding: 16, borderRadius: 12, backgroundColor: '#F1F5F9', width: '22%', alignItems: 'center' }, months === m && { backgroundColor: '#E0E7FF', borderWidth: 2, borderColor: '#4F46E5' }]}
-                                    >
-                                        <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: months === m ? '#4F46E5' : '#64748B' }}>{m}x</Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
+                    {/* Tabs */}
+                    <View style={{ flexDirection: 'row', backgroundColor: COLORS.surface, borderRadius: 16, padding: 6, marginBottom: 24, borderWidth: 1, borderColor: COLORS.border }}>
+                        <TouchableOpacity
+                            onPress={() => setTab('BORROW')}
+                            style={[{ flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 12 }, tab === 'BORROW' && { backgroundColor: COLORS.primary }]}
+                        >
+                            <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: tab === 'BORROW' ? '#FFF' : COLORS.textSecondary }}>Emprunter</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => setTab('REPAY')}
+                            style={[{ flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 12 }, tab === 'REPAY' && { backgroundColor: '#10B981' }]}
+                        >
+                            <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: tab === 'REPAY' ? '#FFF' : COLORS.textSecondary }}>Rembourser</Text>
+                        </TouchableOpacity>
+                    </View>
 
-                            {/* BNPL Summary */}
-                            <View style={{ backgroundColor: '#F8FAFC', borderRadius: 16, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed' }}>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                                    <Text style={{ color: '#64748B' }}>Avance Tiers</Text>
-                                    <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: '#1E293B' }}>{amount || '0'} F</Text>
+                    {/* Form */}
+                    <View style={{ backgroundColor: COLORS.surface, borderRadius: 24, padding: 24, borderWidth: 1, borderColor: COLORS.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 }}>
+                        <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 8, fontSize: 15 }}>
+                            {tab === 'BORROW' ? "Montant Désiré (FCFA)" : "Remboursement (FCFA)"}
+                        </Text>
+                        <TextInput
+                            style={{ backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, padding: 18, fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginBottom: 20, color: COLORS.textPrimary }}
+                            placeholder="Ex: 25000"
+                            placeholderTextColor={COLORS.textSecondary}
+                            keyboardType="numeric"
+                            value={amount}
+                            onChangeText={setAmount}
+                        />
+
+                        {tab === 'BORROW' && (
+                            <>
+                                <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 8, fontSize: 15 }}>Amortissement (Mois)</Text>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 24 }}>
+                                    {[1, 2, 3, 4].map((m) => (
+                                        <TouchableOpacity
+                                            key={m}
+                                            onPress={() => setMonths(m)}
+                                            style={[{ padding: 16, borderRadius: 12, backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border, width: '22%', alignItems: 'center' }, months === m && { backgroundColor: COLORS.primary + '15', borderWidth: 2, borderColor: COLORS.primary }]}
+                                        >
+                                            <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: months === m ? COLORS.primary : COLORS.textSecondary }}>{m}x</Text>
+                                        </TouchableOpacity>
+                                    ))}
                                 </View>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-                                    <Text style={{ color: '#64748B' }}>Frais ({(bnplInterest * 100).toLocaleString('fr-FR')}%)</Text>
-                                    <Text style={{ color: '#F43F5E', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>+ {simFee} F</Text>
-                                </View>
-                                <View style={{ height: 1, backgroundColor: '#E2E8F0', marginVertical: 8 }}></View>
-                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-                                    <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: '900', color: '#1E293B', fontSize: 16 }}>Dette Totale</Text>
-                                    <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: '900', color: '#4F46E5', fontSize: 16 }}>{simTotal} F</Text>
-                                </View>
-                            </View>
-                        </>
-                    )}
 
-                    <Text style={{ color: '#1E293B', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 8, fontSize: 15 }}>Votre code PIN</Text>
-                    <TextInput
-                        style={{ backgroundColor: '#F1F5F9', borderRadius: 16, padding: 18, fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginBottom: 24, letterSpacing: 8, color: '#0F172A' }}
-                        placeholder="⬢⬢⬢⬢"
-                        keyboardType="numeric"
-                        secureTextEntry
-                        maxLength={4}
-                        value={pin}
-                        onChangeText={setPin}
-                    />
-
-                    <TouchableOpacity
-                        onPress={tab === 'BORROW' ? handleApply : handleRepay}
-                        disabled={loading}
-                        style={{ backgroundColor: tab === 'BORROW' ? '#4F46E5' : '#059669', borderRadius: 16, padding: 20, alignItems: 'center', shadowColor: tab === 'BORROW' ? '#4F46E5' : '#059669', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 4 }}
-                    >
-                        {loading ? <ActivityIndicator color="#FFF" /> : (
-                            <Text style={{ color: '#FFF', fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: '900' }}>
-                                {tab === 'BORROW' ? "Débloquer les Fonds" : "Payer ma Dette"}
-                            </Text>
+                                {/* BNPL Summary */}
+                                <View style={{ backgroundColor: COLORS.background, borderRadius: 16, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: COLORS.border, borderStyle: 'dashed' }}>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                                        <Text style={{ color: COLORS.textSecondary }}>Avance Tiers</Text>
+                                        <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary }}>{amount || '0'} F</Text>
+                                    </View>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                                        <Text style={{ color: COLORS.textSecondary }}>Frais ({(bnplInterest * 100).toLocaleString('fr-FR')}%)</Text>
+                                        <Text style={{ color: '#F43F5E', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' }}>+ {simFee} F</Text>
+                                    </View>
+                                    <View style={{ height: 1, backgroundColor: COLORS.border, marginVertical: 8 }}></View>
+                                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+                                        <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: '900', color: COLORS.textPrimary, fontSize: 16 }}>Dette Totale</Text>
+                                        <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: '900', color: COLORS.primary, fontSize: 16 }}>{simTotal} F</Text>
+                                    </View>
+                                </View>
+                            </>
                         )}
-                    </TouchableOpacity>
-                </View>
+
+                        <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 8, fontSize: 15 }}>Votre code PIN</Text>
+                        <TextInput
+                            style={{ backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, padding: 18, fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginBottom: 24, letterSpacing: 8, color: COLORS.textPrimary }}
+                            placeholder="⬢⬢⬢⬢"
+                            placeholderTextColor={COLORS.textSecondary}
+                            keyboardType="numeric"
+                            secureTextEntry
+                            maxLength={4}
+                            value={pin}
+                            onChangeText={setPin}
+                        />
+
+                        <TouchableOpacity
+                            onPress={tab === 'BORROW' ? handleApply : handleRepay}
+                            disabled={loading}
+                            style={{ backgroundColor: tab === 'BORROW' ? COLORS.primary : '#10B981', borderRadius: 16, padding: 20, alignItems: 'center', shadowColor: tab === 'BORROW' ? COLORS.primary : '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 4 }}
+                        >
+                            {loading ? <ActivityIndicator color="#FFF" /> : (
+                                <Text style={{ color: '#FFF', fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: '900' }}>
+                                    {tab === 'BORROW' ? "Débloquer les Fonds" : "Payer ma Dette"}
+                                </Text>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                </ScrollView>
             </View>
-        </ScrollView>
+        </SafeAreaView>
     );
 }
 
