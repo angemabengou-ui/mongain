@@ -54,6 +54,7 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
+    "eas-build-pre-install": "rm -f package-lock.json || echo 'No lockfile'",
     "start": "npx -y expo start -c",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
