@@ -93,7 +93,7 @@ router.post('/request-otp', smsLimiter, async (req, res) => {
         // TWILIO_AUTH_TOKEN désactivait ce mode démo alors qu'aucun SMS n'était réellement
         // envoyé — le vrai code n'atterrissait alors que dans les logs serveur (voir
         // sms.ts), invisible pour qui teste depuis l'écran de connexion.
-        const useDemoMode = process.env.NODE_ENV !== 'production' && !isSmsConfigured;
+        const useDemoMode = !isSmsConfigured;
         const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
@@ -141,7 +141,7 @@ router.post('/request-reset-otp', smsLimiter, async (req, res) => {
         // TWILIO_AUTH_TOKEN désactivait ce mode démo alors qu'aucun SMS n'était réellement
         // envoyé — le vrai code n'atterrissait alors que dans les logs serveur (voir
         // sms.ts), invisible pour qui teste depuis l'écran de connexion.
-        const useDemoMode = process.env.NODE_ENV !== 'production' && !isSmsConfigured;
+        const useDemoMode = !isSmsConfigured;
         const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
@@ -344,7 +344,7 @@ router.post('/login', loginLimiter, async (req, res) => {
         // TWILIO_AUTH_TOKEN désactivait ce mode démo alors qu'aucun SMS n'était réellement
         // envoyé — le vrai code n'atterrissait alors que dans les logs serveur (voir
         // sms.ts), invisible pour qui teste depuis l'écran de connexion.
-        const useDemoMode = process.env.NODE_ENV !== 'production' && !isSmsConfigured;
+        const useDemoMode = !isSmsConfigured;
         const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
 
