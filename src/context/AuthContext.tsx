@@ -248,34 +248,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                         }
                     } catch (e) { }
 
-                    // 2. Tenter de rafraîchir en ligne (réel réseau)
-                    const me = await apiGetMe();
-                    setUser(me);
-                    await SecureStore.setItemAsync('mongain_user_cache', JSON.stringify(me));
-                    await fetchSettings();
+                    // Débloquer immédiatement l'écran de démarrage (Splash Screen) !
+                    // On ne doit pas attendre que le serveur Render se réveille (ce qui peut
+                    // prendre plus de 20s en version gratuite) pour afficher l'interface.
+                    setIsLoading(false);
+
+                    // 2. Tenter de rafraîchir en ligne (réel réseau) en arrière-plan
+                    try {
+                        const me = await apiGetMe();
+                        setUser(me);
+                        await SecureStore.setItemAsync('mongain_user_cache', JSON.stringify(me));
+                        await fetchSettings();
+                    } catch (e: any) {
+                        const errorMessage = e?.message || '';
+                        const isNetworkError = errorMessage.includes('hors ligne') || errorMessage.includes('trop de temps') || errorMessage.includes('AbortError');
+
+                        if (!isNetworkError) {
+                            // Token invalide ou expiré (401/403) → nettoyer
+                            try {
+                                await deleteToken();
+                                await SecureStore.deleteItemAsync('mongain_user_cache');
+                            } catch (e) { }
+                            setToken(null);
+                            setUser(null);
+                        } else {
+                            console.log('Mode hors ligne (timeout réveil serveur). Session conservée en cache.');
+                        }
+                    }
+                } else {
+                    // Si aucun token stocké, on débloque immédiatement car c'est une 1ère connexion
+                    setIsLoading(false);
                 }
             } catch (e: any) {
-                // VUL-FR-02 : Render free tier met le serveur en veille après inactivité. 
-                // Le réveil prend ~20s. Si l'utilisateur ouvre l'app à ce moment-là, un 
-                // timeout réseau (AbortError) se produisait et ce catch était exécuté, 
-                // EFFACANT SA SESSION DÉFINITIVEMENT. Il est crucial de ne purger que sur un VRAI 401.
-                const errorMessage = e?.message || '';
-                const isNetworkError = errorMessage.includes('hors ligne') || errorMessage.includes('trop de temps') || errorMessage.includes('AbortError');
-
-                if (!isNetworkError) {
-                    // Token invalide ou expiré (401/403) → nettoyer
-                    try {
-                        await deleteToken();
-                        await SecureStore.deleteItemAsync('mongain_user_cache');
-                    } catch (e) {
-                        // Ignore secure store delete errors
-                    }
-                    setToken(null);
-                    setUser(null);
-                } else {
-                    console.log('Mode hors ligne (timeout réveil serveur). Session conservée en cache.');
-                }
-            } finally {
+                // Erreur critique de lecture locale
                 setIsLoading(false);
             }
         };
