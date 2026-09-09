@@ -7,6 +7,7 @@ import { friendlyErrorMessage } from '../utils/errors';
 import logger from '../utils/logger';
 import { verifyUserPin } from '../utils/pinAuth';
 import { getSystemSettings } from './settings';
+import { notifyParentOfChildSpend } from './wallet';
 
 const router = express.Router();
 
@@ -104,6 +105,7 @@ router.post('/pay/:id', authMiddleware, circuitBreakerMiddleware, async (req: Au
 
         const settings = await getSystemSettings();
 
+        let paidAmount = 0;
         await prisma.$transaction(async (tx: any) => {
             const splitReq = await tx.splitRequest.findUnique({
                 where: { id: splitId },
@@ -133,6 +135,7 @@ router.post('/pay/:id', authMiddleware, circuitBreakerMiddleware, async (req: Au
             // transfert en faisant transiter l'argent par une demande de partage plutôt qu'un
             // transfert classique.
             await LimitEngine.verifyAndIncrementConsumption(tx, payer.id, payer.wallet!.id, splitReq.amount, settings);
+            paidAmount = splitReq.amount;
 
             // Transfer Funds — garde atomique `balance: gte` : sans elle, deux requêtes
             // concurrentes sur /pay/:id passent toutes les deux le contrôle de solde ci-dessus
@@ -168,6 +171,8 @@ router.post('/pay/:id', authMiddleware, circuitBreakerMiddleware, async (req: Au
 
             logger.info(`[Mongain Split] User ${payer.phone} a remboursé ${splitReq.amount}XAF.`);
         });
+
+        await notifyParentOfChildSpend(req.userId!, paidAmount, 'remboursement de partage de facture');
 
         res.json({ message: 'Partage remboursé avec succès !' });
     } catch (e: any) {

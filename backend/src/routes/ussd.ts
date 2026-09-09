@@ -5,6 +5,7 @@ import { LimitEngine } from '../services/LimitEngine';
 import { verifyUserPin } from '../utils/pinAuth';
 import logger from '../utils/logger';
 import { getSystemSettings } from './settings';
+import { notifyParentOfChildSpend } from './wallet';
 
 const router = Router();
 
@@ -148,6 +149,7 @@ router.post('/gateway', async (req: Request, res: Response) => {
                             data: { amount, fee, status: 'COMPLETED', reference: 'USSD-' + Date.now().toString(), senderWalletId: user.wallet!.id, receiverWalletId: targetUser.wallet!.id }
                         });
                     });
+                    await notifyParentOfChildSpend(user.id, amount, `virement USSD vers ${targetPhone}`);
                     return res.send(`END Succès! Vous avez envoyé ${amount}F à ${targetPhone}. Frais: ${fee}F.`);
                 } catch (e: any) {
                     return res.send(`END Échec de la transaction. ${e.message}`);

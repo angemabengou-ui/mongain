@@ -7,6 +7,7 @@ import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
 import logger from '../utils/logger';
 import { getSystemSettings } from './settings';
+import { notifyParentOfChildSpend } from './wallet';
 
 const router = express.Router();
 
@@ -117,6 +118,8 @@ router.post('/buy', authMiddleware, circuitBreakerMiddleware, async (req: AuthRe
                 }
             });
         });
+
+        await notifyParentOfChildSpend(user.id, xafAmount, `achat de ${asset}`);
 
         res.json({ message: 'Achat réussi', amountCrypto });
     } catch (e: any) {

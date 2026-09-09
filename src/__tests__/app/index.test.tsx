@@ -14,7 +14,7 @@ jest.mock('../../context/AuthContext', () => ({
     useAuth: () => mockUseAuth(),
 }));
 
-import Index from '../index';
+import Index from '../../app/index';
 
 describe('app/index (entry redirect)', () => {
     beforeEach(() => {

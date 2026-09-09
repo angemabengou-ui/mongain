@@ -191,6 +191,11 @@ export default function DashboardScreen() {
               <ActionItem icon="wallet" label="Recharger" bgColor="#00C27A15" color="#00C27A" onPress={() => router.push('/recharge')} styles={styles} />
               <ActionItem icon="lock-closed" label="Retirer" bgColor="#FFB02015" color="#FFB020" onPress={() => router.push('/withdraw')} styles={styles} />
               <ActionItem icon="card" label="Cartes" bgColor="#7E3AF215" color="#7E3AF2" onPress={() => router.push('/cards')} styles={styles} />
+              {/* split.tsx (partage de facture entre plusieurs contacts) est un écran complet et
+                  fonctionnel — son seul point d'accès (ce même bloc "Actions rapides") a été
+                  perdu lors d'une refonte du tableau de bord, le rendant totalement inatteignable
+                  depuis l'app. */}
+              <ActionItem icon="people" label="Diviser" bgColor="#EC489915" color="#EC4899" onPress={() => router.push('/split')} styles={styles} />
             </View>
 
             {/* Mon Épargne */}
@@ -392,7 +397,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>, isDark: boolean) => S
     borderRadius: 20, padding: isDark ? 20 : 0,
     marginBottom: 24
   },
-  actionItemContainer: { alignItems: 'center', width: '22%' },
+  actionItemContainer: { alignItems: 'center', width: '18%' },
   actionIconContainer: { width: 56, height: 56, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
   actionLabel: { color: COLORS.textPrimary, fontSize: 12, fontFamily: 'Satoshi-Regular', textAlign: 'center' },
 

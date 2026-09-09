@@ -52,15 +52,22 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
             setIsEvaluating(false);
             return;
         }
-        const lockPref = await SecureStore.getItemAsync('appLockEnabled');
-        // SECURITY UPDATE: AppLock is ON by default (Opt-out)
-        if (lockPref !== 'false') {
-            setIsLocked(true);
-            setTimeout(() => handleUnlock(), 500);
-        } else {
+        try {
+            const lockPref = await SecureStore.getItemAsync('appLockEnabled');
+            // SECURITY UPDATE: AppLock is ON by default (Opt-out)
+            if (lockPref !== 'false') {
+                setIsLocked(true);
+                setTimeout(() => handleUnlock(), 500);
+            } else {
+                setIsLocked(false);
+            }
+        } catch (e) {
+            // Failsafe if SecureStore crashes (Keystore corruption common on Android)
+            console.error('Erreur lecture appLockEnabled:', e);
             setIsLocked(false);
+        } finally {
+            setIsEvaluating(false);
         }
-        setIsEvaluating(false);
     };
 
     useEffect(() => {
@@ -87,12 +94,16 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
 
             if (appState.current.match(/inactive|background/) && nextAppState === 'active') {
                 if (token) {
-                    const lockPref = await SecureStore.getItemAsync('appLockEnabled');
-                    const timeAway = Date.now() - lastInteractionTime;
-                    if (lockPref !== 'false' && timeAway > BACKGROUND_LIMIT_MS && !SecurityFlags.bypassAppLock) {
-                        setIsLocked(true);
-                        setRequiresPinFallback(false);
-                        handleUnlock();
+                    try {
+                        const lockPref = await SecureStore.getItemAsync('appLockEnabled');
+                        const timeAway = Date.now() - lastInteractionTime;
+                        if (lockPref !== 'false' && timeAway > BACKGROUND_LIMIT_MS && !SecurityFlags.bypassAppLock) {
+                            setIsLocked(true);
+                            setRequiresPinFallback(false);
+                            handleUnlock();
+                        }
+                    } catch (e) {
+                        console.error('Erreur retour background:', e);
                     }
                 }
             }
@@ -110,15 +121,18 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
             if (!token || isLocked || appState.current !== 'active') return;
             const timeAway = Date.now() - lastInteractionTime;
 
-            // Tracker silencieux
-
             if (timeAway > INACTIVITY_LIMIT_MS) {
-                const lockPref = await SecureStore.getItemAsync('appLockEnabled');
-                if (lockPref !== 'false') {
-                    setIsLocked(true);
-                    setRequiresPinFallback(false);
-                    handleUnlock();
-                } else {
+                try {
+                    const lockPref = await SecureStore.getItemAsync('appLockEnabled');
+                    if (lockPref !== 'false') {
+                        setIsLocked(true);
+                        setRequiresPinFallback(false);
+                        handleUnlock();
+                    } else {
+                        lastInteractionTime = Date.now();
+                    }
+                } catch (e) {
+                    console.error('Erreur inactivité:', e);
                     lastInteractionTime = Date.now();
                 }
             }
@@ -133,25 +147,30 @@ export function SecurityWrapper({ children }: { children: React.ReactNode }) {
             setIsLocked(false);
             return;
         }
-        const hasHardware = await LocalAuthentication.hasHardwareAsync();
-        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+        try {
+            const hasHardware = await LocalAuthentication.hasHardwareAsync();
+            const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
-        if (hasHardware && isEnrolled) {
-            const result = await LocalAuthentication.authenticateAsync({
-                promptMessage: 'Déverrouillez Mongain',
-                fallbackLabel: 'Utiliser le code PIN',
-                disableDeviceFallback: false,
-            });
+            if (hasHardware && isEnrolled) {
+                const result = await LocalAuthentication.authenticateAsync({
+                    promptMessage: 'Déverrouillez Mongain',
+                    fallbackLabel: 'Utiliser le code PIN',
+                    disableDeviceFallback: false,
+                });
 
-            if (result.success) {
-                lastInteractionTime = Date.now();
-                setIsLocked(false);
+                if (result.success) {
+                    lastInteractionTime = Date.now();
+                    setIsLocked(false);
+                } else {
+                    // If the user presses "Utiliser le code PIN" or it fails for any reason
+                    setRequiresPinFallback(true);
+                }
             } else {
-                // If the user presses "Utiliser le code PIN" or it fails for any reason
+                // No biometric hardware -> Fallback to custom PIN form
                 setRequiresPinFallback(true);
             }
-        } else {
-            // No biometric hardware -> Fallback to custom PIN form
+        } catch (e) {
+            console.error('Erreur LocalAuthentication:', e);
             setRequiresPinFallback(true);
         }
     };

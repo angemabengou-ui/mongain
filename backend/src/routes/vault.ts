@@ -4,7 +4,7 @@ import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { LimitEngine } from '../services/LimitEngine';
 import { applyRoleChangeGuards, executeVaultWithdraw } from '../services/vaultService';
-import { sendPush } from './wallet';
+import { notifyParentOfChildSpend, sendPush } from './wallet';
 
 const router = express.Router();
 
@@ -445,6 +445,8 @@ router.post('/:id/deposit', authMiddleware, async (req: AuthRequest, res) => {
 
             return vtx;
         });
+
+        await notifyParentOfChildSpend(req.userId!, parsedAmount, 'dépôt dans une caisse commune');
 
         res.json({ success: true, message: "Dépôt réussi", data: result });
     } catch (error: any) {

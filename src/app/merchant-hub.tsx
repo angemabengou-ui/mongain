@@ -137,6 +137,18 @@ export default function MerchantHubScreen() {
                         Aujourd'hui : {stats.todaySalesAmount.toLocaleString('fr-FR')} FCFA de ventes ({stats.todaySalesCount}) · {stats.todayCommission.toLocaleString('fr-FR')} FCFA de commission
                     </Text>
 
+                    {/* Seul point d'entrée vers pay.tsx (encaissement via code + PIN client,
+                        POST /api/pay/qr-scan) — cet écran existait déjà, câblé à une vraie route
+                        backend, mais était devenu inatteignable : l'onglet central de la tab bar
+                        qui y menait a été réaffecté au scanner QR "je paie" (src/app/qr.tsx),
+                        un flux différent (le payeur scanne, pas le marchand qui encaisse). */}
+                    <TouchableOpacity
+                        style={[styles.card, { backgroundColor: COLORS.primary, borderColor: COLORS.primary, marginBottom: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }]}
+                        onPress={() => router.push('/pay')}
+                    >
+                        <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', fontSize: 15 }}>Encaisser un client</Text>
+                    </TouchableOpacity>
+
                     <SectionHeading
                         colors={COLORS}
                         title="Demander un retrait"

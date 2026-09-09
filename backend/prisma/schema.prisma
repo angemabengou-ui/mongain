@@ -25,7 +25,7 @@ model User {
   lockedUntil           DateTime?
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
-  role                  String         @default("USER") // USER, AGENT, ADMIN, MERCHANT
+  role                  String         @default("USER") // USER, AGENT, ADMIN, MERCHANT, CHILD
   isActive              Boolean        @default(true) // Legacy fallback
   accountStatus         String         @default("ACTIVE") // ACTIVE, SUSPENDED, FROZEN, CLOSED
   freezeReason          String?
@@ -74,6 +74,26 @@ model User {
   customMonthlyLimit   Float?
   customPerTxLimit     Float?
   customLimitExpiresAt DateTime?
+
+  // Comptes Enfant — auto-relation parent/enfant. Le CHILD garde son propre login (téléphone
+  // réel + PIN, voir routes/family.ts) et son propre Wallet ; seul son parent peut ajuster
+  // childSpendLimit*/le financer sans frais (voir wallet.ts /transfer).
+  parentId String?
+  parent   User?   @relation("ParentChild", fields: [parentId], references: [id])
+  children User[]  @relation("ParentChild")
+
+  // Même forme libre que Staff.gender (plus bas dans ce fichier) — jamais une contrainte
+  // métier, utilisé uniquement pour l'accent visuel des écrans "Comptes Enfant"
+  // (src/constants/childAccent.ts, mobile).
+  gender String?
+
+  // Plafond de dépense PARENT-CONTRÔLÉ (Comptes Enfant) — volontairement DISTINCT de
+  // customDailyLimit/customMonthlyLimit/customPerTxLimit ci-dessus, qui restent
+  // staff-controlled via le circuit maker/checker (admin.ts + settings.ts). Celui-ci est
+  // self-service PARENT, sans workflow d'approbation ni expiration — voir LimitEngine.ts,
+  // qui applique le plus restrictif entre le plafond KYC et celui-ci pour un CHILD.
+  childSpendLimitAmount Float?
+  childSpendLimitPeriod String? // DAILY, WEEKLY
 
   wallet                 Wallet?
   // Solde de commission d'un marchand (role=MERCHANT), séparé du wallet principal
@@ -306,7 +326,7 @@ model VerificationCode {
   // jamais pouvoir être consommé par le flux "vérifier la connexion" (faille corrigée —
   // auparavant un seul code partagé par téléphone permettait de contourner le PIN via
   // /request-reset-otp + /verify-login-otp).
-  purpose   String   @default("LOGIN") // REGISTER, LOGIN, RESET_PIN
+  purpose   String   @default("LOGIN") // REGISTER, LOGIN, RESET_PIN, CHILD_REGISTER
   code      String
   expiresAt DateTime
   createdAt DateTime @default(now())

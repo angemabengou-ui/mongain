@@ -2,7 +2,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
 import { prisma } from '../../prisma';
-import walletRoutes from '../wallet';
+import walletRoutes, { notifyParentOfChildSpend } from '../wallet';
 
 // Mock du module Prisma pour ne pas taper la base de données de dev
 jest.mock('../../prisma', () => ({
@@ -22,7 +22,10 @@ jest.mock('../../prisma', () => ({
 jest.mock('../../services/LimitEngine', () => ({
     LimitEngine: {
         verifyAndIncrementConsumption: jest.fn().mockResolvedValue(true),
-        getApplicableLimits: jest.fn().mockResolvedValue({ effectiveDaily: 50000 }),
+        getApplicableLimits: jest.fn().mockResolvedValue({ effectiveDaily: 50000, effectiveWeekly: null }),
+        // Ajouté avec GET /wallet/limits pour un Compte Enfant au plafond WEEKLY — même
+        // raison que calculateWithdrawalFee ci-dessous (LimitEngine mocké en entier ici).
+        getWeeklySpent: jest.fn().mockResolvedValue(0),
         // Ajouté avec le calcul de frais cumulé sur les retraits AGENT (wallet.ts
         // /client-initiated-withdraw, /qr-cash-out) — sans ce mock, l'appel réel plantait
         // ("calculateWithdrawalFee is not a function") puisque LimitEngine est entièrement
@@ -516,6 +519,142 @@ describe('Wallet Routes', () => {
             const lockOrder = (prisma.$executeRaw as jest.Mock).mock.invocationCallOrder[0];
             const limitEngineOrder = (LimitEngine.verifyAndIncrementConsumption as jest.Mock).mock.invocationCallOrder[0];
             expect(lockOrder).toBeLessThan(limitEngineOrder);
+        });
+
+        // Comptes Enfant (routes/family.ts) : un virement du parent vers SON PROPRE enfant est
+        // un rechargement interne au foyer, pas un P2P entre deux clients distincts.
+        it('ne devrait facturer aucun frais quand le destinataire est l\'enfant de l\'expéditeur', async () => {
+            (prisma.user.findUnique as jest.Mock).mockImplementation(async (args: any) => {
+                if (args.select?.jwtVersion) return { id: 'user123', isActive: true, jwtVersion: 0 };
+                if (args.where?.id === 'user123' && !args.include) {
+                    return { id: 'user123', pin: 'hashed-pin', failedPinAttempts: 0, lockedUntil: null };
+                }
+                if (args.where?.id === 'user123' && args.include?.wallet) {
+                    return { id: 'user123', role: 'USER', wallet: { id: 'w_sender', balance: 100000 } };
+                }
+                return null;
+            });
+            (prisma.systemAccount.upsert as jest.Mock).mockResolvedValue({ wallet: { id: 'w_corporate', balance: 0 } });
+            // Le destinataire est bien l'enfant : parentId pointe vers l'expéditeur.
+            (prisma.user.findFirst as jest.Mock).mockResolvedValue({ id: 'child456', role: 'CHILD', parentId: 'user123', wallet: { id: 'w_child', balance: 0 } });
+            (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+            // taxP2P non nul : sans l'exemption, ce test facturerait 10 FCFA de frais sur 1000.
+            (getSystemSettings as jest.Mock).mockResolvedValue({ taxP2P: 0.01 });
+            (prisma.wallet.update as jest.Mock).mockResolvedValue({ id: 'w_sender', balance: 99000 });
+            (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: 'tx1' });
+
+            const res = await request(app)
+                .post('/wallet/transfer')
+                .set('Authorization', 'Bearer dummy-token')
+                .send({ receiverPhone: '077000000', amount: 1000, pin: '1234' });
+
+            expect(res.status).toBe(200);
+            expect(prisma.transaction.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ amount: 1000, fee: 0 }) }));
+            // Aucune écriture de frais vers le compte Corporate (pas de 2e transaction.create ni de crédit du wallet corporate).
+            expect(prisma.transaction.create).toHaveBeenCalledTimes(1);
+            expect(prisma.wallet.update).not.toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'w_corporate' } }));
+        });
+    });
+
+    describe('notifyParentOfChildSpend', () => {
+        beforeEach(() => {
+            jest.clearAllMocks();
+        });
+
+        it('ne devrait rien faire (no-op) si le dépensier n\'est pas un compte CHILD', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ role: 'USER', name: 'Alice', parentId: null });
+
+            await notifyParentOfChildSpend('user_1', 5000, 'test');
+
+            expect(prisma.user.findUnique).toHaveBeenCalledTimes(1);
+            expect(prisma.notification.create).not.toHaveBeenCalled();
+        });
+
+        it('ne devrait rien faire si le compte CHILD n\'a pas de parentId', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ role: 'CHILD', name: 'Junior', parentId: null });
+
+            await notifyParentOfChildSpend('child_1', 5000, 'test');
+
+            expect(prisma.notification.create).not.toHaveBeenCalled();
+        });
+
+        it('devrait journaliser une notification pour le parent si le dépensier est un CHILD', async () => {
+            (prisma.user.findUnique as jest.Mock)
+                .mockResolvedValueOnce({ role: 'CHILD', name: 'Junior', parentId: 'parent_1' })
+                .mockResolvedValueOnce({ id: 'parent_1', pushToken: null });
+
+            await notifyParentOfChildSpend('child_1', 5000, 'achat de crédit');
+
+            expect(prisma.notification.create).toHaveBeenCalledWith({
+                data: expect.objectContaining({
+                    userId: 'parent_1',
+                    title: 'Dépense de votre enfant',
+                    // Espace fine insécable (pas une espace normale) dans le séparateur de milliers
+                    // généré par toLocaleString('fr-FR') — reconstruit la même valeur plutôt que de
+                    // la recopier en dur, pour ne pas dépendre du caractère Unicode exact utilisé.
+                    body: expect.stringContaining(`Junior a dépensé ${(5000).toLocaleString('fr-FR')} FCFA · achat de crédit.`),
+                    type: 'TRANSACTION',
+                }),
+            });
+        });
+
+        it('ne devrait jamais lever d\'exception, même si la requête échoue (best-effort)', async () => {
+            (prisma.user.findUnique as jest.Mock).mockRejectedValue(new Error('DB down'));
+
+            await expect(notifyParentOfChildSpend('child_1', 5000, 'test')).resolves.toBeUndefined();
+        });
+    });
+
+    describe('GET /wallet/limits', () => {
+        beforeEach(() => {
+            jest.clearAllMocks();
+            (LimitEngine.getApplicableLimits as jest.Mock).mockResolvedValue({ effectiveDaily: 50000, effectiveMonthly: 1000000, effectivePerTx: 50000, effectiveWeekly: null, isCustomActive: false });
+        });
+
+        // Champs `id`/`isActive`/`jwtVersion` requis par authMiddleware lui-même (qui recharge
+        // l'utilisateur en base pour valider le token) — même mock unique servant les deux
+        // appels, authMiddleware puis le handler de la route.
+        it('devrait renvoyer skip=true pour un rôle ni USER ni CHILD (ex: AGENT)', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'user123', isActive: true, jwtVersion: 0, role: 'AGENT' });
+
+            const res = await request(app).get('/wallet/limits').set('Authorization', 'Bearer dummy-token');
+
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual({ skip: true });
+        });
+
+        it('devrait renvoyer la jauge journalière habituelle pour un CHILD sans plafond parent WEEKLY', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+                id: 'user123', isActive: true, jwtVersion: 0,
+                role: 'CHILD', kycLevel: 0, kycStatus: 'UNVERIFIED',
+                wallet: { id: 'w_child', dailySpent: 1000, monthlySpent: 1000 },
+            });
+
+            const res = await request(app).get('/wallet/limits').set('Authorization', 'Bearer dummy-token');
+
+            expect(res.status).toBe(200);
+            expect(res.body.dailySpend).toBe(1000);
+            expect(res.body.dailyLimit).toBe(50000);
+            expect(res.body.weeklySpend).toBeUndefined();
+            expect(LimitEngine.getWeeklySpent).not.toHaveBeenCalled();
+        });
+
+        it('devrait inclure weeklySpend/weeklyLimit pour un CHILD au plafond parent WEEKLY', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+                id: 'user123', isActive: true, jwtVersion: 0,
+                role: 'CHILD', kycLevel: 0, kycStatus: 'UNVERIFIED',
+                childSpendLimitAmount: 20000, childSpendLimitPeriod: 'WEEKLY',
+                wallet: { id: 'w_child', dailySpent: 0, monthlySpent: 0 },
+            });
+            (LimitEngine.getApplicableLimits as jest.Mock).mockResolvedValue({ effectiveDaily: 50000, effectiveMonthly: 1000000, effectivePerTx: 50000, effectiveWeekly: 20000, isCustomActive: false });
+            (LimitEngine.getWeeklySpent as jest.Mock).mockResolvedValue(8000);
+
+            const res = await request(app).get('/wallet/limits').set('Authorization', 'Bearer dummy-token');
+
+            expect(res.status).toBe(200);
+            expect(res.body.weeklySpend).toBe(8000);
+            expect(res.body.weeklyLimit).toBe(20000);
+            expect(LimitEngine.getWeeklySpent).toHaveBeenCalledWith(expect.anything(), 'w_child');
         });
     });
 });

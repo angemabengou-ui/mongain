@@ -27,6 +27,9 @@ export default function ServicesScreen() {
                         <ServiceSquareItem icon="cash" label="Micro-crédit" bgColor={isDark ? "#1E3A8A40" : "#1E3A8A15"} color={isDark ? "#81A6FF" : "#1E3A8A"} onPress={() => router.push('/credit')} styles={styles} />
                         <ServiceSquareItem icon="card" label="Paiement x3" bgColor={isDark ? "#F59E0B40" : "#F59E0B15"} color={isDark ? "#FBBF24" : "#F59E0B"} onPress={() => router.push('/bnpl')} styles={styles} />
                         <ServiceSquareItem icon="trending-up" label="Crypto" bgColor={isDark ? "#10B98140" : "#10B98115"} color={isDark ? "#34D399" : "#10B981"} onPress={() => router.push('/crypto')} styles={styles} />
+                        {/* backend/src/routes/invest.ts (coffres de staking) existait déjà, entièrement
+                            fonctionnel, mais aucun écran mobile n'y menait jamais avant ce bouton. */}
+                        <ServiceSquareItem icon="lock-closed" label="Staking" bgColor={isDark ? "#F59E0B40" : "#F59E0B15"} color={isDark ? "#FBBF24" : "#F59E0B"} onPress={() => router.push('/services/invest')} styles={styles} />
                     </View>
                 </ScrollView>
             </View>

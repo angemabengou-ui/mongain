@@ -9,7 +9,7 @@ import logger from '../utils/logger';
 import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
 import { getSystemSettings } from './settings';
-import { sendPush } from './wallet';
+import { notifyParentOfChildSpend, sendPush } from './wallet';
 
 const router = express.Router();
 
@@ -139,6 +139,7 @@ router.post('/qr-scan', authMiddleware, circuitBreakerMiddleware, async (req: Au
         // qu'ils n'ouvraient pas eux-mêmes l'onglet Notifications.
         await sendPush(result.customerPushToken, 'Paiement effectué', `Vous avez payé ${amount.toLocaleString('fr-FR')} FCFA chez ${result.merchantName}.`, { amount });
         await sendPush(result.merchantPushToken, 'Paiement reçu 💰', `Vous avez reçu un paiement de ${amount.toLocaleString('fr-FR')} FCFA.`, { amount });
+        await notifyParentOfChildSpend(scannedCode, amount, `paiement chez ${result.merchantName || 'un marchand'}`);
 
         // Socket.IO : seul 'payment_received' est écouté côté mobile (AuthContext.tsx) — pas
         // d'équivalent "payment_sent" pour le payeur, dont la confirmation passe par le push

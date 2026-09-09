@@ -33,12 +33,13 @@ describe('(tabs)/_layout', () => {
 
         expect(byName.index.title).toBe('Accueil');
         expect(byName.history.title).toBe('Historique');
-        expect(byName.market.title).toBe('Services');
+        expect(byName.services.title).toBe('Services');
         expect(byName.profile.title).toBe('Profil');
         expect(byName.pay.title).toBe('');
 
         // Écrans du groupe (tabs) volontairement absents de la barre — atteignables
-        // uniquement par navigation directe (voir index.tsx, profile.tsx, credit-hub.tsx).
+        // uniquement par navigation directe (voir index.tsx pour cards/assistant,
+        // services.tsx pour crypto/credit, profile.tsx pour merchant-hub).
         expect(byName.cards.href).toBeNull();
         expect(byName.crypto.href).toBeNull();
         expect(byName.assistant.href).toBeNull();

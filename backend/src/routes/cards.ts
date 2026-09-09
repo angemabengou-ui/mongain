@@ -7,6 +7,7 @@ import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
 import logger from '../utils/logger';
 import { getSystemSettings } from './settings';
+import { notifyParentOfChildSpend } from './wallet';
 
 const router = express.Router();
 
@@ -114,6 +115,8 @@ router.post('/:id/fund', authMiddleware, circuitBreakerMiddleware, async (req: A
             });
             return c;
         });
+
+        await notifyParentOfChildSpend(req.userId!, parsedAmount, 'rechargement de carte virtuelle');
 
         res.json(updatedCard);
     } catch (e: any) {

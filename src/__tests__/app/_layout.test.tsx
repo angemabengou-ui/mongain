@@ -49,7 +49,7 @@ jest.mock('../../components/SecurityWrapper', () => ({
     },
 }));
 
-import RootLayout from '../_layout';
+import RootLayout from '../../app/_layout';
 
 describe('app/_layout (RootLayoutNav)', () => {
     beforeEach(() => {

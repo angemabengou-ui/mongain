@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import PinPromptModal from '../components/ui/PinPromptModal';
 import ScreenHeader from '../components/ui/ScreenHeader';
 import { useAppTheme } from '../constants/theme';
 import { request } from '../services/api';
@@ -24,6 +25,9 @@ export default function RemitScreen() {
     const [targetCurrency, setTargetCurrency] = useState('EUR');
     const [quote, setQuote] = useState<any>(null);
     const [loading, setLoading] = useState(false);
+    // Remplace Alert.prompt (n'existe que sur iOS, no-op silencieux sur Android — voir
+    // PinPromptModal).
+    const [pinPrompt, setPinPrompt] = useState<{ freshQuote: any; country: string } | null>(null);
 
     const handleCalculateQuote = async () => {
         if (!amountStr) return null;
@@ -57,26 +61,12 @@ export default function RemitScreen() {
             `Souhaitez-vous vraiment débourser ${freshQuote.totalToDebit} XAF pour envoyer l'équivalent de ${freshQuote.convertedAmount} ${targetCurrency} ?`,
             [
                 { text: "Annuler", style: "cancel" },
-                {
-                    text: "Confirmer", style: "default",
-                    onPress: () => {
-                        Alert.prompt(
-                            'Code PIN',
-                            'Confirmez ce virement avec votre code PIN Mongain.',
-                            [
-                                { text: 'Annuler', style: 'cancel' },
-                                { text: 'Envoyer', onPress: (pin?: string) => executeSend(freshQuote, country, pin) },
-                            ],
-                            'secure-text',
-                        );
-                    }
-                }
+                { text: "Confirmer", style: "default", onPress: () => setPinPrompt({ freshQuote, country }) }
             ]
         );
     };
 
-    const executeSend = async (freshQuote: any, country: string, pin?: string) => {
-        if (!pin) return Alert.alert("Erreur", "Code PIN requis.");
+    const executeSend = async (freshQuote: any, country: string, pin: string) => {
         setLoading(true);
         try {
             await request('POST', '/api/remit/send', {
@@ -93,6 +83,12 @@ export default function RemitScreen() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handlePinConfirm = (pin: string) => {
+        const prompt = pinPrompt;
+        setPinPrompt(null);
+        if (prompt) executeSend(prompt.freshQuote, prompt.country, pin);
     };
 
     return (
@@ -174,6 +170,16 @@ export default function RemitScreen() {
                     </View>
                 </KeyboardAvoidingView>
             </View>
+
+            <PinPromptModal
+                visible={!!pinPrompt}
+                title="Code PIN"
+                message="Confirmez ce virement avec votre code PIN Mongain."
+                loading={loading}
+                onConfirm={handlePinConfirm}
+                onCancel={() => setPinPrompt(null)}
+                colors={COLORS}
+            />
         </SafeAreaView>
     );
 }

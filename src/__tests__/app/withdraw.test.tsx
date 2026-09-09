@@ -1,7 +1,7 @@
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import React from 'react';
 import { Alert } from 'react-native';
-import WithdrawScreen from '../withdraw';
+import WithdrawScreen from '../../app/withdraw';
 import { apiGenerateWithdrawCode, apiGetBalance } from '../../services/api';
 
 // @expo/vector-icons pulls in expo-font -> expo-asset, which isn't resolvable in this

@@ -133,8 +133,13 @@ const tryRefreshSession = async (): Promise<boolean> => {
 // dessous de la seconde. Sans retry, l'utilisateur voyait "Vous êtes hors ligne" au premier
 // essai alors que le serveur (et ses données) était parfaitement sain une poignée de secondes
 // plus tard, et devait relancer l'action lui-même pour que ça marche.
-const WAKEUP_MAX_RETRIES = 2;
-const WAKEUP_RETRY_DELAY_MS = 2000;
+// 4 x 4s = jusqu'à 16s de délai cumulé avant d'abandonner — nécessaire pour le cas 502/503
+// (voir plus bas) où l'échec est instantané (proxy Render répondant immédiatement pendant que
+// le conteneur redémarre) : contrairement à un vrai timeout de connexion, qui bénéficie déjà
+// d'une attente native allant jusqu'à REQUEST_TIMEOUT_MS par tentative, ce délai entre essais
+// est ici la SEULE source d'attente réelle face à un réveil mesuré à ~12-20s.
+const WAKEUP_MAX_RETRIES = 4;
+const WAKEUP_RETRY_DELAY_MS = 4000;
 const REQUEST_TIMEOUT_MS = 15000;
 
 export const request = async (method: string, path: string, body?: object, auth = false, _isRetry = false, _wakeupAttempt = 0): Promise<any> => {
@@ -159,6 +164,18 @@ export const request = async (method: string, path: string, body?: object, auth 
             body: body ? JSON.stringify(body) : undefined,
             signal: controller.signal,
         });
+
+        // Render (et la plupart des PaaS) répond via son proxy avec un 502/503/504 PENDANT
+        // que le conteneur applicatif redémarre à froid, plutôt que de laisser la requête
+        // simplement sans réponse — ce n'est donc jamais un "échec de connexion"
+        // (AbortError/Failed to fetch) au sens de la logique de retry plus bas, malgré la
+        // même cause (réveil à froid, ~12-20s mesurés) et le même besoin de retenter. Sans
+        // ceci, CHAQUE écran qui charge des données au démarrage de l'app affichait
+        // indépendamment "Réponse inattendue du serveur", tous en même temps, pendant toute
+        // cette fenêtre — donnant l'impression de nombreuses petites erreurs répétées.
+        if ([502, 503, 504].includes(res.status)) {
+            throw Object.assign(new Error('COLD_START_RETRY'), { isColdStart: true });
+        }
 
         // Token expiré : on tente un renouvellement silencieux une seule fois avant
         // de déclencher la déconnexion complète (voir tryRefreshSession ci-dessus).
@@ -195,18 +212,30 @@ export const request = async (method: string, path: string, body?: object, auth 
         return data;
     } catch (e: any) {
         const isConnectionFailure = e.name === 'AbortError' || e.message.includes('Failed to fetch') || e.message.includes('Network request failed');
+        // Voir le throw plus haut : 502/503/504 sont la même situation (réveil à froid) qu'un
+        // échec de connexion, juste détectée après une vraie réponse HTTP plutôt qu'avant.
+        const isColdStart = !!e.isColdStart;
 
         // Nouvelle tentative silencieuse réservée à un échec de CONNEXION (jamais une réponse
         // HTTP d'erreur déjà reçue) sur GET ou /api/auth/* — jamais sur une écriture financière
         // (/wallet, /merchant, /vaults, /tontine, /services) : là, on ne peut pas distinguer
         // "le serveur n'a rien reçu" de "le serveur a bien traité la demande mais la réponse
         // s'est perdue", et renvoyer silencieusement risquerait un double transfert/retrait.
-        const allowConnectionRetry = method === 'GET' || path.startsWith('/api/auth/');
-        if (isConnectionFailure && allowConnectionRetry && _wakeupAttempt < WAKEUP_MAX_RETRIES) {
+        // match-contacts est un POST (le tableau de numéros passe mal en query string) mais
+        // une simple lecture (findMany), sans aucun effet de bord — sans cette exception, le
+        // premier essai après un réveil à froid de Render (mesuré ~12-20s) échouait toujours
+        // avec "Impossible de vérifier vos contacts", donnant l'impression que la synchro des
+        // contacts Mongain ne fonctionne plus, alors qu'un simple retry aurait suffi.
+        const SAFE_TO_RETRY_POST_PATHS = ['/api/wallet/match-contacts'];
+        const allowConnectionRetry = method === 'GET' || path.startsWith('/api/auth/') || SAFE_TO_RETRY_POST_PATHS.includes(path);
+        if ((isConnectionFailure || isColdStart) && allowConnectionRetry && _wakeupAttempt < WAKEUP_MAX_RETRIES) {
             await new Promise(r => setTimeout(r, WAKEUP_RETRY_DELAY_MS));
             return request(method, path, body, auth, _isRetry, _wakeupAttempt + 1);
         }
 
+        if (isColdStart) {
+            throw new Error('Le serveur est en train de redémarrer. Veuillez réessayer dans un instant.');
+        }
         if (e.name === 'AbortError') {
             throw new Error('Le serveur met trop de temps à répondre (il est peut-être en train de redémarrer). Veuillez réessayer dans un instant.');
         }
@@ -317,7 +346,12 @@ export const apiMatchContacts = (phones: string[]) =>
     request('POST', '/api/wallet/match-contacts', { phones }, true) as Promise<{ matches: { id: string; name: string; phone: string; role: string }[] }>;
 
 export const apiGetDailyLimits = () =>
-    request('GET', '/api/wallet/limits', undefined, true) as Promise<{ skip?: boolean, dailySpend: number, dailyLimit: number, kycStatus: string, kycLevel: number }>;
+    request('GET', '/api/wallet/limits', undefined, true) as Promise<{
+        skip?: boolean, dailySpend: number, dailyLimit: number, kycStatus: string, kycLevel: number,
+        // Uniquement renseigné pour un Compte Enfant dont le parent a choisi un plafond WEEKLY
+        // (voir family.ts) — absent (undefined) dans tous les autres cas.
+        weeklySpend?: number, weeklyLimit?: number,
+    }>;
 
 export const apiGetSystemSettings = () =>
     request('GET', '/api/settings', undefined, false) as Promise<{
@@ -348,6 +382,16 @@ export const apiGetBalance = () =>
 
 export const apiGetTransactions = (limit?: number) =>
     request('GET', `/api/wallet/transactions${limit ? `?limit=${limit}` : ''}`, undefined, true) as Promise<Transaction[]>;
+
+// ─── API Loyalty (Points Mongain) ──────────────────────────────────
+// La carte "Récompenses" de profile.tsx avait perdu son appel — elle visait
+// /api/users/profile (route inexistante, 404 systématique) au lieu de ces deux routes
+// réelles de backend/src/routes/loyalty.ts.
+export const apiGetLoyaltyBalance = () =>
+    request('GET', '/api/loyalty/balance', undefined, true) as Promise<{ points: number }>;
+
+export const apiConvertLoyaltyPoints = (pointsToConvert: number) =>
+    request('POST', '/api/loyalty/convert', { pointsToConvert }, true) as Promise<{ message: string }>;
 
 export const apiTransfer = (receiverPhone: string, amount: number, pin: string) =>
     request('POST', '/api/wallet/transfer', { receiverPhone, amount, pin }, true) as Promise<{
@@ -503,6 +547,33 @@ export const apiGetMyVouchers = () =>
 export const apiSpendVoucher = (voucherId: string, destinationPhone: string, pin: string) =>
     request('POST', `/api/vaults/vouchers/${voucherId}/spend`, { destinationPhone, pin }, true) as Promise<any>;
 
+// ==========================================
+// WEALTH MANAGEMENT (COFFRES DE STAKING)
+// ==========================================
+// backend/src/routes/invest.ts existait déjà (dépôt, liste, retrait — PIN + plafonds AML/KYC
+// vérifiés côté serveur) mais aucun écran mobile ne l'appelait jamais : un produit
+// entièrement fonctionnel, mais totalement inaccessible depuis l'app.
+
+export interface StakingVault {
+    id: string;
+    amount: number;
+    apy: number;
+    lockedUntil: string;
+    status: 'ACTIVE' | 'WITHDRAWN';
+    createdAt: string;
+}
+
+export const apiGetStakingVaults = () =>
+    request('GET', '/api/invest/vaults', undefined, true) as Promise<{ success: boolean; vaults: StakingVault[] }>;
+
+export const apiStakeFunds = (amount: number, lockMonths: number, pin: string) =>
+    request('POST', '/api/invest/stake', { amount, lockMonths, pin }, true) as Promise<{ success: boolean; message: string }>;
+
+export const apiWithdrawStakingVault = (id: string) =>
+    request('POST', `/api/invest/vaults/${id}/withdraw`, undefined, true) as Promise<{
+        success: boolean; message: string; amount: number; interest: number; totalPayout: number; balance: number;
+    }>;
+
 // --- CREDIT (V14) ---
 
 export const apiGetCreditEligibility = () => request('GET', '/api/credit/eligibility', undefined, true) as Promise<{ eligible: boolean, maxAmount: number, interestRate: number, loyaltyPoints: number }>;
@@ -511,6 +582,44 @@ export const apiApplyCredit = (amount: number, pin: string) => request('POST', '
 export const apiRepayCredit = (loanId: string, pin: string) => request('POST', '/api/credit/repay', { loanId, pin }, true) as Promise<{ success: boolean, balance: number }>;
 
 
+
+// ==========================================
+// COMPTES ENFANT (backend/src/routes/family.ts)
+// ==========================================
+// L'enfant a sa propre connexion (téléphone réel + PIN) et son propre Wallet — le
+// financement réutilise apiTransfer ci-dessus (le serveur exempte de frais un virement
+// parent→enfant, voir wallet.ts), ces routes ne couvrent que la gestion côté parent.
+
+export interface ChildAccount {
+    id: string;
+    name: string;
+    phone: string;
+    gender?: 'MALE' | 'FEMALE' | null;
+    childSpendLimitAmount?: number | null;
+    childSpendLimitPeriod?: 'DAILY' | 'WEEKLY' | null;
+    createdAt: string;
+    wallet: Wallet | null;
+}
+
+export const apiRequestChildOtp = (phone: string) =>
+    request('POST', '/api/family/otp', { phone }, true) as Promise<{ message: string }>;
+
+export const apiRegisterChild = (name: string, phone: string, pin: string, otpCode: string, gender?: 'MALE' | 'FEMALE') =>
+    request('POST', '/api/family/children', { name, phone, pin, otpCode, gender }, true) as Promise<ChildAccount>;
+
+export const apiGetChildren = () =>
+    request('GET', '/api/family/children', undefined, true) as Promise<ChildAccount[]>;
+
+export const apiGetChildDetail = (id: string) =>
+    request('GET', `/api/family/children/${id}`, undefined, true) as Promise<ChildAccount>;
+
+export const apiSetChildLimit = (id: string, period: 'DAILY' | 'WEEKLY', amount: number, pin: string) =>
+    request('PUT', `/api/family/children/${id}/limit`, { period, amount, pin }, true) as Promise<{ id: string; childSpendLimitAmount: number; childSpendLimitPeriod: string }>;
+
+// Supervision parentale : historique des transactions de l'enfant (même forme que Transaction
+// ci-dessus).
+export const apiGetChildTransactions = (id: string, limit?: number) =>
+    request('GET', `/api/family/children/${id}/transactions${limit ? `?limit=${limit}` : ''}`, undefined, true) as Promise<Transaction[]>;
 
 // --- 3D-SECURE & INVOICES (V21) ---
 export const apiGetMyInvoices = () => request('GET', '/api/b2b/invoices/my', undefined, true) as Promise<{ success: boolean, invoices: any[] }>;

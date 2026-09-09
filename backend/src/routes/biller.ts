@@ -8,7 +8,7 @@ import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
 import { getSystemSettings } from './settings';
-import { sendPush } from './wallet';
+import { notifyParentOfChildSpend, sendPush } from './wallet';
 
 const router = Router();
 
@@ -101,6 +101,7 @@ router.post('/pay', authMiddleware, circuitBreakerMiddleware, async (req: AuthRe
         });
 
         await sendPush(user.pushToken, 'Facture Payée', `Rechargement ${provider} de ${amount} FCFA validé.`);
+        await notifyParentOfChildSpend(user.id, amount, `facture ${provider}`);
 
         res.json({ success: true, message: `Rechargement ${provider} effectué.` });
     } catch (e: any) {

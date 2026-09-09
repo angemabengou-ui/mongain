@@ -8,6 +8,7 @@ import { getSystemAccount } from '../services/systemAccounts';
 import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
 import { getSystemSettings } from './settings';
+import { notifyParentOfChildSpend } from './wallet';
 
 // `io` était importé de '../index' au niveau du module — comme CashOperationService.ts,
 // cela chargeait toute l'application (routes, serveur HTTP) comme effet de bord d'un simple
@@ -244,13 +245,14 @@ router.post('/repay', authMiddleware, circuitBreakerMiddleware, async (req: Auth
                 }
             });
 
-            return { closedLoan, wallet: updatedWallet, userPhone: loan.user.phone };
+            return { closedLoan, wallet: updatedWallet, userPhone: loan.user.phone, totalOwed: loan.totalOwed };
         }, { isolationLevel: 'Serializable' });
 
         req.app.get('io').to(`user_${result.userPhone}`).emit('global_push', {
             title: 'Remboursement Confirmé ✅',
             body: `Merci ! Votre micro-crédit a été intégralement soldé.`
         });
+        await notifyParentOfChildSpend(req.userId!, result.totalOwed, 'remboursement de crédit');
 
         res.json({ success: true, balance: result.wallet.balance });
     } catch (e: any) {

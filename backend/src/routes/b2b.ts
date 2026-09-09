@@ -5,6 +5,7 @@ import { LimitEngine } from '../services/LimitEngine';
 import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
 import { getSystemSettings } from './settings';
+import { notifyParentOfChildSpend } from './wallet';
 
 const router = Router();
 
@@ -169,6 +170,8 @@ router.post('/invoices/:id/pay', authMiddleware, async (req: AuthRequest, res) =
                 data: { status: 'PAID', paidAt: new Date(), transactionId: ref }
             });
         });
+
+        await notifyParentOfChildSpend(user.id, invoice.amount, 'paiement de facture B2B');
 
         res.json({ success: true, message: "Facture réglée avec succès." });
     } catch (e: any) {

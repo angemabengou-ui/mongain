@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import PinPromptModal from '../../components/ui/PinPromptModal';
 import ScreenHeader from '../../components/ui/ScreenHeader';
 import { useAppTheme } from '../../constants/theme';
 import { request } from '../../services/api';
@@ -16,24 +17,18 @@ export default function AirtimeScreen() {
     const [phoneNumber, setPhoneNumber] = useState('');
     const [amount, setAmount] = useState('');
     const [loading, setLoading] = useState(false);
+    // Remplace Alert.prompt (n'existe que sur iOS, no-op silencieux sur Android — voir
+    // PinPromptModal).
+    const [showPinPrompt, setShowPinPrompt] = useState(false);
 
     const handleConfirm = () => {
         if (!phoneNumber || phoneNumber.length < 8) return Alert.alert('Erreur', 'Numéro de téléphone invalide.');
         if (!amount || Number(amount) <= 0) return Alert.alert('Erreur', 'Veuillez saisir un montant valide.');
-
-        Alert.prompt(
-            'Code PIN',
-            `Confirmez la recharge de ${Number(amount).toLocaleString('fr-FR')} XAF sur le ${phoneNumber} (${network}).`,
-            [
-                { text: 'Annuler', style: 'cancel' },
-                { text: 'Valider', onPress: (pin?: string) => executeTopup(pin) }
-            ],
-            'secure-text'
-        );
+        setShowPinPrompt(true);
     };
 
-    const executeTopup = async (pin?: string) => {
-        if (!pin) return Alert.alert('Erreur', 'Code PIN requis.');
+    const executeTopup = async (pin: string) => {
+        setShowPinPrompt(false);
         setLoading(true);
         try {
             const res = await request('POST', '/api/services/topup', {
@@ -110,6 +105,16 @@ export default function AirtimeScreen() {
                     </View>
                 </KeyboardAvoidingView>
             </View>
+
+            <PinPromptModal
+                visible={showPinPrompt}
+                title="Code PIN"
+                message={`Confirmez la recharge de ${Number(amount || 0).toLocaleString('fr-FR')} XAF sur le ${phoneNumber} (${network}).`}
+                loading={loading}
+                onConfirm={executeTopup}
+                onCancel={() => setShowPinPrompt(false)}
+                colors={COLORS}
+            />
         </SafeAreaView>
     );
 }

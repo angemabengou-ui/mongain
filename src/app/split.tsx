@@ -28,7 +28,7 @@ export default function SplitScreen() {
 
     const fetchPending = async () => {
         try {
-            const res = await request('GET', '/api/split/pending', {}, true);
+            const res = await request('GET', '/api/split/pending', undefined, true);
             setPendingSplits(res.pending || []);
         } catch (e) {
             console.warn("Erreur fetch pending splits", e);

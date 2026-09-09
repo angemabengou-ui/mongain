@@ -17,6 +17,12 @@ export default function ContactPickerModal({ visible, onClose, onSelect, colors 
     const [loading, setLoading] = useState(false);
     const [permissionDenied, setPermissionDenied] = useState(false);
     const [loadError, setLoadError] = useState(false);
+    // Message précis renvoyé par le serveur (ou par request(), voir services/api.ts) au lieu
+    // d'un texte générique "vérifiez votre connexion" figé — ce texte fixe masquait la vraie
+    // cause (ex: limite de fréquence atteinte après plusieurs tentatives, session expirée)
+    // derrière un message qui pointait toujours vers un problème réseau, même quand ce n'en
+    // était pas un.
+    const [loadErrorMessage, setLoadErrorMessage] = useState('');
     const [contacts, setContacts] = useState<MongainContact[]>([]);
     const [loaded, setLoaded] = useState(false);
     const [search, setSearch] = useState('');
@@ -25,17 +31,19 @@ export default function ContactPickerModal({ visible, onClose, onSelect, colors 
         setLoading(true);
         setPermissionDenied(false);
         setLoadError(false);
+        setLoadErrorMessage('');
         try {
             const { granted, contacts: found } = await findMongainContacts();
             if (!granted) { setPermissionDenied(true); return; }
             setContacts(found);
             setLoaded(true);
-        } catch {
+        } catch (e: any) {
             // Sans ce catch, un échec réseau (l'appel serveur derrière findMongainContacts)
             // laissait `contacts` vide sans jamais le signaler — l'écran "aucun contact sur
             // Mongain" s'affichait alors à tort, faisant croire à l'utilisateur qu'il n'a
             // vraiment personne sur l'app plutôt que la synchronisation a simplement échoué.
             setLoadError(true);
+            setLoadErrorMessage(e?.message || '');
         } finally {
             setLoading(false);
         }
@@ -88,7 +96,7 @@ export default function ContactPickerModal({ visible, onClose, onSelect, colors 
                     <View style={styles.center}>
                         <Ionicons name="alert-circle-outline" size={40} color={colors.error} />
                         <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                            Impossible de vérifier vos contacts pour l'instant. Vérifiez votre connexion et réessayez.
+                            {loadErrorMessage || "Impossible de vérifier vos contacts pour l'instant. Vérifiez votre connexion et réessayez."}
                         </Text>
                         <TouchableOpacity style={[styles.retryBtn, { backgroundColor: colors.primary }]} onPress={load}>
                             <Text style={styles.retryBtnText}>Réessayer</Text>

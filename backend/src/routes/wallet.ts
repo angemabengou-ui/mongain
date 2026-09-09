@@ -37,13 +37,59 @@ export const sendPush = async (token: string | null | undefined, title: string, 
                 body,
                 data,
                 priority: 'high',
-                channelId: 'default'
+                // 'transactions-v2', pas 'default' — voir AuthContext.tsx (mobile) : un canal de
+                // notification Android est CRÉÉ UNE FOIS puis ses réglages (son, importance) ne
+                // peuvent plus jamais être changés par l'app, seulement par l'utilisateur dans les
+                // réglages système. Un canal 'default' déjà existant sur un téléphone (installé
+                // avant que 'sound' ne soit posé côté client, ou par une version antérieure de
+                // l'app) restait donc muet pour toujours, quoi qu'on envoie ici — d'où des
+                // notifications reçues mais silencieuses. Changer l'ID force la création d'un
+                // nouveau canal, garanti avec le son, sur les appareils déjà installés.
+                channelId: 'transactions-v2'
             }]);
         } catch (e) {
             console.error('Erreur Push Notification:', e);
         }
     }
 };
+
+// Supervision parentale (Comptes Enfant, voir routes/family.ts) : notifie le parent à CHAQUE
+// dépense de son enfant. Appelée systématiquement APRÈS le commit de la transaction financière
+// concernée (jamais depuis l'intérieur d'un $transaction, même convention que sendPush
+// ci-dessus) — sinon un mouvement encore susceptible d'être annulé (ex : un contrôle de solde
+// qui échoue juste après LimitEngine dans le même $transaction) notifierait le parent à tort.
+// No-op silencieux pour tout compte non-CHILD (l'immense majorité des appels), pour permettre
+// de la brancher sur CHAQUE rail de paiement (tous ceux qui appellent déjà
+// LimitEngine.verifyAndIncrementConsumption) sans condition à répéter à chaque appelant.
+export async function notifyParentOfChildSpend(spenderId: string, amount: number, label: string) {
+    try {
+        const spender = await prisma.user.findUnique({
+            where: { id: spenderId },
+            select: { role: true, name: true, parentId: true },
+        });
+        if (!spender || spender.role !== 'CHILD' || !spender.parentId) return;
+
+        const parent = await prisma.user.findUnique({
+            where: { id: spender.parentId },
+            select: { id: true, pushToken: true },
+        });
+        if (!parent) return;
+
+        const title = 'Dépense de votre enfant';
+        const body = `${spender.name} a dépensé ${amount.toLocaleString('fr-FR')} FCFA · ${label}.`;
+
+        // Persistée en base (même convention que tout le reste de ce fichier) : sans elle,
+        // le parent qui manque ou ignore le push n'a plus aucun moyen de retrouver cette
+        // alerte plus tard dans son onglet Notifications.
+        await prisma.notification.create({
+            data: { userId: parent.id, title, body, type: 'TRANSACTION' }
+        });
+
+        await sendPush(parent.pushToken, title, body);
+    } catch (e) {
+        console.error('Erreur notification parent (dépense enfant):', e);
+    }
+}
 
 const router = Router();
 
@@ -202,6 +248,7 @@ router.post('/qr-cash-out', authMiddleware, async (req: AuthRequest, res) => {
             ]
         });
         await sendPush(client.pushToken, 'Retrait Guichet Validé', qrCashOutBody);
+        await notifyParentOfChildSpend(client.id, amount, 'retrait en agence');
 
         res.json({ success: true, message: 'Transfert au guichet autorisé !' });
 
@@ -232,15 +279,27 @@ router.get('/limits', authMiddleware, async (req: AuthRequest, res) => {
             select: {
                 role: true, kycLevel: true, kycStatus: true,
                 customLimitExpiresAt: true, customDailyLimit: true, customMonthlyLimit: true, customPerTxLimit: true,
-                wallet: { select: { dailySpent: true, monthlySpent: true } }
+                childSpendLimitAmount: true, childSpendLimitPeriod: true,
+                wallet: { select: { id: true, dailySpent: true, monthlySpent: true } }
             }
         });
-        if (!user || user.role !== 'USER') return res.json({ skip: true });
+        // CHILD inclus : sans lui, un compte enfant n'avait aucune visibilité sur son PROPRE
+        // plafond (parent-contrôlé, voir family.ts) depuis son propre profil — contrairement à
+        // un USER normal, qui voit toujours la jauge de plafond KYC sur son écran d'accueil.
+        if (!user || (user.role !== 'USER' && user.role !== 'CHILD')) return res.json({ skip: true });
 
         const settings = await getSystemSettings();
 
         // Appelle le moteur global pour un affichage cohérent sur le Front B2C
         const limits = await LimitEngine.getApplicableLimits(user, settings);
+
+        // Plafond hebdomadaire (Comptes Enfant avec childSpendLimitPeriod === 'WEEKLY'
+        // uniquement) — absent du reste des champs ci-dessous, qui ne couvrent que
+        // journalier/mensuel/par-transaction.
+        let weeklySpend: number | undefined;
+        if (limits.effectiveWeekly !== null && user.wallet) {
+            weeklySpend = await LimitEngine.getWeeklySpent(prisma, user.wallet.id);
+        }
 
         res.json({
             dailySpend: user.wallet?.dailySpent || 0,
@@ -248,6 +307,8 @@ router.get('/limits', authMiddleware, async (req: AuthRequest, res) => {
             dailyLimit: limits.effectiveDaily,
             monthlyLimit: limits.effectiveMonthly,
             perTxLimit: limits.effectivePerTx,
+            weeklySpend,
+            weeklyLimit: limits.effectiveWeekly ?? undefined,
             kycStatus: (user as any).kycStatus,
             kycLevel: (user as any).kycLevel,
             isCustomActive: limits.isCustomActive
@@ -398,9 +459,17 @@ const matchContactsSchema = z.object({
 // et sous quel nom — une fuite de PII bien plus large que l'usage normal (synchroniser SON
 // PROPRE carnet, une poignée de fois par session tout au plus). 20 requêtes/15 min plafonne
 // la casse à 20 000 numéros testés dans la fenêtre, largement suffisant pour l'usage réel.
+//
+// keyGenerator PAR COMPTE (req.userId, posé par authMiddleware qui s'exécute avant ce
+// limiter), pas par IP par défaut : les opérateurs mobiles gabonais font massivement du
+// CGNAT, donc de nombreux comptes distincts partagent la même IP publique vue par le
+// serveur — la limite par IP par défaut les faisait épuiser collectivement ce quota, un
+// utilisateur pouvant se voir bloqué par la simple activité d'autres clients du même
+// réseau, jamais la sienne.
 const matchContactsLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 20,
+    keyGenerator: (req) => (req as AuthRequest).userId || 'anonymous',
     message: { error: 'Trop de requêtes de synchronisation de contacts, veuillez réessayer plus tard.' },
     standardHeaders: true,
     legacyHeaders: false,
@@ -523,7 +592,11 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
             // payait de sa poche 1% de frais sur chaque dépôt qu'il traitait, sans jamais
             // en être informé (aucun aperçu de frais dans cet écran), l'UI le présentant
             // comme gratuit alors que le serveur le facturait quand même.
-            const fee = sender.role === 'AGENT' ? 0 : amount * settings.taxP2P;
+            // Un virement du parent vers SON PROPRE enfant (Comptes Enfant, voir
+            // routes/family.ts) est un rechargement interne au foyer, pas un transfert P2P entre
+            // deux clients distincts — sans cette exemption, financer le compte d'un enfant
+            // coûtait 1% de frais au parent à chaque rechargement.
+            const fee = (sender.role === 'AGENT' || receiver.parentId === sender.id) ? 0 : amount * settings.taxP2P;
             const totalRequired = amount + fee;
 
             if (sender.wallet.balance < totalRequired) {
@@ -621,6 +694,8 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
                 from: result.senderName || 'Un utilisateur'
             });
         }
+
+        await notifyParentOfChildSpend(req.userId!, amount, `virement à ${result.receiverName || 'un destinataire'}`);
 
         return res.json({ message: 'Transfert réussi !', data: result });
     } catch (error: any) {
@@ -832,6 +907,7 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
         // réel du tout pour ce retrait.
         await sendPush(result.agentPushToken, 'Paiement reçu', `Vous avez reçu ${amount.toLocaleString('fr-FR')} FCFA de la part d'un client.`);
         await sendPush(result.senderPushToken, 'Retrait effectué', `Vous avez retiré ${amount.toLocaleString('fr-FR')} FCFA chez ${result.agentName}.`);
+        await notifyParentOfChildSpend(req.userId!, amount, `retrait chez ${result.agentName || 'un agent'}`);
 
         return res.json({ message: 'Retrait autorisé avec succès !', data: result });
     } catch (error: any) {
@@ -1071,6 +1147,7 @@ router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
         });
 
         await sendPush(user.pushToken, `Achat de Service : ${type}`, `Débit de ${amount.toLocaleString('fr-FR')} FCFA. Référence: ${reference}.`);
+        await notifyParentOfChildSpend(user.id, amount, `achat de service (${type})`);
 
         return res.json({
             message: 'Achat effectué avec succès.',
@@ -1303,6 +1380,8 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
             });
             throw pvitError;
         }
+
+        await notifyParentOfChildSpend(req.userId!, amount, `retrait Mobile Money (${network})`);
 
         return res.json({
             message: 'Votre demande de retrait est initiée. Vous allez le recevoir dans quelques instants.',

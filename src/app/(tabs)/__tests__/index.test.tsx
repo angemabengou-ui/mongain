@@ -24,9 +24,18 @@ jest.mock('../../../context/AuthContext', () => ({
 
 const mockApiGetBalance = jest.fn();
 const mockApiGetTransactions = jest.fn();
+// apiGetUnreadCount manquait de ce mock : loadData() l'appelle dans le MÊME Promise.all()
+// que apiGetBalance/apiGetTransactions, donc l'appeler alors qu'il valait `undefined` dans
+// le module mocké levait un TypeError synchrone AVANT même que Promise.all ne s'exécute.
+// Résultat : `transactions` restait bloqué sur son état initial ([]), et l'écran retombait
+// sur les 3 transactions FICTIVES de démo (voir index.tsx, "Dummy data for preview") au lieu
+// des vraies — "Alice"/"Bob"/"Carla" n'apparaissaient donc jamais (d'où le timeout de
+// findByText). Bug de ce test, pas de l'écran réel.
+const mockApiGetUnreadCount = jest.fn();
 jest.mock('../../../services/api', () => ({
     apiGetBalance: (...args: any[]) => mockApiGetBalance(...args),
     apiGetTransactions: (...args: any[]) => mockApiGetTransactions(...args),
+    apiGetUnreadCount: (...args: any[]) => mockApiGetUnreadCount(...args),
 }));
 
 import DashboardScreen from '../index';
@@ -37,6 +46,7 @@ describe('(tabs)/index (DashboardScreen)', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         mockUseAuth.mockReturnValue({ user: baseUser, logout: jest.fn(), settings: { seegEnabled: true, tontineEnabled: true } });
+        mockApiGetUnreadCount.mockResolvedValue({ count: 0 });
     });
 
     it('renders the empty state when there are no transactions', async () => {

@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import PinPromptModal from '../../components/ui/PinPromptModal';
 import ScreenHeader from '../../components/ui/ScreenHeader';
 import { useAppTheme } from '../../constants/theme';
 import { request } from '../../services/api';
@@ -15,24 +16,18 @@ export default function WaterScreen() {
     const [accountNumber, setAccountNumber] = useState('');
     const [amount, setAmount] = useState('');
     const [loading, setLoading] = useState(false);
+    // Remplace Alert.prompt (n'existe que sur iOS, no-op silencieux sur Android — voir
+    // PinPromptModal).
+    const [showPinPrompt, setShowPinPrompt] = useState(false);
 
     const handleConfirm = () => {
         if (!accountNumber || accountNumber.length < 5) return Alert.alert('Erreur', 'Numéro de compteur invalide (min 5 chiffres).');
         if (!amount || Number(amount) <= 0) return Alert.alert('Erreur', 'Veuillez saisir un montant valide.');
-
-        Alert.prompt(
-            'Code PIN',
-            `Confirmez le paiement de ${Number(amount).toLocaleString('fr-FR')} XAF pour le compteur d'eau SEEG N°${accountNumber}.`,
-            [
-                { text: 'Annuler', style: 'cancel' },
-                { text: 'Payer', onPress: (pin?: string) => executePayment(pin) }
-            ],
-            'secure-text'
-        );
+        setShowPinPrompt(true);
     };
 
-    const executePayment = async (pin?: string) => {
-        if (!pin) return Alert.alert('Erreur', 'Code PIN requis.');
+    const executePayment = async (pin: string) => {
+        setShowPinPrompt(false);
         setLoading(true);
         try {
             const res = await request('POST', '/api/services/pay-bill', {
@@ -96,6 +91,16 @@ export default function WaterScreen() {
                     </View>
                 </KeyboardAvoidingView>
             </View>
+
+            <PinPromptModal
+                visible={showPinPrompt}
+                title="Code PIN"
+                message={`Confirmez le paiement de ${Number(amount || 0).toLocaleString('fr-FR')} XAF pour le compteur d'eau SEEG N°${accountNumber}.`}
+                loading={loading}
+                onConfirm={executePayment}
+                onCancel={() => setShowPinPrompt(false)}
+                colors={COLORS}
+            />
         </SafeAreaView>
     );
 }

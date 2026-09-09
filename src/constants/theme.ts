@@ -15,7 +15,7 @@ export const Colors = {
     primary: '#2563FF',      // Brand Blue
     primaryDark: '#103AB5',
     accent: '#FFB020',       // Brand Orange
-    background: '#f7f9fd',
+    background: '#F0FBF7',   // Light brand green tint (tamisé, clair)
     surface: '#ffffff',
     textPrimary: '#0A0F1C',  // Brand Dark
     textSecondary: '#5f6b7a',
@@ -25,9 +25,9 @@ export const Colors = {
     success: '#00C27A',      // Brand Green
     warning: '#FFB020',
     purple: '#7E3AF2',       // Brand Purple
-    remaining: '#F0F3FA',
+    remaining: '#E3F8F0',
     text: '#0A0F1C',
-    backgroundElement: '#f0f3fa',
+    backgroundElement: '#E3F8F0',
     backgroundSelected: '#dbeafe'
   },
   dark: {

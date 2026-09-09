@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import PinPromptModal from '../../components/ui/PinPromptModal';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../services/api';
@@ -26,16 +27,25 @@ export default function CryptoScreen() {
     // envoyait alors amountCrypto:"5000" (5000 ETH, pas 5000 XAF de BTC) à /api/crypto/sell.
     const [amounts, setAmounts] = useState<Record<string, string>>({});
     const [actionLoading, setActionLoading] = useState(false);
+    // Remplace Alert.prompt (n'existe que sur iOS, no-op silencieux sur Android — voir
+    // PinPromptModal) pour les deux actions débitrices de cet écran.
+    const [pinPrompt, setPinPrompt] = useState<{ type: 'buy' | 'sell'; asset: string; amount: string } | null>(null);
 
-    const fetchCryptoData = async () => {
+    // Retourne un booléen (même correctif que (tabs)/cards.tsx, fetchCards) : sans lui, un
+    // achat/vente réellement exécuté par le serveur affichait quand même "Succès" ci-dessous
+    // même quand CE rafraîchissement échouait (le marché/les soldes affichés restaient alors
+    // périmés, pouvant donner l'impression trompeuse que rien ne s'est passé).
+    const fetchCryptoData = async (): Promise<boolean> => {
         try {
-            const res = await request('GET', '/api/crypto/market', {}, true);
+            const res = await request('GET', '/api/crypto/market', undefined, true);
             setMarket(res.market || []);
             setWallets(res.wallets || []);
+            return true;
         } catch (e: any) {
             // Un échec silencieux (juste console.warn) rendait un marché indisponible
             // indiscernable d'un marché simplement vide côté utilisateur.
             Alert.alert("Erreur", e.response?.data?.error || e.message || "Impossible de charger le marché crypto.");
+            return false;
         } finally {
             setLoading(false);
         }
@@ -48,24 +58,15 @@ export default function CryptoScreen() {
     const handleBuy = (asset: string) => {
         const amount = amounts[asset];
         if (!amount) return Alert.alert("Erreur", "Veuillez entrer un montant XAF.");
-        Alert.prompt(
-            'Confirmer l\'achat',
-            `Saisissez votre code PIN Mongain pour acheter du ${asset}.`,
-            [
-                { text: 'Annuler', style: 'cancel' },
-                { text: 'Confirmer', onPress: (pin?: string) => executeBuy(asset, amount, pin) },
-            ],
-            'secure-text',
-        );
+        setPinPrompt({ type: 'buy', asset, amount });
     };
 
-    const executeBuy = async (asset: string, amount: string, pin?: string) => {
-        if (!pin) return Alert.alert("Erreur", "Code PIN requis.");
+    const executeBuy = async (asset: string, amount: string, pin: string) => {
         setActionLoading(true);
         try {
             await request('POST', '/api/crypto/buy', { asset, amountXaf: amount, pin }, true);
-            await fetchCryptoData();
-            Alert.alert("Succès", `Vous avez acheté du ${asset} avec succès.`);
+            const refreshed = await fetchCryptoData();
+            if (refreshed) Alert.alert("Succès", `Vous avez acheté du ${asset} avec succès.`);
             setAmounts(prev => ({ ...prev, [asset]: '' }));
         } catch (e: any) {
             Alert.alert("Erreur", e.response?.data?.error || e.message || "Action impossible.");
@@ -77,30 +78,29 @@ export default function CryptoScreen() {
     const handleSell = (asset: string) => {
         const amount = amounts[asset];
         if (!amount) return Alert.alert("Erreur", "Veuillez entrer la quantité de crypto à vendre.");
-        Alert.prompt(
-            'Confirmer la vente',
-            `Saisissez votre code PIN Mongain pour vendre du ${asset}.`,
-            [
-                { text: 'Annuler', style: 'cancel' },
-                { text: 'Confirmer', onPress: (pin?: string) => executeSell(asset, amount, pin) },
-            ],
-            'secure-text',
-        );
+        setPinPrompt({ type: 'sell', asset, amount });
     };
 
-    const executeSell = async (asset: string, amount: string, pin?: string) => {
-        if (!pin) return Alert.alert("Erreur", "Code PIN requis.");
+    const executeSell = async (asset: string, amount: string, pin: string) => {
         setActionLoading(true);
         try {
             await request('POST', '/api/crypto/sell', { asset, amountCrypto: amount, pin }, true);
-            await fetchCryptoData();
-            Alert.alert("Succès", `Vente de ${asset} exécutée avec succès.`);
+            const refreshed = await fetchCryptoData();
+            if (refreshed) Alert.alert("Succès", `Vente de ${asset} exécutée avec succès.`);
             setAmounts(prev => ({ ...prev, [asset]: '' }));
         } catch (e: any) {
             Alert.alert("Erreur", e.response?.data?.error || e.message || "Action impossible.");
         } finally {
             setActionLoading(false);
         }
+    };
+
+    const handlePinConfirm = (pin: string) => {
+        const prompt = pinPrompt;
+        setPinPrompt(null);
+        if (!prompt) return;
+        if (prompt.type === 'buy') executeBuy(prompt.asset, prompt.amount, pin);
+        else executeSell(prompt.asset, prompt.amount, pin);
     };
 
     const getWalletBalance = (asset: string) => {
@@ -188,6 +188,16 @@ export default function CryptoScreen() {
                     )}
                 </ScrollView>
             </View>
+
+            <PinPromptModal
+                visible={!!pinPrompt}
+                title={pinPrompt?.type === 'buy' ? "Confirmer l'achat" : 'Confirmer la vente'}
+                message={pinPrompt ? `Saisissez votre code PIN Mongain pour ${pinPrompt.type === 'buy' ? 'acheter' : 'vendre'} du ${pinPrompt.asset}.` : ''}
+                loading={actionLoading}
+                onConfirm={handlePinConfirm}
+                onCancel={() => setPinPrompt(null)}
+                colors={COLORS}
+            />
         </SafeAreaView>
     );
 }

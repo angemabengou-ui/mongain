@@ -40,16 +40,33 @@ export class LimitEngine {
         let effectiveDaily = (customActive && user.customDailyLimit) ? user.customDailyLimit : baseDaily;
         let effectiveMonthly = (customActive && user.customMonthlyLimit) ? user.customMonthlyLimit : baseMonthly;
         let effectivePerTx = (customActive && user.customPerTxLimit) ? user.customPerTxLimit : basePerTx;
+        let effectiveWeekly: number | null = null;
+
+        // Comptes Enfant : plafond parent-contrôlé (self-service, sans workflow d'approbation —
+        // voir routes/family.ts), appliqué EN PLUS du plafond KYC ci-dessus, jamais à sa place :
+        // le plus restrictif des deux gagne. Un DAILY resserre simplement effectiveDaily ; un
+        // WEEKLY n'a pas d'équivalent KYC préexistant dans ce moteur, donc il alimente son propre
+        // effectiveWeekly (vérifié séparément, par agrégation live, dans
+        // verifyAndIncrementConsumption — pas de nouveau compteur sur Wallet).
+        if (user.role === 'CHILD' && user.childSpendLimitAmount) {
+            if (user.childSpendLimitPeriod === 'WEEKLY') {
+                effectiveWeekly = user.childSpendLimitAmount;
+            } else {
+                effectiveDaily = Math.min(effectiveDaily, user.childSpendLimitAmount);
+            }
+        }
 
         // Regulatory Absolute Clamp
         effectiveDaily = Math.min(effectiveDaily, MAXIMUM_ALLOWED_LIMIT);
         effectiveMonthly = Math.min(effectiveMonthly, MAXIMUM_ALLOWED_LIMIT * 5); // Ex: 50M
         effectivePerTx = Math.min(effectivePerTx, MAXIMUM_ALLOWED_LIMIT);
+        if (effectiveWeekly !== null) effectiveWeekly = Math.min(effectiveWeekly, MAXIMUM_ALLOWED_LIMIT);
 
         return {
             effectiveDaily,
             effectiveMonthly,
             effectivePerTx,
+            effectiveWeekly,
             baseDaily,
             baseMonthly,
             basePerTx,
@@ -76,12 +93,18 @@ export class LimitEngine {
                 where: { id: userId },
                 data: { isActive: false, kycStatus: 'REJECTED' }
             });
+            // BUG CORRIGÉ : ce create() passait `userId`/`ipAddress`, deux champs qui n'existent
+            // PAS sur AuditLog (voir schema.prisma — seul `adminId` existe, référence libre
+            // User OU Staff). Le Prisma Client réel (contrairement au mock `tx: any` des tests)
+            // rejette tout argument inconnu et lève une erreur de validation ICI MÊME, à
+            // l'intérieur de la même transaction que le gel (`tx.user.update` juste au-dessus) —
+            // qui se retrouvait donc annulé (rollback) à chaque déclenchement réel du SAR, sans
+            // qu'aucun test ne puisse le détecter puisque le tx mocké n'y voit que du feu.
             await tx.auditLog.create({
                 data: {
-                    userId,
+                    adminId: userId,
                     action: 'AML_FREEZE_SAR',
-                    details: `Suspicious velocity detected (${velocity} tx/h). Account automatically frozen.`,
-                    ipAddress: 'INTERNAL_AML_ENGINE'
+                    details: `Vélocité suspecte détectée (${velocity} tx/h). Compte gelé automatiquement.`,
                 }
             });
             return true;
@@ -110,13 +133,19 @@ export class LimitEngine {
                 customMonthlyLimit: true,
                 customPerTxLimit: true,
                 customLimitExpiresAt: true,
+                childSpendLimitAmount: true,
+                childSpendLimitPeriod: true,
                 isActive: true,
                 lockedUntil: true
             }
         });
 
         if (!user) throw new Error('Compte introuvable');
-        if (user.role !== 'USER') return; // Exemptions for Staff/Internal
+        // CHILD doit rester soumis aux plafonds (voir getApplicableLimits) — seul un rôle
+        // Staff/Internal (AGENT, ADMIN, MERCHANT...) est réellement exempté. Un simple
+        // `!== 'USER'` exemptait AUSSI un compte enfant de toute vérification, l'exact inverse
+        // de ce que le plafond parent-contrôlé est censé garantir.
+        if (user.role !== 'USER' && user.role !== 'CHILD') return; // Exemptions for Staff/Internal
 
         if (!user.isActive || (user.lockedUntil && user.lockedUntil > new Date())) {
             throw new Error('Le compte est gelé ou suspendu. Action interdite.');
@@ -179,6 +208,19 @@ export class LimitEngine {
             throw new Error(`Plafond mensuel dépassé. Limite: ${limits.effectiveMonthly.toLocaleString()} FCFA. Reste: ${dispo.toLocaleString()}`);
         }
 
+        // 6.5 Plafond HEBDOMADAIRE (Comptes Enfant uniquement — voir getApplicableLimits).
+        // Gaté par `effectiveWeekly !== null` : sans coût pour tout compte non-CHILD, qui ne
+        // déclenche jamais cette requête.
+        if (limits.effectiveWeekly !== null) {
+            const currentWeeklySpent = await this.getWeeklySpent(tx, walletId);
+            const newWeekly = currentWeeklySpent + requestedAmount;
+
+            if (newWeekly > limits.effectiveWeekly) {
+                const dispo = Math.max(0, limits.effectiveWeekly - currentWeeklySpent);
+                throw new Error(`Plafond hebdomadaire dépassé. Limite: ${limits.effectiveWeekly.toLocaleString()} FCFA. Reste: ${dispo.toLocaleString()}`);
+            }
+        }
+
         // 7. Mise à jour — incrément relatif, pas un SET absolu basé sur la lecture du
         // point 2 : deux transactions concurrentes sur le même wallet liraient le même
         // `dailySpent` de départ et écriraient chacune leur propre valeur absolue, la
@@ -196,6 +238,31 @@ export class LimitEngine {
                 monthlySpentResetAt: monthlyReset ? now : undefined
             }
         });
+    }
+
+    /**
+     * Cumul hebdomadaire glissant (semaine calendaire, démarrant le lundi) pour le plafond
+     * parent-contrôlé d'un Compte Enfant — calculé par agrégation live sur Transaction plutôt
+     * qu'un nouveau compteur sur Wallet (même principe que calculateWithdrawalFee plus bas dans
+     * ce fichier), pour ne rien écrire de supplémentaire à chaque transaction de chaque
+     * utilisateur pour un besoin propre aux seuls comptes enfant. Partagée entre l'application
+     * du plafond (verifyAndIncrementConsumption) et son affichage (GET /wallet/limits).
+     */
+    static async getWeeklySpent(tx: any, walletId: string): Promise<number> {
+        const now = new Date();
+        const dayOfWeek = now.getDay(); // 0 (dim.) .. 6 (sam.)
+        const diffToMonday = (dayOfWeek + 6) % 7;
+        const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMonday);
+
+        const weeklyAgg = await tx.transaction.aggregate({
+            where: {
+                senderWalletId: walletId,
+                createdAt: { gte: startOfWeek },
+                status: 'COMPLETED',
+            },
+            _sum: { amount: true },
+        });
+        return weeklyAgg._sum.amount || 0;
     }
 
     /**

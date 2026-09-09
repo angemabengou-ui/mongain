@@ -75,6 +75,41 @@ describe('LimitEngine.getApplicableLimits', () => {
         expect(limits.baseDaily).toBe(50000);
         expect(limits.baseMonthly).toBe(1000000);
     });
+
+    describe('Comptes Enfant (role CHILD)', () => {
+        it('devrait resserrer effectiveDaily si le plafond parent DAILY est plus bas que le plafond KYC', async () => {
+            const user = { kycLevel: 0, role: 'CHILD', childSpendLimitAmount: 10000, childSpendLimitPeriod: 'DAILY' };
+            const limits = await LimitEngine.getApplicableLimits(user, settings);
+            expect(limits.effectiveDaily).toBe(10000);
+            expect(limits.effectiveWeekly).toBeNull();
+        });
+
+        it('ne devrait PAS resserrer effectiveDaily si le plafond parent DAILY est plus large que le plafond KYC', async () => {
+            const user = { kycLevel: 0, role: 'CHILD', childSpendLimitAmount: 999999999, childSpendLimitPeriod: 'DAILY' };
+            const limits = await LimitEngine.getApplicableLimits(user, settings);
+            // Le plus restrictif des deux gagne : le plafond KYC Tier0 (50000) reste en place.
+            expect(limits.effectiveDaily).toBe(50000);
+        });
+
+        it('devrait alimenter effectiveWeekly (sans toucher effectiveDaily) pour un plafond parent WEEKLY', async () => {
+            const user = { kycLevel: 0, role: 'CHILD', childSpendLimitAmount: 30000, childSpendLimitPeriod: 'WEEKLY' };
+            const limits = await LimitEngine.getApplicableLimits(user, settings);
+            expect(limits.effectiveWeekly).toBe(30000);
+            expect(limits.effectiveDaily).toBe(50000);
+        });
+
+        it('devrait plafonner effectiveWeekly au maximum réglementaire absolu', async () => {
+            const user = { kycLevel: 0, role: 'CHILD', childSpendLimitAmount: MAXIMUM_ALLOWED_LIMIT + 1, childSpendLimitPeriod: 'WEEKLY' };
+            const limits = await LimitEngine.getApplicableLimits(user, settings);
+            expect(limits.effectiveWeekly).toBe(MAXIMUM_ALLOWED_LIMIT);
+        });
+
+        it('ne devrait jamais appliquer de plafond parent pour un rôle USER, même si childSpendLimitAmount est renseigné', async () => {
+            const user = { kycLevel: 0, role: 'USER', childSpendLimitAmount: 10, childSpendLimitPeriod: 'DAILY' };
+            const limits = await LimitEngine.getApplicableLimits(user, settings);
+            expect(limits.effectiveDaily).toBe(50000);
+        });
+    });
 });
 
 describe('LimitEngine.verifyAndIncrementConsumption', () => {
@@ -104,6 +139,10 @@ describe('LimitEngine.verifyAndIncrementConsumption', () => {
         // compte pendant les tests des plafonds classiques, qui ne testent pas ce mécanisme.
         transaction: {
             count: jest.fn().mockResolvedValue(overrides.transactionCount ?? 0),
+            // Utilisé uniquement pour le plafond hebdomadaire des Comptes Enfant (voir
+            // getApplicableLimits/effectiveWeekly) — 0 par défaut, sans effet sur les tests
+            // classiques (rôle USER) qui ne déclenchent jamais cette agrégation.
+            aggregate: jest.fn().mockResolvedValue({ _sum: { amount: overrides.weeklySpent ?? 0 } }),
         },
         auditLog: {
             create: jest.fn().mockResolvedValue({}),
@@ -227,7 +266,13 @@ describe('LimitEngine.verifyAndIncrementConsumption', () => {
             where: { id: 'user_1' },
             data: { isActive: false, kycStatus: 'REJECTED' },
         });
-        expect(tx.auditLog.create).toHaveBeenCalled();
+        // Régression : ce create() passait autrefois `userId`/`ipAddress`, deux champs
+        // inexistants sur AuditLog (seul `adminId` existe) — invisible avec un tx mocké, mais
+        // le vrai Prisma Client rejette tout argument inconnu et annulait le gel (rollback de
+        // toute la transaction) à chaque déclenchement réel du SAR.
+        expect(tx.auditLog.create).toHaveBeenCalledWith({
+            data: expect.objectContaining({ adminId: 'user_1', action: 'AML_FREEZE_SAR' }),
+        });
         // Le gel doit intervenir AVANT toute écriture sur les compteurs de plafond.
         expect(tx.wallet.update).not.toHaveBeenCalled();
     });
@@ -239,6 +284,60 @@ describe('LimitEngine.verifyAndIncrementConsumption', () => {
 
         expect(tx.user.update).not.toHaveBeenCalled();
         expect(tx.wallet.update).toHaveBeenCalled();
+    });
+
+    describe('Comptes Enfant (role CHILD) — non exemptés', () => {
+        it('ne devrait PLUS exempter un rôle CHILD (régression du bug corrigé : role !== USER exemptait aussi CHILD)', async () => {
+            const tx = buildTx({ user: { role: 'CHILD', childSpendLimitAmount: null, childSpendLimitPeriod: null } });
+
+            await LimitEngine.verifyAndIncrementConsumption(tx, 'user_1', 'wallet_1', 1000, settings);
+
+            // Toujours soumis au plafond KYC standard (Tier0), contrairement à un rôle Staff/Internal.
+            expect(tx.wallet.findUnique).toHaveBeenCalled();
+            expect(tx.wallet.update).toHaveBeenCalled();
+        });
+
+        it('devrait lever une exception si le montant dépasse le plafond parent DAILY, même sous le plafond KYC', async () => {
+            const tx = buildTx({ user: { role: 'CHILD', childSpendLimitAmount: 5000, childSpendLimitPeriod: 'DAILY' } });
+
+            await expect(LimitEngine.verifyAndIncrementConsumption(tx, 'user_1', 'wallet_1', 10000, settings))
+                .rejects.toThrow('Plafond journalier dépassé.');
+        });
+
+        it('devrait lever une exception si le cumul hebdomadaire dépasse le plafond parent WEEKLY', async () => {
+            const tx = buildTx({
+                user: { role: 'CHILD', childSpendLimitAmount: 20000, childSpendLimitPeriod: 'WEEKLY' },
+                weeklySpent: 18000,
+            });
+
+            await expect(LimitEngine.verifyAndIncrementConsumption(tx, 'user_1', 'wallet_1', 5000, settings))
+                .rejects.toThrow('Plafond hebdomadaire dépassé.');
+
+            // Le cumul hebdomadaire est calculé par agrégation live sur ce même wallet, jamais écrit.
+            expect(tx.transaction.aggregate).toHaveBeenCalledWith(expect.objectContaining({
+                where: expect.objectContaining({ senderWalletId: 'wallet_1', status: 'COMPLETED' }),
+            }));
+            expect(tx.wallet.update).not.toHaveBeenCalled();
+        });
+
+        it('devrait laisser passer une transaction sous le plafond parent WEEKLY', async () => {
+            const tx = buildTx({
+                user: { role: 'CHILD', childSpendLimitAmount: 20000, childSpendLimitPeriod: 'WEEKLY' },
+                weeklySpent: 5000,
+            });
+
+            await LimitEngine.verifyAndIncrementConsumption(tx, 'user_1', 'wallet_1', 5000, settings);
+
+            expect(tx.wallet.update).toHaveBeenCalled();
+        });
+
+        it('ne devrait jamais interroger le cumul hebdomadaire pour un rôle USER (aucun plafond WEEKLY applicable)', async () => {
+            const tx = buildTx({ user: { role: 'USER' } });
+
+            await LimitEngine.verifyAndIncrementConsumption(tx, 'user_1', 'wallet_1', 1000, settings);
+
+            expect(tx.transaction.aggregate).not.toHaveBeenCalled();
+        });
     });
 });
 

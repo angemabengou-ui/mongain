@@ -1,4 +1,11 @@
-import * as Contacts from 'expo-contacts';
+// 'expo-contacts/legacy', pas 'expo-contacts' : depuis cette version du SDK, le module
+// principal ne réexporte plus getContactsAsync/Fields/etc. que comme des stubs dépréciés qui
+// LÈVENT UNE ERREUR À L'EXÉCUTION (pas juste un avertissement) — voir le guide de migration
+// officiel. C'est ce qui rendait "Mes contacts sur Mongain" invisible sur l'écran final (une
+// APK release n'affiche aucune trace de ce genre d'erreur, contrairement à Expo Go/un build
+// de dev, qui l'a révélée). requestPermissionsAsync n'est pas concerné (API encore actuelle),
+// mais tout vient d'ici pour garder un seul point d'import cohérent.
+import * as Contacts from 'expo-contacts/legacy';
 import { apiMatchContacts } from './api';
 
 // Même normalisation que l'ancienne saisie manuelle (InlineInviteForm, transfer.tsx) —

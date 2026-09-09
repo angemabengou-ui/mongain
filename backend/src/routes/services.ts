@@ -9,6 +9,7 @@ import { getSystemAccount } from '../services/systemAccounts';
 import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
 import { getSystemSettings } from './settings';
+import { notifyParentOfChildSpend } from './wallet';
 
 const router = express.Router();
 
@@ -87,6 +88,8 @@ router.post('/pay-bill', authMiddleware, async (req: AuthRequest, res) => {
             });
         });
 
+        await notifyParentOfChildSpend(user.id, amount, `facture ${service}`);
+
         res.json({
             message: `Paiement ${service} validé avec succès.`,
             seegCode,
@@ -160,6 +163,8 @@ router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
                 }
             });
         });
+
+        await notifyParentOfChildSpend(user.id, amount, `recharge crédit ${network}`);
 
         res.json({
             message: `Recharge de ${amount} FCFA (${network}) effectuée avec succès sur le ${phoneNumber}.`,

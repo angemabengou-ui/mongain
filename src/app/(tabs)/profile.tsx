@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
 import { useTabBarHeight } from '../../hooks/useTabBarHeight';
-import { apiGetBalance, apiGetDailyLimits, request } from '../../services/api';
+import { apiConvertLoyaltyPoints, apiGetBalance, apiGetDailyLimits, apiGetLoyaltyBalance } from '../../services/api';
 
 // Refonte : l'ancienne page mettait "Informations personnelles", "Sécurité & PIN",
 // "Notifications", "Centre d'aide" et "Conditions d'utilisation" (qui ne menait nulle
@@ -30,32 +30,15 @@ export default function ProfileScreen() {
 
     const [balance, setBalance] = useState(user?.wallet?.balance ?? 0);
     const [currency, setCurrency] = useState(user?.wallet?.currency ?? 'FCFA');
-    const [userData, setUserData] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
+    const [loyaltyPoints, setLoyaltyPoints] = useState(0);
+    const [converting, setConverting] = useState(false);
     const [appLockEnabled, setAppLockEnabled] = useState(true);
-
-    const fetchProfileData = async () => {
-        try {
-            const res = await request('GET', '/api/users/profile', {}, true);
-            setUserData(res.user);
-            let pointBalance = 0;
-            try {
-                const lp = await request('GET', '/api/loyalty/balance', {}, true);
-                if (lp && lp.points) pointBalance = lp.points;
-            } catch (e) {
-                // Feature fails silently if endpoint not ready yet
-            }
-            if (res.user) setUserData({ ...res.user, loyaltyPoints: pointBalance });
-        } catch (e: any) {
-            console.warn(e);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     useFocusEffect(
         useCallback(() => {
-            fetchProfileData();
+            apiGetLoyaltyBalance().then(res => {
+                if (res && typeof res.points === 'number') setLoyaltyPoints(res.points);
+            }).catch(console.error);
             apiGetBalance().then(res => {
                 if (res && res.balance !== undefined) {
                     setBalance(res.balance);
@@ -65,10 +48,46 @@ export default function ProfileScreen() {
         }, [])
     );
 
+    // Conversion des Points Mongain en FCFA (ratio 10:1 — voir backend/src/routes/loyalty.ts) :
+    // convertit tout le solde disponible, plutôt que de demander un montant — cet écran n'a
+    // pas de champ de saisie dédié, et c'est l'usage attendu (vider ses points accumulés).
+    const handleConvertPoints = () => {
+        if (loyaltyPoints <= 0 || converting) return;
+        Alert.alert(
+            'Convertir mes points',
+            `Convertir vos ${loyaltyPoints.toLocaleString('fr-FR')} MP en ${(loyaltyPoints / 10).toLocaleString('fr-FR')} FCFA ?`,
+            [
+                { text: 'Annuler', style: 'cancel' },
+                {
+                    text: 'Convertir', onPress: async () => {
+                        setConverting(true);
+                        try {
+                            await apiConvertLoyaltyPoints(loyaltyPoints);
+                            const res = await apiGetLoyaltyBalance();
+                            setLoyaltyPoints(res.points);
+                            apiGetBalance().then(res => {
+                                if (res && res.balance !== undefined) setBalance(res.balance);
+                            }).catch(console.error);
+                            Alert.alert('Succès', 'Vos points ont été convertis avec succès.');
+                        } catch (e: any) {
+                            Alert.alert('Erreur', e.message || 'La conversion a échoué.');
+                        } finally {
+                            setConverting(false);
+                        }
+                    }
+                },
+            ]
+        );
+    };
+
     const [limits, setLimits] = useState<any>(null);
 
     useEffect(() => {
-        if (user && user.role === 'USER') {
+        // CHILD inclus : sans ça, un enfant connecté à son propre compte n'avait aucune jauge
+        // de plafond sur son propre profil — la seule visibilité venait d'un rejet de
+        // transaction, jamais d'un aperçu proactif. Le backend (wallet.ts, GET /limits) gère
+        // maintenant ce rôle en plus de USER.
+        if (user && (user.role === 'USER' || user.role === 'CHILD')) {
             apiGetDailyLimits().then(data => setLimits(data)).catch(console.error);
         }
         if (Platform.OS !== 'web') {
@@ -87,8 +106,8 @@ export default function ProfileScreen() {
         setAppLockEnabled(value);
     };
 
-    const authName = userData?.name || user?.name;
-    const authEmail = userData?.email || user?.email;
+    const authName = user?.name;
+    const authEmail = user?.email;
     const initials = authName
         ? authName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
         : '??';
@@ -130,20 +149,56 @@ export default function ProfileScreen() {
                         </Text>
                     </View>
 
-                    {limits && !limits.skip && (
-                        <View style={styles.limitsCard}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                <Text style={{ fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', color: COLORS.textPrimary }}>Plafond Journalier</Text>
-                                <Text style={{ fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: COLORS.textSecondary }}>{(limits.dailySpend / limits.dailyLimit * 100).toFixed(0)}%</Text>
+                    {limits && !limits.skip && (() => {
+                        // Un Compte Enfant dont le parent a choisi un plafond WEEKLY (voir
+                        // family.ts) n'a pas de plafond journalier pertinent à afficher ici —
+                        // la jauge bascule alors sur le cumul hebdomadaire renvoyé par le
+                        // backend (wallet.ts, GET /limits), sinon sur le journalier habituel.
+                        const isWeekly = limits.weeklyLimit !== undefined && limits.weeklySpend !== undefined;
+                        const spend = isWeekly ? limits.weeklySpend! : limits.dailySpend;
+                        const limit = isWeekly ? limits.weeklyLimit! : limits.dailyLimit;
+                        return (
+                            <View style={styles.limitsCard}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                    <Text style={{ fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', color: COLORS.textPrimary }}>{isWeekly ? 'Plafond Hebdomadaire' : 'Plafond Journalier'}</Text>
+                                    <Text style={{ fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: COLORS.textSecondary }}>{(spend / limit * 100).toFixed(0)}%</Text>
+                                </View>
+                                <View style={{ width: '100%', height: 8, backgroundColor: COLORS.border, borderRadius: 4, overflow: 'hidden' }}>
+                                    <View style={{ width: `${Math.min(100, (spend / limit) * 100)}%`, height: '100%', backgroundColor: spend > limit * 0.8 ? '#ef4444' : '#10b981', borderRadius: 4 }} />
+                                </View>
+                                <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 8 }}>
+                                    Dépensé : <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary }}>{spend.toLocaleString('fr-FR')}</Text> / {limit.toLocaleString('fr-FR')} FCFA
+                                </Text>
                             </View>
-                            <View style={{ width: '100%', height: 8, backgroundColor: COLORS.border, borderRadius: 4, overflow: 'hidden' }}>
-                                <View style={{ width: `${Math.min(100, (limits.dailySpend / limits.dailyLimit) * 100)}%`, height: '100%', backgroundColor: limits.dailySpend > limits.dailyLimit * 0.8 ? '#ef4444' : '#10b981', borderRadius: 4 }} />
-                            </View>
-                            <Text style={{ fontSize: 12, color: COLORS.textSecondary, marginTop: 8 }}>
-                                Dépensé : <Text style={{ fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary }}>{limits.dailySpend.toLocaleString('fr-FR')}</Text> / {limits.dailyLimit.toLocaleString('fr-FR')} FCFA
-                            </Text>
+                        );
+                    })()}
+
+                    {/* Carte Points Mongain — les styles rewardsCard/rewardsPoints/... existaient
+                        déjà mais n'étaient plus rendus nulle part depuis une ancienne refonte ;
+                        l'appel qui alimentait cette carte visait /api/users/profile, une route
+                        inexistante (404 systématique, voir apiGetLoyaltyBalance ci-dessus). */}
+                    <View style={styles.rewardsCard}>
+                        <View style={styles.rewardsHeader}>
+                            <Ionicons name="gift" size={22} color="#FCD34D" />
+                            <Text style={styles.rewardsTitle}>Points Mongain</Text>
                         </View>
-                    )}
+                        <Text style={styles.rewardsPoints}>{loyaltyPoints.toLocaleString('fr-FR')} MP</Text>
+                        <Text style={styles.rewardsSubtitle}>
+                            Soit {(loyaltyPoints / 10).toLocaleString('fr-FR')} FCFA à convertir
+                        </Text>
+                        <View style={styles.rewardsActions}>
+                            <TouchableOpacity
+                                style={[styles.rewardBtn, styles.rewardBtnConvert, (loyaltyPoints <= 0 || converting) && { opacity: 0.5 }]}
+                                onPress={handleConvertPoints}
+                                disabled={loyaltyPoints <= 0 || converting}
+                            >
+                                <Ionicons name="swap-horizontal" size={18} color="#1E293B" />
+                                <Text style={[styles.rewardBtnText, { color: '#1E293B' }]}>
+                                    {converting ? 'Conversion...' : 'Convertir en FCFA'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
 
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Compte</Text>
@@ -156,6 +211,11 @@ export default function ProfileScreen() {
                             destiné. */}
                         {user?.role === 'MERCHANT' && (
                             <MenuItem icon="storefront-outline" label="Espace Marchand" sublabel="Ventes, commissions et retraits" onPress={() => router.push('/merchant-hub')} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
+                        )}
+                        {/* Un compte CHILD n'a aucune autorité sur d'autres comptes enfant (voir
+                            routes/family.ts) — n'affiché que pour un parent USER normal. */}
+                        {user?.role === 'USER' && (
+                            <MenuItem icon="people-outline" label="Comptes Enfant" sublabel="Gérez les comptes de vos enfants" onPress={() => router.push('/family-hub')} styles={styles} tint={COLORS.primary} chevronColor={COLORS.textSecondary} />
                         )}
                     </View>
 

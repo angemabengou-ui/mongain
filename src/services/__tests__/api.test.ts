@@ -6,6 +6,7 @@ jest.mock('expo-secure-store', () => ({
 
 import * as SecureStore from 'expo-secure-store';
 import {
+    apiGetBalance,
     apiGetMe,
     apiGetSystemSettings,
     apiLogin,
@@ -275,18 +276,43 @@ describe('api service', () => {
             await expect(apiLogin('+24177000000', '0000')).rejects.toThrow('Réponse inattendue du serveur (500)');
         });
 
-        // /api/auth/* retente automatiquement 2 fois (réveil à froid Render, voir request()
-        // dans api.ts) avant d'abandonner — d'où le délai réel (~4s) couvert par le timeout
-        // explicite ci-dessous, au-delà des 5000ms par défaut de Jest.
+        // /api/auth/* retente automatiquement jusqu'à 4 fois (réveil à froid Render, voir
+        // WAKEUP_MAX_RETRIES/WAKEUP_RETRY_DELAY_MS dans api.ts) avant d'abandonner — d'où le
+        // délai réel (~16s) couvert par le timeout explicite ci-dessous, au-delà des 5000ms
+        // par défaut de Jest.
         it('translates a fetch network failure into a friendly offline message', async () => {
             mockFetch(() => Promise.reject(new Error('Network request failed')));
             await expect(apiLogin('+24177000000', '0000')).rejects.toThrow('Vous êtes hors ligne');
-        }, 10000);
+        }, 20000);
 
         it('translates a "Failed to fetch" error into a friendly offline message', async () => {
             mockFetch(() => Promise.reject(new Error('Failed to fetch')));
             await expect(apiLogin('+24177000000', '0000')).rejects.toThrow('Vous êtes hors ligne');
-        }, 10000);
+        }, 20000);
+
+        // Render (et la plupart des PaaS) répond via son proxy avec un 502/503/504 PENDANT
+        // que le conteneur redémarre à froid, plutôt que de laisser la requête sans réponse —
+        // sans ce cas dédié (voir le throw `isColdStart` dans request()), cette réponse HTTP
+        // bien reçue n'était jamais reconnue comme un réveil à froid et ne déclenchait aucune
+        // nouvelle tentative, contrairement à un vrai timeout de connexion.
+        it('retries automatically on a 502/503/504 and succeeds once the server is awake', async () => {
+            let call = 0;
+            mockFetch(() => {
+                call++;
+                if (call < 3) return Promise.resolve({ ok: false, status: 503, json: async () => ({}) });
+                return Promise.resolve(okResponse({ balance: 1000, currency: 'FCFA' }));
+            });
+
+            const res = await apiGetBalance();
+
+            expect(res).toEqual({ balance: 1000, currency: 'FCFA' });
+            expect(global.fetch).toHaveBeenCalledTimes(3);
+        }, 20000);
+
+        it('gives up on a persistent 502/503/504 with a friendly "server restarting" message', async () => {
+            mockFetch(() => Promise.resolve({ ok: false, status: 503, json: async () => ({}) }));
+            await expect(apiGetBalance()).rejects.toThrow('Le serveur est en train de redémarrer');
+        }, 20000);
 
         it('triggers the unauthorized handler and rejects on a 401 response when there is no refresh token to try', async () => {
             const onUnauthorized = jest.fn();

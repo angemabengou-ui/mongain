@@ -1,7 +1,7 @@
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import React from 'react';
 import { Alert } from 'react-native';
-import WithdrawFormScreen from '../withdraw-form';
+import WithdrawFormScreen from '../../app/withdraw-form';
 import { apiPushWithdrawal } from '../../services/api';
 
 jest.mock('@expo/vector-icons', () => ({

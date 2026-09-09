@@ -32,7 +32,7 @@ jest.mock('../../services/api', () => ({
     apiGetTransactions: (...args: any[]) => mockApiGetTransactions(...args),
 }));
 
-import InsightsScreen from '../insights';
+import InsightsScreen from '../../app/insights';
 
 // "Maintenant" fixé au 15/01/2026 pour que le filtrage par mois calendaire soit déterministe.
 const NOW = new Date('2026-01-15T12:00:00.000Z');

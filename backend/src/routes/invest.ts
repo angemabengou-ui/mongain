@@ -7,7 +7,7 @@ import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
 import { getSystemSettings } from './settings';
-import { sendPush } from './wallet';
+import { notifyParentOfChildSpend, sendPush } from './wallet';
 
 const router = Router();
 
@@ -110,6 +110,8 @@ router.post('/stake', authMiddleware, circuitBreakerMiddleware, async (req: Auth
                 throw new Error("Erreur système: Trésorerie d'investissement introuvable.");
             }
         });
+
+        await notifyParentOfChildSpend(user.id, stakeAmount, 'dépôt dans un coffre de staking');
 
         res.status(201).json({ success: true, message: `Dépôt de ${stakeAmount} FCFA verrouillé à ${apy * 100}% d'intérêt annuel.` });
     } catch (e: any) {

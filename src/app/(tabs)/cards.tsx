@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../services/api';
 
@@ -11,15 +11,31 @@ export default function CardsScreen() {
     const [loading, setLoading] = useState(true);
     const [revealCvv, setRevealCvv] = useState<{ [key: string]: boolean }>({});
     const [actionLoading, setActionLoading] = useState(false);
+    // Remplace les deux Alert.prompt chaînés (montant puis PIN) de handleFund — Alert.prompt
+    // n'existe que sur iOS ; sur Android c'est un no-op total (ni boîte, ni callback), donc
+    // "Recharger" ne faisait strictement rien. Un seul modal avec les deux champs, plutôt que
+    // deux prompts successifs, comme transfer-confirm.tsx (montant + PIN sur le même écran).
+    const [fundingCardId, setFundingCardId] = useState<string | null>(null);
+    const [fundAmount, setFundAmount] = useState('');
+    const [fundPin, setFundPin] = useState('');
 
-    const fetchCards = async () => {
+    // BUG CORRIGÉ ("carte créée mais rien n'apparaît") : cette fonction avalait sa propre
+    // erreur (son propre Alert.alert, sans jamais la relancer), donc chaque appelant ci-dessous
+    // (`await fetchCards()`) continuait comme si le rafraîchissement avait réussi et affichait
+    // quand même son "Succès" — alors que la liste affichée restait celle d'AVANT l'action
+    // (toujours vide au tout premier essai) si ce GET échouait pour une raison quelconque
+    // (ex : réveil à froid Render, un hoquet réseau). Sur Android, deux Alert.alert appelés
+    // coup sur coup peuvent en plus se chevaucher et ne laisser voir que le dernier — masquant
+    // ainsi complètement l'alerte d'erreur pourtant déclenchée juste avant. Retourner un booléen
+    // permet à l'appelant de ne PLUS afficher "Succès" quand ce rafraîchissement a réellement échoué.
+    const fetchCards = async (): Promise<boolean> => {
         try {
-            const res = await request('GET', '/api/wallet/cards', {}, true) as any[];
+            const res = await request('GET', '/api/wallet/cards', undefined, true) as any[];
             setCards(res || []);
+            return true;
         } catch (e: any) {
-            // Un échec silencieux (juste console.warn) rendait un chargement en échec
-            // indiscernable d'un compte sans aucune carte.
             Alert.alert("Erreur", e.response?.data?.error || e.message || "Impossible de charger vos cartes.");
+            return false;
         } finally {
             setLoading(false);
         }
@@ -29,54 +45,44 @@ export default function CardsScreen() {
         if (token) fetchCards();
     }, [token]);
 
+    // Anti double-tap (même correctif que vault-detail.tsx : `disabled={actionLoading}` seul
+    // ne protège pas contre deux appuis assez rapprochés pour lire `actionLoading` avant que le
+    // premier `setActionLoading(true)` ne soit commité par React) — un double-tap émettait ici
+    // deux cartes virtuelles distinctes pour un seul appui perçu.
+    const issuingRef = React.useRef(false);
+
     const handleIssueCard = async () => {
+        if (issuingRef.current) return;
+        issuingRef.current = true;
         setActionLoading(true);
         try {
             await request('POST', '/api/wallet/cards/issue', {}, true);
-            await fetchCards();
-            Alert.alert("Succès", "Votre carte virtuelle a été émise avec succès.");
+            const refreshed = await fetchCards();
+            if (refreshed) Alert.alert("Succès", "Votre carte virtuelle a été émise avec succès.");
         } catch (e: any) {
             Alert.alert("Erreur", e.response?.data?.error || "Impossible d'émettre la carte.");
         } finally {
+            issuingRef.current = false;
             setActionLoading(false);
         }
     };
 
     const handleFund = (cardId: string) => {
-        Alert.prompt(
-            'Recharger la carte',
-            'Montant à transférer de votre portefeuille vers cette carte (XAF) :',
-            [
-                { text: 'Annuler', style: 'cancel' },
-                { text: 'Suivant', onPress: (amount?: string) => promptPinForFund(cardId, amount) },
-            ],
-            'plain-text',
-            '',
-            'numeric',
-        );
+        setFundAmount('');
+        setFundPin('');
+        setFundingCardId(cardId);
     };
 
-    const promptPinForFund = (cardId: string, amount?: string) => {
-        const parsed = parseFloat(amount || '');
+    const executeFund = async () => {
+        const parsed = parseFloat(fundAmount);
         if (!parsed || parsed <= 0) return Alert.alert('Erreur', 'Montant invalide.');
-        Alert.prompt(
-            'Code PIN',
-            'Confirmez ce rechargement avec votre code PIN Mongain.',
-            [
-                { text: 'Annuler', style: 'cancel' },
-                { text: 'Confirmer', onPress: (pin?: string) => executeFund(cardId, parsed, pin) },
-            ],
-            'secure-text',
-        );
-    };
-
-    const executeFund = async (cardId: string, amount: number, pin?: string) => {
-        if (!pin) return Alert.alert('Erreur', 'Code PIN requis.');
+        if (fundPin.length !== 4) return Alert.alert('Erreur', 'Code PIN à 4 chiffres requis.');
         setActionLoading(true);
         try {
-            await request('POST', `/api/wallet/cards/${cardId}/fund`, { amount, pin }, true);
-            await fetchCards();
-            Alert.alert('Succès', 'Carte rechargée avec succès.');
+            await request('POST', `/api/wallet/cards/${fundingCardId}/fund`, { amount: parsed, pin: fundPin }, true);
+            const refreshed = await fetchCards();
+            setFundingCardId(null);
+            if (refreshed) Alert.alert('Succès', 'Carte rechargée avec succès.');
         } catch (e: any) {
             Alert.alert('Erreur', e.response?.data?.error || e.message || 'Rechargement impossible.');
         } finally {
@@ -88,8 +94,8 @@ export default function CardsScreen() {
         setActionLoading(true);
         try {
             await request('PUT', `/api/wallet/cards/${id}/freeze`, {}, true);
-            await fetchCards();
-            Alert.alert(isFrozen ? "Débloquée" : "Bloquée", `La carte a été ${isFrozen ? "réactivée" : "suspendue"}.`);
+            const refreshed = await fetchCards();
+            if (refreshed) Alert.alert(isFrozen ? "Débloquée" : "Bloquée", `La carte a été ${isFrozen ? "réactivée" : "suspendue"}.`);
         } catch (e: any) {
             Alert.alert("Erreur", e.response?.data?.error || "Action impossible.");
         } finally {
@@ -188,6 +194,46 @@ export default function CardsScreen() {
                     })
                 )}
             </ScrollView>
+
+            <Modal transparent animationType="fade" visible={!!fundingCardId} onRequestClose={() => setFundingCardId(null)}>
+                <View style={styles.fundOverlay}>
+                    <View style={styles.fundCard}>
+                        <Text style={styles.fundTitle}>Recharger la carte</Text>
+                        <Text style={styles.fundLabel}>Montant à transférer depuis votre portefeuille (XAF)</Text>
+                        <TextInput
+                            style={styles.fundInput}
+                            placeholder="ex: 10000"
+                            placeholderTextColor="#64748b"
+                            keyboardType="numeric"
+                            value={fundAmount}
+                            onChangeText={setFundAmount}
+                        />
+                        <Text style={styles.fundLabel}>Code PIN Mongain</Text>
+                        <TextInput
+                            style={[styles.fundInput, { textAlign: 'center', letterSpacing: 10, fontSize: 22 }]}
+                            placeholder="⬢⬢⬢⬢"
+                            placeholderTextColor="#64748b"
+                            keyboardType="number-pad"
+                            secureTextEntry
+                            maxLength={4}
+                            value={fundPin}
+                            onChangeText={setFundPin}
+                        />
+                        <View style={styles.fundActions}>
+                            <TouchableOpacity style={styles.fundBtnCancel} onPress={() => setFundingCardId(null)} disabled={actionLoading}>
+                                <Text style={styles.fundBtnCancelText}>Annuler</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.fundBtnConfirm, (actionLoading || !fundAmount || fundPin.length !== 4) && { opacity: 0.5 }]}
+                                onPress={executeFund}
+                                disabled={actionLoading || !fundAmount || fundPin.length !== 4}
+                            >
+                                {actionLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.fundBtnConfirmText}>Confirmer</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -213,11 +259,22 @@ const styles = StyleSheet.create({
     cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
     cardLabel: { color: 'rgba(255,255,255,0.5)', fontSize: 11, marginBottom: 4 },
     cardInfo: { color: '#fff', fontSize: 16, fontWeight: '600', fontFamily: 'monospace' },
-    frozenFilter: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(30, 58, 138, 0.4)', justifyContent: 'center', alignItems: 'center', borderRadius: 20 },
+    frozenFilter: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(30, 58, 138, 0.4)', justifyContent: 'center', alignItems: 'center', borderRadius: 20 },
     actions: { flexDirection: 'row', gap: 12, marginTop: 12 },
     actionBtn: { flex: 1, backgroundColor: 'rgba(255,255,255,0.1)', padding: 14, borderRadius: 12, alignItems: 'center' },
     actionBtnDanger: { backgroundColor: 'rgba(239, 68, 68, 0.2)' },
     actionBtnUnfreeze: { backgroundColor: 'rgba(16, 185, 129, 0.2)' },
-    actionText: { color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '600', fontSize: 14 }
+    actionText: { color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '600', fontSize: 14 },
+
+    fundOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+    fundCard: { width: '100%', maxWidth: 360, borderRadius: 20, padding: 24, backgroundColor: '#1E293B' },
+    fundTitle: { color: '#fff', fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginBottom: 16, textAlign: 'center' },
+    fundLabel: { color: '#94a3b8', fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', marginBottom: 8 },
+    fundInput: { backgroundColor: 'rgba(0,0,0,0.3)', color: '#fff', padding: 14, borderRadius: 12, fontSize: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', marginBottom: 16 },
+    fundActions: { flexDirection: 'row', gap: 12, marginTop: 4 },
+    fundBtnCancel: { flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+    fundBtnCancelText: { color: '#94a3b8', fontSize: 15, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
+    fundBtnConfirm: { flex: 1, paddingVertical: 14, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#2563EB' },
+    fundBtnConfirmText: { color: '#fff', fontSize: 15, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
 });
 

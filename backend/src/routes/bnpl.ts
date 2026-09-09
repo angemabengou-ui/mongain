@@ -7,7 +7,7 @@ import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
 import { getSystemSettings } from './settings';
-import { sendPush } from './wallet';
+import { notifyParentOfChildSpend, sendPush } from './wallet';
 
 const router = Router();
 
@@ -158,6 +158,7 @@ router.post('/repay', authMiddleware, circuitBreakerMiddleware, async (req: Auth
         if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         // Atomic Repay
+        let effectiveRepayAmount = 0;
         await prisma.$transaction(async (tx) => {
             const debt = await tx.bnplContract.findFirst({
                 where: { userId: user.id, status: 'ACTIVE' }
@@ -165,6 +166,7 @@ router.post('/repay', authMiddleware, circuitBreakerMiddleware, async (req: Auth
             if (!debt) throw new Error("Aucune dette BNPL active.");
 
             const effectiveRepay = Math.min(repayAmount, debt.remaining);
+            effectiveRepayAmount = effectiveRepay;
 
             if (user.wallet!.balance < effectiveRepay) throw new Error("Solde insuffisant pour le remboursement.");
 
@@ -203,6 +205,8 @@ router.post('/repay', authMiddleware, circuitBreakerMiddleware, async (req: Auth
                 }
             });
         });
+
+        await notifyParentOfChildSpend(user.id, effectiveRepayAmount, 'remboursement BNPL');
 
         res.json({ success: true, message: "Remboursement enregistré." });
     } catch (e: any) {

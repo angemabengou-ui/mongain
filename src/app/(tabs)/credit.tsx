@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import PinPromptModal from '../../components/ui/PinPromptModal';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
 import { apiApplyCredit, apiGetActiveLoans, apiGetCreditEligibility, apiRepayCredit } from '../../services/api';
@@ -41,6 +42,9 @@ export default function CreditScreen() {
     const [eligibility, setEligibility] = useState<any>(null);
     const [activeLoans, setActiveLoans] = useState<any[]>([]);
     const [actionLoading, setActionLoading] = useState(false);
+    // Remplace Alert.prompt (n'existe que sur iOS, no-op silencieux sur Android — voir
+    // PinPromptModal) pour les deux actions débitrices de cet écran.
+    const [pinPrompt, setPinPrompt] = useState<{ type: 'apply' } | { type: 'repay'; loanId: string } | null>(null);
 
     const loadData = async () => {
         try {
@@ -75,20 +79,7 @@ export default function CreditScreen() {
             `Souhaitez-vous débloquer un crédit de ${eligibility.maxAmount.toLocaleString('fr-FR')} FCFA ?\n\nTaux: ${(eligibility.interestRate * 100).toFixed(1)}%\nDurée: 30 Jours`,
             [
                 { text: "Annuler", style: "cancel" },
-                {
-                    text: "Débloquer",
-                    onPress: () => {
-                        Alert.prompt(
-                            'Confirmer le crédit',
-                            'Saisissez votre code PIN Mongain pour débloquer ce crédit.',
-                            [
-                                { text: 'Annuler', style: 'cancel' },
-                                { text: 'Confirmer', onPress: (pin?: string) => executeApply(pin) },
-                            ],
-                            'secure-text',
-                        );
-                    }
-                }
+                { text: "Débloquer", onPress: () => setPinPrompt({ type: 'apply' }) }
             ]
         );
     };
@@ -113,26 +104,12 @@ export default function CreditScreen() {
             `Voulez-vous rembourser le solde total de ${amountOwed.toLocaleString('fr-FR')} FCFA ?`,
             [
                 { text: "Annuler", style: "cancel" },
-                {
-                    text: "Confirmer",
-                    onPress: () => {
-                        Alert.prompt(
-                            'Confirmer le remboursement',
-                            'Saisissez votre code PIN Mongain pour valider ce remboursement.',
-                            [
-                                { text: 'Annuler', style: 'cancel' },
-                                { text: 'Confirmer', onPress: (pin?: string) => executeRepay(loanId, pin) },
-                            ],
-                            'secure-text',
-                        );
-                    }
-                }
+                { text: "Confirmer", onPress: () => setPinPrompt({ type: 'repay', loanId }) }
             ]
         );
     };
 
-    const executeRepay = async (loanId: string, pin?: string) => {
-        if (!pin) return Alert.alert("Erreur", "Code PIN requis.");
+    const executeRepay = async (loanId: string, pin: string) => {
         setActionLoading(true);
         try {
             const res = await apiRepayCredit(loanId, pin);
@@ -143,6 +120,13 @@ export default function CreditScreen() {
         } finally {
             setActionLoading(false);
         }
+    };
+
+    const handlePinConfirm = (pin: string) => {
+        const prompt = pinPrompt;
+        setPinPrompt(null);
+        if (prompt?.type === 'apply') executeApply(pin);
+        else if (prompt?.type === 'repay') executeRepay(prompt.loanId, pin);
     };
 
     if (loading) {
@@ -251,6 +235,18 @@ export default function CreditScreen() {
                     )}
                 </ScrollView>
             </View>
+
+            <PinPromptModal
+                visible={!!pinPrompt}
+                title={pinPrompt?.type === 'apply' ? 'Confirmer le crédit' : 'Confirmer le remboursement'}
+                message={pinPrompt?.type === 'apply'
+                    ? 'Saisissez votre code PIN Mongain pour débloquer ce crédit.'
+                    : 'Saisissez votre code PIN Mongain pour valider ce remboursement.'}
+                loading={actionLoading}
+                onConfirm={handlePinConfirm}
+                onCancel={() => setPinPrompt(null)}
+                colors={COLORS}
+            />
         </SafeAreaView>
     );
 }

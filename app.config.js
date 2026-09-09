@@ -7,6 +7,39 @@
 const buildProfile = process.env.EAS_BUILD_PROFILE;
 const isDevBuild = !buildProfile || buildProfile === 'development';
 
+const { withAndroidStyles, AndroidConfig } = require('@expo/config-plugins');
+
+// Écran blanc reproductible UNIQUEMENT quand le thème SYSTÈME est en mode clair (jamais en
+// sombre), constaté sur deux téléphones différents (Tecno Camon 40, Samsung S24 Ultra) — donc
+// pas un bug JS (sinon indépendant du thème système) ni un problème de build APK isolé.
+// android.backgroundColor (plus bas) corrige déjà android:windowBackground, et on a vérifié
+// que sa valeur résolue est identique en clair/sombre (values-night/colors.xml généré est
+// vide, donc repli sur values/colors.xml dans les deux cas) — ce fond-là n'explique donc PAS
+// la différence observée.
+//
+// `AppTheme` hérite de `Theme.AppCompat.DayNight(.NoActionBar)` (confirmé dans le
+// styles.xml généré) : cette famille de thèmes bascule AUTOMATIQUEMENT entre sa variante
+// Light et sa variante Dark selon le mode système, tant qu'aucun `AppCompatDelegate` ne le
+// force autrement. Cette bascule ne touche pas que `windowBackground` (qu'on contrôle déjà) :
+// elle définit aussi `android:colorBackground`, un attribut de thème DISTINCT, jamais
+// surchargé jusqu'ici — sa valeur héritée est BLANCHE dans la variante Light, sombre dans la
+// variante Dark. Avec `newArchEnabled`/`edgeToEdgeEnabled` (RN 0.86, imposés, voir
+// android/gradle.properties généré), la surface Fabric peut peindre son tout premier frame
+// (avant que le JS n'ait fini d'évaluer et de committer) avec cette couleur de thème plutôt
+// qu'avec `windowBackground` — un blanc en clair, invisible en sombre puisque déjà sombre par
+// défaut. On fixe donc aussi cet attribut, explicitement, à la même teinte que le reste.
+function withColorBackgroundFix(config) {
+  return withAndroidStyles(config, (config) => {
+    config.modResults = AndroidConfig.Styles.setStylesItem({
+      xml: config.modResults,
+      parent: AndroidConfig.Styles.getAppThemeGroup(),
+      item: { $: { name: 'android:colorBackground' }, _: '@color/activityBackground' },
+      add: true,
+    });
+    return config;
+  });
+}
+
 module.exports = () => ({
   expo: {
     name: 'Mongain',
@@ -25,6 +58,17 @@ module.exports = () => ({
       usesCleartextTraffic: isDevBuild,
       googleServicesFile: './google-services.json',
       package: 'com.mongain.superapp',
+      // Corrige le "flash blanc" au démarrage : le thème Android actif une fois le splash
+      // natif écarté (AppTheme, généré par expo-splash-screen sans couleur de fond propre)
+      // hérite du blanc par défaut d'AppCompat — visible dès que l'OS quitte le splash,
+      // AVANT même que React n'ait eu la moindre chance de dessiner quoi que ce soit.
+      // Contrairement au splash lui-même (contrôlé par JS via SplashScreen.hideAsync), ce
+      // fond est purement natif : aucun filet de sécurité côté JS ne peut l'empêcher tant
+      // que cette couleur n'est pas fixée dans le thème natif. Le plugin expo-system-ui lit
+      // ce champ pour poser android:windowBackground sur AppTheme — même teinte que le
+      // splash et le fond réel de l'appli, pour qu'un JS lent ou en échec révèle du sombre
+      // cohérent avec la marque plutôt qu'un blanc brutal.
+      backgroundColor: '#0a0a0f',
       permissions: [
         'android.permission.CAMERA',
         'android.permission.RECORD_AUDIO',
@@ -42,8 +86,24 @@ module.exports = () => ({
       output: 'static',
       favicon: './assets/images/favicon.png',
     },
+    // expo-updates est une dépendance du projet (mises à jour OTA) mais AUCUNE mise à jour
+    // n'a jamais été publiée (`eas update`) — sans ce champ, un build EAS lié à un projet
+    // (extra.eas.projectId, ci-dessous) active ce module par défaut avec une vérification
+    // réseau AU DÉMARRAGE, avant même le premier rendu JS. Contrairement à Expo Go (qui
+    // n'active jamais ce module), un vrai build APK peut donc rester bloqué sur un écran
+    // blanc en attendant une réponse qui n'arrivera jamais vers un canal qui n'existe pas —
+    // exactement le symptôme observé (fonctionne dans Expo Go, jamais dans l'APK, sur
+    // plusieurs téléphones). Désactivé tant que les mises à jour OTA ne sont pas utilisées.
+    updates: {
+      enabled: false,
+    },
     plugins: [
       'expo-router',
+      // Explicite (pas seulement le champ `updates` ci-dessus) : garantit que le plugin de
+      // config d'expo-updates s'exécute bien pendant le prebuild EAS et écrit correctement
+      // `enabled: false` dans le manifeste natif, plutôt que de compter sur une éventuelle
+      // auto-application implicite.
+      'expo-updates',
       [
         'expo-splash-screen',
         {
@@ -72,6 +132,7 @@ module.exports = () => ({
         },
       ],
       'expo-asset',
+      withColorBackgroundFix,
     ],
     experiments: {
       typedRoutes: true,

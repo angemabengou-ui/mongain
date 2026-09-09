@@ -20,6 +20,7 @@ import cardsRoutes from './routes/cards';
 import corpRoutes from './routes/corp';
 import creditRoutes from './routes/credit';
 import cryptoRoutes from './routes/crypto';
+import familyRoutes from './routes/family';
 import gatewayRoutes from './routes/gateway';
 import investRoutes from './routes/invest';
 import loyaltyRoutes from './routes/loyalty';
@@ -211,6 +212,10 @@ app.use('/api/vaults', circuitBreakerMiddleware, vaultRoutes);
 app.use('/api/tontine', circuitBreakerMiddleware, tontineRoutes);
 app.use('/api/services', circuitBreakerMiddleware, servicesRoutes);
 app.use('/api/agency', adminIpAllowlistMiddleware, circuitBreakerMiddleware, agencyRoutes);
+// Comptes Enfant : création/gestion par le parent (voir family.ts) — derrière le Circuit
+// Breaker comme le reste des routes financières, même si la création elle-même ne déplace
+// aucun fonds (le financement passe par /api/wallet/transfer, déjà protégé).
+app.use('/api/family', circuitBreakerMiddleware, familyRoutes);
 
 // Health check
 // `RENDER_GIT_COMMIT` est posée automatiquement par Render à chaque déploiement — bien plus

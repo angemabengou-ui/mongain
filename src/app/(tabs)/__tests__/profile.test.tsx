@@ -27,17 +27,16 @@ jest.mock('../../../context/AuthContext', () => ({
 
 const mockApiGetBalance = jest.fn();
 const mockApiGetDailyLimits = jest.fn();
-// `request` manquait de ce mock : profile.tsx l'importe aussi (fetchProfileData l'appelle
-// pour /api/users/profile et /api/loyalty/balance) — sans lui, `request` valait `undefined`
-// dans le module mocké et l'appel plantait avant même le premier rendu, empêchant
-// "Jean Dupont" d'apparaître (d'où le timeout de findByText).
-const mockRequest = jest.fn();
+const mockApiGetLoyaltyBalance = jest.fn();
+const mockApiConvertLoyaltyPoints = jest.fn();
 jest.mock('../../../services/api', () => ({
     apiGetBalance: (...args: any[]) => mockApiGetBalance(...args),
     apiGetDailyLimits: (...args: any[]) => mockApiGetDailyLimits(...args),
-    request: (...args: any[]) => mockRequest(...args),
+    apiGetLoyaltyBalance: (...args: any[]) => mockApiGetLoyaltyBalance(...args),
+    apiConvertLoyaltyPoints: (...args: any[]) => mockApiConvertLoyaltyPoints(...args),
 }));
 
+import { Alert } from 'react-native';
 import ProfileScreen from '../profile';
 
 const baseUser = { id: 'u1', name: 'Jean Dupont', phone: '077000000', email: 'jean.dupont@mongain.com', role: 'USER', wallet: { id: 'w1', balance: 1000, currency: 'FCFA' } };
@@ -48,8 +47,8 @@ describe('(tabs)/profile (ProfileScreen)', () => {
         mockUseAuth.mockReturnValue({ user: baseUser, logout: mockLogout });
         mockApiGetBalance.mockResolvedValue({ balance: 1000, currency: 'FCFA' });
         mockApiGetDailyLimits.mockResolvedValue({ skip: true });
+        mockApiGetLoyaltyBalance.mockResolvedValue({ points: 0 });
         mockGetItemAsync.mockResolvedValue(null);
-        mockRequest.mockResolvedValue({ user: baseUser, points: 0 });
     });
 
     it('renders the user name, email and wallet balance', async () => {
@@ -102,5 +101,31 @@ describe('(tabs)/profile (ProfileScreen)', () => {
 
         expect(await screen.findByText('Verrou Biométrique')).toBeTruthy();
         expect(mockSetItemAsync).toHaveBeenCalledWith('appLockEnabled', 'true');
+    });
+
+    it('shows the loyalty points balance from the real backend endpoint (not the old dead /api/users/profile call)', async () => {
+        mockApiGetLoyaltyBalance.mockResolvedValue({ points: 5000 });
+
+        await render(<ProfileScreen />);
+
+        expect(await screen.findByText('5 000 MP')).toBeTruthy();
+        expect(screen.getByText(/500 FCFA à convertir/)).toBeTruthy();
+    });
+
+    it('converts loyalty points to FCFA and refreshes both balances on confirmation', async () => {
+        mockApiGetLoyaltyBalance.mockResolvedValueOnce({ points: 5000 }).mockResolvedValueOnce({ points: 0 });
+        mockApiConvertLoyaltyPoints.mockResolvedValue({ message: 'Conversion réussie !' });
+        jest.spyOn(Alert, 'alert').mockImplementation((_title, _msg, buttons) => {
+            const confirm = buttons?.find(b => b.text === 'Convertir');
+            confirm?.onPress?.();
+        });
+
+        await render(<ProfileScreen />);
+        await screen.findByText('5 000 MP');
+
+        fireEvent.press(screen.getByText('Convertir en FCFA'));
+
+        await screen.findByText('0 MP');
+        expect(mockApiConvertLoyaltyPoints).toHaveBeenCalledWith(5000);
     });
 });

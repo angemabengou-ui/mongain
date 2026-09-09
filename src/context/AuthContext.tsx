@@ -7,6 +7,7 @@ import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+
 // Import dynamique pour éviter le crash natif d'expo-notifications sous Expo Go (SDK 53+)
 let Notifications: any = null;
 try {
@@ -42,9 +43,17 @@ Notifications.setNotificationHandler({
 async function registerForPushNotificationsAsync() {
     let token;
     if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('default', {
-            name: 'default',
+        // 'transactions-v2', pas 'default' — voir backend/src/routes/wallet.ts (sendPush) pour
+        // le détail : un canal de notification Android ne peut être configuré (son, importance)
+        // qu'UNE SEULE FOIS, à sa création ; tout appel ultérieur à setNotificationChannelAsync
+        // avec le même ID est un no-op silencieux si le canal existe déjà — impossible de
+        // corriger après coup un canal 'default' resté sans son sur un téléphone où l'app a été
+        // installée avant que ce champ ne soit posé ici. `sound: 'default'` explicite (plutôt que
+        // de compter sur le comportement par défaut d'Android quand le champ est omis).
+        await Notifications.setNotificationChannelAsync('transactions-v2', {
+            name: 'Transactions',
             importance: Notifications.AndroidImportance.MAX,
+            sound: 'default',
             vibrationPattern: [0, 250, 250, 250],
             lightColor: '#2563EB',
         });
@@ -98,6 +107,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [socket, setSocket] = useState<Socket | null>(null);
     const [settings, setSettings] = useState<any>(null);
 
+    // Réveil précoce du backend Render (plan gratuit, ~12-20s de redémarrage à froid mesurés en
+    // pratique) : lancé au montage du Provider, donc bien avant que l'utilisateur n'atteigne un
+    // écran qui déclenche une VRAIE requête non-rejouable (ex: /wallet/transfer, volontairement
+    // exclu du retry automatique de request() pour éviter un double débit — voir
+    // services/api.ts). Fire-and-forget : n'importe quel échec est ignoré, ça ne fait que
+    // maximiser le recouvrement entre le réveil du serveur et le temps que l'utilisateur passe à
+    // se connecter / consulter son tableau de bord avant d'arriver sur un envoi d'argent.
+    // Volontairement dans un useEffect (pas au chargement du module) : un appel réseau exécuté
+    // pendant l'évaluation du module, avant que React n'ait commencé à monter quoi que ce soit,
+    // s'est avéré risqué en build APK release (écran blanc au démarrage).
+    useEffect(() => {
+        fetch(`${BASE_URL}/health`).catch(() => { });
+    }, []);
+
     // Initialiser les WebSockets quand on est connecté
     useEffect(() => {
         if (!user) {
@@ -144,7 +167,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         newSocket.on('global_push', async (data: { title: string, body: string }) => {
             try {
                 await Notifications.scheduleNotificationAsync({
-                    content: { title: data.title, body: data.body, sound: true },
+                    // channelId explicite (même canal que sendPush(), backend/src/routes/wallet.ts) :
+                    // sans lui, Android range cette notification LOCALE dans son propre canal de
+                    // repli interne à expo-notifications, distinct de celui utilisé pour les push
+                    // distants — deux canaux différents pour la même app, potentiellement deux
+                    // réglages de son différents selon lequel a été créé en premier sur l'appareil.
+                    content: { title: data.title, body: data.body, sound: true, ...(Platform.OS === 'android' ? { channelId: 'transactions-v2' } : {}) },
                     trigger: null // déclenche immédiatement !
                 });
             } catch (e) { console.error('Local Push error:', e); }
