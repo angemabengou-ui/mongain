@@ -82,14 +82,20 @@ function Badge({ text, color }: { text: string; color: string }) {
     );
 }
 
-interface SupportCenterProps { token: string; hasPerm: (perms: string[]) => boolean; }
+interface SupportCenterProps { token: string; hasPerm: (perms: string[]) => boolean; staffId?: string; }
 
-export default function SupportCenter({ token, hasPerm }: SupportCenterProps) {
+export default function SupportCenter({ token, hasPerm, staffId }: SupportCenterProps) {
     // Régression : gatait Approuver/Exécuter sur `perm_refund_request` (le Maker, qui CRÉE la
     // demande) au lieu de `perm_refund_approve` (le Checker, seul autorisé côté backend) — le
     // Checker (COMPLIANCE_CHECKER) ne voyait jamais ces boutons, tandis que les Makers en
     // voyaient qui échouaient systématiquement en 403 au clic.
     const canApproveRefunds = hasPerm(['perm_refund_approve']);
+    // Règle Maker/Checker (admin.ts, PATCH /refund-requests/:id/approve) : le demandeur ne
+    // peut pas approuver sa propre demande, sauf SUPER_ADMIN. Même repère front-end que
+    // Treasury.tsx pour ce même rôle. Sans ce filtre, un Checker qui avait aussi créé une
+    // demande (perm_refund_request + perm_refund_approve cumulés) voyait Approuver/Exécuter
+    // pleinement actifs sur SA PROPRE demande, pour un 403 garanti au clic.
+    const canApprove = (r: any) => canApproveRefunds && !(staffId && r.requesterId === staffId && !hasPerm(['perm_staff_permissions_edit']));
     const [tab, setTab] = useState<'dashboard' | 'inbox' | 'fraud' | 'refunds'>('dashboard');
     const [stats, setStats] = useState<any>(null);
     const [tickets, setTickets] = useState<any[]>([]);
@@ -517,13 +523,13 @@ export default function SupportCenter({ token, hasPerm }: SupportCenterProps) {
                                         <td style={{ padding: '8px' }}><Badge text={REFUND_STATUS_LABELS[r.status] || r.status} color={r.status === 'EXECUTED' ? 'var(--success)' : r.status === 'REJECTED' ? 'var(--danger)' : r.status === 'APPROVED' ? '#3b82f6' : 'var(--warning)'} /></td>
                                         <td style={{ padding: '8px' }}>
                                             <div style={{ display: 'flex', gap: 4 }}>
-                                                {(r.status === 'REQUESTED' || r.status === 'UNDER_REVIEW') && (canApproveRefunds ? <>
+                                                {(r.status === 'REQUESTED' || r.status === 'UNDER_REVIEW') && (canApprove(r) ? <>
                                                     <button onClick={() => approveRefund(r.id, 'APPROVE')} style={{ background: 'var(--success-bg)', border: '1px solid var(--success-bg)', color: 'var(--success)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}><CheckCircle size={10} />Approuver</button>
                                                     <button onClick={() => approveRefund(r.id, 'REJECT')} style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-bg)', color: 'var(--danger)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}><XCircle size={10} />Rejeter</button>
-                                                </> : <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>En attente d'approbation Finance</span>)}
-                                                {r.status === 'APPROVED' && (canApproveRefunds ? (
+                                                </> : <span style={{ color: 'var(--text-muted)', fontSize: 10 }} title={canApproveRefunds ? 'Le demandeur ne peut pas approuver sa propre demande.' : undefined}>{canApproveRefunds ? 'Votre propre demande' : "En attente d'approbation Finance"}</span>)}
+                                                {r.status === 'APPROVED' && (canApprove(r) ? (
                                                     <button onClick={() => executeRefund(r.id)} style={{ background: 'var(--accent)', border: 'none', color: '#fff', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontSize: 10, fontWeight: 700 }}>⚡ Exécuter</button>
-                                                ) : <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>En attente d'exécution Finance</span>)}
+                                                ) : <span style={{ color: 'var(--text-muted)', fontSize: 10 }} title={canApproveRefunds ? 'Le demandeur ne peut pas exécuter sa propre demande.' : undefined}>{canApproveRefunds ? 'Votre propre demande' : "En attente d'exécution Finance"}</span>)}
                                                 {r.status === 'EXECUTED' && <span style={{ color: 'var(--success)', fontSize: 10 }}>✅ Exécuté</span>}
                                                 {r.status === 'REJECTED' && (
                                                     <span style={{ color: 'var(--danger)', fontSize: 10 }} title={r.rejectionReason}>❌ Rejeté</span>

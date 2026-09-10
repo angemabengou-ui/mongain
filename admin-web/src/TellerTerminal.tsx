@@ -5,7 +5,16 @@ import ImageLightbox from './components/ImageLightbox';
 
 const fmt = (n: number) => n.toLocaleString('fr-GA') + ' FCFA';
 
-export default function TellerTerminal({ token, userName }: { token: string; userName: string }) {
+export default function TellerTerminal({ token, userName, hasPerm }: { token: string; userName: string; hasPerm?: (perms: string[]) => boolean }) {
+    // Le point d'entrée (App.tsx) n'autorise l'accès au terminal qu'avec AU MOINS UNE de
+    // perm_cash_session_open/perm_cash_in/perm_cash_out (OR) — mais chaque action ici appelle
+    // une route distincte, gardée par SA propre permission (agency.ts:64/97/128/33/10). Un
+    // profil qui n'a, par ex., que perm_cash_session_open voyait tout de même les 3 boutons
+    // d'opération (CASH-IN/CASH-OUT/CODE SECRET) pleinement actifs, garantis 403 au clic.
+    const canOpenSession = hasPerm ? hasPerm(['perm_cash_session_open']) : true;
+    const canCloseSession = hasPerm ? hasPerm(['perm_cash_session_close']) : true;
+    const canCashIn = hasPerm ? hasPerm(['perm_cash_in']) : true;
+    const canCashOut = hasPerm ? hasPerm(['perm_cash_out']) : true;
     const [session, setSession] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     // Vérification d'identité en agence : jusqu'ici, l'identification client (lookup par
@@ -178,15 +187,17 @@ export default function TellerTerminal({ token, userName }: { token: string; use
                     <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: 'var(--text-secondary)' }}><LogIn size={32} /></div>
                     <h2 style={{ margin: '0 0 8px', fontWeight: 800 }}>Ouverture de Caisse</h2>
                     <p style={{ color: 'var(--text-muted)', marginBottom: 24, fontSize: 14 }}>Bonjour <b>{userName}</b>. Veuillez déclarer votre fond de caisse initial pour ouvrir votre session.</p>
-                    <form onSubmit={handleOpenShift} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                        <div style={{ position: 'relative' }}>
-                            <input type="number" required placeholder="0" value={openForm.initialCash} onChange={e => setOpenForm({ initialCash: e.target.value })} style={{ width: '100%', padding: '14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 24, fontWeight: 700, textAlign: 'center' }} />
-                            <span style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: 'var(--text-muted)' }}>FCFA</span>
-                        </div>
-                        <button type="submit" disabled={loading} style={{ padding: '14px', background: 'black', color: 'white', borderRadius: 12, fontWeight: 700, fontSize: 16, cursor: loading ? 'not-allowed' : 'pointer', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.7 : 1 }}>
-                            {loading ? 'Ouverture...' : 'Ouvrir la Caisse'}
-                        </button>
-                    </form>
+                    {canOpenSession ? (
+                        <form onSubmit={handleOpenShift} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                            <div style={{ position: 'relative' }}>
+                                <input type="number" required placeholder="0" value={openForm.initialCash} onChange={e => setOpenForm({ initialCash: e.target.value })} style={{ width: '100%', padding: '14px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 24, fontWeight: 700, textAlign: 'center' }} />
+                                <span style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: 'var(--text-muted)' }}>FCFA</span>
+                            </div>
+                            <button type="submit" disabled={loading} style={{ padding: '14px', background: 'black', color: 'white', borderRadius: 12, fontWeight: 700, fontSize: 16, cursor: loading ? 'not-allowed' : 'pointer', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.7 : 1 }}>
+                                {loading ? 'Ouverture...' : 'Ouvrir la Caisse'}
+                            </button>
+                        </form>
+                    ) : <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Vous n'avez pas l'autorisation d'ouvrir une session de caisse.</p>}
                 </div>
             </div>
         );
@@ -203,9 +214,11 @@ export default function TellerTerminal({ token, userName }: { token: string; use
                     <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 10 }}>Session Caisse Active <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--success)' }}></span></h2>
                     <p style={{ color: 'var(--text-muted)', margin: '4px 0 0', fontSize: 14 }}>Caissier : <b>{userName}</b> • Ouvert à {new Date(session.openedAt).toLocaleTimeString('fr-GA', { timeStyle: 'short' })}</p>
                 </div>
-                <button onClick={() => setShowCloseModal(true)} style={{ padding: '10px 20px', background: 'var(--danger-bg)', color: 'var(--danger)', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <LogOut size={16} /> Clôturer la caisse
-                </button>
+                {canCloseSession && (
+                    <button onClick={() => setShowCloseModal(true)} style={{ padding: '10px 20px', background: 'var(--danger-bg)', color: 'var(--danger)', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <LogOut size={16} /> Clôturer la caisse
+                    </button>
+                )}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(400px, 1fr) 300px', gap: 24, alignItems: 'start' }}>
@@ -217,15 +230,15 @@ export default function TellerTerminal({ token, userName }: { token: string; use
                             <h3 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 800 }}>Nouvelle Opération</h3>
 
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 24 }}>
-                                <button onClick={() => setOpType('CASH_IN')} style={{ padding: 20, borderRadius: 12, border: `2px solid ${opType === 'CASH_IN' ? 'var(--success)' : 'var(--border)'}`, background: opType === 'CASH_IN' ? 'var(--success-bg)' : 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, transition: '0.2s' }}>
+                                <button onClick={() => canCashIn && setOpType('CASH_IN')} disabled={!canCashIn} title={!canCashIn ? "Autorisation Cash-In requise." : undefined} style={{ padding: 20, borderRadius: 12, border: `2px solid ${opType === 'CASH_IN' ? 'var(--success)' : 'var(--border)'}`, background: opType === 'CASH_IN' ? 'var(--success-bg)' : 'transparent', cursor: canCashIn ? 'pointer' : 'not-allowed', opacity: canCashIn ? 1 : 0.4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, transition: '0.2s' }}>
                                     <Download size={28} color={opType === 'CASH_IN' ? 'var(--success)' : 'var(--text-muted)'} />
                                     <span style={{ fontWeight: 700, color: opType === 'CASH_IN' ? 'var(--success)' : 'var(--text-secondary)' }}>CASH-IN (Dépôt)</span>
                                 </button>
-                                <button onClick={() => setOpType('CASH_OUT')} style={{ padding: 20, borderRadius: 12, border: `2px solid ${opType === 'CASH_OUT' ? 'var(--danger)' : 'var(--border)'}`, background: opType === 'CASH_OUT' ? 'var(--danger-bg)' : 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, transition: '0.2s' }}>
+                                <button onClick={() => canCashOut && setOpType('CASH_OUT')} disabled={!canCashOut} title={!canCashOut ? "Autorisation Cash-Out requise." : undefined} style={{ padding: 20, borderRadius: 12, border: `2px solid ${opType === 'CASH_OUT' ? 'var(--danger)' : 'var(--border)'}`, background: opType === 'CASH_OUT' ? 'var(--danger-bg)' : 'transparent', cursor: canCashOut ? 'pointer' : 'not-allowed', opacity: canCashOut ? 1 : 0.4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, transition: '0.2s' }}>
                                     <Upload size={28} color={opType === 'CASH_OUT' ? 'var(--danger)' : 'var(--text-muted)'} />
                                     <span style={{ fontWeight: 700, color: opType === 'CASH_OUT' ? 'var(--danger)' : 'var(--text-secondary)' }}>CASH-OUT (Retrait)</span>
                                 </button>
-                                <button onClick={() => { setOpType('CASH_OUT_CODE'); setClientInfo(null); }} style={{ padding: 20, borderRadius: 12, border: `2px solid ${opType === 'CASH_OUT_CODE' ? 'var(--accent)' : 'var(--border)'}`, background: opType === 'CASH_OUT_CODE' ? 'var(--accent-bg)' : 'transparent', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, transition: '0.2s' }}>
+                                <button onClick={() => { if (!canCashOut) return; setOpType('CASH_OUT_CODE'); setClientInfo(null); }} disabled={!canCashOut} title={!canCashOut ? "Autorisation Cash-Out requise." : undefined} style={{ padding: 20, borderRadius: 12, border: `2px solid ${opType === 'CASH_OUT_CODE' ? 'var(--accent)' : 'var(--border)'}`, background: opType === 'CASH_OUT_CODE' ? 'var(--accent-bg)' : 'transparent', cursor: canCashOut ? 'pointer' : 'not-allowed', opacity: canCashOut ? 1 : 0.4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, transition: '0.2s' }}>
                                     <XCircle size={28} color={opType === 'CASH_OUT_CODE' ? 'var(--accent)' : 'var(--text-muted)'} style={{ transform: 'rotate(45deg)' }} />
                                     <span style={{ fontWeight: 700, color: opType === 'CASH_OUT_CODE' ? 'var(--accent)' : 'var(--text-secondary)', textAlign: 'center' }}>CODE SECRET (Retrait)</span>
                                 </button>

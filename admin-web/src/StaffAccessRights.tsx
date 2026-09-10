@@ -83,7 +83,17 @@ const getRoleColor = (r: string) => {
     return 'var(--text-secondary)';
 };
 
-export default function StaffAccessRights({ token }: { token: string }) {
+export default function StaffAccessRights({ token, hasPerm }: { token: string; hasPerm?: (perms: string[]) => boolean }) {
+    // Rôle change / Activer / Suspendre passent tous par PUT /api/admin/staff/:id ou
+    // /:id/approve, qui exigent perm_staff_manage (admin.ts:1233/1292/1328). La matrice de
+    // droits (Droits d'Accès), elle, est réservée SUPER_ADMIN côté serveur (rbac.ts,
+    // superAdminOnly) — perm_staff_permissions_edit est déjà la convention utilisée ailleurs
+    // (Settings.tsx, Treasury.tsx) comme repère front-end pour ce même rôle. Sans ce filtre,
+    // un rôle qui n'a que perm_staff_view (BRANCH_MANAGER) voyait toute cette page — menus de
+    // rôle, boutons Activer/Suspendre/Droits — entièrement interactive, avec un 403 à la
+    // moindre tentative réelle.
+    const canManageStaff = hasPerm ? hasPerm(['perm_staff_manage']) : true;
+    const canEditPermissions = hasPerm ? hasPerm(['perm_staff_permissions_edit']) : true;
     const [error, setError] = useState('');
     const [roleSelection, setRoleSelection] = useState<Record<string, string>>({});
     const [savingId, setSavingId] = useState<string | null>(null);
@@ -285,9 +295,11 @@ export default function StaffAccessRights({ token }: { token: string }) {
                                         <Building size={14} /> {s.branch?.name || 'Direction Corporate'}
                                     </div>
                                     <div>
-                                        <select value={roleFor(s)} onChange={e => setRoleSelection(sel => ({ ...sel, [s.id]: e.target.value }))} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 13, color: getRoleColor(roleFor(s)), minWidth: 180 }}>
-                                            {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                                        </select>
+                                        {canManageStaff ? (
+                                            <select value={roleFor(s)} onChange={e => setRoleSelection(sel => ({ ...sel, [s.id]: e.target.value }))} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 13, color: getRoleColor(roleFor(s)), minWidth: 180 }}>
+                                                {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                                            </select>
+                                        ) : <span style={{ fontSize: 13, color: getRoleColor(roleFor(s)) }}>{ROLES.find(r => r.value === roleFor(s))?.label || roleFor(s)}</span>}
                                     </div>
                                 </td>
                                 {/* STATUT */}
@@ -306,7 +318,7 @@ export default function StaffAccessRights({ token }: { token: string }) {
                                 <td style={{ ...tdStyle, textAlign: 'right' }}>
                                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                                         {/* Bouton d'enregistrement du ROLE si changé */}
-                                        {roleFor(s) !== s.role && (
+                                        {canManageStaff && roleFor(s) !== s.role && (
                                             <button onClick={() => handleUpdateActive(s)} disabled={savingId === s.id} style={{ padding: '8px 14px', background: 'var(--btn-dark-bg)', color: 'var(--btn-dark-text)', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
                                                 Sauvegarder rôle
                                             </button>
@@ -314,17 +326,24 @@ export default function StaffAccessRights({ token }: { token: string }) {
 
                                         {/* Action principale selon PENDING ou ACTIVE */}
                                         {s.status === 'PENDING' ? (
-                                            <button onClick={() => handleActivate(s)} disabled={savingId === s.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
-                                                <ShieldCheck size={14} /> Activer Employé
-                                            </button>
+                                            canManageStaff ? (
+                                                <button onClick={() => handleActivate(s)} disabled={savingId === s.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                                                    <ShieldCheck size={14} /> Activer Employé
+                                                </button>
+                                            ) : <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>En attente d'un habilité</span>
                                         ) : (
                                             <>
-                                                <button onClick={() => openPermMatrix(s)} style={{ padding: '8px 14px', background: 'rgba(99,102,241,0.1)', color: 'var(--accent)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                                    <Lock size={13} /> Droits
-                                                </button>
-                                                <button onClick={() => toggleSuspend(s)} disabled={savingId === s.id} style={{ padding: '8px 14px', background: s.isActive ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)', border: `1px solid ${s.isActive ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)'}`, color: s.isActive ? 'var(--danger)' : 'var(--success)', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
-                                                    {s.isActive ? 'Suspendre' : 'Réactiver'}
-                                                </button>
+                                                {canEditPermissions && (
+                                                    <button onClick={() => openPermMatrix(s)} style={{ padding: '8px 14px', background: 'rgba(99,102,241,0.1)', color: 'var(--accent)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                                        <Lock size={13} /> Droits
+                                                    </button>
+                                                )}
+                                                {canManageStaff && (
+                                                    <button onClick={() => toggleSuspend(s)} disabled={savingId === s.id} style={{ padding: '8px 14px', background: s.isActive ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)', border: `1px solid ${s.isActive ? 'rgba(239, 68, 68, 0.3)' : 'rgba(34, 197, 94, 0.3)'}`, color: s.isActive ? 'var(--danger)' : 'var(--success)', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+                                                        {s.isActive ? 'Suspendre' : 'Réactiver'}
+                                                    </button>
+                                                )}
+                                                {!canEditPermissions && !canManageStaff && <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>Lecture seule</span>}
                                             </>
                                         )}
                                     </div>

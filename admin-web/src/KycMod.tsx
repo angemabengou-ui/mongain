@@ -4,7 +4,12 @@ import { API_URL } from './config';
 import ImageLightbox from './components/ImageLightbox';
 import TabBar from './components/TabBar';
 
-export default function KycMod({ token }: { token: string }) {
+export default function KycMod({ token, hasPerm }: { token: string; hasPerm?: (perms: string[]) => boolean }) {
+    // GET /users/kyc accepte perm_customer_kyc_view OU perm_customer_kyc_validate (guichet
+    // qui doit juste vérifier une pièce), mais PUT /users/:id/kyc (Approuver/Rejeter) exige
+    // strictement perm_customer_kyc_validate (admin.ts:1024) — sans ce filtre, un TELLER qui
+    // n'a que le droit de vue voyait ces boutons pleinement actifs et se heurtait à un 403.
+    const canValidate = hasPerm ? hasPerm(['perm_customer_kyc_validate']) : true;
     const [tab, setTab] = useState<'PENDING' | 'APPROVED'>('PENDING');
     const [pending, setPending] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -165,14 +170,20 @@ export default function KycMod({ token }: { token: string }) {
                             </div>
 
                             {tab === 'PENDING' && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', minWidth: '150px' }}>
-                                    <button onClick={() => processKyc(p.id, 'APPROVED')} style={{ backgroundColor: 'var(--success)', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                        <Check size={16} /> Approuver (Tier 1)
-                                    </button>
-                                    <button onClick={() => processKyc(p.id, 'REJECTED')} style={{ backgroundColor: 'var(--danger)', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                        <X size={16} /> Rejeter
-                                    </button>
-                                </div>
+                                canValidate ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', minWidth: '150px' }}>
+                                        <button onClick={() => processKyc(p.id, 'APPROVED')} style={{ backgroundColor: 'var(--success)', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                            <Check size={16} /> Approuver (Tier 1)
+                                        </button>
+                                        <button onClick={() => processKyc(p.id, 'REJECTED')} style={{ backgroundColor: 'var(--danger)', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                            <X size={16} /> Rejeter
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div style={{ minWidth: '150px', textAlign: 'right' }}>
+                                        <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>Vue seule — validation réservée</span>
+                                    </div>
+                                )
                             )}
 
                             {tab === 'APPROVED' && (

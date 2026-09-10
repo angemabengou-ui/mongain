@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react';
 import { API_URL } from './config';
 import { apiFetch } from './utils/apiFetch';
 
-export default function VirtualCardsAdmin({ token: _token }: { token: string }) {
+export default function VirtualCardsAdmin({ token: _token, hasPerm }: { token: string; hasPerm?: (perms: string[]) => boolean }) {
+    // PUT /api/admin/cards/:id/freeze exige perm_customer_freeze (admin.ts:3315), une
+    // permission distincte de perm_analytics_view qui garde déjà cette page (GET /cards/all
+    // — juste consulter la flotte). Sans ce filtre, BRANCH_MANAGER/RISK/COMPLIANCE_CHECKER
+    // (qui ont tous perm_analytics_view par défaut, RBAC.ts) voyaient "Gel d'Urgence"
+    // pleinement actif alors que seul perm_customer_freeze l'autorise réellement.
+    const canFreeze = hasPerm ? hasPerm(['perm_customer_freeze']) : true;
     const [cards, setCards] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [actioningId, setActioningId] = useState<string | null>(null);
@@ -81,19 +87,26 @@ export default function VirtualCardsAdmin({ token: _token }: { token: string }) 
                                         )}
                                     </td>
                                     <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                                        <button
-                                            onClick={() => handleFreeze(c.id)}
-                                            disabled={actioningId === c.id}
-                                            style={{
-                                                padding: '6px 12px',
-                                                background: c.status === 'ACTIVE' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                                                color: c.status === 'ACTIVE' ? '#ef4444' : '#10b981',
-                                                border: '1px solid var(--border)', borderRadius: 20, fontSize: 12, fontWeight: 600,
-                                                cursor: actioningId === c.id ? 'wait' : 'pointer', opacity: actioningId === c.id ? 0.6 : 1
-                                            }}
-                                        >
-                                            {c.status === 'ACTIVE' ? "Gel d'Urgence" : 'Débloquer'}
-                                        </button>
+                                        {canFreeze ? (
+                                            <button
+                                                onClick={() => handleFreeze(c.id)}
+                                                disabled={actioningId === c.id}
+                                                style={{
+                                                    padding: '6px 12px',
+                                                    // Le backend (admin.ts:3329) ne bascule qu'entre ACTIVE et BLOCKED
+                                                    // (`newStatus = status === 'BLOCKED' ? 'ACTIVE' : 'BLOCKED'`) — une
+                                                    // carte FROZEN (pause volontaire du titulaire) tombait donc dans la
+                                                    // branche "Débloquer" alors que le clic la faisait BASCULER en
+                                                    // BLOCKED, l'inverse de ce que le libellé promettait.
+                                                    background: c.status === 'BLOCKED' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                                                    color: c.status === 'BLOCKED' ? '#10b981' : '#ef4444',
+                                                    border: '1px solid var(--border)', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                                                    cursor: actioningId === c.id ? 'wait' : 'pointer', opacity: actioningId === c.id ? 0.6 : 1
+                                                }}
+                                            >
+                                                {c.status === 'BLOCKED' ? 'Débloquer' : "Gel d'Urgence"}
+                                            </button>
+                                        ) : <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Lecture seule</span>}
                                     </td>
                                 </tr>
                             ))}

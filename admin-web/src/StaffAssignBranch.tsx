@@ -17,7 +17,12 @@ const SORT_OPTIONS = [
 // Un seul tableau, toujours rempli de données réelles (jamais vide par défaut) :
 // filtrable par statut d'affectation et par agence, triable, et cherchable pour
 // retrouver quelqu'un qui ne serait pas dans les 15 lignes affichées.
-export default function StaffAssignBranch({ token }: { token: string }) {
+export default function StaffAssignBranch({ token, hasPerm }: { token: string; hasPerm?: (perms: string[]) => boolean }) {
+    // PUT /api/admin/staff/:id (utilisé par handleSave ci-dessous) exige perm_staff_manage
+    // côté serveur (admin.ts:1328) — un rôle qui n'a que perm_staff_view voyait ce tableau
+    // entièrement interactif (menu déroulant + bouton Affecter) mais essuyait un 403 à
+    // chaque tentative, sans jamais savoir pourquoi.
+    const canAssign = hasPerm ? hasPerm(['perm_staff_manage']) : true;
     const [branches, setBranches] = useState<any[]>([]);
     const [error, setError] = useState('');
     const [selection, setSelection] = useState<Record<string, string>>({});
@@ -194,34 +199,40 @@ export default function StaffAssignBranch({ token }: { token: string }) {
                                     )}
                                 </td>
                                 <td style={{ padding: '16px 20px' }}>
-                                    <select
-                                        value={selectedValue(s)}
-                                        onChange={e => setSelection(sel => ({ ...sel, [s.id]: e.target.value }))}
-                                        style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13, minWidth: 220, cursor: 'pointer', outline: 'none', transition: '0.2s', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)' }}
-                                    >
-                                        <option value="">— Désaffecter / Non assigné —</option>
-                                        {branches.map(b => (
-                                            <option key={b.id} value={b.id}>{b.name}{b.isHQ ? ' (Siège HQ)' : ''}</option>
-                                        ))}
-                                    </select>
+                                    {canAssign ? (
+                                        <select
+                                            value={selectedValue(s)}
+                                            onChange={e => setSelection(sel => ({ ...sel, [s.id]: e.target.value }))}
+                                            style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13, minWidth: 220, cursor: 'pointer', outline: 'none', transition: '0.2s', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)' }}
+                                        >
+                                            <option value="">— Désaffecter / Non assigné —</option>
+                                            {branches.map(b => (
+                                                <option key={b.id} value={b.id}>{b.name}{b.isHQ ? ' (Siège HQ)' : ''}</option>
+                                            ))}
+                                        </select>
+                                    ) : <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>—</span>}
                                 </td>
                                 <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                                    <button
-                                        onClick={() => handleSave(s)}
-                                        disabled={savingId === s.id || !hasChanged(s)}
-                                        style={{
-                                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 18px',
-                                            background: hasChanged(s) ? 'linear-gradient(135deg, var(--accent) 0%, rgba(139, 92, 246, 0.8) 100%)' : 'var(--bg-secondary)',
-                                            color: hasChanged(s) ? '#fff' : 'var(--text-muted)',
-                                            border: 'none',
-                                            borderRadius: 10, cursor: savingId === s.id || !hasChanged(s) ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 13,
-                                            boxShadow: hasChanged(s) ? '0 4px 12px rgba(139, 92, 246, 0.25)' : 'none',
-                                            transition: 'all 0.2s ease',
-                                            transform: hasChanged(s) ? 'translateY(-1px)' : 'none'
-                                        }}
-                                    >
-                                        <Building size={14} /> {savingId === s.id ? 'Patientez...' : s.branchId && s.branchId !== selectedValue(s) ? 'Réaffecter' : 'Affecter'}
-                                    </button>
+                                    {!canAssign ? (
+                                        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Lecture seule</span>
+                                    ) : (
+                                        <button
+                                            onClick={() => handleSave(s)}
+                                            disabled={savingId === s.id || !hasChanged(s)}
+                                            style={{
+                                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 18px',
+                                                background: hasChanged(s) ? 'linear-gradient(135deg, var(--accent) 0%, rgba(139, 92, 246, 0.8) 100%)' : 'var(--bg-secondary)',
+                                                color: hasChanged(s) ? '#fff' : 'var(--text-muted)',
+                                                border: 'none',
+                                                borderRadius: 10, cursor: savingId === s.id || !hasChanged(s) ? 'not-allowed' : 'pointer', fontWeight: 800, fontSize: 13,
+                                                boxShadow: hasChanged(s) ? '0 4px 12px rgba(139, 92, 246, 0.25)' : 'none',
+                                                transition: 'all 0.2s ease',
+                                                transform: hasChanged(s) ? 'translateY(-1px)' : 'none'
+                                            }}
+                                        >
+                                            <Building size={14} /> {savingId === s.id ? 'Patientez...' : s.branchId && s.branchId !== selectedValue(s) ? 'Réaffecter' : 'Affecter'}
+                                        </button>
+                                    )}
                                 </td>
                             </tr>
                         ))}

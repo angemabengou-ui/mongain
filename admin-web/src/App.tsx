@@ -227,7 +227,7 @@ export default function App() {
       reqPerms: ['perm_analytics_view'],
       items: [
         { id: 'system-monitor', label: 'Santé Système', reqPerms: ['perm_analytics_view'] },
-        { id: 'push-center', label: 'Notifications Push', reqPerms: ['perm_analytics_view'] },
+        { id: 'push-center', label: 'Notifications Push', reqPerms: ['perm_broadcast_send'] },
         { id: 'risk-scoring', label: 'Scoring & Risques', reqPerms: ['perm_analytics_view'] },
         { id: 'virtual-cards', label: 'Cartes Virtuelles', reqPerms: ['perm_analytics_view'] },
         { id: 'crypto-desk', label: 'Crypto & Assets (V8)', reqPerms: ['perm_analytics_view'] },
@@ -376,12 +376,12 @@ export default function App() {
           {activeTab === 'tontines' && hasPerm(['perm_tontine_view']) && <Tontines token={token} hasPerm={hasPerm} initialSelectedId={searchTarget?.tab === 'tontines' ? searchTarget.id : undefined} />}
           {activeTab === 'merchants' && hasPerm(['perm_merchant_view']) && <Merchants token={token} hasPerm={hasPerm} initialSelectedId={searchTarget?.tab === 'merchants' ? searchTarget.id : undefined} />}
 
-          {activeTab === 'reclamations' && hasPerm(['perm_ticket_view', 'perm_ticket_resolve']) && <SupportCenter token={token} hasPerm={hasPerm} />}
+          {activeTab === 'reclamations' && hasPerm(['perm_ticket_view', 'perm_ticket_resolve']) && <SupportCenter token={token} hasPerm={hasPerm} staffId={staffId} />}
           {activeTab === 'branch-dash' && hasPerm(['perm_branch_view']) && <BranchDashboard token={token} onNavigateToTreasury={hasPerm(['perm_treasury_view']) ? () => setActiveTab('treasury') : undefined} />}
           {activeTab === 'agency-center' && hasPerm(['perm_branch_manage']) && <AgencyCenter token={token} hasPerm={hasPerm} />}
-          {activeTab === 'teller-terminal' && hasPerm(['perm_cash_session_open', 'perm_cash_in', 'perm_cash_out']) && <TellerTerminal token={token} userName={userName} />}
+          {activeTab === 'teller-terminal' && hasPerm(['perm_cash_session_open', 'perm_cash_in', 'perm_cash_out']) && <TellerTerminal token={token} userName={userName} hasPerm={hasPerm} />}
 
-          {activeTab === 'kyc' && hasPerm(['perm_customer_kyc_view', 'perm_customer_kyc_validate']) && <KycMod token={token} />}
+          {activeTab === 'kyc' && hasPerm(['perm_customer_kyc_view', 'perm_customer_kyc_validate']) && <KycMod token={token} hasPerm={hasPerm} />}
           {activeTab === 'ledger' && hasPerm(['perm_transaction_view']) && <Ledger token={token} hasPerm={hasPerm} />}
           {activeTab === 'treasury' && hasPerm(['perm_treasury_view', 'perm_treasury_mint', 'perm_treasury_approve']) && <Treasury token={token} prefillAdjustTarget={adjustTarget} hasPerm={hasPerm} staffId={staffId} />}
           {activeTab === 'system-accounts' && hasPerm(['perm_treasury_view']) && <SystemAccounts token={token} onAdjust={(walletId, name) => { setAdjustTarget({ walletId, name }); setActiveTab('treasury'); }} />}
@@ -394,9 +394,9 @@ export default function App() {
 
           {/* V6 INNOVATION ROUTES */}
           {activeTab === 'system-monitor' && hasPerm(['perm_analytics_view']) && <SystemMonitor token={token} />}
-          {activeTab === 'push-center' && hasPerm(['perm_analytics_view']) && <PushCenter token={token} />}
+          {activeTab === 'push-center' && hasPerm(['perm_broadcast_send']) && <PushCenter token={token} />}
           {activeTab === 'risk-scoring' && hasPerm(['perm_analytics_view']) && <RiskScoring token={token} />}
-          {activeTab === 'virtual-cards' && hasPerm(['perm_analytics_view']) && <VirtualCardsAdmin token={token} />}
+          {activeTab === 'virtual-cards' && hasPerm(['perm_analytics_view']) && <VirtualCardsAdmin token={token} hasPerm={hasPerm} />}
           {activeTab === 'crypto-desk' && hasPerm(['perm_analytics_view']) && <CryptoAdmin token={token} />}
 
           {/* FALLBACK IF NOT AUTHORIZED TO VIEW TAB */}
