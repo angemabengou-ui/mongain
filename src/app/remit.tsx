@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import PinPromptModal from '../components/ui/PinPromptModal';
@@ -47,6 +47,15 @@ export default function RemitScreen() {
             setLoading(false);
         }
     };
+
+    // Changer de devise remettait `quote` à null sans jamais le recalculer : le bouton
+    // "Initier le transfert" (désactivé par `!quote`) restait grisé indéfiniment tant que
+    // l'utilisateur ne retournait pas volontairement retoucher le champ montant (dont seul
+    // le `onBlur` relance la cotation) — un blocage silencieux, sans aucun message d'erreur.
+    useEffect(() => {
+        if (amountStr) handleCalculateQuote();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [targetCurrency]);
 
     const handleSend = async () => {
         if (!targetAccount) return Alert.alert("Erreur", "Saisissez le numéro ou l'IBAN.");
@@ -124,7 +133,7 @@ export default function RemitScreen() {
                                 <TouchableOpacity
                                     key={c.code}
                                     style={[styles.currencyBtn, { backgroundColor: COLORS.surface, borderColor: targetCurrency === c.code ? COLORS.primary : COLORS.border }]}
-                                    onPress={() => { setTargetCurrency(c.code); setQuote(null); }}
+                                    onPress={() => setTargetCurrency(c.code)}
                                     activeOpacity={0.7}
                                 >
                                     <Text style={styles.flagText}>{c.flag}</Text>

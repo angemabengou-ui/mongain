@@ -72,8 +72,8 @@ export default function TontineSettingsScreen() {
             Alert.alert('Nom requis', 'Donnez un nom au club.');
             return;
         }
-        const amt = contribution.replace(/\s/g, '').replace(',', '.');
-        if (!hasStarted && (!amt || Number(amt) <= 0)) {
+        const amt = Math.round(parseFloat(contribution.replace(/\s/g, '').replace(',', '.')) || 0);
+        if (!hasStarted && amt <= 0) {
             Alert.alert('Cotisation invalide', 'Indiquez un montant de cotisation valide.');
             return;
         }
@@ -82,7 +82,7 @@ export default function TontineSettingsScreen() {
             await apiUpdateTontineSettings(id, {
                 name: name.trim(),
                 isPublic,
-                ...(hasStarted ? {} : { contribution: Number(amt), frequency }),
+                ...(hasStarted ? {} : { contribution: amt, frequency }),
             });
             Alert.alert('Enregistré', 'Les paramètres du club ont été mis à jour.');
             load();
@@ -168,7 +168,7 @@ export default function TontineSettingsScreen() {
                         ]}
                         placeholder="Montant en FCFA"
                         placeholderTextColor={COLORS.textSecondary}
-                        keyboardType="numeric"
+                        keyboardType="number-pad"
                         value={contribution}
                         onChangeText={setContribution}
                         editable={!hasStarted}

@@ -24,10 +24,12 @@ export default function PayScreen() {
     const handleScanMock = async () => {
         if (!scannedUserId || !amount) return Alert.alert("Erreur", "L'ID et le montant sont requis.");
         if (!pin || pin.length !== 4) return Alert.alert("Erreur", "Le client doit saisir son code PIN à 4 chiffres pour autoriser le paiement.");
+        const parsedAmount = Math.round(parseFloat(amount) || 0);
+        if (parsedAmount <= 0) return Alert.alert("Erreur", "Montant invalide.");
         setLoading(true);
         try {
-            await request('POST', '/api/pay/qr-scan', { scannedCode: scannedUserId, amountXaf: amount, pin }, true);
-            Alert.alert("Succès", `Encaissement de ${amount} XAF validé avec succès !`);
+            await request('POST', '/api/pay/qr-scan', { scannedCode: scannedUserId, amountXaf: parsedAmount, pin }, true);
+            Alert.alert("Succès", `Encaissement de ${parsedAmount.toLocaleString('fr-FR')} XAF validé avec succès !`);
             setScannedUserId('');
             setAmount('');
             setPin('');
@@ -52,7 +54,7 @@ export default function PayScreen() {
                             style={styles.input}
                             placeholder="ex: 15000"
                             placeholderTextColor="#64748b"
-                            keyboardType="numeric"
+                            keyboardType="number-pad"
                             value={amount}
                             onChangeText={setAmount}
                         />

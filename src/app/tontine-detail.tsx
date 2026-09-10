@@ -156,7 +156,7 @@ export default function TontineDetailScreen() {
         // Champ vide = tout régler d'un coup (le solde restant dû du moment) ; sinon montant
         // libre saisi par l'utilisateur — payer en plusieurs fois est désormais possible.
         const raw = contributeAmount.trim().replace(/\s/g, '').replace(',', '.');
-        const amount = raw ? Number(raw) : myRemaining;
+        const amount = raw ? Math.round(Number(raw)) : myRemaining;
         if (!amount || amount <= 0 || Number.isNaN(amount)) {
             Alert.alert('Montant invalide', 'Indiquez un montant à cotiser supérieur à zéro.');
             return;
@@ -441,7 +441,7 @@ export default function TontineDetailScreen() {
                             <View style={{ flexDirection: 'row', gap: 8 }}>
                                 <TextInput
                                     style={[styles.contributeInput, { borderColor: COLORS.border, color: COLORS.textPrimary, backgroundColor: COLORS.background }]}
-                                    keyboardType="numeric"
+                                    keyboardType="number-pad"
                                     placeholder={myRemaining.toLocaleString('fr-FR')}
                                     placeholderTextColor={COLORS.textSecondary}
                                     value={contributeAmount}

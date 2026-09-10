@@ -37,15 +37,15 @@ export default function TontineCreateScreen() {
 
     const handleCreate = async () => {
         if (creatingRef.current) return;
-        const amt = contribution.replace(/\s/g, '').replace(',', '.');
-        if (!name.trim() || !amt || Number(amt) <= 0) {
+        const amt = Math.round(parseFloat(contribution.replace(/\s/g, '').replace(',', '.')) || 0);
+        if (!name.trim() || !amt || amt <= 0) {
             Alert.alert('Informations manquantes', 'Donnez un nom et un montant de cotisation valide.');
             return;
         }
         creatingRef.current = true;
         setLoading(true);
         try {
-            await apiCreateTontine(name.trim(), Number(amt), frequency, isPublic);
+            await apiCreateTontine(name.trim(), amt, frequency, isPublic);
             router.back();
         } catch (e: any) {
             Alert.alert('Échec', e.message || 'Impossible de créer le club.');
@@ -82,7 +82,7 @@ export default function TontineCreateScreen() {
                         style={[styles.input, { color: COLORS.textPrimary, backgroundColor: COLORS.surface, borderColor: COLORS.border }]}
                         placeholder="Ex : 10000"
                         placeholderTextColor={COLORS.textSecondary}
-                        keyboardType="numeric"
+                        keyboardType="number-pad"
                         value={contribution}
                         onChangeText={setContribution}
                     />

@@ -17,10 +17,14 @@ export default function BillersScreen() {
         if (!reference || !amount || !pin) {
             return Alert.alert("Erreur", "Veuillez remplir tous les champs !");
         }
+        const parsedAmount = Math.round(parseFloat(amount) || 0);
+        if (parsedAmount <= 0) {
+            return Alert.alert("Erreur", "Montant invalide.");
+        }
         setLoading(true);
         try {
             const res = await request('POST', '/api/billers/pay', {
-                provider, reference, amountXaf: amount, pin
+                provider, reference, amountXaf: parsedAmount, pin
             }, true) as { success: boolean, message: string };
 
             Alert.alert("Succès", res.message, [{ text: "Génial", onPress: () => router.back() }]);
@@ -76,7 +80,7 @@ export default function BillersScreen() {
                     <TextInput
                         style={{ backgroundColor: '#F1F5F9', borderRadius: 12, padding: 16, fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', marginBottom: 16 }}
                         placeholder="Ex: 5000"
-                        keyboardType="numeric"
+                        keyboardType="number-pad"
                         value={amount}
                         onChangeText={setAmount}
                     />

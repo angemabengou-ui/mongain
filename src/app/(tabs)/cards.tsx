@@ -74,7 +74,7 @@ export default function CardsScreen() {
     };
 
     const executeFund = async () => {
-        const parsed = parseFloat(fundAmount);
+        const parsed = Math.round(parseFloat(fundAmount) || 0);
         if (!parsed || parsed <= 0) return Alert.alert('Erreur', 'Montant invalide.');
         if (fundPin.length !== 4) return Alert.alert('Erreur', 'Code PIN à 4 chiffres requis.');
         setActionLoading(true);
@@ -204,7 +204,7 @@ export default function CardsScreen() {
                             style={styles.fundInput}
                             placeholder="ex: 10000"
                             placeholderTextColor="#64748b"
-                            keyboardType="numeric"
+                            keyboardType="number-pad"
                             value={fundAmount}
                             onChangeText={setFundAmount}
                         />
