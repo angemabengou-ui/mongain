@@ -17,7 +17,9 @@ router.post('/create', authMiddleware, async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, message: "Nom et contribution requis." });
         }
 
-        const contributionAmount = parseFloat(contribution);
+        // Le FCFA n'a aucune sous-unité (TontineGroup.contribution est désormais Int, voir
+        // docs/AUTO_CRITIQUE_PROJET.md) — arrondi ici, sinon l'écriture Prisma échoue.
+        const contributionAmount = Math.round(parseFloat(contribution));
         if (isNaN(contributionAmount) || contributionAmount <= 0) {
             return res.status(400).json({ success: false, message: "Montant de cotisation invalide." });
         }
@@ -82,7 +84,7 @@ router.put('/settings', authMiddleware, async (req: Request, res: Response) => {
                 return res.status(400).json({ success: false, message: 'Impossible de modifier la cotisation ou la fréquence : le premier cycle a déjà été exécuté.' });
             }
             if (contribution !== undefined) {
-                const amt = parseFloat(contribution);
+                const amt = Math.round(parseFloat(contribution));
                 if (isNaN(amt) || amt <= 0) return res.status(400).json({ success: false, message: 'Montant de cotisation invalide.' });
                 data.contribution = amt;
             }
@@ -490,7 +492,7 @@ router.post('/contribute', authMiddleware, async (req: Request, res: Response) =
         const userId = (req as AuthRequest).userId!;
         const { groupId, amount } = req.body;
 
-        const result = await contributeNow(String(groupId), userId, Number(amount));
+        const result = await contributeNow(String(groupId), userId, Math.round(Number(amount)));
 
         res.json({
             success: true,

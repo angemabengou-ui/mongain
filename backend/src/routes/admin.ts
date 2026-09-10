@@ -1147,9 +1147,20 @@ router.get('/teller/lookup/:phone', authMiddleware, async (req: AuthRequest, res
         // être comparé à sa pièce d'identité au dossier — avant, ce lookup ne renvoyait que
         // nom/téléphone/statut, sans aucun moyen pour le caissier de vérifier visuellement
         // l'identité de la personne en face de lui.
+        // FAILLE CORRIGÉE : ces photos étaient renvoyées à quiconque avait perm_cash_out,
+        // sans jamais vérifier perm_customer_kyc_view — la permission dédiée qui protège ces
+        // mêmes champs partout ailleurs (GET /users/kyc, GET /users/:id/360). Par défaut
+        // TELLER/BRANCH_MANAGER ont toujours les deux ensemble (RBAC.ts), donc invisible en
+        // pratique — mais la matrice "Droits d'Accès" permet de forcer les permissions d'un
+        // employé une par une, et un profil avec perm_cash_out sans perm_customer_kyc_view
+        // recevait quand même les CNI/selfie en clair.
+        const canViewKyc = hasPermission(staff, 'perm_customer_kyc_view');
         const user = await prisma.user.findUnique({
             where: { phone: req.params.phone as string },
-            select: { id: true, name: true, phone: true, kycStatus: true, role: true, idCardFront: true, idCardBack: true, selfie: true }
+            select: {
+                id: true, name: true, phone: true, kycStatus: true, role: true,
+                idCardFront: canViewKyc, idCardBack: canViewKyc, selfie: canViewKyc,
+            }
         });
 
         if (!user) return res.status(404).json({ error: 'Client introuvable.' });

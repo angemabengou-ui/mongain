@@ -6,6 +6,7 @@ import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
 import { getSystemSettings } from './settings';
 import { notifyParentOfChildSpend } from './wallet';
+import logger from '../utils/logger';
 
 const router = Router();
 
@@ -230,14 +231,18 @@ router.post('/payouts', authMiddleware, async (req: AuthRequest, res) => {
         // bénéficiaire est DÉBITÉ), sans le consentement de ce dernier, sans PIN, sans
         // aucune limite : n'importe quel compte MARCHAND pouvait ainsi vider le solde de
         // N'IMPORTE QUEL numéro de téléphone en le glissant dans un lot de paie.
+        // Le FCFA n'a aucune sous-unité (voir docs/AUTO_CRITIQUE_PROJET.md, PayoutEntry.amount
+        // et PayoutBulk.totalAmount sont désormais Int) — un montant brut soumis par le client
+        // (ex: "5000.75") doit être arrondi ICI, sinon l'écriture Prisma échoue purement et
+        // simplement à la création du lot, pour toutes les entrées d'un coup.
         for (const e of entries) {
-            const amt = parseFloat(e?.amount);
+            const amt = Math.round(parseFloat(e?.amount));
             if (!e?.phone || typeof e.phone !== 'string' || !Number.isFinite(amt) || amt <= 0) {
                 return res.status(400).json({ error: "Chaque bénéficiaire doit avoir un téléphone et un montant positif valides." });
             }
         }
 
-        const totalAmount = entries.reduce((sum: number, e: any) => sum + parseFloat(e.amount), 0);
+        const totalAmount = entries.reduce((sum: number, e: any) => sum + Math.round(parseFloat(e.amount)), 0);
 
         if (!user.wallet || user.wallet.balance < totalAmount) {
             return res.status(400).json({ error: `Solde insuffisant pour un total de ${totalAmount} FCFA.` });
@@ -252,15 +257,22 @@ router.post('/payouts', authMiddleware, async (req: AuthRequest, res) => {
                 entries: {
                     create: entries.map(e => ({
                         phone: e.phone,
-                        amount: parseFloat(e.amount)
+                        amount: Math.round(parseFloat(e.amount))
                     }))
                 }
             },
             include: { entries: true }
         });
 
-        // Trigger processing asynchrously
-        processBulkAsync(bulk.id, user.id);
+        // Trigger processing asynchrously — .catch() OBLIGATOIRE : sans lui, une exception
+        // dans processBulkAsync (ex: un hoquet DB transitoire pendant sa lecture initiale, hors
+        // de son propre try/catch) devient un rejet de promesse non intercepté. Node (>=15,
+        // et cette app cible Node 22) TERMINE le processus entier sur un tel rejet — un simple
+        // marchand authentifié pouvait ainsi faire crasher tout le backend pour tous les
+        // utilisateurs en déclenchant ce lot au mauvais moment.
+        processBulkAsync(bulk.id, user.id).catch((e) => {
+            logger.error(`[B2B Bulk Payout] Échec non intercepté pour le lot ${bulk.id}:`, e);
+        });
 
         res.status(202).json({ success: true, message: "Paiement groupé en cours de traitement.", bulkId: bulk.id });
     } catch (e: any) {

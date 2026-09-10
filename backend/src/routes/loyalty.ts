@@ -36,6 +36,17 @@ router.post('/convert', authMiddleware, circuitBreakerMiddleware, async (req: Au
 
         if (isNaN(points) || points <= 0) return res.status(400).json({ error: 'Montant de points invalide.' });
 
+        // FAILLE CORRIGÉE : Math.round(points / 10) plus bas arrondissait CHAQUE appel
+        // indépendamment. Tout `points` ≡ 5 (mod 10) a une part fractionnaire de exactement
+        // .5, que Math.round arrondit toujours vers le haut — convertir 5 MP à la fois (au
+        // lieu d'un seul lot de 10) rapportait 1 XAF par appel au lieu de 0,5, soit le DOUBLE
+        // du taux annoncé en fractionnant la conversion, de façon déterministe et scriptable.
+        // Exiger un multiple exact de 10 élimine tout arrondi : chaque conversion est
+        // maintenant exacte, sans perte ni gain possible en la fractionnant.
+        if (points % 10 !== 0) {
+            return res.status(400).json({ error: 'Le nombre de points à convertir doit être un multiple de 10 (ratio 10 MP = 1 FCFA).' });
+        }
+
         await prisma.$transaction(async (tx: any) => {
             const user = await tx.user.findUnique({
                 where: { id: req.userId! },

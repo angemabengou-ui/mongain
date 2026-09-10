@@ -16,11 +16,24 @@ const router = Router();
 // V17: UTILITY BILLERS (Facturiers SEEG/CANAL)
 // ==========================================
 
+// Aucune intégration réelle avec SEEG/Canal+ n'existe : cette route ne fait que débiter le
+// client et créditer un compte interne factice ("service partenaire") tout en affichant un
+// faux succès — l'argent quitte vraiment le solde du client sans que rien ne se passe
+// réellement côté SEEG/Canal+. Même garde que services.ts (/pay-bill, /topup) — CE
+// GARDE-FOU MANQUAIT ICI, ce qui débitait déjà réellement les clients pour un service jamais
+// livré, contrairement à la route sœur qui reste désactivée pour la même raison.
 router.post('/pay', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+    if (process.env.ENABLE_UNVERIFIED_EXTERNAL_SERVICES !== 'true') {
+        return res.status(501).json({
+            error: 'Le paiement de factures nécessite une intégration réelle avec le fournisseur (SEEG/Canal+). Cette fonctionnalité est désactivée tant que cette intégration n\'est pas en place.'
+        });
+    }
     try {
         if (!req.userId) return res.status(401).json({ error: "Unauthorized" });
         const { provider, reference, amountXaf, pin } = req.body;
-        const amount = parseFloat(amountXaf);
+        // Le FCFA n'a aucune sous-unité (voir docs/AUTO_CRITIQUE_PROJET.md) — arrondi ici,
+        // sinon l'écriture Prisma échoue sur un montant décimal soumis par le client.
+        const amount = Math.round(parseFloat(amountXaf));
 
         if (!provider || !['SEEG', 'CANAL'].includes(provider)) {
             return res.status(400).json({ error: "Fournisseur invalide" });

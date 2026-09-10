@@ -199,5 +199,28 @@ describe('Admin Customers/Teller Routes', () => {
                 select: expect.objectContaining({ idCardFront: true, idCardBack: true, selfie: true }),
             }));
         });
+
+        it("ne renvoie PAS les photos KYC pour un profil avec perm_cash_out mais sans perm_customer_kyc_view (droits personnalisés)", async () => {
+            // FAILLE CORRIGÉE : ce lookup ne vérifiait que perm_cash_out, jamais
+            // perm_customer_kyc_view — invisible avec les droits par défaut de TELLER (qui a
+            // toujours les deux), mais un profil personnalisé via la matrice "Droits d'Accès"
+            // pouvait avoir perm_cash_out seul et recevait quand même les CNI/selfie en clair.
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue({
+                id: 'x', role: 'TELLER', permissionsCustomized: true, permissions: ['perm_cash_out'],
+            });
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+                id: 'u1', name: 'Jean', phone: '066123456', kycStatus: 'APPROVED', role: 'USER',
+                idCardFront: undefined, idCardBack: undefined, selfie: undefined,
+            });
+
+            const res = await request(app).get('/admin/teller/lookup/066123456');
+
+            expect(res.status).toBe(200);
+            expect(res.body.id).toBe('u1');
+            expect(res.body.selfie).toBeUndefined();
+            expect(prisma.user.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+                select: expect.objectContaining({ idCardFront: false, idCardBack: false, selfie: false }),
+            }));
+        });
     });
 });

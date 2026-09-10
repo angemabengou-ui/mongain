@@ -21,7 +21,10 @@ const router = express.Router();
 router.post('/qr-scan', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         const { scannedCode, amountXaf, pin } = req.body;
-        const amount = parseFloat(amountXaf);
+        // Le FCFA n'a aucune sous-unité (voir docs/AUTO_CRITIQUE_PROJET.md, Wallet.balance et
+        // Transaction.amount sont désormais Int) — arrondi ici, sinon l'écriture Prisma
+        // échoue purement et simplement sur un montant décimal soumis par le client.
+        const amount = Math.round(parseFloat(amountXaf));
 
         if (!scannedCode) return res.status(400).json({ error: 'QR Code invalide.' });
         if (isNaN(amount) || amount <= 0) return res.status(400).json({ error: 'Montant invalide.' });
