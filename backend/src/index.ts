@@ -118,8 +118,11 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization', 'Bypass-Tunnel-Reminder', 'ngrok-skip-browser-warning']
 }));
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+// Les pièces KYC sont encore envoyées en base64 par l'application : 10 Mo laisse
+// une marge suffisante pour une photo de document tout en évitant qu'une seule
+// requête puisse monopoliser la mémoire du processus.
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // --- DEBUG LOGGER (dev uniquement) --- Restait actif en production : loggait le corps de
 // CHAQUE réponse d'erreur (peut contenir des PII — nom, téléphone, montant) ainsi qu'un

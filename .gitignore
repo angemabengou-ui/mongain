@@ -45,6 +45,7 @@ example
 node_modules/
 .env
 .expo/
+backend/otps.json
 
 .claude
 .agent
