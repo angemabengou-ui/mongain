@@ -290,6 +290,6 @@ export class LimitEngine {
         // La partie du montant actuel qui dépasse la franchise restante pour aujourd'hui
         const taxableAmount = Math.max(0, (sumToday + amount) - Math.max(sumToday, threshold));
 
-        return taxableAmount * settings.agencyTaxWithdraw;
+        return Math.round(taxableAmount * settings.agencyTaxWithdraw);
     }
 }

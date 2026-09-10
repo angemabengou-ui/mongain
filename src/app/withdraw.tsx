@@ -66,8 +66,8 @@ export default function WithdrawScreen() {
     }, [showCode]);
 
     const confirmGenerateCode = async () => {
-        const amount = parseFloat(codeAmount.replace(/\s/g, '').replace(',', '.'));
-        if (isNaN(amount) || amount <= 0) {
+        const amount = Math.round(parseFloat(codeAmount.replace(/\s/g, '').replace(',', '.')) || 0);
+        if (amount <= 0) {
             Alert.alert('Montant invalide', 'Veuillez entrer un montant valide supérieur à 0.');
             return;
         }
@@ -106,7 +106,7 @@ export default function WithdrawScreen() {
                             style={styles.input}
                             placeholder="0"
                             placeholderTextColor={COLORS.textSecondary}
-                            keyboardType="numeric"
+                            keyboardType="number-pad"
                             value={codeAmount}
                             onChangeText={setCodeAmount}
                             autoFocus

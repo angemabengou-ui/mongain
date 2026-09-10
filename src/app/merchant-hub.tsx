@@ -84,14 +84,15 @@ export default function MerchantHubScreen() {
     useFocusEffect(useCallback(() => { load(); }, [load]));
 
     const handleCreatePayout = async () => {
-        const amt = payoutAmount.replace(/\s/g, '').replace(',', '.');
-        if (!amt || Number(amt) <= 0) {
+        // Le FCFA n'a aucune sous-unité — arrondi à l'entier (voir docs/AUTO_CRITIQUE_PROJET.md).
+        const amt = Math.round(Number(payoutAmount.replace(/\s/g, '').replace(',', '.')) || 0);
+        if (amt <= 0) {
             Alert.alert('Montant invalide', 'Indiquez un montant de virement supérieur à zéro.');
             return;
         }
         setPayoutLoading(true);
         try {
-            await apiCreateMerchantPayout(payoutSource, Number(amt), payoutNote.trim() || undefined);
+            await apiCreateMerchantPayout(payoutSource, amt, payoutNote.trim() || undefined);
             setPayoutAmount('');
             setPayoutNote('');
             setShowPayoutForm(false);
@@ -181,7 +182,7 @@ export default function MerchantHubScreen() {
                                 style={[styles.input, { color: COLORS.textPrimary, borderColor: COLORS.border }]}
                                 placeholder="Montant en FCFA"
                                 placeholderTextColor={COLORS.textSecondary}
-                                keyboardType="numeric"
+                                keyboardType="number-pad"
                                 value={payoutAmount}
                                 onChangeText={setPayoutAmount}
                             />

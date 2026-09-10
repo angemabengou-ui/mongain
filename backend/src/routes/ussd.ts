@@ -115,7 +115,7 @@ router.post('/gateway', async (req: Request, res: Response) => {
                         return res.send(`END Opérations financières suspendues temporairement (verrouillage d'urgence).`);
                     }
 
-                    const fee = amount * (settings?.taxP2P || 0.01);
+                    const fee = Math.round(amount * (settings?.taxP2P || 0.01));
                     const totalRequired = amount + fee;
 
                     if (user.wallet.balance < totalRequired) return res.send(`END Solde insuffisant (Frais: ${fee}F).`);

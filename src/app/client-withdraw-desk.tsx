@@ -38,7 +38,9 @@ export default function ClientWithdrawDeskScreen() {
 
     const threshold = settings?.agencyWithdrawThreshold ?? 500000;
     const taxRate = isMerchant ? (settings?.taxWithdraw ?? 0.013) : (settings?.agencyTaxWithdraw ?? 0.01);
-    const cleanAmount = (v: string) => parseFloat(v.replace(/\s/g, '').replace(',', '.'));
+    // Le FCFA n'a aucune sous-unité — arrondi à l'entier plutôt que d'accepter un montant
+    // décimal tel quel (voir docs/AUTO_CRITIQUE_PROJET.md, montants désormais Int en base).
+    const cleanAmount = (v: string) => Math.round(parseFloat(v.replace(/\s/g, '').replace(',', '.')) || 0);
     const numAmountPreview = cleanAmount(amount) || 0;
 
     const localFeeEstimate = isMerchant
@@ -187,7 +189,7 @@ export default function ClientWithdrawDeskScreen() {
                                 style={[styles.input, { color: COLORS.textPrimary }]}
                                 placeholder="0"
                                 placeholderTextColor={COLORS.textSecondary}
-                                keyboardType="numeric"
+                                keyboardType="number-pad"
                                 value={amount}
                                 onChangeText={setAmount}
                                 autoFocus

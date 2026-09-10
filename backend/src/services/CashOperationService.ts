@@ -255,7 +255,7 @@ export class CashOperationService {
                             // configurable par l'admin, pas une valeur inventée ici) : appliqué
                             // au seul dépassement du seuil anti-fractionnement, en plus des frais
                             // normaux calculés plus bas.
-                            antiFractioningPenalty = (combinedAmount - settings.antiFractioningMaxAmount) * agencyRate;
+                            antiFractioningPenalty = Math.round((combinedAmount - settings.antiFractioningMaxAmount) * agencyRate);
                         }
                     }
                 }
@@ -267,7 +267,7 @@ export class CashOperationService {
             // appliquait ici par erreur — ce dernier reste réservé aux retraits chez un
             // marchand (wallet.ts /client-initiated-withdraw), un guichet différent.
             const threshold = settings?.agencyWithdrawThreshold ?? 500000;
-            const fee = (amount > threshold ? (amount - threshold) * agencyRate : 0) + antiFractioningPenalty;
+            const fee = (amount > threshold ? Math.round((amount - threshold) * agencyRate) : 0) + antiFractioningPenalty;
             const totalToDeduct = amount + fee;
 
             if (client.wallet.balance < totalToDeduct) {

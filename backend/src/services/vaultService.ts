@@ -70,7 +70,7 @@ export async function executeVaultWithdraw(tx: TxClient, vaultTx: WithdrawableVa
         if (!destWallet) throw new Error("Portefeuille destinataire introuvable.");
 
         const settings = await tx.systemSettings.findFirst();
-        const fee = settings ? vaultTx.amount * settings.taxP2P : 0;
+        const fee = settings ? Math.round(vaultTx.amount * settings.taxP2P) : 0;
         const netAmount = vaultTx.amount - fee;
 
         await tx.wallet.update({

@@ -521,6 +521,38 @@ describe('Wallet Routes', () => {
             expect(lockOrder).toBeLessThan(limitEngineOrder);
         });
 
+        // Régression : Transaction.fee est désormais un entier (Float -> Int, voir
+        // docs/AUTO_CRITIQUE_PROJET.md) — un montant dont 1% ne tombe pas rond (1001 * 1% =
+        // 10.01) doit être arrondi avant d'être écrit, pas laissé fractionnaire.
+        it('devrait arrondir le frais à l\'entier quand le taux ne donne pas un multiple entier', async () => {
+            (prisma.user.findUnique as jest.Mock).mockImplementation(async (args: any) => {
+                if (args.select?.jwtVersion) return { id: 'user123', isActive: true, jwtVersion: 0 };
+                if (args.where?.id === 'user123' && !args.include) {
+                    return { id: 'user123', pin: 'hashed-pin', failedPinAttempts: 0, lockedUntil: null };
+                }
+                if (args.where?.id === 'user123' && args.include?.wallet) {
+                    return { id: 'user123', role: 'USER', wallet: { id: 'w_sender', balance: 100000 } };
+                }
+                return null;
+            });
+            (prisma.systemAccount.upsert as jest.Mock).mockResolvedValue({ wallet: { id: 'w_corporate', balance: 0 } });
+            (prisma.user.findFirst as jest.Mock).mockResolvedValue({ id: 'user456', role: 'USER', wallet: { id: 'w_receiver', balance: 0 } });
+            (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+            (getSystemSettings as jest.Mock).mockResolvedValue({ taxP2P: 0.01 });
+            (prisma.wallet.update as jest.Mock).mockResolvedValue({ id: 'w_sender', balance: 99000 });
+            (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: 'tx1' });
+
+            const res = await request(app)
+                .post('/wallet/transfer')
+                .set('Authorization', 'Bearer dummy-token')
+                .send({ receiverPhone: '077000000', amount: 1001, pin: '1234' });
+
+            expect(res.status).toBe(200);
+            const feeArg = (prisma.transaction.create as jest.Mock).mock.calls[0][0].data.fee;
+            expect(Number.isInteger(feeArg)).toBe(true);
+            expect(feeArg).toBe(10); // 1001 * 1% = 10.01 -> 10
+        });
+
         // Comptes Enfant (routes/family.ts) : un virement du parent vers SON PROPRE enfant est
         // un rechargement interne au foyer, pas un P2P entre deux clients distincts.
         it('ne devrait facturer aucun frais quand le destinataire est l\'enfant de l\'expéditeur', async () => {

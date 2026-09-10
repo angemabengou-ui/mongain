@@ -121,7 +121,7 @@ router.post('/apply', authMiddleware, circuitBreakerMiddleware, async (req: Auth
             await LimitEngine.verifyAndIncrementConsumption(tx, user.id, user.wallet!.id, amount, settings);
 
             const interestRate = 0.05;
-            const totalOwed = amount + (amount * interestRate);
+            const totalOwed = amount + Math.round(amount * interestRate);
 
             // 1. Création du contrat de prêt
             const loan = await tx.loan.create({

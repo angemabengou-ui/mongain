@@ -466,7 +466,9 @@ export default function Treasury({ token, hasPerm, prefillAdjustTarget, staffId 
                                     <div>
                                         <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', display: 'block', marginBottom: 10, textTransform: 'uppercase' }}>Montant (FCFA) *</label>
                                         <div style={{ position: 'relative' }}>
-                                            <input required type="number" step="0.01" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} placeholder="Ex: 5000000" style={{ width: '100%', padding: '24px 24px 24px 60px', borderRadius: 16, border: '2px solid var(--border)', fontSize: 32, fontWeight: 900, color: 'var(--text-primary)', background: 'var(--bg-primary)' }} />
+                                            {/* Le FCFA n'a aucune sous-unité (voir docs/AUTO_CRITIQUE_PROJET.md) — pas de step
+                                                décimal sur un montant, contrairement aux taux/pourcentages ci-dessus. */}
+                                            <input required type="number" step="1" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} placeholder="Ex: 5000000" style={{ width: '100%', padding: '24px 24px 24px 60px', borderRadius: 16, border: '2px solid var(--border)', fontSize: 32, fontWeight: 900, color: 'var(--text-primary)', background: 'var(--bg-primary)' }} />
                                             <div style={{ position: 'absolute', left: 20, top: 32, fontSize: 24, fontWeight: 900, color: 'var(--text-muted)' }}>₣</div>
                                         </div>
                                     </div>

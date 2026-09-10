@@ -58,7 +58,7 @@ router.post('/buy', authMiddleware, circuitBreakerMiddleware, async (req: AuthRe
         if (user.wallet!.balance < xafAmount) return res.status(400).json({ error: 'Solde XAF insuffisant' });
 
         const currentRate = RATES[asset];
-        const fee = xafAmount * 0.015; // 1.5% fee
+        const fee = Math.round(xafAmount * 0.015); // 1.5% fee
         const netPurchase = xafAmount - fee;
         const amountCrypto = Number((netPurchase / currentRate).toFixed(8));
         const settings = await getSystemSettings();
@@ -139,8 +139,11 @@ router.post('/sell', authMiddleware, circuitBreakerMiddleware, async (req: AuthR
         if (!cryptoWallet || cryptoWallet.balance < cryptoQty) return res.status(400).json({ error: 'Solde crypto insuffisant' });
 
         const currentRate = RATES[asset] || 0;
-        const grossSale = cryptoQty * currentRate;
-        const fee = grossSale * 0.015; // 1.5% fee
+        // Arrondi une seule fois, sur la base commune : fee + netSale === grossSale
+        // exactement, plutôt que d'arrondir fee et netSale indépendamment (qui pourrait
+        // laisser 1 FCFA d'écart entre les deux).
+        const grossSale = Math.round(cryptoQty * currentRate);
+        const fee = Math.round(grossSale * 0.015); // 1.5% fee
         const netSale = grossSale - fee;
 
         const user = await prisma.user.findUnique({ where: { id: req.userId! }, include: { wallet: true } });

@@ -49,8 +49,8 @@ export default function RechargeFormScreen() {
             return;
         }
 
-        const amt = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
-        if (isNaN(amt) || amt < 500) {
+        const amt = Math.round(parseFloat(amount.replace(/\s/g, '').replace(',', '.')) || 0);
+        if (amt < 500) {
             Alert.alert("Erreur", "Le montant minimum de dépôt est de 500 FCFA.");
             return;
         }

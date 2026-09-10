@@ -42,7 +42,7 @@ export default function SplitScreen() {
         // Un montant "0", négatif ou non numérique passait jusqu'ici tel quel jusqu'au
         // serveur (qui le rejette, mais sans que l'utilisateur ait été prévenu avant de
         // taper "Envoyer") — même validation que les autres écrans de mouvement de fonds.
-        const parsedAmount = Number(amountStr.trim().replace(/\s/g, '').replace(',', '.'));
+        const parsedAmount = Math.round(Number(amountStr.trim().replace(/\s/g, '').replace(',', '.')) || 0);
         if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
             return Alert.alert("Erreur", "Le montant par personne doit être un nombre positif.");
         }
@@ -139,7 +139,7 @@ export default function SplitScreen() {
                             style={styles.input}
                             placeholder="ex: 5000"
                             placeholderTextColor="#64748b"
-                            keyboardType="numeric"
+                            keyboardType="number-pad"
                             value={amountStr}
                             onChangeText={setAmountStr}
                         />

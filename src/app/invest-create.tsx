@@ -38,7 +38,7 @@ export default function InvestCreateScreen() {
     // React ne suffit pas contre un double-tap avant que son changement ne soit commité.
     const creatingRef = useRef(false);
 
-    const amount = parseFloat(amountStr.replace(/\s/g, '').replace(',', '.'));
+    const amount = Math.round(parseFloat(amountStr.replace(/\s/g, '').replace(',', '.')) || 0);
     const apy = lockMonths >= 12 ? 0.08 : 0.05;
     const projectedInterest = amount > 0 ? Math.round(amount * apy * (lockMonths / 12)) : 0;
 
@@ -83,7 +83,7 @@ export default function InvestCreateScreen() {
                         style={[styles.input, { color: COLORS.textPrimary, backgroundColor: COLORS.surface, borderColor: COLORS.border }]}
                         placeholder={`Min. ${MIN_AMOUNT.toLocaleString('fr-FR')}`}
                         placeholderTextColor={COLORS.textSecondary}
-                        keyboardType="numeric"
+                        keyboardType="number-pad"
                         value={amountStr}
                         onChangeText={setAmountStr}
                     />

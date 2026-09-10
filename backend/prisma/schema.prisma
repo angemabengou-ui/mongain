@@ -13,7 +13,7 @@ datasource db {
 model User {
   splitRequestsSent     SplitRequest[] @relation("SplitRequester")
   splitRequestsReceived SplitRequest[] @relation("SplitTarget")
-  loyaltyPoints         Float          @default(0)
+  loyaltyPoints         Int            @default(0)
   id                    String         @id @default(uuid())
   username              String?        @unique // Secondary auth identifier (Anti-SIM recycle)
   email                 String?        @unique // Optional tertiary auth and recovery
@@ -70,9 +70,9 @@ model User {
   kycVendorCheckedAt DateTime?
 
   // Nouveaux Champs: Limites Personnalisées (PROMPT 03)
-  customDailyLimit     Float?
-  customMonthlyLimit   Float?
-  customPerTxLimit     Float?
+  customDailyLimit     Int?
+  customMonthlyLimit   Int?
+  customPerTxLimit     Int?
   customLimitExpiresAt DateTime?
 
   // Comptes Enfant — auto-relation parent/enfant. Le CHILD garde son propre login (téléphone
@@ -92,7 +92,7 @@ model User {
   // staff-controlled via le circuit maker/checker (admin.ts + settings.ts). Celui-ci est
   // self-service PARENT, sans workflow d'approbation ni expiration — voir LimitEngine.ts,
   // qui applique le plus restrictif entre le plafond KYC et celui-ci pour un CHILD.
-  childSpendLimitAmount Float?
+  childSpendLimitAmount Int?
   childSpendLimitPeriod String? // DAILY, WEEKLY
 
   wallet                 Wallet?
@@ -193,11 +193,11 @@ model Wallet {
   id                  String   @id @default(uuid())
   userId              String?  @unique
   user                User?    @relation(fields: [userId], references: [id])
-  balance             Float    @default(0.0)
+  balance             Int      @default(0)
   currency            String   @default("FCFA")
-  dailySpent          Float    @default(0.0) // Dépense journalière (atomique, réinitialisé chaque jour)
+  dailySpent          Int      @default(0) // Dépense journalière (atomique, réinitialisé chaque jour)
   dailySpentResetAt   DateTime @default(now()) // Date dernière remise à zéro
-  monthlySpent        Float    @default(0.0) // Dépense mensuelle
+  monthlySpent        Int      @default(0) // Dépense mensuelle
   monthlySpentResetAt DateTime @default(now()) // Remise à zéro mensuelle
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -224,7 +224,7 @@ model MerchantPayoutRequest {
   merchant   User   @relation("MerchantPayoutRequests", fields: [merchantId], references: [id])
 
   sourceAccount String // SALES (Wallet principal), COMMISSION (commissionWallet)
-  amount        Float
+  amount        Int
   note          String? // motif optionnel du marchand
 
   status          String  @default("PENDING") // PENDING, EXECUTED, REJECTED
@@ -276,8 +276,8 @@ model SystemAccount {
 
 model Transaction {
   id        String   @id @default(uuid())
-  amount    Float
-  fee       Float    @default(0.0)
+  amount    Int
+  fee       Int      @default(0)
   status    String   @default("COMPLETED") // PENDING, COMPLETED, FAILED
   type      String   @default("TRANSFER") // TRANSFER, CASH_IN, CASH_OUT, REFUND, ALLOCATION
   reference String   @unique @default(cuid())
@@ -341,18 +341,18 @@ model SystemSettings {
   // V18 Governance Paramenters
   bnplInterest   Float @default(0.05) // 5% Flat
   forexMarkup    Float @default(0.025) // 2.5% FX Markup
-  kycReqAmount   Float @default(2000000)
+  kycReqAmount   Int   @default(2000000)
 
   taxCashIn      Float @default(0.015) // 1.5% - Distinct par nature du Cash-Out
   taxWithdraw    Float @default(0.013) // 1.3% par défaut
   rewardMerchant Float @default(0.003) // 0.3% par défaut
 
   // Limites journalières configurables (V4)
-  dailyLimitTier0 Float @default(50000.0) // Plafond en FCFA par jour pour non-vérifiés
-  dailyLimitTier1 Float @default(2000000.0) // Plafond en FCFA par jour pour vérifiés
+  dailyLimitTier0 Int   @default(50000) // Plafond en FCFA par jour pour non-vérifiés
+  dailyLimitTier1 Int   @default(2000000) // Plafond en FCFA par jour pour vérifiés
 
   // Règles spécifiques Agences (V6)
-  agencyWithdrawThreshold Float @default(500000.0) // Montant au-delà duquel le retrait agence est taxé
+  agencyWithdrawThreshold Int   @default(500000) // Montant au-delà duquel le retrait agence est taxé
   agencyTaxWithdraw       Float @default(0.01) // Taxe de 1% sur la part excédentaire ou globale
 
   // Opérations & Intégrations Partenaires (V6)
@@ -384,13 +384,13 @@ model SystemSettings {
   supportPhone String @default("+2410000000")
 
   // Limites KYC Étendues
-  dailyLimitTier2   Float @default(5000000.0)
-  monthlyLimitTier0 Float @default(1000000.0)
-  monthlyLimitTier1 Float @default(10000000.0)
-  monthlyLimitTier2 Float @default(50000000.0)
-  perTxLimitTier0   Float @default(50000.0)
-  perTxLimitTier1   Float @default(500000.0)
-  perTxLimitTier2   Float @default(2000000.0)
+  dailyLimitTier2   Int   @default(5000000)
+  monthlyLimitTier0 Int   @default(1000000)
+  monthlyLimitTier1 Int   @default(10000000)
+  monthlyLimitTier2 Int   @default(50000000)
+  perTxLimitTier0   Int   @default(50000)
+  perTxLimitTier1   Int   @default(500000)
+  perTxLimitTier2   Int   @default(2000000)
 
   // SLA (heures) — configurables depuis les Paramètres
   slaLowHours      Int @default(72)
@@ -399,7 +399,7 @@ model SystemSettings {
   slaCriticalHours Int @default(4)
 
   // Refund Maker/Checker seuil
-  refundMakerCheckerThreshold Float @default(100000)
+  refundMakerCheckerThreshold Int   @default(100000)
 
   // Maintenance & Sécurité
   globalMaintenance Boolean @default(false)
@@ -412,15 +412,15 @@ model SystemSettings {
 
   // Anti-Fraud & Cash Operations (V6)
   antiFractioningWindowHours Int    @default(24) // Fenêtre glissante en heures
-  antiFractioningMaxAmount   Float  @default(100000.0) // Seuil maximum de retraits cumulés sans alerte
+  antiFractioningMaxAmount   Int    @default(100000) // Seuil maximum de retraits cumulés sans alerte
   antiFractioningMaxCount    Int    @default(3) // Nombre d'opérations maximum sur la fenêtre
   antiFractioningAction      String @default("APPLY_FEE") // ALLOW, APPLY_FEE, BLOCK, ALERT
 
   // Treasury & Liquidity Policies (V6)
-  maxMintAmount               Float @default(1000000000.0) // Max 1 Milliard par requête Mint
-  treasuryApprovalThreshold   Float @default(5000000.0) // Au-delà, requiert SUPER_ADMIN spécifiquement
-  agencyLowLiquidityThreshold Float @default(15000000.0) // Alerte orange
-  agencyCriticalLiquidity     Float @default(5000000.0) // Alerte rouge
+  maxMintAmount               Int   @default(1000000000) // Max 1 Milliard par requête Mint
+  treasuryApprovalThreshold   Int   @default(5000000) // Au-delà, requiert SUPER_ADMIN spécifiquement
+  agencyLowLiquidityThreshold Int   @default(15000000) // Alerte orange
+  agencyCriticalLiquidity     Int   @default(5000000) // Alerte rouge
 
   // Restriction réseau du portail personnel (équivalent applicatif d'un VPN pour la jambe
   // admin-web ↔ backend) — désactivée par défaut : le personnel travaille depuis des réseaux
@@ -492,7 +492,7 @@ model TontineGroup {
   creatorId       String
   creator         User      @relation("GroupCreator", fields: [creatorId], references: [id])
   name            String
-  contribution    Float
+  contribution    Int
   frequency       String    @default("MONTHLY") // WEEKLY, MONTHLY
   startDate       DateTime  @default(now())
   status          String    @default("ACTIVE") // ACTIVE, PENDING_RENEWAL, COMPLETED, CANCELLED
@@ -556,8 +556,8 @@ model TontineCycle {
   status                   String       @default("COMPLETED") // COMPLETED, PARTIAL (au moins une cotisation en échec)
   beneficiaryParticipantId String?
   payoutTransactionId      String?
-  totalExpected            Float
-  totalCollected           Float
+  totalExpected            Int
+  totalCollected           Int
   executedAt               DateTime     @default(now())
 
   contributions TontineContribution[]
@@ -576,7 +576,7 @@ model TontineContribution {
   // cotiser en plusieurs fois, d'un montant libre à chaque fois (voir tontineService.ts,
   // collectParticipantContribution) ; `amount` grandit à chaque dépôt jusqu'à atteindre
   // TontineGroup.contribution.
-  amount        Float
+  amount        Int
   status        String             @default("PAID") // PAID (amount >= contribution), PARTIAL (0 < amount < contribution), FAILED (legacy — cycles antérieurs au dépôt libre, 0 collecté)
   createdAt     DateTime           @default(now())
 
@@ -586,7 +586,7 @@ model TontineContribution {
   // de garde contre une double pénalité si l'admin relance la collecte plusieurs fois pour
   // le même cycle. `penaltyAmount` reste à 0 tant qu'aucune pénalité n'a pu être prélevée
   // (taux à 0, ou solde insuffisant au moment de la tentative).
-  penaltyAmount    Float     @default(0)
+  penaltyAmount    Int       @default(0)
   penaltyAppliedAt DateTime?
 
   @@unique([cycleId, participantId])
@@ -607,7 +607,7 @@ model Branch {
   phone   String? // Téléphone de l'agence
   status  String  @default("DRAFT") // DRAFT, CONFIGURED, ACTIVE, SUSPENDED, CLOSED
 
-  balance     Float     @default(0.0) // Physical Cash Float (Coffre)
+  balance     Int       @default(0) // Physical Cash Balance (Coffre)
   isActive    Boolean   @default(true) // Legacy fallback
   isHQ        Boolean   @default(false)
   activatedAt DateTime?
@@ -637,13 +637,13 @@ model CashSession {
   openedAt DateTime  @default(now())
   closedAt DateTime?
 
-  initialCash Float  @default(0.0)
-  finalCash   Float?
+  initialCash Int    @default(0)
+  finalCash   Int?
 
-  totalCashInValue  Float @default(0.0)
-  totalCashOutValue Float @default(0.0)
+  totalCashInValue  Int   @default(0)
+  totalCashOutValue Int   @default(0)
 
-  discrepancy       Float?
+  discrepancy       Int?
   discrepancyReason String?
 }
 
@@ -651,7 +651,7 @@ model TreasuryRequest {
   id          String  @id @default(uuid())
   reference   String  @unique // ex: TR-20260816-0001
   type        String // ISSUANCE, ALLOCATION, RETURN
-  amount      Float
+  amount      Int
   currency    String  @default("FCFA")
   status      String  @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED, EXECUTED
   reason      String
@@ -682,9 +682,9 @@ model ReconciliationCase {
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id])
 
-  expectedAmount Float
-  reportedAmount Float
-  difference     Float
+  expectedAmount Int
+  reportedAmount Int
+  difference     Int
 
   status        String  @default("UNDER_REVIEW") // MATCHED, MISMATCH, UNDER_REVIEW, RESOLVED
   investigation String?
@@ -809,7 +809,7 @@ model RefundRequest {
   approverId    String?
   approver      Staff?  @relation("RefundApprover", fields: [approverId], references: [id])
 
-  amount        Float
+  amount        Int
   refundType    String       @default("FULL") // FULL, PARTIAL
   reason        String
   description   String
@@ -900,7 +900,7 @@ model Vault {
   id                String   @id @default(uuid())
   name              String
   description       String?
-  balance           Float    @default(0.0)
+  balance           Int      @default(0)
   // Nombre d'approbations de commissaires requises pour exécuter un retrait.
   // Démarre à 1 (le créateur peut agir seul) plutôt qu'une constante codée en
   // dur à 2 — l'ancienne logique bloquait indéfiniment toute caisse n'ayant
@@ -952,7 +952,7 @@ model VaultTransaction {
   vault   Vault  @relation(fields: [vaultId], references: [id], onDelete: Cascade)
 
   type   String // DEPOSIT, WITHDRAW_REQUEST
-  amount Float
+  amount Int
   status String @default("PENDING") // PENDING, APPROVED, REJECTED, COMPLETED
 
   destinationType String? // TREASURER, VOUCHER (Physical Agency/Merchant), TRANSFER (envoi direct)
@@ -998,7 +998,7 @@ model VaultVoucher {
   vaultId String
   vault   Vault  @relation(fields: [vaultId], references: [id], onDelete: Cascade)
 
-  amount     Float
+  amount     Int
   status     String  @default("ACTIVE") // ACTIVE, USED, VOID (annulé par un admin — litige/erreur)
   voidReason String?
 
@@ -1019,8 +1019,8 @@ model VirtualCard {
   cvv             String
   expiryDate      String
   status          String @default("ACTIVE")
-  spendingLimit   Float  @default(0)
-  balance         Float  @default(0)
+  spendingLimit   Int    @default(0)
+  balance         Int    @default(0)
 }
 
 model CryptoWallet {
@@ -1039,15 +1039,15 @@ model CryptoTransaction {
   type         String // "BUY", "SELL"
   asset        String // e.g "BTC"
   amountCrypto Float
-  amountFiat   Float // XAF equivalent
+  amountFiat   Int // XAF equivalent
   exchangeRate Float
-  fee          Float
+  fee          Int
   createdAt    DateTime @default(now())
 }
 
 model SplitRequest {
   id          String   @id @default(uuid())
-  amount      Float
+  amount      Int
   requesterId String
   requester   User     @relation("SplitRequester", fields: [requesterId], references: [id])
   targetPhone String
@@ -1060,9 +1060,9 @@ model SplitRequest {
 model Loan {
   id           String   @id @default(uuid())
   userId       String
-  amount       Float
+  amount       Int
   interestRate Float    @default(0.05)
-  totalOwed    Float
+  totalOwed    Int
   status       String   @default("ACTIVE") // ACTIVE, PAID, DEFAULTED
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -1078,7 +1078,7 @@ model Invoice {
   id            String    @id @default(uuid())
   merchantId    String
   customerPhone String
-  amount        Float
+  amount        Int
   description   String?
   status        String    @default("PENDING") // PENDING, PAID, CANCELLED
   transactionId String? // reference to Ledger transaction when paid
@@ -1093,7 +1093,7 @@ model PayoutBulk {
   id          String    @id @default(uuid())
   merchantId  String
   name        String?
-  totalAmount Float     @default(0)
+  totalAmount Int       @default(0)
   status      String    @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
   createdAt   DateTime  @default(now())
   completedAt DateTime?
@@ -1106,7 +1106,7 @@ model PayoutEntry {
   id            String  @id @default(uuid())
   bulkId        String
   phone         String
-  amount        Float
+  amount        Int
   status        String  @default("PENDING") // PENDING, SUCCESS, FAILED
   errorReason   String?
   transactionId String?
@@ -1124,7 +1124,7 @@ model MarketListing {
   seller      User     @relation("UserListings", fields: [sellerId], references: [id])
   title       String
   description String
-  price       Float
+  price       Int
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
@@ -1139,7 +1139,7 @@ model EscrowTransaction {
   seller     User          @relation("SellerEscrows", fields: [sellerId], references: [id])
   listingId  String
   listing    MarketListing @relation(fields: [listingId], references: [id])
-  amount     Float
+  amount     Int
   status     String // "LOCKED", "RELEASED", "DISPUTED", "REFUNDED"
   createdAt  DateTime      @default(now())
   releasedAt DateTime?
@@ -1153,7 +1153,7 @@ model StakingVault {
   id          String   @id @default(cuid())
   userId      String
   user        User     @relation("UserStaking", fields: [userId], references: [id])
-  amount      Float
+  amount      Int
   apy         Float
   lockedUntil DateTime
   status      String // "ACTIVE", "MATURED", "WITHDRAWN"
@@ -1182,7 +1182,7 @@ model BillerTransaction {
   user        User     @relation("UserBillerTxs", fields: [userId], references: [id])
   provider    String   // EG: 'SEEG', 'CANAL'
   reference   String   // Compteur, Numéro Abonnée
-  amount      Float
+  amount      Int
   status      String   @default("COMPLETED")
   createdAt   DateTime @default(now())
 }
@@ -1191,9 +1191,9 @@ model BnplContract {
   id          String   @id @default(cuid())
   userId      String
   user        User     @relation("UserBnpl", fields: [userId], references: [id])
-  totalAmount Float
+  totalAmount Int
   months      Int
-  remaining   Float
+  remaining   Int
   nextPaymentDate DateTime
   status      String   @default("ACTIVE") // ACTIVE, DEFAULTED, CLOSED
   createdAt   DateTime @default(now())
@@ -1204,11 +1204,11 @@ model RemittanceTransaction {
   sender           User     @relation("SenderRemit", fields: [senderId], references: [id])
   recipientPhone   String
   destinationCountry String
-  sourceAmountXaf  Float
+  sourceAmountXaf  Int
   exchangeRate     Float
   destinationAmount Float
-  destinationCurrency String 
-  fee              Float
+  destinationCurrency String
+  fee              Int
   status           String   @default("COMPLETED")
   createdAt        DateTime @default(now())
 }
@@ -1219,8 +1219,8 @@ model EscrowContract {
   sellerId        String
   buyer           User     @relation("BuyerEscrow", fields: [buyerId], references: [id])
   seller          User     @relation("SellerEscrow", fields: [sellerId], references: [id])
-  amount          Float
-  fee             Float
+  amount          Int
+  fee             Int
   status          String   @default("LOCKED") // LOCKED, RELEASED, DISPUTED, REFUNDED
   itemDescription String
   releaseCode     String   // Used by buyer to give to seller upon delivery

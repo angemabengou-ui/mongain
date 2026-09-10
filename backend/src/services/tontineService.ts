@@ -70,7 +70,7 @@ export async function collectParticipantContribution(
             if (currentlyPaid >= group.contribution) throw new Error('ALREADY_COMPLETE');
             const cappedAmount = Math.min(amount, group.contribution - currentlyPaid);
 
-            const fee = cappedAmount * settings.taxP2P;
+            const fee = Math.round(cappedAmount * settings.taxP2P);
             const totalDebit = cappedAmount + fee;
 
             await LimitEngine.verifyAndIncrementConsumption(tx, userId, wallet.id, totalDebit, settings);

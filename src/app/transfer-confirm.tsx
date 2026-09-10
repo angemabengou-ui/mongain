@@ -64,7 +64,8 @@ export default function TransferConfirmScreen() {
     const handleBiometricAuth = async () => {
         if (submittingRef.current) return; // Garde anti double-tap (synchrone, voir déclaration de submittingRef).
         setError('');
-        const amountNum = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
+        // Le FCFA n'a aucune sous-unité — arrondi à l'entier (voir docs/AUTO_CRITIQUE_PROJET.md).
+        const amountNum = Math.round(parseFloat(amount.replace(/\s/g, '').replace(',', '.')) || 0);
         if (!amount || isNaN(amountNum) || amountNum <= 0) {
             setError('Veuillez entrer un montant valide.');
             return;
@@ -101,7 +102,8 @@ export default function TransferConfirmScreen() {
     const handleTransfer = async () => {
         if (submittingRef.current) return; // Garde anti double-tap (synchrone, voir déclaration de submittingRef).
         setError('');
-        const amountNum = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
+        // Le FCFA n'a aucune sous-unité — arrondi à l'entier (voir docs/AUTO_CRITIQUE_PROJET.md).
+        const amountNum = Math.round(parseFloat(amount.replace(/\s/g, '').replace(',', '.')) || 0);
 
         if (!amount || isNaN(amountNum) || amountNum <= 0) {
             setError('Veuillez entrer un montant valide.');
@@ -327,7 +329,7 @@ export default function TransferConfirmScreen() {
                             <TextInput
                                 style={styles.input}
                                 placeholder="0"
-                                keyboardType="numeric"
+                                keyboardType="number-pad"
                                 value={amount}
                                 onChangeText={setAmount}
                                 placeholderTextColor={COLORS.textSecondary}
@@ -339,7 +341,7 @@ export default function TransferConfirmScreen() {
                             // Number(amount) brut renvoie NaN dès qu'un espace ou une virgule traîne
                             // dans la saisie (collage, IME), ce qui masquait silencieusement cet
                             // encart de frais au lieu d'afficher le montant réellement débité.
-                            const cleanedAmount = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
+                            const cleanedAmount = Math.round(parseFloat(amount.replace(/\s/g, '').replace(',', '.')) || 0);
                             if (!(cleanedAmount > 0)) return null;
 
                             // Le backend (backend/src/routes/wallet.ts:435, POST /transfer) EXEMPTE

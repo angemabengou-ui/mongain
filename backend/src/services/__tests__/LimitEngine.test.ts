@@ -390,4 +390,15 @@ describe('LimitEngine.calculateWithdrawalFee', () => {
         const fee = await LimitEngine.calculateWithdrawalFee(tx as any, 'wallet_1', 600000, feeSettings);
         expect(fee).toBe(1000);
     });
+
+    // Régression : Wallet.balance/Transaction.fee sont désormais des entiers (Float -> Int,
+    // voir docs/AUTO_CRITIQUE_PROJET.md) — un frais fractionnaire ne peut plus être écrit tel
+    // quel. Ce cas (33 333 * 1% = 333,33) ne produisait auparavant qu'un simple float ; il
+    // doit maintenant être arrondi à l'entier avant d'être renvoyé à l'appelant.
+    it('devrait arrondir le frais à l\'entier le plus proche (le taux ne donne pas un multiple entier)', async () => {
+        const tx = buildFeeTx(0);
+        const fee = await LimitEngine.calculateWithdrawalFee(tx as any, 'wallet_1', 533333, feeSettings);
+        expect(Number.isInteger(fee)).toBe(true);
+        expect(fee).toBe(333); // (533333 - 500000) * 1% = 333.33 -> 333
+    });
 });

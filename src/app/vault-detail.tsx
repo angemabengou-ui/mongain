@@ -141,8 +141,11 @@ export default function VaultDetailScreen() {
 
     const handleDeposit = async () => {
         if (depositSubmittingRef.current) return;
-        const amt = depositAmount.replace(/\s/g, '').replace(',', '.');
-        if (!amt || Number(amt) <= 0) return;
+        // Le FCFA n'a aucune sous-unité — arrondi à l'entier avant envoi (voir
+        // docs/AUTO_CRITIQUE_PROJET.md), reconverti en chaîne pour l'API existante.
+        const amtNum = Math.round(Number(depositAmount.replace(/\s/g, '').replace(',', '.')) || 0);
+        if (amtNum <= 0) return;
+        const amt = String(amtNum);
         depositSubmittingRef.current = true;
         setDepositLoading(true);
         try {
@@ -161,8 +164,9 @@ export default function VaultDetailScreen() {
 
     const handleWithdrawRequest = async () => {
         if (withdrawSubmittingRef.current) return;
-        const amt = withdrawAmount.replace(/\s/g, '').replace(',', '.');
-        if (!amt || Number(amt) <= 0) return;
+        const amtNum = Math.round(Number(withdrawAmount.replace(/\s/g, '').replace(',', '.')) || 0);
+        if (amtNum <= 0) return;
+        const amt = String(amtNum);
         if (!withdrawReason.trim() || withdrawReason.trim().length < 3) {
             Alert.alert('Motif requis', 'Précisez pourquoi ce retrait est demandé (au moins 3 caractères) — les commissaires en ont besoin pour approuver en connaissance de cause.');
             return;
@@ -355,7 +359,7 @@ export default function VaultDetailScreen() {
                             style={[styles.inlineInput, { color: COLORS.textPrimary }]}
                             placeholder="Montant en FCFA"
                             placeholderTextColor={COLORS.textSecondary}
-                            keyboardType="numeric"
+                            keyboardType="number-pad"
                             value={depositAmount}
                             onChangeText={setDepositAmount}
                         />
@@ -386,7 +390,7 @@ export default function VaultDetailScreen() {
                                         style={[styles.input, { color: COLORS.textPrimary, borderColor: COLORS.border }]}
                                         placeholder="Montant en FCFA"
                                         placeholderTextColor={COLORS.textSecondary}
-                                        keyboardType="numeric"
+                                        keyboardType="number-pad"
                                         value={withdrawAmount}
                                         onChangeText={setWithdrawAmount}
                                     />

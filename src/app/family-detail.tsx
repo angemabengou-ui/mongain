@@ -72,14 +72,14 @@ export default function FamilyDetailScreen() {
     useFocusEffect(useCallback(() => { load(); }, [load]));
 
     const handleSaveLimit = () => {
-        const amt = limitAmount.replace(/\s/g, '').replace(',', '.');
-        if (!amt || Number(amt) <= 0) return;
+        const amt = Math.round(Number(limitAmount.replace(/\s/g, '').replace(',', '.')) || 0);
+        if (amt <= 0) return;
         setPinPrompt({ type: 'limit' });
     };
 
     const handleFund = () => {
-        const amt = fundAmount.replace(/\s/g, '').replace(',', '.');
-        if (!amt || Number(amt) <= 0) return;
+        const amt = Math.round(Number(fundAmount.replace(/\s/g, '').replace(',', '.')) || 0);
+        if (amt <= 0) return;
         setPinPrompt({ type: 'fund' });
     };
 
@@ -89,11 +89,11 @@ export default function FamilyDetailScreen() {
         setActionLoading(true);
         try {
             if (prompt.type === 'limit') {
-                const amt = Number(limitAmount.replace(/\s/g, '').replace(',', '.'));
+                const amt = Math.round(Number(limitAmount.replace(/\s/g, '').replace(',', '.')) || 0);
                 await apiSetChildLimit(child.id, limitPeriod, amt, pin);
                 Alert.alert('Plafond mis à jour', `${child.name} est désormais limité(e) à ${amt.toLocaleString('fr-FR')} FCFA par ${limitPeriod === 'WEEKLY' ? 'semaine' : 'jour'}.`);
             } else {
-                const amt = Number(fundAmount.replace(/\s/g, '').replace(',', '.'));
+                const amt = Math.round(Number(fundAmount.replace(/\s/g, '').replace(',', '.')) || 0);
                 await apiTransfer(child.phone, amt, pin);
                 setFundAmount('');
                 Alert.alert('Recharge effectuée', `${amt.toLocaleString('fr-FR')} FCFA envoyés à ${child.name}, sans frais.`);
@@ -150,7 +150,7 @@ export default function FamilyDetailScreen() {
                             style={[styles.inlineInput, { color: COLORS.textPrimary }]}
                             placeholder="Montant en FCFA"
                             placeholderTextColor={COLORS.textSecondary}
-                            keyboardType="numeric"
+                            keyboardType="number-pad"
                             value={fundAmount}
                             onChangeText={setFundAmount}
                         />
@@ -185,7 +185,7 @@ export default function FamilyDetailScreen() {
                             style={[styles.input, { color: COLORS.textPrimary, borderColor: COLORS.border }]}
                             placeholder="Montant maximum en FCFA"
                             placeholderTextColor={COLORS.textSecondary}
-                            keyboardType="numeric"
+                            keyboardType="number-pad"
                             value={limitAmount}
                             onChangeText={setLimitAmount}
                         />

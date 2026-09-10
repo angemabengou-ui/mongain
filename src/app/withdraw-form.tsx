@@ -42,11 +42,13 @@ export default function WithdrawFormScreen() {
     // Sans cet aperçu, aucun frais n'était montré avant validation (contrairement à
     // client-withdraw-desk.tsx) alors que le serveur (wallet.ts POST /push) débite bien
     // `amount + amount * taxWithdraw` — le client ne découvrait le prélèvement qu'après coup
-    // en vérifiant son solde. Pas d'arrondi ici : reflète exactement la formule serveur, non
-    // arrondie elle non plus, pour que l'aperçu et le débit réel coïncident au FCFA près.
-    const numAmountPreview = parseFloat(amount.replace(/\s/g, '').replace(',', '.')) || 0;
+    // en vérifiant son solde. Arrondi à l'entier ici (Math.round), pour refléter exactement
+    // la formule serveur — désormais elle-même arrondie (voir wallet.ts /push et
+    // docs/AUTO_CRITIQUE_PROJET.md) — afin que l'aperçu et le débit réel coïncident toujours
+    // au FCFA près.
+    const numAmountPreview = Math.round(parseFloat(amount.replace(/\s/g, '').replace(',', '.')) || 0);
     const taxRate = settings?.taxWithdraw ?? 0.013;
-    const fee = numAmountPreview * taxRate;
+    const fee = Math.round(numAmountPreview * taxRate);
 
     const handleWithdraw = async () => {
         if (submittingRef.current) return;
@@ -55,8 +57,8 @@ export default function WithdrawFormScreen() {
             return;
         }
 
-        const amt = parseFloat(amount.replace(/\s/g, '').replace(',', '.'));
-        if (isNaN(amt) || amt < 500) {
+        const amt = Math.round(parseFloat(amount.replace(/\s/g, '').replace(',', '.')) || 0);
+        if (amt < 500) {
             Alert.alert("Erreur", "Le montant minimum de retrait est de 500 FCFA.");
             return;
         }

@@ -362,7 +362,7 @@ router.post('/:id/deposit', authMiddleware, async (req: AuthRequest, res) => {
 
             // Vérifier solde utilisateur
             const settings = await tx.systemSettings.findFirst();
-            const fee = settings ? parsedAmount * settings.taxP2P : 0;
+            const fee = settings ? Math.round(parsedAmount * settings.taxP2P) : 0;
             const totalDebit = parsedAmount + fee;
 
             const userWallet = await tx.wallet.findUnique({ where: { userId: req.userId! } });
@@ -787,7 +787,7 @@ router.post('/vouchers/:id/spend', authMiddleware, async (req: AuthRequest, res)
             // aucune ligne Transaction : ce mouvement était à la fois gratuit pour la
             // plateforme ET invisible dans l'historique du marchand qui le recevait.
             const settings = await tx.systemSettings.findFirst();
-            const fee = settings ? voucher.amount * settings.taxP2P : 0;
+            const fee = settings ? Math.round(voucher.amount * settings.taxP2P) : 0;
             const netAmount = voucher.amount - fee;
 
             // Exécution

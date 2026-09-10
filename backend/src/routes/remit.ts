@@ -79,7 +79,10 @@ router.post('/send', authMiddleware, async (req: AuthRequest, res) => {
         const settings = await getSystemSettings();
         const fxMarkup = settings.forexMarkup || 0.025; // default 2.5%
 
-        const fee = amountXaf * fxMarkup;
+        // Même formule que /quote ci-dessus (Math.round(amountXaf * fxMarkup)) — les deux
+        // divergeaient auparavant (/quote arrondissait, /send non), ce qui pouvait faire
+        // débiter un frais différent de celui annoncé au client avant confirmation.
+        const fee = Math.round(amountXaf * fxMarkup);
         const netSourceAmount = amountXaf - fee;
         const destinationAmount = netSourceAmount * rate;
 

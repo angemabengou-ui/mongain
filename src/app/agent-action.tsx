@@ -39,7 +39,9 @@ export default function AgentActionDeskScreen() {
 
     // Right now, this screen is specialized for the Agent depositing digital cash into a Client's wallet after receiving physical cash.
     const isDeposit = action === 'DEPOSIT';
-    const cleanAmount = (v: string) => parseFloat(v.replace(/\s/g, '').replace(',', '.'));
+    // Le FCFA n'a aucune sous-unité — arrondi à l'entier plutôt que d'accepter un montant
+    // décimal tel quel (voir docs/AUTO_CRITIQUE_PROJET.md, montants désormais Int en base).
+    const cleanAmount = (v: string) => Math.round(parseFloat(v.replace(/\s/g, '').replace(',', '.')) || 0);
     const numAmountPreview = cleanAmount(amount) || 0;
 
     const submitAction = async (usedPin: string) => {
@@ -177,7 +179,7 @@ export default function AgentActionDeskScreen() {
                             style={styles.amountInput}
                             placeholder="0"
                             placeholderTextColor={COLORS.textSecondary}
-                            keyboardType="numeric"
+                            keyboardType="number-pad"
                             value={amount}
                             onChangeText={setAmount}
                             autoFocus

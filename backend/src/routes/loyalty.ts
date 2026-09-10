@@ -45,7 +45,7 @@ router.post('/convert', authMiddleware, circuitBreakerMiddleware, async (req: Au
             if (!user) throw new Error('Utilisateur introuvable.');
             if (user.loyaltyPoints < points) throw new Error(`Points insuffisants. Vous avez ${user.loyaltyPoints} MP.`);
 
-            const xafEquiv = points / 10; // 10:1 ratio
+            const xafEquiv = Math.round(points / 10); // 10:1 ratio
 
             // Deduct Points — garde atomique (loyaltyPoints: gte) : le contrôle ci-dessus lit une
             // valeur non verrouillée, donc deux conversions concurrentes du même utilisateur

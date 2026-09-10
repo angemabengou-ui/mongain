@@ -24,11 +24,15 @@ export default function BNPLScreen() {
     const { settings } = useAuth();
     const bnplInterest = settings?.bnplInterest ?? DEFAULT_BNPL_INTEREST;
 
+    // Le FCFA n'a aucune sous-unité — arrondi à l'entier avant envoi, et virgule acceptée en
+    // saisie comme séparateur décimal (voir docs/AUTO_CRITIQUE_PROJET.md).
+    const cleanAmount = () => Math.round(parseFloat(amount.replace(/\s/g, '').replace(',', '.')) || 0);
+
     const handleApply = async () => {
         if (!amount || !pin) return Alert.alert("Erreur", "Saisissez un montant et votre PIN.");
         setLoading(true);
         try {
-            const res = await request('POST', '/api/bnpl/apply', { amountXaf: amount, months, pin }, true) as { message: string };
+            const res = await request('POST', '/api/bnpl/apply', { amountXaf: cleanAmount(), months, pin }, true) as { message: string };
             Alert.alert("Félicitations", res.message, [{ text: "Compris", onPress: () => router.back() }]);
         } catch (e: any) {
             Alert.alert("Refus", e.response?.data?.error || "Le crédit vous est refusé.");
@@ -40,7 +44,7 @@ export default function BNPLScreen() {
         if (!amount || !pin) return Alert.alert("Erreur", "Saisissez un montant et votre PIN.");
         setLoading(true);
         try {
-            const res = await request('POST', '/api/bnpl/repay', { amountXaf: amount, pin }, true) as { message: string };
+            const res = await request('POST', '/api/bnpl/repay', { amountXaf: cleanAmount(), pin }, true) as { message: string };
             Alert.alert("Remboursement Confirmé", res.message);
             setAmount('');
             setPin('');
@@ -50,8 +54,8 @@ export default function BNPLScreen() {
         setLoading(false);
     };
 
-    const simFee = parseFloat(amount || '0') * bnplInterest;
-    const simTotal = parseFloat(amount || '0') + simFee;
+    const simFee = Math.round(cleanAmount() * bnplInterest);
+    const simTotal = cleanAmount() + simFee;
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.primary }}>
@@ -97,7 +101,7 @@ export default function BNPLScreen() {
                             style={{ backgroundColor: COLORS.background, borderWidth: 1, borderColor: COLORS.border, borderRadius: 16, padding: 18, fontSize: 20, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginBottom: 20, color: COLORS.textPrimary }}
                             placeholder="Ex: 25000"
                             placeholderTextColor={COLORS.textSecondary}
-                            keyboardType="numeric"
+                            keyboardType="number-pad"
                             value={amount}
                             onChangeText={setAmount}
                         />

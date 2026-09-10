@@ -596,7 +596,7 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
             // routes/family.ts) est un rechargement interne au foyer, pas un transfert P2P entre
             // deux clients distincts — sans cette exemption, financer le compte d'un enfant
             // coûtait 1% de frais au parent à chaque rechargement.
-            const fee = (sender.role === 'AGENT' || receiver.parentId === sender.id) ? 0 : amount * settings.taxP2P;
+            const fee = (sender.role === 'AGENT' || receiver.parentId === sender.id) ? 0 : Math.round(amount * settings.taxP2P);
             const totalRequired = amount + fee;
 
             if (sender.wallet.balance < totalRequired) {
@@ -779,8 +779,8 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
             let merchantReward = 0;
 
             if (agent.role === 'MERCHANT') {
-                fee = amount * settings.taxWithdraw;
-                merchantReward = amount * settings.rewardMerchant;
+                fee = Math.round(amount * settings.taxWithdraw);
+                merchantReward = Math.round(amount * settings.rewardMerchant);
                 if (merchantReward > fee) merchantReward = fee;
             } else if (agent.role === 'AGENT') {
                 fee = await LimitEngine.calculateWithdrawalFee(tx, sender.wallet.id, amount, settings);
@@ -1258,7 +1258,7 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
         const customerAccountNumber = toPvitCustomerAccountNumber(String(phone));
 
         // 2. Pré-débit du solde + Frais
-        const fee = amount * settings.taxWithdraw;
+        const fee = Math.round(amount * settings.taxWithdraw);
         const totalRequired = amount + fee;
 
         // Récupérer le compte passerelle pour équilibrer la comptabilité

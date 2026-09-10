@@ -49,7 +49,7 @@ router.post('/apply', authMiddleware, circuitBreakerMiddleware, async (req: Auth
 
         const settings = await getSystemSettings();
         const bnplInterest = settings.bnplInterest || DEFAULT_BNPL_INTEREST;
-        const fee = requestedAmount * bnplInterest;
+        const fee = Math.round(requestedAmount * bnplInterest);
         const totalOwed = requestedAmount + fee;
 
         const nextPayment = new Date();
