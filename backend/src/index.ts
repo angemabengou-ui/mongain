@@ -112,7 +112,12 @@ app.use(helmet({
 app.use(cors({
     origin: (origin, callback) => {
         if (isOriginAllowed(origin)) return callback(null, true);
-        callback(new Error('CORS: origine non autorisée — ' + origin));
+        // `isCorsRejection` : marqueur lu par le filet de sécurité générique ci-dessous pour
+        // répondre 403 (échec d'autorisation côté client) plutôt que 500 (erreur serveur) — une
+        // origine refusée n'est pas un bug de ce serveur.
+        const corsError: any = new Error('CORS: origine non autorisée — ' + origin);
+        corsError.isCorsRejection = true;
+        callback(corsError);
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Bypass-Tunnel-Reminder', 'ngrok-skip-browser-warning']
@@ -241,6 +246,11 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
     logger.error('Erreur non gérée:', err);
     logError('UNCAUGHT', err?.message || String(err), { stack: err?.stack, method: req.method }, { path: req.path });
     if (res.headersSent) return next(err);
+    // Origine CORS refusée (voir cors({ origin }) ci-dessus) : un échec d'autorisation
+    // côté client, pas une erreur serveur — ne doit jamais atterrir en 500.
+    if (err?.isCorsRejection) {
+        return res.status(403).json({ error: 'Origine non autorisée.' });
+    }
     res.status(500).json({ error: 'Une erreur inattendue est survenue.' });
 });
 

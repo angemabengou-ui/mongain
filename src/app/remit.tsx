@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import PinPromptModal from '../components/ui/PinPromptModal';
 import ScreenHeader from '../components/ui/ScreenHeader';
 import { useAppTheme } from '../constants/theme';
+import { useAuth } from '../context/AuthContext';
 import { request } from '../services/api';
 
 const CURRENCIES = [
@@ -19,6 +20,13 @@ export default function RemitScreen() {
     const COLORS = useAppTheme();
     const styles = getStyles(COLORS);
     const router = useRouter();
+    const { user } = useAuth();
+
+    // Filet de sécurité UX (pas la barrière de sécurité — le backend refuse déjà ces routes
+    // pour un CHILD) : couvre un lien profond périmé, une notification, ou tout autre chemin
+    // qui contournerait les boutons/onglet masqués côté navigation ((tabs)/index.tsx et
+    // (tabs)/_layout.tsx).
+    const isChild = user?.role === 'CHILD';
 
     const [amountStr, setAmountStr] = useState('');
     const [targetAccount, setTargetAccount] = useState('');
@@ -99,6 +107,20 @@ export default function RemitScreen() {
         setPinPrompt(null);
         if (prompt) executeSend(prompt.freshQuote, prompt.country, pin);
     };
+
+    if (isChild) {
+        return (
+            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background, justifyContent: 'center', alignItems: 'center', padding: 24 }]} edges={['top', 'left', 'right']}>
+                <Ionicons name="lock-closed-outline" size={48} color={COLORS.textSecondary} style={{ marginBottom: 16 }} />
+                <Text style={{ fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: COLORS.textPrimary, textAlign: 'center', marginBottom: 24 }}>
+                    Cette fonctionnalité n'est pas disponible pour les comptes enfant.
+                </Text>
+                <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={{ backgroundColor: COLORS.primary, paddingVertical: 14, paddingHorizontal: 28, borderRadius: 14 }}>
+                    <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>Retour à l'accueil</Text>
+                </TouchableOpacity>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top', 'left', 'right']}>

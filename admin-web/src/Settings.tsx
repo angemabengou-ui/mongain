@@ -232,6 +232,17 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
     const [myIp, setMyIp] = useState<string | null>(null);
     const [newIpInput, setNewIpInput] = useState('');
 
+    // Aucun bouton "Déposer Changement" ci-dessous ne vérifiait `perm_system_settings_edit`
+    // (le Maker) — seule l'approbation vérifiait `perm_system_settings_approve` (le Checker,
+    // ligne ~815). Un COMPLIANCE_CHECKER (a `_approve` mais pas `_edit` par défaut, voir
+    // RBAC.ts) pouvait donc remplir n'importe quel formulaire de cet écran et ne découvrait
+    // le rejet qu'au clic final (POST /api/settings/request exige `_edit`, settings.ts).
+    // `hasPerm && hasPerm([...])` plutôt que `hasPerm ? hasPerm([...]) : true` : ce dernier
+    // échoue OUVERT (autorise) si la prop venait à manquer, ce qu'on veut précisément éviter
+    // ici pour une action de modification.
+    const canEditSettings = hasPerm && hasPerm(['perm_system_settings_edit']);
+    const editDisabledTitle = canEditSettings ? undefined : 'Modification réservée aux détenteurs de perm_system_settings_edit (Maker).';
+
     useEffect(() => { loadAll(); }, []);
 
     useEffect(() => {
@@ -241,7 +252,11 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
 
     const fetchSettings = async () => {
         try {
-            const resp = await fetch(API_URL + '/api/settings');
+            // GET /api/settings (sans jeton) ne renvoie plus qu'un sous-ensemble public minimal
+            // (tarifs affichés, bascules de fonctionnalité) — voir backend/src/routes/settings.ts
+            // et docs/AUTO_CRITIQUE_PROJET.md section 8.4. Cet écran d'administration a besoin de
+            // la configuration complète pour l'afficher/éditer : /full, authentifiée.
+            const resp = await fetch(API_URL + '/api/settings/full', { headers: { 'Authorization': `Bearer ${token}` } });
             const data = await resp.json();
             if (resp.ok) { setSettings(data); setDrafts(data); }
         } catch (e) { console.error(e); }
@@ -453,7 +468,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                     <div><label>Email Support</label><input className="input" value={drafts.supportEmail || ''} onChange={e => handleFieldChange('supportEmail', e.target.value)} /></div>
                                     <div><label>Téléphone Support</label><input className="input" value={drafts.supportPhone || ''} onChange={e => handleFieldChange('supportPhone', e.target.value)} /></div>
                                 </div>
-                                <button className="btn" style={{ marginTop: 24, padding: '14px 24px', background: '#4F46E5', borderRadius: 12 }} onClick={() => handleSaveGroup('UPDATE_GENERAL', ['platformName', 'currency', 'supportEmail', 'supportPhone'])}>💾 Enregistrer les Modifications</button>
+                                <button className="btn" style={{ marginTop: 24, padding: '14px 24px', background: '#4F46E5', borderRadius: 12 }} disabled={!canEditSettings} title={editDisabledTitle} onClick={() => handleSaveGroup('UPDATE_GENERAL', ['platformName', 'currency', 'supportEmail', 'supportPhone'])}>💾 Enregistrer les Modifications</button>
                             </div>
                         )}
 
@@ -469,7 +484,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                                 <div><label>Seuil de Retrait Gratuit (FCFA)</label><input className="input" type="number" value={drafts.agencyWithdrawThreshold || 0} onChange={e => handleFieldChange('agencyWithdrawThreshold', e.target.value)} /></div>
                                                 <div style={{ marginTop: 12 }}><label>Taux au-delà du seuil, sur le dépassement (%)</label><input className="input" type="number" step="0.01" value={(drafts.agencyTaxWithdraw || 0) * 100} onChange={e => handlePercentFieldChange('agencyTaxWithdraw', e.target.value)} /></div>
                                             </div>
-                                            <button className="btn" style={{ marginTop: 'auto', paddingTop: 12, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_FEE_AGENCY', ['agencyWithdrawThreshold', 'agencyTaxWithdraw'])}>Déposer Changement</button>
+                                            <button className="btn" style={{ marginTop: 'auto', paddingTop: 12, width: '100%' }} disabled={!canEditSettings} title={editDisabledTitle} onClick={() => handleSaveGroup('UPDATE_FEE_AGENCY', ['agencyWithdrawThreshold', 'agencyTaxWithdraw'])}>Déposer Changement</button>
                                         </div>
                                         <div style={{ minWidth: 280, padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column' }}>
                                             <div>
@@ -477,7 +492,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                                 <div><label>Taux fixe, sans seuil (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxWithdraw || 0) * 100} onChange={e => handlePercentFieldChange('taxWithdraw', e.target.value)} /></div>
                                                 <div style={{ marginTop: 12 }}><label>Commission reversée au marchand (%)</label><input className="input" type="number" step="0.01" value={(drafts.rewardMerchant || 0) * 100} onChange={e => handlePercentFieldChange('rewardMerchant', e.target.value)} /></div>
                                             </div>
-                                            <button className="btn" style={{ marginTop: 'auto', paddingTop: 12, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_FEE_MERCHANT', ['taxWithdraw', 'rewardMerchant'])}>Déposer Changement</button>
+                                            <button className="btn" style={{ marginTop: 'auto', paddingTop: 12, width: '100%' }} disabled={!canEditSettings} title={editDisabledTitle} onClick={() => handleSaveGroup('UPDATE_FEE_MERCHANT', ['taxWithdraw', 'rewardMerchant'])}>Déposer Changement</button>
                                         </div>
                                         <div style={{ minWidth: 280, padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column' }}>
                                             <div>
@@ -490,7 +505,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                                 </div>
                                                 <div style={{ marginTop: 12 }}><label>Taux P2P (%)</label><input className="input" type="number" step="0.01" value={(drafts.taxP2P || 0) * 100} onChange={e => handlePercentFieldChange('taxP2P', e.target.value)} /></div>
                                             </div>
-                                            <button className="btn" style={{ marginTop: 'auto', paddingTop: 12, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_FEE_P2P', ['taxP2P'])}>Déposer Changement</button>
+                                            <button className="btn" style={{ marginTop: 'auto', paddingTop: 12, width: '100%' }} disabled={!canEditSettings} title={editDisabledTitle} onClick={() => handleSaveGroup('UPDATE_FEE_P2P', ['taxP2P'])}>Déposer Changement</button>
                                         </div>
                                         <div style={{ minWidth: 280, padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-secondary)', borderTop: '4px solid #8B5CF6', display: 'flex', flexDirection: 'column' }}>
                                             <div>
@@ -499,7 +514,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                                 <div style={{ marginTop: 12 }}><label>FX Remise (Cross Border)</label><input className="input" type="number" step="0.1" value={(drafts.forexMarkup || 0) * 100} onChange={e => handlePercentFieldChange('forexMarkup', e.target.value)} /></div>
                                                 <div style={{ marginTop: 12 }}><label>Plafond Absolu KYC</label><input className="input" type="number" value={drafts.kycReqAmount || 2000000} onChange={e => handleFieldChange('kycReqAmount', e.target.value)} /></div>
                                             </div>
-                                            <button className="btn" style={{ marginTop: 'auto', paddingTop: 12, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_CREDIT_FOREX', ['bnplInterest', 'forexMarkup', 'kycReqAmount'])}>Déposer Changement</button>
+                                            <button className="btn" style={{ marginTop: 'auto', paddingTop: 12, width: '100%' }} disabled={!canEditSettings} title={editDisabledTitle} onClick={() => handleSaveGroup('UPDATE_CREDIT_FOREX', ['bnplInterest', 'forexMarkup', 'kycReqAmount'])}>Déposer Changement</button>
                                         </div>
                                     </div>
                                 </div>
@@ -535,7 +550,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                         <div style={{ marginTop: 12 }}><label>Alerte Liquidité Critique (CRITICAL)</label><input className="input" type="number" value={drafts.agencyCriticalLiquidity || 0} onChange={e => handleFieldChange('agencyCriticalLiquidity', e.target.value)} /></div>
                                     </div>
                                 </div>
-                                <button className="btn" style={{ marginTop: 24, padding: '14px 24px', background: '#3B82F6', borderRadius: 12 }} onClick={() => handleSaveGroup('UPDATE_TREASURY_POLICIES', ['maxMintAmount', 'treasuryApprovalThreshold', 'agencyLowLiquidityThreshold', 'agencyCriticalLiquidity'])}>💾 Appliquer aux Coffres Forts</button>
+                                <button className="btn" style={{ marginTop: 24, padding: '14px 24px', background: '#3B82F6', borderRadius: 12 }} disabled={!canEditSettings} title={editDisabledTitle} onClick={() => handleSaveGroup('UPDATE_TREASURY_POLICIES', ['maxMintAmount', 'treasuryApprovalThreshold', 'agencyLowLiquidityThreshold', 'agencyCriticalLiquidity'])}>💾 Appliquer aux Coffres Forts</button>
                             </div>
                         )}
 
@@ -552,7 +567,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                     <div><label>Journalier</label><input className="input" type="number" value={drafts.dailyLimitTier1} onChange={e => handleFieldChange('dailyLimitTier1', e.target.value)} /></div>
                                     <div><label>Par transaction</label><input className="input" type="number" value={drafts.perTxLimitTier1} onChange={e => handleFieldChange('perTxLimitTier1', e.target.value)} /></div>
                                 </div>
-                                <button className="btn" style={{ marginTop: 24, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_LIMITS', ['dailyLimitTier0', 'perTxLimitTier0', 'dailyLimitTier1', 'perTxLimitTier1'])}>Déposer Changement (Maker)</button>
+                                <button className="btn" style={{ marginTop: 24, width: '100%' }} disabled={!canEditSettings} title={editDisabledTitle} onClick={() => handleSaveGroup('UPDATE_LIMITS', ['dailyLimitTier0', 'perTxLimitTier0', 'dailyLimitTier1', 'perTxLimitTier1'])}>Déposer Changement (Maker)</button>
                             </div>
                         )}
 
@@ -573,7 +588,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                         </select>
                                     </div>
                                 </div>
-                                <button className="btn" style={{ marginTop: 24, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_ANTIFRAUD', ['antiFractioningWindowHours', 'antiFractioningMaxAmount', 'antiFractioningMaxCount', 'antiFractioningAction'])}>Déposer Changement (Maker)</button>
+                                <button className="btn" style={{ marginTop: 24, width: '100%' }} disabled={!canEditSettings} title={editDisabledTitle} onClick={() => handleSaveGroup('UPDATE_ANTIFRAUD', ['antiFractioningWindowHours', 'antiFractioningMaxAmount', 'antiFractioningMaxCount', 'antiFractioningAction'])}>Déposer Changement (Maker)</button>
 
                                 <div style={{ marginTop: 24, borderTop: '1px solid var(--border)', paddingTop: 24 }}>
                                     <h3>Pénalité de Retard — Tontine</h3>
@@ -584,7 +599,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                         <label>Taux de pénalité (%)</label>
                                         <input className="input" type="number" step="0.01" min="0" max="100" value={(drafts.tontineLatePenaltyRate || 0) * 100} onChange={e => handlePercentFieldChange('tontineLatePenaltyRate', e.target.value)} />
                                     </div>
-                                    <button className="btn" style={{ marginTop: 16, width: '100%' }} onClick={() => handleSaveGroup('UPDATE_TONTINE_PENALTY', ['tontineLatePenaltyRate'])}>Déposer Changement (Maker)</button>
+                                    <button className="btn" style={{ marginTop: 16, width: '100%' }} disabled={!canEditSettings} title={editDisabledTitle} onClick={() => handleSaveGroup('UPDATE_TONTINE_PENALTY', ['tontineLatePenaltyRate'])}>Déposer Changement (Maker)</button>
                                 </div>
                             </div>
                         )}
@@ -628,7 +643,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                             );
                                         })}
                                     </div>
-                                    <button className="btn" style={{ marginTop: 20, width: '100%' }} onClick={() => handleSaveGroup('TOGGLE_MOBILE_MONEY_CHANNELS', ['airtelEnabled', 'moovEnabled'])}>Déposer Changement (Maker)</button>
+                                    <button className="btn" style={{ marginTop: 20, width: '100%' }} disabled={!canEditSettings} title={editDisabledTitle} onClick={() => handleSaveGroup('TOGGLE_MOBILE_MONEY_CHANNELS', ['airtelEnabled', 'moovEnabled'])}>Déposer Changement (Maker)</button>
                                 </div>
 
                                 <div className="card" style={{ padding: 24 }}>
@@ -688,7 +703,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                             : <span style={{ color: 'var(--warning)', fontWeight: 700 }}>⚠ Incomplet — le dépôt Mobile Money reste désactivé tant que les 4 champs ci-dessus ne sont pas remplis.</span>}
                                     </div>
 
-                                    <button className="btn" style={{ marginTop: 20, width: '100%' }} onClick={() => handleSaveGroup('CONFIGURE_PVIT', ['pvitSecretKey', 'pvitCodeUrlPayment', 'pvitMerchantOperationAccountCode', 'pvitCallbackUrlCode', 'pvitWebhookSecret'])}>Déposer Changement (Maker)</button>
+                                    <button className="btn" style={{ marginTop: 20, width: '100%' }} disabled={!canEditSettings} title={editDisabledTitle} onClick={() => handleSaveGroup('CONFIGURE_PVIT', ['pvitSecretKey', 'pvitCodeUrlPayment', 'pvitMerchantOperationAccountCode', 'pvitCallbackUrlCode', 'pvitWebhookSecret'])}>Déposer Changement (Maker)</button>
                                 </div>
                             </div>
                         )}
@@ -706,7 +721,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                 <div style={{ padding: 20, background: 'var(--bg-secondary)', borderRadius: 12, marginBottom: 24, fontWeight: 700, fontSize: 16 }}>
                                     Statut Actuel : {settings.circuitBreaker ? <span style={{ color: 'var(--danger)' }}>ACTIVÉ (BLOCKING)</span> : <span style={{ color: 'var(--success)' }}>DÉSACTIVÉ (OPERATIONAL)</span>}
                                 </div>
-                                <button onClick={() => {
+                                <button disabled={!canEditSettings} title={editDisabledTitle} onClick={() => {
                                     const next = !settings.circuitBreaker;
                                     handleFieldChange('circuitBreaker', next);
                                     handleSaveGroup('CIRCUIT_BREAKER_TOGGLE', ['circuitBreaker'], { circuitBreaker: next });
@@ -787,7 +802,7 @@ export default function PlatformConfig({ token, hasPerm, staffId }: { token: str
                                     ))}
                                 </div>
 
-                                <button className="btn" style={{ width: '100%' }} onClick={submitIpAllowlist}>Déposer Changement (Maker)</button>
+                                <button className="btn" style={{ width: '100%' }} disabled={!canEditSettings} title={editDisabledTitle} onClick={submitIpAllowlist}>Déposer Changement (Maker)</button>
                             </div>
                         )}
 

@@ -10,7 +10,7 @@ jest.mock('../../prisma', () => ({
         user: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn(), create: jest.fn() },
         wallet: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn(), create: jest.fn() },
         systemAccount: { upsert: jest.fn() },
-        transaction: { create: jest.fn(), findMany: jest.fn(), updateMany: jest.fn(), aggregate: jest.fn() },
+        transaction: { create: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), updateMany: jest.fn(), aggregate: jest.fn() },
         notification: { create: jest.fn() },
         systemSettings: { findFirst: jest.fn() },
         $executeRaw: jest.fn(),
@@ -586,6 +586,33 @@ describe('Wallet Routes', () => {
             expect(prisma.transaction.create).toHaveBeenCalledTimes(1);
             expect(prisma.wallet.update).not.toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'w_corporate' } }));
         });
+
+        // Régression : idempotencyKey — un double-tap ou un retry réseau avec la même clé ne
+        // doit JAMAIS re-débiter l'expéditeur ni re-créditer le destinataire une seconde fois.
+        it('ne doit pas ré-exécuter le transfert si idempotencyKey correspond à une Transaction déjà existante', async () => {
+            (prisma.user.findUnique as jest.Mock).mockImplementation(async (args: any) => {
+                if (args.select?.jwtVersion) return { id: 'user123', isActive: true, jwtVersion: 0 };
+                if (args.where?.id === 'user123' && !args.include) {
+                    return { id: 'user123', pin: 'hashed-pin', failedPinAttempts: 0, lockedUntil: null };
+                }
+                return null;
+            });
+            (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+            (prisma.transaction.findUnique as jest.Mock).mockResolvedValue({ id: 'existing_tx', senderWalletId: 'w_sender', amount: 1000 });
+            (prisma.wallet.findUnique as jest.Mock).mockResolvedValue({ id: 'w_sender', balance: 99000 });
+
+            const res = await request(app)
+                .post('/wallet/transfer')
+                .set('Authorization', 'Bearer dummy-token')
+                .send({ receiverPhone: '077000000', amount: 1000, pin: '1234', idempotencyKey: 'key-1' });
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.transaction.id).toBe('existing_tx');
+            // Aucun mouvement de fonds ni écriture ne doit avoir eu lieu pour ce rejeu.
+            expect(prisma.wallet.update).not.toHaveBeenCalled();
+            expect(prisma.transaction.create).not.toHaveBeenCalled();
+            expect(prisma.notification.create).not.toHaveBeenCalled();
+        });
     });
 
     describe('notifyParentOfChildSpend', () => {
@@ -686,7 +713,7 @@ describe('Wallet Routes', () => {
             expect(res.status).toBe(200);
             expect(res.body.weeklySpend).toBe(8000);
             expect(res.body.weeklyLimit).toBe(20000);
-            expect(LimitEngine.getWeeklySpent).toHaveBeenCalledWith(expect.anything(), 'w_child');
+            expect(LimitEngine.getWeeklySpent).toHaveBeenCalledWith(expect.anything(), 'w_child', expect.anything());
         });
     });
 });

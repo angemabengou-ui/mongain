@@ -53,21 +53,53 @@ export const getSystemSettings = async () => {
     return settings;
 };
 
-// GET /api/settings (Public or Protected, used by app to get fees)
+const maskApiKeys = (settings: NonNullable<Awaited<ReturnType<typeof getSystemSettings>>>) => ({
+    ...settings,
+    airtelApiKey: settings.airtelApiKey ? '••••••••' + settings.airtelApiKey.slice(-4) : null,
+    moovApiKey: settings.moovApiKey ? '••••••••' + settings.moovApiKey.slice(-4) : null,
+    pvitSecretKey: settings.pvitSecretKey ? '••••••••' + settings.pvitSecretKey.slice(-4) : null,
+    pvitWebhookSecret: settings.pvitWebhookSecret ? '••••••••' + settings.pvitWebhookSecret.slice(-4) : null,
+});
+
+// Champs réellement consultés par l'app mobile SANS session (apiGetSystemSettings, voir
+// src/services/api.ts) avant tout login — uniquement les tarifs affichés et les bascules de
+// fonctionnalité. Voir docs/AUTO_CRITIQUE_PROJET.md section 8.4 : la route publique renvoyait
+// jusqu'ici l'intégralité de SystemSettings, y compris les seuils anti-fractionnement/KYC, tous
+// les plafonds par palier, et surtout `adminIpAllowlist`/`adminIpAllowlistEnabled` — de quoi
+// calibrer une fraude sous les seuils de détection ou savoir si le portail admin est protégé,
+// sans même être authentifié.
+const PUBLIC_SETTINGS_FIELDS = [
+    'airtelEnabled', 'moovEnabled', 'seegEnabled', 'tontineEnabled',
+    'taxP2P', 'taxWithdraw', 'bnplInterest', 'forexMarkup',
+] as const;
+
+// GET /api/settings (public, sans authentification — utilisé par l'app mobile avant tout
+// login pour afficher les tarifs/bascules de fonctionnalité). Ne renvoie QUE l'allowlist
+// ci-dessus : pour la configuration complète, voir GET /full (authentifiée, staff habilité).
 router.get('/', async (req, res) => {
     try {
         const settings = await getSystemSettings();
+        const publicSettings: Record<string, unknown> = {};
+        for (const field of PUBLIC_SETTINGS_FIELDS) publicSettings[field] = (settings as any)[field];
+        return res.json(publicSettings);
+    } catch (e: any) {
+        return res.status(500).json({ error: 'Erreur Serveur.' });
+    }
+});
 
-        // Sécurité : Masquage strict des clés secrètes d'API
-        const maskedSettings = {
-            ...settings,
-            airtelApiKey: settings.airtelApiKey ? '••••••••' + settings.airtelApiKey.slice(-4) : null,
-            moovApiKey: settings.moovApiKey ? '••••••••' + settings.moovApiKey.slice(-4) : null,
-            pvitSecretKey: settings.pvitSecretKey ? '••••••••' + settings.pvitSecretKey.slice(-4) : null,
-            pvitWebhookSecret: settings.pvitWebhookSecret ? '••••••••' + settings.pvitWebhookSecret.slice(-4) : null,
-        };
+// GET /api/settings/full (staff authentifié, perm_system_settings_view) — configuration
+// complète pour l'écran d'administration (Settings.tsx), qui a besoin de tous les champs pour
+// les afficher/éditer. Remplace l'ancien usage de GET / (public) par Settings.tsx, qui envoyait
+// déjà un jeton pour /my-ip, /requests et /history juste à côté, mais pas pour cet appel-ci.
+router.get('/full', authMiddleware, adminIpAllowlistMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, role: true, permissions: true, permissionsCustomized: true } });
+        if (!staff || !hasPermission(staff, 'perm_system_settings_view')) {
+            return res.status(403).json({ error: 'Accès non autorisé.' });
+        }
 
-        return res.json(maskedSettings);
+        const settings = await getSystemSettings();
+        return res.json(maskApiKeys(settings));
     } catch (e: any) {
         return res.status(500).json({ error: 'Erreur Serveur.' });
     }

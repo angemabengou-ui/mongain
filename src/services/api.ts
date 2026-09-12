@@ -86,6 +86,23 @@ export const deleteRefreshToken = async () => {
 let _onUnauthorized: (() => void) | null = null;
 export const setUnauthorizedHandler = (fn: () => void) => { _onUnauthorized = fn; };
 
+// ─── Réveil à froid du backend (plan gratuit Render, mis en veille après inactivité) ──
+// La TOUTE PREMIÈRE requête suivant une veille échoue au niveau connexion (le conteneur
+// n'écoute pas encore) — mesuré en pratique : ~20s sans aucune réponse, puis tout redevient
+// normal en dessous de la seconde. Sans retry, l'utilisateur voyait "Vous êtes hors ligne" au
+// premier essai alors que le serveur (et ses données) était parfaitement sain une poignée de
+// secondes plus tard, et devait relancer l'action lui-même pour que ça marche.
+// 4 x 4s = jusqu'à 16s de délai cumulé avant d'abandonner — nécessaire pour le cas 502/503
+// (voir plus bas) où l'échec est instantané (proxy Render répondant immédiatement pendant que
+// le conteneur redémarre) : contrairement à un vrai timeout de connexion, qui bénéficie déjà
+// d'une attente native allant jusqu'à REQUEST_TIMEOUT_MS par tentative, ce délai entre essais
+// est ici la SEULE source d'attente réelle face à un réveil mesuré à ~12-20s.
+// Partagées entre request() ci-dessous ET tryRefreshSession() ci-dessous : les deux tapent le
+// même backend Render et doivent tolérer le même réveil à froid (voir son commentaire dédié).
+const WAKEUP_MAX_RETRIES = 4;
+const WAKEUP_RETRY_DELAY_MS = 4000;
+const REQUEST_TIMEOUT_MS = 15000;
+
 // ─── Renouvellement silencieux de session ───────────────────────────
 // Appelé une seule fois par vague de 401 concurrents (ex: la home charge solde +
 // transactions + stats marchand en parallèle) grâce à _refreshPromise : tous les
@@ -94,30 +111,77 @@ export const setUnauthorizedHandler = (fn: () => void) => { _onUnauthorized = fn
 // suivantes, une seule pouvant réussir par ancien refresh token).
 let _refreshPromise: Promise<boolean> | null = null;
 
+// Tentative réseau réelle derrière tryRefreshSession, avec la MÊME résilience au réveil à
+// froid de Render que request() (voir son commentaire juste au-dessus) — jusqu'ici ce SEUL
+// appel (POST /api/auth/refresh) passait par un fetch() brut, sans retry ni timeout explicite.
+// Conséquence observée en pratique : l'access token dure 30 min (ACCESS_TOKEN_TTL,
+// backend/src/middleware/auth.ts) ; il suffit donc de laisser l'app en arrière-plan un peu
+// plus longtemps que ça — largement le cas "à chaque fois" qu'on rouvre l'app après une pause —
+// pour que le PREMIER appel authentifié au retour reçoive un 401 pendant que Render, lui, s'est
+// ENTRE-TEMPS rendormi. request() tente alors ce renouvellement silencieux, qui tombe sur un
+// serveur qui redémarre : 502/503 (proxy Render pendant le redémarrage) ou échec de connexion
+// pur et simple (conteneur pas encore à l'écoute), TOUS DEUX traités par l'ancien code comme
+// "le refresh token est invalide" (`if (!res.ok) return false`) — alors que le refresh token
+// n'a jamais été présenté au serveur applicatif, qui n'était simplement pas encore réveillé.
+// Résultat : déconnexion complète de l'utilisateur, PIN à ressaisir, pour un serveur qui aurait
+// répondu correctement quelques secondes plus tard. On duplique ici, volontairement, la logique
+// de retry de request() plutôt que de router cet appel à travers request() lui-même : celui-ci
+// rappelle tryRefreshSession() sur un 401 (voir plus bas), et /auth/refresh peut légitimement
+// renvoyer un 401 pour un refresh token réellement expiré/invalide — y router l'appel créerait
+// une récursion (tryRefreshSession → request → 401 → tryRefreshSession → ...).
+const attemptTokenRefresh = async (wakeupAttempt = 0): Promise<boolean> => {
+    const refreshToken = await getRefreshToken();
+    if (!refreshToken) return false;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+        const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken }),
+            signal: controller.signal,
+        });
+
+        // Même situation de réveil à froid que dans request() : le proxy Render répond par un
+        // 502/503/504 PENDANT que le conteneur redémarre, plutôt que de laisser la requête sans
+        // réponse — ce n'est jamais un refresh token invalide, juste un serveur pas encore levé.
+        if ([502, 503, 504].includes(res.status)) {
+            if (wakeupAttempt < WAKEUP_MAX_RETRIES) {
+                await new Promise(r => setTimeout(r, WAKEUP_RETRY_DELAY_MS));
+                return attemptTokenRefresh(wakeupAttempt + 1);
+            }
+            return false;
+        }
+        // Ici, un vrai refus déjà reçu du serveur applicatif (401/400/403) : le refresh token
+        // est réellement invalide/expiré/révoqué — aucune nouvelle tentative ne changera ça.
+        if (!res.ok) return false;
+
+        const data = await res.json();
+        if (!data.token || !data.refreshToken) return false;
+
+        await saveToken(data.token);
+        await saveRefreshToken(data.refreshToken);
+        return true;
+    } catch (e: any) {
+        // Échec de CONNEXION (timeout/abort du AbortController ci-dessus, ou conteneur pas
+        // encore à l'écoute) plutôt qu'une réponse HTTP déjà reçue — même cause que le
+        // 502/503/504 ci-dessus (réveil à froid), juste détectée avant la réponse plutôt qu'après.
+        const isConnectionFailure = e.name === 'AbortError' || (e.message || '').includes('Failed to fetch') || (e.message || '').includes('Network request failed');
+        if (isConnectionFailure && wakeupAttempt < WAKEUP_MAX_RETRIES) {
+            await new Promise(r => setTimeout(r, WAKEUP_RETRY_DELAY_MS));
+            return attemptTokenRefresh(wakeupAttempt + 1);
+        }
+        return false;
+    } finally {
+        clearTimeout(timeoutId);
+    }
+};
+
 const tryRefreshSession = async (): Promise<boolean> => {
     if (!_refreshPromise) {
-        _refreshPromise = (async () => {
-            try {
-                const refreshToken = await getRefreshToken();
-                if (!refreshToken) return false;
-
-                const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ refreshToken }),
-                });
-                if (!res.ok) return false;
-
-                const data = await res.json();
-                if (!data.token || !data.refreshToken) return false;
-
-                await saveToken(data.token);
-                await saveRefreshToken(data.refreshToken);
-                return true;
-            } catch {
-                return false;
-            }
-        })();
+        _refreshPromise = attemptTokenRefresh();
     }
     try {
         return await _refreshPromise;
@@ -127,20 +191,6 @@ const tryRefreshSession = async (): Promise<boolean> => {
 };
 
 // ─── Client HTTP de base ───────────────────────────────────────────
-// Réveil à froid du backend (plan gratuit Render, mis en veille après inactivité) : la TOUTE
-// PREMIÈRE requête suivant une veille échoue au niveau connexion (le conteneur n'écoute pas
-// encore) — mesuré en pratique : ~20s sans aucune réponse, puis tout redevient normal en
-// dessous de la seconde. Sans retry, l'utilisateur voyait "Vous êtes hors ligne" au premier
-// essai alors que le serveur (et ses données) était parfaitement sain une poignée de secondes
-// plus tard, et devait relancer l'action lui-même pour que ça marche.
-// 4 x 4s = jusqu'à 16s de délai cumulé avant d'abandonner — nécessaire pour le cas 502/503
-// (voir plus bas) où l'échec est instantané (proxy Render répondant immédiatement pendant que
-// le conteneur redémarre) : contrairement à un vrai timeout de connexion, qui bénéficie déjà
-// d'une attente native allant jusqu'à REQUEST_TIMEOUT_MS par tentative, ce délai entre essais
-// est ici la SEULE source d'attente réelle face à un réveil mesuré à ~12-20s.
-const WAKEUP_MAX_RETRIES = 4;
-const WAKEUP_RETRY_DELAY_MS = 4000;
-const REQUEST_TIMEOUT_MS = 15000;
 
 export const request = async (method: string, path: string, body?: object, auth = false, _isRetry = false, _wakeupAttempt = 0): Promise<any> => {
     const headers: Record<string, string> = {
@@ -266,6 +316,11 @@ export interface User {
     kycStatus?: string;
     kycLevel?: number;
     role?: string;
+    // Uniquement renseigné pour un compte CHILD (voir ChildAccount ci-dessous) — consommé par
+    // getChildAccent() (constants/childAccent.ts) pour teinter l'expérience de l'enfant une
+    // fois connecté sur SON PROPRE compte (dashboard, tab bar), pas seulement dans la gestion
+    // parentale (family-hub/family-create/family-detail) qui en dépendait déjà.
+    gender?: 'MALE' | 'FEMALE' | null;
     wallet: Wallet | null;
 }
 

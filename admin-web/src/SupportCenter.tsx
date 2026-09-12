@@ -387,19 +387,24 @@ export default function SupportCenter({ token, hasPerm, staffId }: SupportCenter
                             {/* Description */}
                             <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', fontSize: 12, color: 'var(--text-primary)', fontStyle: 'italic' }}>{selectedTicket.description}</div>
 
-                            {/* Actions rapides */}
-                            <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                                {['IN_PROGRESS', 'WAITING_CUSTOMER', 'WAITING_INTERNAL', 'RESOLVED', 'CLOSED'].map(s => (
-                                    selectedTicket.status !== s && (
-                                        <button key={s} onClick={() => updateTicketStatus(selectedTicket.id, s)} style={{ background: 'var(--bg-primary)', border: `1px solid ${STATUS_COLORS[s]}55`, color: STATUS_COLORS[s], borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
-                                            → {s}
-                                        </button>
-                                    )
-                                ))}
-                                <button onClick={() => updateTicketStatus(selectedTicket.id, 'ESCALATED')} style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-bg)', color: 'var(--danger)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
-                                    🔺 ESCALADE
-                                </button>
-                            </div>
+                            {/* Actions rapides — réservées à perm_ticket_resolve côté backend
+                                (PATCH /api/admin/reclamations/:id, admin.ts) : un agent qui n'a
+                                que perm_ticket_view voyait ces boutons puis se heurtait à un 403
+                                au clic. */}
+                            {hasPerm(['perm_ticket_resolve']) && (
+                                <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                    {['IN_PROGRESS', 'WAITING_CUSTOMER', 'WAITING_INTERNAL', 'RESOLVED', 'CLOSED'].map(s => (
+                                        selectedTicket.status !== s && (
+                                            <button key={s} onClick={() => updateTicketStatus(selectedTicket.id, s)} style={{ background: 'var(--bg-primary)', border: `1px solid ${STATUS_COLORS[s]}55`, color: STATUS_COLORS[s], borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
+                                                → {s}
+                                            </button>
+                                        )
+                                    ))}
+                                    <button onClick={() => updateTicketStatus(selectedTicket.id, 'ESCALATED')} style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-bg)', color: 'var(--danger)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
+                                        🔺 ESCALADE
+                                    </button>
+                                </div>
+                            )}
 
                             {/* Timeline Notes */}
                             <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -430,9 +435,17 @@ export default function SupportCenter({ token, hasPerm, staffId }: SupportCenter
                                 <div style={{ display: 'flex', gap: 8 }}>
                                     <textarea value={noteContent} onChange={e => setNoteContent(e.target.value)} placeholder="Ajouter une note ou réponse…"
                                         style={{ flex: 1, background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px', color: 'var(--text-primary)', fontSize: 12, resize: 'none', height: 64 }} />
-                                    <button onClick={addNote} style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, padding: '0 16px', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
-                                        Envoyer
-                                    </button>
+                                    {/* POST /api/admin/reclamations/:id/notes (admin.ts) exige
+                                        perm_support_note OU perm_ticket_resolve — sans ce garde,
+                                        un rôle qui n'a ni l'un ni l'autre pouvait rédiger toute
+                                        une note avant de recevoir un 403 au clic Envoyer. */}
+                                    {hasPerm(['perm_support_note', 'perm_ticket_resolve']) ? (
+                                        <button onClick={addNote} style={{ background: 'var(--accent)', border: 'none', borderRadius: 8, padding: '0 16px', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+                                            Envoyer
+                                        </button>
+                                    ) : (
+                                        <span style={{ alignSelf: 'center', color: 'var(--text-muted)', fontSize: 11, whiteSpace: 'nowrap' }} title="Permission perm_support_note ou perm_ticket_resolve requise.">Envoi non autorisé</span>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -471,14 +484,19 @@ export default function SupportCenter({ token, hasPerm, staffId }: SupportCenter
                                         <td style={{ padding: '8px', fontSize: 11, color: 'var(--text-muted)' }}>{fc.analyst?.name || '—'}</td>
                                         <td style={{ padding: '8px', fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(fc.createdAt).toLocaleDateString('fr-FR')}</td>
                                         <td style={{ padding: '8px' }}>
-                                            <div style={{ display: 'flex', gap: 4 }}>
-                                                {fc.status === 'OPEN' && <button onClick={() => updateFraudCase(fc.id, 'INVESTIGATION')} style={{ background: '#3b82f611', border: '1px solid #3b82f633', color: '#3b82f6', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>Investiguer</button>}
-                                                {fc.status === 'INVESTIGATION' && <>
-                                                    <button onClick={() => updateFraudCase(fc.id, 'CONFIRMED', 'FRAUD')} style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-bg)', color: 'var(--danger)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>Confirmer</button>
-                                                    <button onClick={() => updateFraudCase(fc.id, 'FALSE_POSITIVE', 'INVALID')} style={{ background: 'var(--success-bg)', border: '1px solid var(--success-bg)', color: 'var(--success)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>Faux Positif</button>
-                                                </>}
-                                                {(fc.status === 'CONFIRMED' || fc.status === 'FALSE_POSITIVE') && <button onClick={() => updateFraudCase(fc.id, 'CLOSED')} style={{ background: '#6b728011', border: '1px solid #6b728033', color: '#6b7280', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>Clore</button>}
-                                            </div>
+                                            {/* GET/PATCH /api/admin/fraud-cases (admin.ts) exigent perm_customer_flag —
+                                                sans ce garde, un agent sans cette permission voyait ces boutons de
+                                                traitement puis recevait un 403 au clic. */}
+                                            {hasPerm(['perm_customer_flag']) && (
+                                                <div style={{ display: 'flex', gap: 4 }}>
+                                                    {fc.status === 'OPEN' && <button onClick={() => updateFraudCase(fc.id, 'INVESTIGATION')} style={{ background: '#3b82f611', border: '1px solid #3b82f633', color: '#3b82f6', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>Investiguer</button>}
+                                                    {fc.status === 'INVESTIGATION' && <>
+                                                        <button onClick={() => updateFraudCase(fc.id, 'CONFIRMED', 'FRAUD')} style={{ background: 'var(--danger-bg)', border: '1px solid var(--danger-bg)', color: 'var(--danger)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>Confirmer</button>
+                                                        <button onClick={() => updateFraudCase(fc.id, 'FALSE_POSITIVE', 'INVALID')} style={{ background: 'var(--success-bg)', border: '1px solid var(--success-bg)', color: 'var(--success)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>Faux Positif</button>
+                                                    </>}
+                                                    {(fc.status === 'CONFIRMED' || fc.status === 'FALSE_POSITIVE') && <button onClick={() => updateFraudCase(fc.id, 'CLOSED')} style={{ background: '#6b728011', border: '1px solid #6b728033', color: '#6b7280', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 10, fontWeight: 600 }}>Clore</button>}
+                                                </div>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}

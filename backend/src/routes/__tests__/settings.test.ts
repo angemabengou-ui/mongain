@@ -1,7 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import { prisma } from '../../prisma';
-import settingsRoutes from '../settings';
+import settingsRoutes, { invalidateSettingsCache } from '../settings';
 
 jest.mock('../../middleware/auth', () => ({
     authMiddleware: (req: any, res: any, next: any) => {
@@ -34,6 +34,10 @@ const CHECKER = { id: 'staff_1', role: 'COMPLIANCE_CHECKER', permissionsCustomiz
 describe('POST /settings/approve/:id — garde anti-auto-verrouillage (restriction IP)', () => {
     beforeEach(() => {
         jest.resetAllMocks();
+        // Le cache mémoire de getSystemSettings (TTL 5s, voir settings.ts) survit entre les
+        // tests de ce fichier — sans l'invalider ici, un describe pourrait lire les settings
+        // mockées par le describe précédent au lieu de celles fraîchement mockées ci-dessous.
+        invalidateSettingsCache();
         (prisma.staff.findUnique as jest.Mock).mockResolvedValue(CHECKER);
         (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue(BASE_SETTINGS);
     });
@@ -107,5 +111,95 @@ describe('POST /settings/approve/:id — garde anti-auto-verrouillage (restricti
 
         expect(res.status).toBe(200);
         expect(prisma.settingsApproval.update).toHaveBeenCalled();
+    });
+});
+
+describe('GET /settings/ (public) — ne renvoie plus que l\'allowlist minimale', () => {
+    // Réplique une ligne SystemSettings réaliste : les seuils anti-fraude, les plafonds par
+    // palier et l'allowlist IP admin étaient jusqu'ici renvoyés en clair à n'importe quel
+    // appelant non authentifié — voir docs/AUTO_CRITIQUE_PROJET.md section 8.4.
+    const FULL_SETTINGS = {
+        id: 1,
+        airtelEnabled: true, moovEnabled: false, seegEnabled: true, tontineEnabled: true,
+        taxP2P: 0.01, taxWithdraw: 0.013, bnplInterest: 0.05, forexMarkup: 0.02,
+        antiFractioningMaxAmount: 100000, antiFractioningMaxCount: 5, antiFractioningWindowHours: 24,
+        kycReqAmount: 2000000, dailyLimitTier0: 50000, monthlyLimitTier0: 1000000,
+        adminIpAllowlistEnabled: true, adminIpAllowlist: ['203.0.113.5'],
+        globalMaintenance: false, circuitBreaker: false,
+        airtelApiKey: 'sk_live_abcdef123456', pvitWebhookSecret: 'whsec_super_secret_value',
+    };
+
+    beforeEach(() => {
+        jest.resetAllMocks();
+        // Le cache mémoire de getSystemSettings (TTL 5s, voir settings.ts) survit entre les
+        // tests de ce fichier — sans l'invalider ici, un describe pourrait lire les settings
+        // mockées par le describe précédent au lieu de celles fraîchement mockées ci-dessous.
+        invalidateSettingsCache();
+        (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue(FULL_SETTINGS);
+    });
+
+    it('ne renvoie que les champs publics (tarifs affichés, bascules de fonctionnalité)', async () => {
+        const res = await request(app).get('/settings/');
+
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({
+            airtelEnabled: true, moovEnabled: false, seegEnabled: true, tontineEnabled: true,
+            taxP2P: 0.01, taxWithdraw: 0.013, bnplInterest: 0.05, forexMarkup: 0.02,
+        });
+    });
+
+    it('ne fuit jamais les seuils anti-fraude, les plafonds ou l\'allowlist IP admin', async () => {
+        const res = await request(app).get('/settings/');
+
+        expect(res.body.antiFractioningMaxAmount).toBeUndefined();
+        expect(res.body.kycReqAmount).toBeUndefined();
+        expect(res.body.dailyLimitTier0).toBeUndefined();
+        expect(res.body.adminIpAllowlist).toBeUndefined();
+        expect(res.body.adminIpAllowlistEnabled).toBeUndefined();
+        expect(res.body.circuitBreaker).toBeUndefined();
+        expect(res.body.airtelApiKey).toBeUndefined();
+    });
+});
+
+describe('GET /settings/full — configuration complète, réservée au staff habilité', () => {
+    // adminIpAllowlistEnabled: false — ce test vérifie le contrôle de PERMISSION de /full, pas
+    // adminIpAllowlistMiddleware (couvert par le describe tout en haut de ce fichier) : à true,
+    // l'IP locale de supertest ne matcherait jamais '203.0.113.5' et bloquerait en 403 pour une
+    // raison sans rapport avec ce qui est testé ici.
+    const FULL_SETTINGS = {
+        id: 1, taxP2P: 0.01, adminIpAllowlistEnabled: false, adminIpAllowlist: ['203.0.113.5'],
+        airtelApiKey: 'sk_live_abcdef123456',
+    };
+
+    beforeEach(() => {
+        jest.resetAllMocks();
+        // Le cache mémoire de getSystemSettings (TTL 5s, voir settings.ts) survit entre les
+        // tests de ce fichier — sans l'invalider ici, un describe pourrait lire les settings
+        // mockées par le describe précédent au lieu de celles fraîchement mockées ci-dessous.
+        invalidateSettingsCache();
+        (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue(FULL_SETTINGS);
+    });
+
+    it('refuse un staff sans perm_system_settings_view', async () => {
+        (prisma.staff.findUnique as jest.Mock).mockResolvedValue({
+            id: 'staff_1', role: 'SUPPORT_MAKER', permissionsCustomized: false, permissions: [],
+        });
+
+        const res = await request(app).get('/settings/full');
+
+        expect(res.status).toBe(403);
+    });
+
+    it('renvoie la configuration complète (secrets masqués) pour un staff habilité', async () => {
+        (prisma.staff.findUnique as jest.Mock).mockResolvedValue({
+            id: 'staff_1', role: 'SUPER_ADMIN', permissionsCustomized: false, permissions: [],
+        });
+
+        const res = await request(app).get('/settings/full');
+
+        expect(res.status).toBe(200);
+        expect(res.body.adminIpAllowlist).toEqual(['203.0.113.5']);
+        expect(res.body.adminIpAllowlistEnabled).toBe(false);
+        expect(res.body.airtelApiKey).toBe('••••••••3456');
     });
 });

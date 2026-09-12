@@ -66,7 +66,9 @@ router.post('/sessions/open', requireBranchId, async (req: AuthRequest, res) => 
         }
 
         const branchId = (req as any).branchId;
-        const initialCash = parseFloat(req.body.initialCash) || 0;
+        // Le FCFA n'a aucune sous-unité (voir docs/AUTO_CRITIQUE_PROJET.md) — arrondi ici, sinon
+        // l'écriture Prisma échoue sur un montant décimal soumis par le client (CashSession.initialCash est Int).
+        const initialCash = Math.round(parseFloat(req.body.initialCash)) || 0;
 
         // Check-then-create sans verrou : deux ouvertures concurrentes pour le même teller
         // (double-tap, retry réseau) passaient toutes deux le `findFirst` avant qu'aucune
@@ -117,7 +119,9 @@ router.post('/sessions/close', async (req: AuthRequest, res) => {
             return res.status(403).json({ error: 'Vous n\'avez pas les droits de clôture de session.' });
         }
 
-        const finalCashDeclared = parseFloat(req.body.finalCash);
+        // Le FCFA n'a aucune sous-unité — arrondi ici, sinon l'écriture Prisma échoue sur un
+        // montant décimal (CashSession.finalCash est Int).
+        const finalCashDeclared = Math.round(parseFloat(req.body.finalCash));
         if (isNaN(finalCashDeclared)) return res.status(400).json({ error: 'Final cash invalide.' });
 
         const active = await prisma.cashSession.findFirst({
@@ -250,8 +254,9 @@ router.post('/cash-in', requireBranchId, async (req: AuthRequest, res) => {
         // `amount <= 0` de CashOperationService laisse passer (NaN <= 0 vaut false en JS) —
         // un corps de requête sans `amount` (ou invalide) échouait alors plus loin sur une
         // erreur Prisma technique et incompréhensible pour le caissier, au lieu d'un message
-        // de validation clair ici.
-        const parsedAmount = parseFloat(amount);
+        // de validation clair ici. Arrondi (FCFA sans sous-unité) : sinon l'écriture Prisma
+        // échoue sur un montant décimal, les colonnes concernées étant Int.
+        const parsedAmount = Math.round(parseFloat(amount));
         if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
             return res.status(400).json({ error: 'Montant invalide.' });
         }
@@ -281,8 +286,8 @@ router.post('/cash-out', requireBranchId, async (req: AuthRequest, res) => {
         const phone = userPhone || clientPhone;
 
         // Même garde qu'en Cash-In ci-dessus (voir commentaire) : NaN passait le contrôle
-        // `amount <= 0` de CashOperationService.
-        const parsedAmount = parseFloat(amount);
+        // `amount <= 0` de CashOperationService. Arrondi pour la même raison (FCFA, colonnes Int).
+        const parsedAmount = Math.round(parseFloat(amount));
         if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
             return res.status(400).json({ error: 'Montant invalide.' });
         }
@@ -322,7 +327,7 @@ router.post('/cash-out-code', requireBranchId, async (req: AuthRequest, res) => 
         const [storedCode, storedAmount] = verif.code.split(':');
         if (storedCode !== String(code)) return res.status(400).json({ error: 'Code incorrect.' });
 
-        const amount = parseFloat(storedAmount);
+        const amount = Math.round(parseFloat(storedAmount));
         if (!amount || amount <= 0) return res.status(400).json({ error: 'Code invalide (montant illisible).' });
 
         // Réclamé (supprimé) AVANT d'exécuter le retrait, pas après : la version précédente
@@ -361,7 +366,7 @@ router.post('/treasury-requests', requireBranchId, async (req: AuthRequest, res)
         const branchId = (req as any).branchId;
         if (!hasPermission(staff, 'perm_branch_manage')) return res.status(403).json({ error: 'Seul le Manager (perm_branch_manage) peut demander un financement.' });
 
-        const schema = z.object({ amount: z.number().positive(), reason: z.string().min(3) });
+        const schema = z.object({ amount: z.number().int().positive(), reason: z.string().min(3) });
         const parsed = schema.safeParse(req.body);
         if (!parsed.success) return res.status(400).json({ error: 'Données invalides' });
 

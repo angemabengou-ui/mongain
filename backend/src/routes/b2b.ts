@@ -213,7 +213,7 @@ router.post('/invoices/:id/reject', authMiddleware, async (req: AuthRequest, res
 
 router.post('/payouts', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const { name, entries } = req.body; // entries: [{ phone, amount }]
+        const { name, entries, pin, idempotencyKey } = req.body; // entries: [{ phone, amount }]
 
         const user = await getActiveUser(req.userId);
         if (!user || user.role !== 'MERCHANT') {
@@ -248,12 +248,36 @@ router.post('/payouts', authMiddleware, async (req: AuthRequest, res) => {
             return res.status(400).json({ error: `Solde insuffisant pour un total de ${totalAmount} FCFA.` });
         }
 
+        // PIN obligatoire : ce virement de masse débitait le marchand vers une liste de
+        // numéros de son choix sans aucun consentement explicite, contrairement à tous les
+        // autres rails de paiement initiés par un User (voir /invoices/:id/pay ci-dessus,
+        // /transfer, /pay/qr-scan...) qui exigent tous verifyUserPin.
+        if (!pin) return res.status(400).json({ error: "Code PIN requis." });
+        const pinCheck = await verifyUserPin(user, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
+
+        // Idempotence : sans clé (fournie par le client, stable le temps d'une tentative de
+        // soumission), un double-clic ou un retry réseau sur ce bouton recréait un lot
+        // identique, traité une deuxième fois par processBulkAsync ci-dessous — débitant le
+        // marchand et créditant chaque bénéficiaire une seconde fois. Un lot déjà créé avec
+        // cette clé est retourné tel quel plutôt que d'en recréer un second.
+        if (idempotencyKey) {
+            const existingBulk = await prisma.payoutBulk.findUnique({
+                where: { idempotencyKey },
+                include: { entries: true }
+            });
+            if (existingBulk) {
+                return res.status(202).json({ success: true, message: "Paiement groupé déjà soumis.", bulkId: existingBulk.id });
+            }
+        }
+
         const bulk = await prisma.payoutBulk.create({
             data: {
                 merchantId: user.id,
                 name: name || "Paie groupée",
                 totalAmount,
                 status: 'PROCESSING',
+                idempotencyKey: idempotencyKey || null,
                 entries: {
                     create: entries.map(e => ({
                         phone: e.phone,

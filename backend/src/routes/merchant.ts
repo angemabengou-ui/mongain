@@ -100,7 +100,9 @@ router.post('/payouts', authMiddleware, async (req: AuthRequest, res) => {
         if (sourceAccount !== 'SALES' && sourceAccount !== 'COMMISSION') {
             return res.status(400).json({ error: "sourceAccount doit être 'SALES' ou 'COMMISSION'." });
         }
-        const parsedAmount = Number(amount);
+        // Le FCFA n'a aucune sous-unité — arrondi ici, sinon l'écriture Prisma échoue sur un
+        // montant décimal (MerchantPayoutRequest.amount est Int).
+        const parsedAmount = Math.round(Number(amount));
         if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
             return res.status(400).json({ error: 'Montant invalide.' });
         }

@@ -967,6 +967,11 @@ model VaultTransaction {
 
   createdAt DateTime @default(now())
 
+  // Idempotence — empêche un double-clic/retry réseau de créer un second dépôt ou une
+  // seconde demande de retrait identiques (voir routes/vault.ts, /:id/deposit et
+  // /:id/withdraw-request). Même convention que Transaction.idempotencyKey plus haut.
+  idempotencyKey String? @unique
+
   // Seuil et liste des commissaires obligatoires figés au moment de la CRÉATION de la
   // demande (routes/vault.ts, POST /:id/withdraw-request), plutôt que recalculés à chaque
   // approbation depuis les VaultMember courants. Sans ce gel, un initiateur malveillant
@@ -1090,13 +1095,18 @@ model Invoice {
 }
 
 model PayoutBulk {
-  id          String    @id @default(uuid())
-  merchantId  String
-  name        String?
-  totalAmount Int       @default(0)
-  status      String    @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
-  createdAt   DateTime  @default(now())
-  completedAt DateTime?
+  id             String    @id @default(uuid())
+  merchantId     String
+  name           String?
+  totalAmount    Int       @default(0)
+  status         String    @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  // Optionnelle, fournie par le client (POST /api/b2b/payouts) : un double-clic ou un retry
+  // réseau renvoyant la même clé retrouve ce lot déjà créé au lieu d'en recréer un second,
+  // qui serait traité une deuxième fois par processBulkAsync (débit marchand + crédit de
+  // chaque bénéficiaire en double). NULL pour les lots existants créés avant ce champ.
+  idempotencyKey String?   @unique
+  createdAt      DateTime  @default(now())
+  completedAt    DateTime?
 
   merchant User          @relation("MerchantPayoutBulks", fields: [merchantId], references: [id])
   entries  PayoutEntry[]

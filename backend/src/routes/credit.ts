@@ -74,7 +74,12 @@ router.get('/active', authMiddleware, async (req: AuthRequest, res) => {
 // POST /api/credit/apply
 router.post('/apply', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
-        const { amount, pin } = req.body;
+        // Contrairement aux autres rails, `amount` n'était converti nulle part avant d'atteindre
+        // `Loan.amount` (Int) : une chaîne ("5000.5") ou un montant décimal passait telle quelle
+        // la comparaison `< 5000` (coercition JS implicite), puis faisait planter la transaction
+        // Prisma en 500 au lieu d'un 400 propre. Le FCFA n'a aucune sous-unité — arrondi ici.
+        const { pin } = req.body;
+        const amount = Math.round(Number(req.body.amount));
         if (!amount || amount < 5000) {
             return res.status(400).json({ error: 'Montant minimum: 5000 FCFA' });
         }
@@ -85,6 +90,12 @@ router.post('/apply', authMiddleware, circuitBreakerMiddleware, async (req: Auth
         if (!pin) return res.status(400).json({ error: 'Code PIN requis.' });
         const userForPin = await prisma.user.findUnique({ where: { id: req.userId } });
         if (!userForPin) return res.status(403).json({ error: 'Utilisateur non trouvé' });
+        // Restriction Comptes Enfant : souscrire à un crédit engage une dette réelle (intérêts
+        // inclus), ce qui ne fait pas partie des fonctionnalités approuvées pour un compte
+        // enfant. Le mobile masque déjà le bouton correspondant, mais un masquage d'UI seul
+        // n'est jamais une garantie — c'est ce contrôle serveur qui constitue le véritable
+        // point d'application.
+        if (userForPin.role === 'CHILD') return res.status(403).json({ error: 'Cette fonctionnalité n\'est pas disponible pour les comptes enfant.' });
         const pinCheck = await verifyUserPin(userForPin, pin);
         if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 

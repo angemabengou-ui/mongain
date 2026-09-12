@@ -195,7 +195,9 @@ router.get('/children/:id', async (req: AuthRequest, res) => {
 
 const setLimitSchema = z.object({
     period: z.enum(['DAILY', 'WEEKLY']),
-    amount: z.number().positive('Le montant doit être positif.'),
+    // .int() : le FCFA n'a aucune sous-unité (User.childSpendLimitAmount est Int) — sans ça,
+    // un montant décimal passait la validation Zod puis échouait plus loin sur l'écriture Prisma.
+    amount: z.number().int('Le montant doit être un nombre entier.').positive('Le montant doit être positif.'),
     pin: z.string(),
 });
 

@@ -43,3 +43,30 @@ export function startOfMonthInTimezone(timeZone: string, reference: Date = new D
     const localMonthStartAsUTC = Date.UTC(get('year'), get('month') - 1, 1, 0, 0, 0);
     return new Date(localMonthStartAsUTC - offsetMs);
 }
+
+// Même principe que startOfDayInTimezone, pour le lundi 00h00 heure locale de la semaine
+// calendaire en cours (semaine démarrant le lundi — voir LimitEngine.getWeeklySpent).
+export function startOfWeekInTimezone(timeZone: string, reference: Date = new Date()): Date {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hourCycle: 'h23',
+    }).formatToParts(reference);
+    const get = (type: string) => Number(parts.find(p => p.type === type)!.value);
+
+    const wallClockAsUTC = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+    const offsetMs = wallClockAsUTC - reference.getTime();
+
+    // Jour de la semaine (0 dim. .. 6 sam.) de la date murale locale, dérivé via un instant UTC
+    // arbitraire portant les mêmes composantes Y/M/D — getUTCDay() n'est affecté par aucun
+    // fuseau, seul le triplet Y/M/D compte ici.
+    const dayOfWeek = new Date(Date.UTC(get('year'), get('month') - 1, get('day'))).getUTCDay();
+    const diffToMonday = (dayOfWeek + 6) % 7;
+
+    // Lundi heure murale dans ce fuseau (Date.UTC accepte un jour hors-borne, ex. day 0 ou
+    // négatif, et rétropropage correctement sur le mois précédent), exprimé comme un vrai
+    // instant UTC.
+    const localWeekStartAsUTC = Date.UTC(get('year'), get('month') - 1, get('day') - diffToMonday, 0, 0, 0);
+    return new Date(localWeekStartAsUTC - offsetMs);
+}

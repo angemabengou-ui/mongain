@@ -6,7 +6,9 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { authCorp, AuthRequest, JWT_SECRET } from '../middleware/auth';
 import { prisma } from '../prisma';
+import { isSmsConfigured, sendSms } from '../services/sms';
 import { friendlyErrorMessage, withDbRetry } from '../utils/errors';
+import logger from '../utils/logger';
 
 const router = express.Router();
 
@@ -99,19 +101,36 @@ router.post('/login', loginLimiter, async (req, res) => {
         // téléphone client, obligatoire) : un compte sans numéro enregistré ne peut pas
         // recevoir de code, donc pas se connecter — pas de repli silencieux qui
         // contournerait le 2FA pour ces comptes-là.
-        // --- DÉSACTIVATION TEMPORAIRE DU 2FA ---
-        const token = jwt.sign({ userId: staff.id, role: staff.role, isCorp: true, jwtVersion: staff.jwtVersion }, JWT_SECRET, { expiresIn: '12h' });
-        return res.json({
-            token,
-            user: {
-                id: staff.id,
-                name: staff.name,
-                role: staff.role,
-                email: staff.email,
-                branchId: staff.branchId,
-                mustChangePassword: staff.mustChangePassword
-            }
+        // RESTAURÉ le 2026-09-12 : le commit c2f0981 (« Desactivation_2FA », 2026-09-04)
+        // avait retiré tout ce bloc et délivrait un jeton complet sur mot de passe seul —
+        // voir docs/AUTO_CRITIQUE_PROJET.md section 1. `/verify-login-otp` et
+        // StaffVerificationCode n'avaient jamais été retirés, ils étaient juste devenus
+        // du code mort en attendant cette restauration.
+        if (!staff.phone) {
+            return res.status(400).json({ error: 'Aucun numéro de téléphone enregistré pour ce compte. Contactez un SUPER_ADMIN pour l\'ajouter avant de pouvoir vous connecter.' });
+        }
+
+        // Source de vérité unique (sms.ts) pour "un vrai SMS partira-t-il ?" — même motif que
+        // auth.ts (register/login/reset-pin), pour ne jamais générer un code universel « 1234 »
+        // qui resterait valide alors qu'un SMS part réellement, ni un code aléatoire qui ne
+        // finit que dans les logs serveur pendant qu'on croit tester le mode démo.
+        const useDemoMode = !isSmsConfigured;
+        const code = useDemoMode ? '1234' : crypto.randomInt(1000, 10000).toString();
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes, comme le login client
+
+        await prisma.staffVerificationCode.upsert({
+            where: { staffId: staff.id },
+            update: { code, expiresAt },
+            create: { staffId: staff.id, code, expiresAt }
         });
+
+        if (useDemoMode) {
+            logger.info(`[DEMO MODE] Code d'accès 1234 généré pour le login staff de ${staff.email}`);
+        } else {
+            await sendSms(staff.phone, `[Mongain] Votre code de connexion personnel est : ${code}.`);
+        }
+
+        return res.json({ requireOtp: true, message: 'Un code de sécurité a été envoyé par SMS.' });
     } catch (e: any) {
         console.error('Erreur /corp/login:', e);
         res.status(500).json({ error: friendlyErrorMessage(e) });

@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { CheckCircle, DollarSign, FileText, Plus, RefreshCw, Send, Users, XCircle } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const fmt = (n: number) => n.toLocaleString('fr-GA');
 
@@ -14,6 +14,13 @@ export default function B2BHub({ token }: { token: string }) {
     const [newInvoice, setNewInvoice] = useState({ phone: '', amount: '', description: '' });
     const [payoutName, setPayoutName] = useState('');
     const [payoutEntries, setPayoutEntries] = useState([{ phone: '', amount: '' }]);
+    const [payoutPin, setPayoutPin] = useState('');
+    const [payoutSubmitting, setPayoutSubmitting] = useState(false);
+    // Stable le temps d'une tentative de soumission (retries inclus) — voir handleCreatePayout.
+    // Régénérée uniquement après un succès, jamais après un échec, pour qu'un retry de la
+    // même tentative (ex: coupure réseau juste après l'envoi) soit reconnu comme le même lot
+    // côté serveur au lieu d'en créer un second traité en double.
+    const payoutIdempotencyKey = useRef<string>(crypto.randomUUID());
 
     const fetchB2B = async () => {
         setLoading(true);
@@ -54,19 +61,29 @@ export default function B2BHub({ token }: { token: string }) {
     };
 
     const handleCreatePayout = async () => {
+        if (payoutSubmitting) return; // ceinture supplémentaire au-delà du bouton désactivé
+        setPayoutSubmitting(true);
         try {
             await axios.post(`${import.meta.env.VITE_API_URL}/api/b2b/payouts`, {
                 name: payoutName,
-                entries: payoutEntries
+                entries: payoutEntries,
+                pin: payoutPin,
+                idempotencyKey: payoutIdempotencyKey.current
             }, { headers: { Authorization: `Bearer ${token}` } });
 
             setPayoutName('');
             setPayoutEntries([{ phone: '', amount: '' }]);
+            setPayoutPin('');
+            payoutIdempotencyKey.current = crypto.randomUUID(); // nouvelle tentative = nouvelle clé
             setActiveTab('PAYOUTS');
             fetchB2B();
             alert("Paie groupée synchronisée avec le Ledger !");
         } catch (e: any) {
+            // La clé n'est PAS régénérée ici : un nouveau clic après un échec (ex: PIN erroné,
+            // solde insuffisant) doit rester reconnaissable comme la même tentative côté serveur.
             alert(e.response?.data?.error || "Erreur de paiement en masse");
+        } finally {
+            setPayoutSubmitting(false);
         }
     };
 
@@ -214,8 +231,26 @@ export default function B2BHub({ token }: { token: string }) {
                             </div>
                         </div>
 
-                        <button onClick={handleCreatePayout} className="btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px', marginTop: 'auto' }}>
-                            <Send size={20} /> Exécuter le Transfert
+                        <div>
+                            <label style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 8, display: 'block' }}>Code PIN (confirmation)</label>
+                            <input
+                                type="password" inputMode="numeric" maxLength={4} value={payoutPin}
+                                onChange={e => setPayoutPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                                placeholder="••••"
+                            />
+                        </div>
+
+                        <button
+                            onClick={handleCreatePayout}
+                            disabled={payoutSubmitting || payoutPin.length !== 4}
+                            className="btn-primary"
+                            style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px', marginTop: 'auto',
+                                cursor: payoutSubmitting || payoutPin.length !== 4 ? 'not-allowed' : 'pointer',
+                                opacity: payoutSubmitting || payoutPin.length !== 4 ? 0.6 : 1
+                            }}
+                        >
+                            <Send size={20} /> {payoutSubmitting ? 'Envoi…' : 'Exécuter le Transfert'}
                         </button>
                     </div>
 

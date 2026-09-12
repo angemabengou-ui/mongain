@@ -4,7 +4,9 @@ import { BlurView } from 'expo-blur';
 import { Tabs, useRouter } from 'expo-router';
 import React from 'react';
 import { Platform, StyleSheet, View, useColorScheme } from 'react-native';
+import { getChildAccent } from '../../constants/childAccent';
 import { useAppTheme } from '../../constants/theme';
+import { useAuth } from '../../context/AuthContext';
 import { TAB_BAR_HEIGHT_BASE, useTabBarHeight } from '../../hooks/useTabBarHeight';
 
 export default function TabLayout() {
@@ -13,6 +15,14 @@ export default function TabLayout() {
     const COLORS = useAppTheme();
     const colorScheme = useColorScheme() ?? 'light';
     const router = useRouter();
+    const { user } = useAuth();
+
+    // Même accent additionnel que (tabs)/index.tsx pour une session CHILD connectée sur son
+    // propre compte — remplace juste la teinte active de la tab bar, jamais le thème
+    // clair/sombre lui-même (COLORS ci-dessus, inchangé pour tout le reste).
+    const isChild = user?.role === 'CHILD';
+    const childAccent = isChild ? getChildAccent(user?.gender) : null;
+    const activeTint = childAccent ? childAccent.color : COLORS.primary;
 
     // Hauteur totale (base + inset bas défensif) — voir useTabBarHeight.ts. Chaque écran
     // d'onglet réutilise le même hook pour compenser dans son propre padding bas, la tab
@@ -24,7 +34,7 @@ export default function TabLayout() {
         <Tabs
             screenOptions={{
                 headerShown: false,
-                tabBarActiveTintColor: COLORS.primary,
+                tabBarActiveTintColor: activeTint,
                 tabBarInactiveTintColor: COLORS.textSecondary,
                 tabBarStyle: {
                     position: 'absolute',
@@ -98,6 +108,10 @@ export default function TabLayout() {
                     tabBarIcon: ({ color, size, focused }) => (
                         <Ionicons name={focused ? 'grid' : 'grid-outline'} size={24} color={color} />
                     ),
+                    // Micro-crédit / BNPL / Crypto / Staking (services.tsx) : aucun n'est
+                    // approuvé pour un Compte Enfant. Onglet entièrement masqué pour ce rôle
+                    // uniquement — inchangé (visible, normal) pour tout autre utilisateur.
+                    href: isChild ? null : undefined,
                 }}
             />
 

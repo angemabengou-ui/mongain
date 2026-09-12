@@ -14,6 +14,7 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getChildAccent } from '../../constants/childAccent';
 import { useAppTheme } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
 import { useTabBarHeight } from '../../hooks/useTabBarHeight';
@@ -59,6 +60,13 @@ export default function DashboardScreen() {
   const router = useRouter();
   const { user, logout, settings } = useAuth();
   const appConfig = { seegEnabled: settings?.seegEnabled ?? true };
+
+  // Accent visuel additionnel pour une session CHILD connectée sur SON PROPRE compte —
+  // distinct du thème clair/sombre (useAppTheme() ci-dessus, inchangé) : remplace juste le
+  // bleu générique COLORS.primary par la couleur de genre choisie par le parent (ou le violet
+  // par défaut), déjà utilisée dans la gestion parentale (family-hub/family-create/family-detail).
+  const isChild = user?.role === 'CHILD';
+  const childAccent = isChild ? getChildAccent(user?.gender) : null;
 
   const loadData = useCallback(async () => {
     try {
@@ -125,7 +133,15 @@ export default function DashboardScreen() {
               </View>
               <View style={{ marginLeft: 12 }}>
                 <Text style={styles.welcomeText}>Bonjour</Text>
-                <Text style={styles.userName}>{user?.name ?? 'Ange'}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={styles.userName}>{user?.name ?? 'Ange'}</Text>
+                  {isChild && childAccent && (
+                    <View style={[styles.childBadge, { backgroundColor: childAccent.tint }]}>
+                      <Ionicons name="sparkles" size={12} color={childAccent.color} />
+                      <Text style={[styles.childBadgeText, { color: childAccent.color }]}>Compte Enfant</Text>
+                    </View>
+                  )}
+                </View>
               </View>
             </View>
             <View style={{ flexDirection: 'row', gap: 16 }}>
@@ -151,7 +167,7 @@ export default function DashboardScreen() {
 
           <View style={[styles.contentContainer, { paddingBottom: tabBarHeight + 40 }]}>
             {/* Balance Card */}
-            <View style={styles.balanceCard}>
+            <View style={[styles.balanceCard, isChild && childAccent && { backgroundColor: childAccent.color, shadowColor: childAccent.color }]}>
               <View style={styles.balanceHeader}>
                 <Text style={styles.balanceLabel}>Solde principal <Ionicons name="chevron-down" size={12} color="#fff" /></Text>
                 <TouchableOpacity onPress={() => setBalanceVisible(!balanceVisible)}>
@@ -190,12 +206,15 @@ export default function DashboardScreen() {
               <ActionItem icon="paper-plane" label="Envoyer" bgColor="#2563FF15" color="#2563FF" onPress={() => router.push('/transfer')} styles={styles} />
               <ActionItem icon="wallet" label="Recharger" bgColor="#00C27A15" color="#00C27A" onPress={() => router.push('/recharge')} styles={styles} />
               <ActionItem icon="lock-closed" label="Retirer" bgColor="#FFB02015" color="#FFB020" onPress={() => router.push('/withdraw')} styles={styles} />
-              <ActionItem icon="card" label="Cartes" bgColor="#7E3AF215" color="#7E3AF2" onPress={() => router.push('/cards')} styles={styles} />
-              {/* split.tsx (partage de facture entre plusieurs contacts) est un écran complet et
-                  fonctionnel — son seul point d'accès (ce même bloc "Actions rapides") a été
-                  perdu lors d'une refonte du tableau de bord, le rendant totalement inatteignable
-                  depuis l'app. */}
-              <ActionItem icon="people" label="Diviser" bgColor="#EC489915" color="#EC4899" onPress={() => router.push('/split')} styles={styles} />
+              {/* Cartes et Diviser (partage de facture) ne font pas partie des fonctionnalités
+                  approuvées pour un Compte Enfant — masquées ici pour cette session. cards.tsx
+                  porte en plus son propre filet de sécurité (lien profond direct). */}
+              {!isChild && (
+                <ActionItem icon="card" label="Cartes" bgColor="#7E3AF215" color="#7E3AF2" onPress={() => router.push('/cards')} styles={styles} />
+              )}
+              {!isChild && (
+                <ActionItem icon="people" label="Diviser" bgColor="#EC489915" color="#EC4899" onPress={() => router.push('/split')} styles={styles} />
+              )}
             </View>
 
             {/* Mon Épargne */}
@@ -218,7 +237,10 @@ export default function DashboardScreen() {
               <ServiceSquareItem icon="flash" label="Factures" bgColor="#FFB02015" color="#FFB020" disabled={!appConfig.seegEnabled} onPress={() => router.push('/billers')} styles={styles} />
               <ServiceSquareItem icon="phone-portrait" label="Recharge" bgColor="#2563FF15" color="#2563FF" onPress={() => router.push('/services/airtime')} styles={styles} />
               <ServiceSquareItem icon="water" label="Eau" bgColor="#EF444415" color="#EF4444" onPress={() => router.push('/services/water')} styles={styles} />
-              <ServiceSquareItem icon="earth" label="Internat." bgColor="#00C27A15" color="#00C27A" onPress={() => router.push('/remit')} styles={styles} />
+              {/* Transfert international : non approuvé pour un Compte Enfant. */}
+              {!isChild && (
+                <ServiceSquareItem icon="earth" label="Internat." bgColor="#00C27A15" color="#00C27A" onPress={() => router.push('/remit')} styles={styles} />
+              )}
             </View>
 
             {/* Transactions récentes */}
@@ -363,6 +385,11 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>, isDark: boolean) => S
   },
   welcomeText: { color: COLORS.textSecondary, fontSize: 13, fontFamily: 'Satoshi-Regular', marginBottom: 2 },
   userName: { color: COLORS.textPrimary, fontSize: 18, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold' },
+  childBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, marginLeft: 8,
+  },
+  childBadgeText: { fontSize: 11, fontFamily: 'Satoshi-SemiBold', fontWeight: '700' },
   notificationBadge: {
     position: 'absolute', top: -2, right: -4,
     backgroundColor: '#2563FF', width: 16, height: 16, borderRadius: 8,

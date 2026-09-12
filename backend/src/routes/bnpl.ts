@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
@@ -18,11 +19,28 @@ const router = Router();
 const MAX_BNPL_AMOUNT = 50000;
 const DEFAULT_BNPL_INTEREST = 0.05; // 5% flat fee de repli si non configuré côté admin
 
-router.post('/apply', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+// Anti-abus sur ces deux rails de mouvement de fonds (même raisonnement que wallet.ts
+// moneyMovementLimiter) : keyGenerator PAR COMPTE, pas par IP par défaut, pour ne pas
+// pénaliser collectivement les nombreux comptes distincts partageant la même IP publique
+// (CGNAT des opérateurs mobiles gabonais). 30 requêtes/15 min couvre largement l'usage réel
+// (un emprunt BNPL est déjà limité à une dette active à la fois, un remboursement se fait au
+// plus quelques fois par session) tout en bloquant un script en boucle.
+const moneyMovementLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    keyGenerator: (req) => (req as AuthRequest).userId || 'anonymous',
+    message: { error: 'Trop d\'opérations BNPL en peu de temps. Veuillez réessayer plus tard.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+router.post('/apply', authMiddleware, moneyMovementLimiter, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         if (!req.userId) return res.status(401).json({ error: "Unauthorized" });
-        const { amountXaf, months, pin } = req.body;
-        const requestedAmount = parseFloat(amountXaf);
+        const { amountXaf, months, pin, idempotencyKey } = req.body;
+        // Le FCFA n'a aucune sous-unité — arrondi ici, sinon l'écriture Prisma échoue sur un
+        // montant décimal (BnplContract.totalAmount/remaining sont Int).
+        const requestedAmount = Math.round(parseFloat(amountXaf));
         const duration = parseInt(months);
 
         if (isNaN(requestedAmount) || requestedAmount <= 0 || requestedAmount > MAX_BNPL_AMOUNT) {
@@ -40,6 +58,13 @@ router.post('/apply', authMiddleware, circuitBreakerMiddleware, async (req: Auth
 
         if (!user || user.accountStatus !== 'ACTIVE' || !user.wallet) return res.status(403).json({ error: "Impossible d'emprunter sur ce compte." });
 
+        // Restriction Comptes Enfant : souscrire à une avance BNPL engage une dette réelle (frais
+        // inclus), ce qui ne fait pas partie des fonctionnalités approuvées pour un compte
+        // enfant. Le mobile masque déjà le bouton correspondant, mais un masquage d'UI seul
+        // n'est jamais une garantie — c'est ce contrôle serveur qui constitue le véritable
+        // point d'application.
+        if (user.role === 'CHILD') return res.status(403).json({ error: 'Cette fonctionnalité n\'est pas disponible pour les comptes enfant.' });
+
         if (user.kycLevel < 1) {
             return res.status(403).json({ error: "Validation KYC Premium requise pour débloquer le crédit." });
         }
@@ -55,7 +80,17 @@ router.post('/apply', authMiddleware, circuitBreakerMiddleware, async (req: Auth
         const nextPayment = new Date();
         nextPayment.setMonth(nextPayment.getMonth() + 1);
 
-        await prisma.$transaction(async (tx) => {
+        const isNew = await prisma.$transaction(async (tx) => {
+            // Idempotence : un double-tap ou un retry réseau avec la même idempotencyKey ne
+            // doit JAMAIS débloquer un second crédit pour une seule demande — sans ce garde,
+            // le client recevait deux décaissements (et deux dettes) pour un seul geste.
+            // Vérifié avant toute lecture/écriture, même convention que
+            // CashOperationService.executeCashIn.
+            if (idempotencyKey) {
+                const dup = await tx.transaction.findUnique({ where: { idempotencyKey } });
+                if (dup) return false;
+            }
+
             // Verrou advisory scopé à l'utilisateur (même technique que agency.ts /sessions/open) :
             // aucune ligne BnplContract n'existe encore à ce stade pour un `SELECT ... FOR UPDATE`,
             // donc rien n'empêchait nativement deux transactions concurrentes de lire toutes deux
@@ -112,7 +147,8 @@ router.post('/apply', authMiddleware, circuitBreakerMiddleware, async (req: Auth
                     reference: generateReference('BNPL_IN'),
                     fee: 0,
                     senderWalletId: treasury.wallet.id,
-                    receiverWalletId: user.wallet!.id
+                    receiverWalletId: user.wallet!.id,
+                    idempotencyKey
                 }
             });
 
@@ -124,9 +160,14 @@ router.post('/apply', authMiddleware, circuitBreakerMiddleware, async (req: Auth
                     type: 'SYSTEM'
                 }
             });
+            return true;
         });
 
-        await sendPush(user.pushToken, 'Crédit BNPL Approuvé', `Félicitations, votre avance de ${requestedAmount} FCFA a été virée. Reste à devoir: ${totalOwed} FCFA.`);
+        // Push sauté pour un rejeu idempotent (isNew === false) : déjà envoyé lors du tout
+        // premier passage de cette idempotencyKey.
+        if (isNew) {
+            await sendPush(user.pushToken, 'Crédit BNPL Approuvé', `Félicitations, votre avance de ${requestedAmount} FCFA a été virée. Reste à devoir: ${totalOwed} FCFA.`);
+        }
 
         res.status(201).json({ success: true, message: "Micro-crédit BNPL débloqué !", amount: requestedAmount });
     } catch (e: any) {
@@ -135,11 +176,13 @@ router.post('/apply', authMiddleware, circuitBreakerMiddleware, async (req: Auth
 });
 
 // BNPL Repay
-router.post('/repay', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+router.post('/repay', authMiddleware, moneyMovementLimiter, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         if (!req.userId) return res.status(401).json({ error: "Unauthorized" });
-        const { amountXaf, pin } = req.body;
-        const repayAmount = parseFloat(amountXaf);
+        const { amountXaf, pin, idempotencyKey } = req.body;
+        // Le FCFA n'a aucune sous-unité — arrondi ici, sinon l'écriture Prisma échoue sur un
+        // montant décimal (BnplContract.remaining est Int).
+        const repayAmount = Math.round(parseFloat(amountXaf));
 
         if (isNaN(repayAmount) || repayAmount <= 0) return res.status(400).json({ error: "Montant invalide" });
 
@@ -150,6 +193,12 @@ router.post('/repay', authMiddleware, circuitBreakerMiddleware, async (req: Auth
 
         if (!user || !user.wallet) return res.status(403).json({ error: "Validation échouée" });
 
+        // Restriction Comptes Enfant : la gestion d'une dette BNPL ne fait pas partie des
+        // fonctionnalités approuvées pour un compte enfant (voir /apply ci-dessus). Le mobile
+        // masque déjà le bouton correspondant, mais seul ce contrôle serveur constitue une
+        // vraie barrière (un masquage d'UI seul n'en est jamais une).
+        if (user.role === 'CHILD') return res.status(403).json({ error: 'Cette fonctionnalité n\'est pas disponible pour les comptes enfant.' });
+
         // Vérifié AVANT d'entrer dans la transaction : un `return res.status(...)` depuis
         // l'intérieur du callback `$transaction` ne l'interrompt pas (il ne fait que résoudre
         // la promesse interne avec l'objet Response) — le code après continuait de s'exécuter
@@ -159,7 +208,20 @@ router.post('/repay', authMiddleware, circuitBreakerMiddleware, async (req: Auth
 
         // Atomic Repay
         let effectiveRepayAmount = 0;
-        await prisma.$transaction(async (tx) => {
+        const isNew = await prisma.$transaction(async (tx) => {
+            // Idempotence : un double-tap ou un retry réseau avec la même idempotencyKey ne
+            // doit JAMAIS re-débiter le client pour un seul remboursement — sans ce garde, sa
+            // dette était amortie une seconde fois pour un seul geste, au prix d'un double
+            // débit de son wallet. Vérifié avant toute lecture/écriture, même convention que
+            // CashOperationService.executeCashIn.
+            if (idempotencyKey) {
+                const dup = await tx.transaction.findUnique({ where: { idempotencyKey } });
+                if (dup) {
+                    effectiveRepayAmount = dup.amount;
+                    return false;
+                }
+            }
+
             const debt = await tx.bnplContract.findFirst({
                 where: { userId: user.id, status: 'ACTIVE' }
             });
@@ -191,7 +253,8 @@ router.post('/repay', authMiddleware, circuitBreakerMiddleware, async (req: Auth
                     reference: generateReference('BNPL_OUT'),
                     fee: 0,
                     senderWalletId: user.wallet!.id,
-                    receiverWalletId: treasury!.wallet.id
+                    receiverWalletId: treasury!.wallet.id,
+                    idempotencyKey
                 }
             });
 
@@ -204,9 +267,14 @@ router.post('/repay', authMiddleware, circuitBreakerMiddleware, async (req: Auth
                     status: newRemaining <= 0 ? 'CLOSED' : 'ACTIVE'
                 }
             });
+            return true;
         });
 
-        await notifyParentOfChildSpend(user.id, effectiveRepayAmount, 'remboursement BNPL');
+        // Notification sautée pour un rejeu idempotent (isNew === false) : déjà envoyée lors
+        // du tout premier passage de cette idempotencyKey.
+        if (isNew) {
+            await notifyParentOfChildSpend(user.id, effectiveRepayAmount, 'remboursement BNPL');
+        }
 
         res.json({ success: true, message: "Remboursement enregistré." });
     } catch (e: any) {

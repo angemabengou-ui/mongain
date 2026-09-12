@@ -628,6 +628,23 @@ describe('Vault Routes', () => {
                 }
             });
         });
+
+        // Régression : idempotencyKey — un double-tap ou un retry réseau avec la même clé ne
+        // doit JAMAIS re-débiter le déposant une seconde fois pour un seul dépôt.
+        it('ne doit pas ré-exécuter le dépôt si idempotencyKey correspond à une VaultTransaction déjà existante', async () => {
+            (prisma.vaultTransaction.findUnique as jest.Mock).mockResolvedValue({ id: 'existing_tx', type: 'DEPOSIT', amount: 100 });
+
+            const res = await request(app).post('/vault/v1/deposit').send({ amount: 100, idempotencyKey: 'key-1' });
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.id).toBe('existing_tx');
+            // Aucune lecture/écriture de mouvement de fonds ne doit avoir eu lieu pour ce rejeu
+            // — le garde d'idempotence court-circuite avant même la vérification d'appartenance.
+            expect(prisma.vaultMember.findUnique).not.toHaveBeenCalled();
+            expect(prisma.wallet.updateMany).not.toHaveBeenCalled();
+            expect(prisma.vault.update).not.toHaveBeenCalled();
+            expect(prisma.vaultTransaction.create).not.toHaveBeenCalled();
+        });
     });
 
     // ==========================================
@@ -776,6 +793,23 @@ describe('Vault Routes', () => {
             const res = await request(app).post('/vault/v1/withdraw-request').send({ amount: 100, reason: 'Achat matériel' });
 
             expect(res.status).toBe(500);
+        });
+
+        // Régression : idempotencyKey — un double-tap ou un retry réseau avec la même clé ne
+        // doit JAMAIS créer une deuxième demande de retrait pour un seul geste (chaque demande
+        // PENDING pouvant ensuite être approuvée et exécutée indépendamment).
+        it('ne doit pas créer une deuxième demande si idempotencyKey correspond à une VaultTransaction déjà existante', async () => {
+            (prisma.vaultTransaction.findUnique as jest.Mock).mockResolvedValue({ id: 'existing_wd', status: 'PENDING', amount: 100 });
+
+            const res = await request(app)
+                .post('/vault/v1/withdraw-request')
+                .send({ amount: 100, reason: 'Achat matériel', idempotencyKey: 'key-2' });
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.id).toBe('existing_wd');
+            expect(prisma.vaultMember.findUnique).not.toHaveBeenCalled();
+            expect(prisma.vaultTransaction.create).not.toHaveBeenCalled();
+            expect(prisma.notification.createMany).not.toHaveBeenCalled();
         });
     });
 

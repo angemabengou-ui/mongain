@@ -25,7 +25,16 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // POST /api/wallet/cards/issue
+// Le numéro/CVV sont générés localement (Math.random()) — aucun réseau Visa/Mastercard ni
+// processeur de cartes n'est connecté, cette "carte" ne fonctionnerait chez aucun marchand
+// réel. Désactivé tant qu'un émetteur de cartes réel n'est pas intégré. `/fund` est désactivé
+// pour la même raison juste en dessous — voir docs/AUTO_CRITIQUE_PROJET.md.
 router.post('/issue', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+    if (process.env.ENABLE_UNVERIFIED_CARDS !== 'true') {
+        return res.status(501).json({
+            error: 'Les cartes virtuelles nécessitent une intégration réelle avec un émetteur de cartes. Cette fonctionnalité est désactivée tant que cette intégration n\'est pas en place.'
+        });
+    }
     try {
         const user = await prisma.user.findUnique({
             where: { id: req.userId! },
@@ -35,6 +44,13 @@ router.post('/issue', authMiddleware, circuitBreakerMiddleware, async (req: Auth
         if (!user || user.accountStatus !== 'ACTIVE') {
             return res.status(403).json({ error: 'Compte restreint ou inexistant.' });
         }
+
+        // Restriction Comptes Enfant : l'émission d'une carte virtuelle ne fait pas partie des
+        // fonctionnalités approuvées pour un compte enfant. Garde SÉPARÉE du flag
+        // ENABLE_UNVERIFIED_CARDS ci-dessus : le jour où cette fonctionnalité sera activée pour
+        // de vrais utilisateurs, un compte enfant doit rester bloqué — le mobile masque déjà le
+        // bouton correspondant, mais un masquage d'UI seul n'est jamais une garantie de sécurité.
+        if (user.role === 'CHILD') return res.status(403).json({ error: 'Cette fonctionnalité n\'est pas disponible pour les comptes enfant.' });
 
         // Logic to generate unique 16 digit card number
         let cardNumber = '';
@@ -70,6 +86,11 @@ router.post('/issue', authMiddleware, circuitBreakerMiddleware, async (req: Auth
 
 // POST /api/wallet/cards/:id/fund
 router.post('/:id/fund', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+    if (process.env.ENABLE_UNVERIFIED_CARDS !== 'true') {
+        return res.status(501).json({
+            error: 'Les cartes virtuelles nécessitent une intégration réelle avec un émetteur de cartes. Cette fonctionnalité est désactivée tant que cette intégration n\'est pas en place.'
+        });
+    }
     try {
         const { amount, pin } = req.body;
         const parsedAmount = parseFloat(amount);
@@ -79,6 +100,12 @@ router.post('/:id/fund', authMiddleware, circuitBreakerMiddleware, async (req: A
         const card = await prisma.virtualCard.findUnique({ where: { id: cardId }, include: { fundingWallet: true, user: true } });
         if (!card || card.userId !== req.userId) return res.status(404).json({ error: 'Carte introuvable.' });
         if (card.status !== 'ACTIVE') return res.status(403).json({ error: 'Carte inactive ou bloquée.' });
+
+        // Restriction Comptes Enfant : même raisonnement que /issue ci-dessus — garde SÉPARÉE
+        // du flag ENABLE_UNVERIFIED_CARDS, pour qu'un compte enfant reste bloqué même une fois
+        // cette fonctionnalité activée pour de vrais utilisateurs. Le mobile masque déjà le
+        // bouton correspondant, mais seul ce contrôle serveur constitue une vraie barrière.
+        if (card.user.role === 'CHILD') return res.status(403).json({ error: 'Cette fonctionnalité n\'est pas disponible pour les comptes enfant.' });
 
         if (!pin) return res.status(400).json({ error: 'Code PIN requis.' });
         const pinCheck = await verifyUserPin(card.user, pin);

@@ -43,15 +43,34 @@ router.get('/market', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // POST /api/crypto/buy
+// Aucune bourse, custodian ni blockchain n'est connectée (voir RATES ci-dessus, "Mocked... for
+// DEMO") : un achat ici débite réellement le portefeuille XAF du client contre un actif qui
+// n'existe nulle part ailleurs que dans cette base. Même garde que services.ts/biller.ts —
+// désactivé tant qu'un partenaire d'exchange réel n'est pas intégré. `/sell` reste ouvert
+// pour ne pas enfermer un client qui détiendrait déjà une position simulée sans moyen de la
+// reconvertir en XAF réel.
 router.post('/buy', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+    if (process.env.ENABLE_UNVERIFIED_CRYPTO !== 'true') {
+        return res.status(501).json({
+            error: 'L\'achat de cryptomonnaies nécessite une intégration réelle avec une bourse/custodian. Cette fonctionnalité est désactivée tant que cette intégration n\'est pas en place.'
+        });
+    }
     try {
         const { asset, amountXaf, pin } = req.body;
-        const xafAmount = parseFloat(amountXaf);
+        // Le FCFA n'a aucune sous-unité — arrondi ici, sinon l'écriture Prisma échoue sur un
+        // montant décimal (Transaction.amount/CryptoTransaction.amountFiat sont Int).
+        const xafAmount = Math.round(parseFloat(amountXaf));
         if (isNaN(xafAmount) || xafAmount <= 1000) return res.status(400).json({ error: 'Minimum achat : 1000 XAF' });
         if (!RATES[asset]) return res.status(400).json({ error: 'Actif non supporté' });
 
         const user = await prisma.user.findUnique({ where: { id: req.userId! }, include: { wallet: true } });
         if (!user || user.accountStatus !== 'ACTIVE') return res.status(403).json({ error: 'Compte inactif' });
+        // Restriction Comptes Enfant : l'achat de cryptomonnaies ne fait pas partie des
+        // fonctionnalités approuvées pour un compte enfant (voir docs produit). Le mobile
+        // masque déjà le bouton correspondant (changement parallèle), mais un masquage d'UI
+        // seul n'est jamais une garantie — c'est ce contrôle serveur qui constitue le
+        // véritable point d'application.
+        if (user.role === 'CHILD') return res.status(403).json({ error: 'Cette fonctionnalité n\'est pas disponible pour les comptes enfant.' });
         if (!pin) return res.status(400).json({ error: 'Code PIN requis.' });
         const pinCheck = await verifyUserPin(user, pin);
         if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
@@ -148,6 +167,11 @@ router.post('/sell', authMiddleware, circuitBreakerMiddleware, async (req: AuthR
 
         const user = await prisma.user.findUnique({ where: { id: req.userId! }, include: { wallet: true } });
         if (!user) return res.status(403).json({ error: 'Compte introuvable' });
+        // Restriction Comptes Enfant : même raisonnement que /buy ci-dessus — la vente de
+        // cryptomonnaies ne fait pas partie des fonctionnalités approuvées pour un compte
+        // enfant. Le mobile masque déjà le bouton correspondant, mais seul ce contrôle
+        // serveur constitue une vraie barrière (un masquage d'UI seul n'en est jamais une).
+        if (user.role === 'CHILD') return res.status(403).json({ error: 'Cette fonctionnalité n\'est pas disponible pour les comptes enfant.' });
         if (!pin) return res.status(400).json({ error: 'Code PIN requis.' });
         const pinCheck = await verifyUserPin(user, pin);
         if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });

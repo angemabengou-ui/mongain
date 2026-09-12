@@ -65,7 +65,17 @@ router.post('/quote', authMiddleware, async (req: AuthRequest, res) => {
     }
 });
 
+// Aucun partenaire de transfert/paiement à l'étranger n'est connecté (FX_RATES ci-dessus est
+// un "Mock... for MVP") : envoyer débite réellement le client, mais rien ne part jamais vers
+// la destination annoncée — l'écran mobile affiche pourtant "Transféré ! Fonds expédiés..."
+// Désactivé tant qu'un partenaire réel n'est pas intégré (voir aussi les contraintes BEAC/
+// CEMAC sur les transferts internationaux par un acteur non-bancaire, docs/AUTO_CRITIQUE_PROJET.md).
 router.post('/send', authMiddleware, async (req: AuthRequest, res) => {
+    if (process.env.ENABLE_UNVERIFIED_REMIT !== 'true') {
+        return res.status(501).json({
+            error: 'La remise internationale nécessite une intégration réelle avec un partenaire de transfert. Cette fonctionnalité est désactivée tant que cette intégration n\'est pas en place.'
+        });
+    }
     try {
         const parsed = remitSchema.safeParse(req.body);
         if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -94,6 +104,13 @@ router.post('/send', authMiddleware, async (req: AuthRequest, res) => {
         if (!sender || sender.accountStatus !== 'ACTIVE') {
             return res.status(403).json({ error: 'Compte restreint pour l\'international.' });
         }
+
+        // Restriction Comptes Enfant : l'envoi d'argent à l'international ne fait pas partie
+        // des fonctionnalités approuvées pour un compte enfant. Garde SÉPARÉE du flag
+        // ENABLE_UNVERIFIED_REMIT ci-dessus, pour qu'un compte enfant reste bloqué même une fois
+        // cette fonctionnalité activée pour de vrais utilisateurs. Le mobile masque déjà le
+        // bouton correspondant, mais un masquage d'UI seul n'est jamais une garantie de sécurité.
+        if (sender.role === 'CHILD') return res.status(403).json({ error: 'Cette fonctionnalité n\'est pas disponible pour les comptes enfant.' });
 
         const pinCheck = await verifyUserPin(sender, pin);
         if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });

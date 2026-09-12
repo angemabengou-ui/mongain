@@ -14,12 +14,20 @@ jest.mock('expo-router', () => {
     return { Tabs: TabsMock, useRouter: () => ({ push: mockPush }) };
 });
 
+const mockUseAuth = jest.fn();
+jest.mock('../../../context/AuthContext', () => ({
+    useAuth: () => mockUseAuth(),
+}));
+
 import TabLayout from '../_layout';
+
+const baseUser = { id: 'u1', name: 'Jean Dupont', role: 'USER' };
 
 describe('(tabs)/_layout', () => {
     beforeEach(() => {
         mockScreenCalls.length = 0;
         mockPush.mockClear();
+        mockUseAuth.mockReturnValue({ user: baseUser });
     });
 
     // Refonte de la tab bar (5 onglets visibles + 4 masqués derrière href:null, un bouton
@@ -57,5 +65,24 @@ describe('(tabs)/_layout', () => {
 
         expect(preventDefault).toHaveBeenCalled();
         expect(mockPush).toHaveBeenCalledWith('/qr');
+    });
+
+    // Restriction de navigation "Comptes Enfant" : l'onglet "Services" (Micro-crédit / BNPL /
+    // Crypto / Staking) n'est approuvé pour aucun compte CHILD — voir (tabs)/index.tsx pour
+    // les mêmes restrictions appliquées au tableau de bord (Cartes/Diviser/Internat.).
+    it('hides the "services" tab (href: null) for a CHILD-role user', async () => {
+        mockUseAuth.mockReturnValue({ user: { ...baseUser, role: 'CHILD' } });
+
+        await render(<TabLayout />);
+
+        const byName = Object.fromEntries(mockScreenCalls.map((c) => [c.name, c.options]));
+        expect(byName.services.href).toBeNull();
+    });
+
+    it('keeps the "services" tab normal (no href override) for a non-CHILD user — no regression', async () => {
+        await render(<TabLayout />);
+
+        const byName = Object.fromEntries(mockScreenCalls.map((c) => [c.name, c.options]));
+        expect(byName.services.href).toBeUndefined();
     });
 });

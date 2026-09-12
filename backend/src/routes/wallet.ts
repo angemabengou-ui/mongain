@@ -100,11 +100,33 @@ const transferSchema = z.object({
     // côté client, où le déverrouillage biométrique ne fait que révéler le vrai PIN stocké
     // localement (SecureStore protégé), plutôt que de contourner la vérification serveur.
     pin: z.string().length(4),
+    // Idempotence — clé optionnelle générée côté client (mobile) : permet de rejouer cet appel
+    // sans risque après un double-tap ou un retry réseau, voir le garde à l'intérieur du
+    // $transaction ci-dessous (même convention que CashOperationService.executeCashIn).
+    idempotencyKey: z.string().optional(),
 });
 
 const topUpSchema = z.object({
     amount: z.number().positive(),
     cardToken: z.string().optional()
+});
+
+// Anti-abus sur les rails qui déplacent réellement du solde (transfert, retraits guichet,
+// achats de service, dépôt Mobile Money) — jusqu'ici seul /match-contacts (PII, aucun mouvement
+// de fonds) avait une limite dans ce fichier. keyGenerator PAR COMPTE (req.userId, posé par
+// authMiddleware qui s'exécute toujours avant ce limiter), pas par IP par défaut — même
+// raison que matchContactsLimiter plus bas : le CGNAT des opérateurs mobiles gabonais fait
+// partager la même IP publique à de nombreux comptes distincts, une limite par IP les
+// pénaliserait collectivement. 30 requêtes/15 min couvre largement l'usage réel (aucun de ces
+// rails n'est appelé en rafale par un utilisateur légitime) tout en bloquant un script tentant
+// de forcer un retrait/transfert en boucle.
+const moneyMovementLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    keyGenerator: (req) => (req as AuthRequest).userId || 'anonymous',
+    message: { error: 'Trop d\'opérations financières en peu de temps. Veuillez réessayer plus tard.' },
+    standardHeaders: true,
+    legacyHeaders: false,
 });
 
 router.post('/generate-withdraw-code', authMiddleware, async (req: AuthRequest, res) => {
@@ -164,15 +186,18 @@ router.get('/history', authMiddleware, async (req: AuthRequest, res) => {
 const qrCashOutSchema = z.object({
     branchCode: z.string(),
     amount: z.number().int().positive(),
-    pin: z.string().length(4)
+    pin: z.string().length(4),
+    // Idempotence — voir transferSchema plus haut : même garde côté serveur, à l'intérieur
+    // du $transaction ci-dessous.
+    idempotencyKey: z.string().optional()
 });
 
-router.post('/qr-cash-out', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/qr-cash-out', authMiddleware, moneyMovementLimiter, async (req: AuthRequest, res) => {
     try {
         const parsed = qrCashOutSchema.safeParse(req.body);
         if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
-        const { branchCode, amount, pin } = parsed.data;
+        const { branchCode, amount, pin, idempotencyKey } = parsed.data;
 
         const client = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
         if (!client || !client.wallet) return res.status(404).json({ error: 'Client introuvable.' });
@@ -202,7 +227,16 @@ router.post('/qr-cash-out', authMiddleware, async (req: AuthRequest, res) => {
         // une valeur non verrouillée, donc deux retraits QR simultanés du même client ou sur
         // la même agence pouvaient tous deux passer le contrôle et faire passer le solde en
         // négatif (même classe de bug que celle corrigée dans CashOperationService).
-        await prisma.$transaction(async (tx) => {
+        const isNew = await prisma.$transaction(async (tx) => {
+            // Idempotence : un double-tap ou un retry réseau avec la même idempotencyKey ne
+            // doit JAMAIS re-débiter le client — sinon un simple problème réseau côté mobile
+            // pouvait faire perdre au client le montant du retrait une seconde fois. Vérifié
+            // avant toute lecture/écriture, même convention que CashOperationService.executeCashIn.
+            if (idempotencyKey) {
+                const dup = await tx.transaction.findUnique({ where: { idempotencyKey } });
+                if (dup) return false;
+            }
+
             // 🛑 PESSIMISTIC LOCKING : Verrouillage strict anti-course
             const lockIds = [client.wallet!.id, branch.wallet!.id].sort();
             for (const id of lockIds) {
@@ -233,22 +267,26 @@ router.post('/qr-cash-out', authMiddleware, async (req: AuthRequest, res) => {
             }
 
             await tx.transaction.create({
-                data: { senderWalletId: client.wallet!.id, receiverWalletId: branch.wallet!.id, amount: amount, fee: feeAmount, status: 'COMPLETED', reference: generateReference('QROUT') }
+                data: { senderWalletId: client.wallet!.id, receiverWalletId: branch.wallet!.id, amount: amount, fee: feeAmount, status: 'COMPLETED', reference: generateReference('QROUT'), idempotencyKey }
             });
 
             await tx.branch.update({ where: { id: branch.id, balance: { gte: amount } }, data: { balance: { decrement: amount } } });
             await tx.cashSession.update({ where: { id: activeSession.id }, data: { totalCashOutValue: { increment: amount } } });
+            return true;
         });
 
-        // Notifications au Front
-        const qrCashOutBody = `Votre retrait de ${amount} FCFA en agence (${branch.name}) a été traité avec succès.`;
-        await prisma.notification.createMany({
-            data: [
-                { userId: client.id, title: 'Retrait Guichet Validé', body: qrCashOutBody }
-            ]
-        });
-        await sendPush(client.pushToken, 'Retrait Guichet Validé', qrCashOutBody);
-        await notifyParentOfChildSpend(client.id, amount, 'retrait en agence');
+        // Notifications au Front — seulement pour une exécution réelle : un rejeu idempotent
+        // (isNew === false) a déjà été notifié lors de son tout premier passage.
+        if (isNew) {
+            const qrCashOutBody = `Votre retrait de ${amount} FCFA en agence (${branch.name}) a été traité avec succès.`;
+            await prisma.notification.createMany({
+                data: [
+                    { userId: client.id, title: 'Retrait Guichet Validé', body: qrCashOutBody }
+                ]
+            });
+            await sendPush(client.pushToken, 'Retrait Guichet Validé', qrCashOutBody);
+            await notifyParentOfChildSpend(client.id, amount, 'retrait en agence');
+        }
 
         res.json({ success: true, message: 'Transfert au guichet autorisé !' });
 
@@ -298,7 +336,7 @@ router.get('/limits', authMiddleware, async (req: AuthRequest, res) => {
         // journalier/mensuel/par-transaction.
         let weeklySpend: number | undefined;
         if (limits.effectiveWeekly !== null && user.wallet) {
-            weeklySpend = await LimitEngine.getWeeklySpent(prisma, user.wallet.id);
+            weeklySpend = await LimitEngine.getWeeklySpent(prisma, user.wallet.id, settings);
         }
 
         res.json({
@@ -503,13 +541,13 @@ router.post('/match-contacts', authMiddleware, matchContactsLimiter, async (req:
 
 
 // POST /api/wallet/transfer
-router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/transfer', authMiddleware, moneyMovementLimiter, async (req: AuthRequest, res) => {
     const parsed = transferSchema.safeParse(req.body);
     if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.issues[0].message });
     }
 
-    const { receiverPhone, amount, pin } = parsed.data;
+    const { receiverPhone, amount, pin, idempotencyKey } = parsed.data;
 
     try {
         // Vérification du PIN et gestion des tentatives échouées EN DEHORS de la
@@ -544,6 +582,25 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
         }
 
         const result = await prisma.$transaction(async (tx) => {
+            // Idempotence : un double-tap ou un retry réseau avec la même idempotencyKey ne
+            // doit JAMAIS ré-exécuter ce transfert — sinon l'expéditeur est débité et le
+            // destinataire crédité une seconde fois pour un seul geste utilisateur. Vérifié
+            // avant toute lecture/écriture, même convention que CashOperationService.executeCashIn.
+            if (idempotencyKey) {
+                const dup = await tx.transaction.findUnique({ where: { idempotencyKey } });
+                if (dup) {
+                    const senderWalletDup = dup.senderWalletId ? await tx.wallet.findUnique({ where: { id: dup.senderWalletId } }) : null;
+                    return {
+                        transaction: dup,
+                        remainingBalance: senderWalletDup?.balance ?? 0,
+                        receiverName: undefined as string | undefined,
+                        receiverPushToken: undefined as string | null | undefined,
+                        senderName: undefined as string | undefined,
+                        isNew: false as const,
+                    };
+                }
+            }
+
             const sender = await tx.user.findUnique({
                 where: { id: req.userId },
                 include: { wallet: true },
@@ -635,6 +692,7 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
                     // d'agences alors qu'ils passent par un agent Mongain identifié.
                     branchId: sender.role === 'AGENT' ? (sender as any).branchId : undefined,
                     tellerId: sender.role === 'AGENT' ? sender.id : undefined,
+                    idempotencyKey,
                 },
             });
 
@@ -667,7 +725,8 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
                 remainingBalance: updatedSenderWallet.balance,
                 receiverName: receiver.name,
                 receiverPushToken: (receiver as any).pushToken,
-                senderName: sender.name
+                senderName: sender.name,
+                isNew: true as const,
             };
             // Timeout relevé à 15s (défaut Prisma : 5s) — même correctif que sur
             // CashOperationService.executeCashOut, client-initiated-withdraw et le départ
@@ -675,27 +734,32 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
             // aussi le délai par défaut sous charge réseau réelle contre la base distante.
         }, { timeout: 15000 });
 
-        // Notify Receiver via Expo Push — utilise désormais le helper sendPush() (déjà exporté
-        // par ce fichier et déjà utilisé partout ailleurs : tontine.ts, admin.vaults.ts,
-        // admin.tontines.ts, tontineService.ts) au lieu d'un fetch() brut vers exp.host qui
-        // dupliquait sa logique sans sa validation Expo.isExpoPushToken() ni son typage.
-        await sendPush(
-            (result as any).receiverPushToken,
-            '💰 Transfert reçu !',
-            `Vous venez de recevoir ${amount.toLocaleString('fr-FR')} FCFA de la part de ${result.senderName || 'Un utilisateur'}.`,
-            { amount }
-        );
+        // Notifications (push/socket/parent) sautées pour un rejeu idempotent (isNew ===
+        // false) : elles ont déjà été envoyées lors du tout premier passage de cette
+        // idempotencyKey, les renvoyer romprait la promesse "aucun effet de bord en double".
+        if (result.isNew) {
+            // Notify Receiver via Expo Push — utilise désormais le helper sendPush() (déjà exporté
+            // par ce fichier et déjà utilisé partout ailleurs : tontine.ts, admin.vaults.ts,
+            // admin.tontines.ts, tontineService.ts) au lieu d'un fetch() brut vers exp.host qui
+            // dupliquait sa logique sans sa validation Expo.isExpoPushToken() ni son typage.
+            await sendPush(
+                (result as any).receiverPushToken,
+                '💰 Transfert reçu !',
+                `Vous venez de recevoir ${amount.toLocaleString('fr-FR')} FCFA de la part de ${result.senderName || 'Un utilisateur'}.`,
+                { amount }
+            );
 
-        // Notify Receiver via Socket.IO
-        const io = req.app.get('io');
-        if (io) {
-            io.to(`user_${receiverPhone}`).emit('payment_received', {
-                amount,
-                from: result.senderName || 'Un utilisateur'
-            });
+            // Notify Receiver via Socket.IO
+            const io = req.app.get('io');
+            if (io) {
+                io.to(`user_${receiverPhone}`).emit('payment_received', {
+                    amount,
+                    from: result.senderName || 'Un utilisateur'
+                });
+            }
+
+            await notifyParentOfChildSpend(req.userId!, amount, `virement à ${result.receiverName || 'un destinataire'}`);
         }
-
-        await notifyParentOfChildSpend(req.userId!, amount, `virement à ${result.receiverName || 'un destinataire'}`);
 
         return res.json({ message: 'Transfert réussi !', data: result });
     } catch (error: any) {
@@ -704,11 +768,11 @@ router.post('/transfer', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // ─── Retrait Initié par le Client (QR Permanent) ──────────────────────
-router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/client-initiated-withdraw', authMiddleware, moneyMovementLimiter, async (req: AuthRequest, res) => {
     const parsed = transferSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
-    const { receiverPhone, amount, pin } = parsed.data;
+    const { receiverPhone, amount, pin, idempotencyKey } = parsed.data;
 
     try {
         // Même raisonnement que /transfer : la vérification du PIN et la gestion des
@@ -741,6 +805,25 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
         }
 
         const result = await prisma.$transaction(async (tx) => {
+            // Idempotence : même garde que /transfer ci-dessus — un double-tap ou un retry
+            // réseau avec la même idempotencyKey ne doit JAMAIS re-débiter le client pour ce
+            // même retrait. Vérifié avant toute lecture/écriture.
+            if (idempotencyKey) {
+                const dup = await tx.transaction.findUnique({ where: { idempotencyKey } });
+                if (dup) {
+                    const senderWalletDup = dup.senderWalletId ? await tx.wallet.findUnique({ where: { id: dup.senderWalletId } }) : null;
+                    return {
+                        transaction: dup,
+                        remainingBalance: senderWalletDup?.balance ?? 0,
+                        agentName: undefined as string | undefined,
+                        agentPhone: undefined as string | undefined,
+                        agentPushToken: undefined as string | null | undefined,
+                        senderPushToken: undefined as string | null | undefined,
+                        isNew: false as const,
+                    };
+                }
+            }
+
             const sender = await tx.user.findUnique({
                 where: { id: req.userId },
                 include: { wallet: true },
@@ -836,6 +919,7 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
                     // à une agence, l'opération doit apparaître dans les rapports de celle-ci.
                     branchId: agent.role === 'AGENT' ? (agent as any).branchId : undefined,
                     tellerId: agent.role === 'AGENT' ? agent.id : undefined,
+                    idempotencyKey,
                 },
             });
 
@@ -886,7 +970,8 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
                 agentName: agent.name,
                 agentPhone: agent.phone,
                 agentPushToken: agent.pushToken,
-                senderPushToken: sender.pushToken
+                senderPushToken: sender.pushToken,
+                isNew: true as const,
             };
             // Timeout relevé à 15s (défaut Prisma : 5s) — cette transaction enchaîne
             // plafonds, anti-fractionnement et plusieurs écritures ; elle expirait déjà
@@ -894,20 +979,24 @@ router.post('/client-initiated-withdraw', authMiddleware, async (req: AuthReques
             // corrigée sur CashOperationService.executeCashOut.
         }, { timeout: 15000 });
 
-        // Notify Agent via Socket.IO
-        const io = req.app.get('io');
-        if (io) {
-            io.to(`user_${result.agentPhone}`).emit('payment_received', {
-                amount,
-                from: 'Client ' + req.userId?.substring(0, 5) // Minimal info
-            });
+        // Notifications sautées pour un rejeu idempotent (isNew === false) : déjà envoyées
+        // lors du tout premier passage de cette idempotencyKey.
+        if (result.isNew) {
+            // Notify Agent via Socket.IO
+            const io = req.app.get('io');
+            if (io) {
+                io.to(`user_${result.agentPhone}`).emit('payment_received', {
+                    amount,
+                    from: 'Client ' + req.userId?.substring(0, 5) // Minimal info
+                });
+            }
+            // Push Expo pour les deux côtés — le socket ci-dessus ne couvre l'agent que s'il est
+            // connecté à cet instant précis ; le client, lui, n'avait jusqu'ici aucun canal temps
+            // réel du tout pour ce retrait.
+            await sendPush(result.agentPushToken, 'Paiement reçu', `Vous avez reçu ${amount.toLocaleString('fr-FR')} FCFA de la part d'un client.`);
+            await sendPush(result.senderPushToken, 'Retrait effectué', `Vous avez retiré ${amount.toLocaleString('fr-FR')} FCFA chez ${result.agentName}.`);
+            await notifyParentOfChildSpend(req.userId!, amount, `retrait chez ${result.agentName || 'un agent'}`);
         }
-        // Push Expo pour les deux côtés — le socket ci-dessus ne couvre l'agent que s'il est
-        // connecté à cet instant précis ; le client, lui, n'avait jusqu'ici aucun canal temps
-        // réel du tout pour ce retrait.
-        await sendPush(result.agentPushToken, 'Paiement reçu', `Vous avez reçu ${amount.toLocaleString('fr-FR')} FCFA de la part d'un client.`);
-        await sendPush(result.senderPushToken, 'Retrait effectué', `Vous avez retiré ${amount.toLocaleString('fr-FR')} FCFA chez ${result.agentName}.`);
-        await notifyParentOfChildSpend(req.userId!, amount, `retrait chez ${result.agentName || 'un agent'}`);
 
         return res.json({ message: 'Retrait autorisé avec succès !', data: result });
     } catch (error: any) {
@@ -1079,7 +1168,7 @@ router.post('/topup', authMiddleware, async (req: AuthRequest, res) => {
 // avec n'importe quel `type` autre que ELECTRICITY débitait quand même le client pour un
 // service jamais livré. Désactivé par défaut, même flag que services.ts (même catégorie :
 // paiement de service externe non branché, pas un rechargement de wallet).
-router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/pay-service', authMiddleware, moneyMovementLimiter, async (req: AuthRequest, res) => {
     if (process.env.ENABLE_UNVERIFIED_EXTERNAL_SERVICES !== 'true') {
         return res.status(501).json({
             error: 'Le paiement de services nécessite une intégration réelle avec le fournisseur. Cette fonctionnalité est désactivée tant que cette intégration n\'est pas en place.'
@@ -1166,7 +1255,7 @@ router.post('/pay-service', authMiddleware, async (req: AuthRequest, res) => {
 // final. Le wallet n'est crédité que par le webhook (backend/src/routes/webhooks.ts,
 // POST /api/webhooks/pvit-status) une fois l'opérateur confirmé, ce qui est pourquoi la
 // transaction ci-dessous démarre PENDING et non COMPLETED.
-router.post('/pull', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/pull', authMiddleware, moneyMovementLimiter, async (req: AuthRequest, res) => {
     const settings = await getSystemSettings();
     if (!isPvitConfigured(settings)) {
         return res.status(501).json({

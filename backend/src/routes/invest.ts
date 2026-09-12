@@ -23,7 +23,9 @@ router.post('/stake', authMiddleware, circuitBreakerMiddleware, async (req: Auth
         if (!req.userId) return res.status(401).json({ error: "Unauthorized" });
         const { amount, lockMonths, pin } = req.body;
 
-        const stakeAmount = parseFloat(amount);
+        // Le FCFA n'a aucune sous-unité — arrondi ici, sinon l'écriture Prisma échoue sur un
+        // montant décimal (StakingVault.amount est Int).
+        const stakeAmount = Math.round(parseFloat(amount));
         const duration = parseInt(lockMonths);
 
         if (isNaN(stakeAmount) || stakeAmount < 10000) {
@@ -39,6 +41,12 @@ router.post('/stake', authMiddleware, circuitBreakerMiddleware, async (req: Auth
         });
 
         if (!user || !user.wallet) return res.status(401).json({ error: "Utilisateur non valide." });
+
+        // Restriction Comptes Enfant : bloquer des fonds dans un coffre de staking ne fait pas
+        // partie des fonctionnalités approuvées pour un compte enfant. Le mobile masque déjà le
+        // bouton correspondant, mais un masquage d'UI seul n'est jamais une garantie — c'est ce
+        // contrôle serveur qui constitue le véritable point d'application.
+        if (user.role === 'CHILD') return res.status(403).json({ error: 'Cette fonctionnalité n\'est pas disponible pour les comptes enfant.' });
 
         // Seule route de débit réel du fichier sans code PIN jusqu'ici — contrairement à tous
         // les autres rails sortants (crypto.ts, bnpl.ts, b2b.ts, biller.ts...), un jeton de

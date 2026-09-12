@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { Request, Response, Router } from 'express';
 import { prisma } from '../prisma';
 import { LimitEngine } from '../services/LimitEngine';
+import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
 import logger from '../utils/logger';
 import { getSystemSettings } from './settings';
@@ -86,7 +87,9 @@ router.post('/gateway', async (req: Request, res: Response) => {
 
             if (inputs.length === 4) {
                 const targetPhone = inputs[1];
-                const amount = parseFloat(inputs[2]);
+                // Le FCFA n'a aucune sous-unité — arrondi ici, sinon l'écriture Prisma échoue
+                // sur un montant décimal (Transaction.amount est Int).
+                const amount = Math.round(parseFloat(inputs[2]));
                 const pin = inputs[3];
 
                 if (!amount || amount <= 0) return res.send(`END Montant invalide.`);
@@ -152,7 +155,11 @@ router.post('/gateway', async (req: Request, res: Response) => {
                     await notifyParentOfChildSpend(user.id, amount, `virement USSD vers ${targetPhone}`);
                     return res.send(`END Succès! Vous avez envoyé ${amount}F à ${targetPhone}. Frais: ${fee}F.`);
                 } catch (e: any) {
-                    return res.send(`END Échec de la transaction. ${e.message}`);
+                    // e.message brut fuyait des détails internes (ex: contraintes Prisma) à un
+                    // appelant USSD non authentifié, via la passerelle télco — friendlyErrorMessage
+                    // renvoie déjà le message métier lisible quand il en existe un (ex: plafond
+                    // dépassé, solde insuffisant) sans jamais exposer la trace technique sous-jacente.
+                    return res.send(`END Échec de la transaction. ${friendlyErrorMessage(e)}`);
                 }
             }
         }

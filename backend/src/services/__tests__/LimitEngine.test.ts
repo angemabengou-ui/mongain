@@ -1,4 +1,17 @@
+import { prisma } from '../../prisma';
 import { LimitEngine, MAXIMUM_ALLOWED_LIMIT } from '../LimitEngine';
+
+// Le gel SAR (detectAndFreezeSAR) doit committer indépendamment de la transaction `tx` de
+// l'appelant, qui est annulée juste après par le `throw` volontaire de
+// verifyAndIncrementConsumption — voir LimitEngine.ts. D'où le mock du client racine `prisma`,
+// distinct du `tx` mocké par buildTx() plus bas.
+jest.mock('../../prisma', () => ({
+    prisma: {
+        user: { update: jest.fn().mockResolvedValue({}) },
+        auditLog: { create: jest.fn().mockResolvedValue({}) },
+        $transaction: jest.fn((ops: Promise<any>[]) => Promise.all(ops)),
+    },
+}));
 
 const settings = {
     dailyLimitTier0: 50000, dailyLimitTier1: 2000000, dailyLimitTier2: 5000000,
@@ -262,17 +275,24 @@ describe('LimitEngine.verifyAndIncrementConsumption', () => {
         await expect(LimitEngine.verifyAndIncrementConsumption(tx, 'user_1', 'wallet_1', 1000, settings))
             .rejects.toThrow('Compte gelé par réseau Sécurité (SAR Fraud). Vélocité anormale détectée.');
 
-        expect(tx.user.update).toHaveBeenCalledWith({
+        // Régression : le gel écrivait autrefois via `tx` (le client transactionnel de
+        // l'appelant), qui est annulé (ROLLBACK) par le `throw` juste après — le gel ne
+        // persistait donc jamais réellement. Il doit passer par le client racine `prisma`,
+        // dans sa propre transaction indépendante, pour committer malgré le rollback de `tx`.
+        expect(prisma.$transaction).toHaveBeenCalledWith([
+            expect.anything(),
+            expect.anything(),
+        ]);
+        expect(prisma.user.update).toHaveBeenCalledWith({
             where: { id: 'user_1' },
             data: { isActive: false, kycStatus: 'REJECTED' },
         });
-        // Régression : ce create() passait autrefois `userId`/`ipAddress`, deux champs
-        // inexistants sur AuditLog (seul `adminId` existe) — invisible avec un tx mocké, mais
-        // le vrai Prisma Client rejette tout argument inconnu et annulait le gel (rollback de
-        // toute la transaction) à chaque déclenchement réel du SAR.
-        expect(tx.auditLog.create).toHaveBeenCalledWith({
+        expect(prisma.auditLog.create).toHaveBeenCalledWith({
             data: expect.objectContaining({ adminId: 'user_1', action: 'AML_FREEZE_SAR' }),
         });
+        // Le tx de l'appelant ne doit plus jamais porter cette écriture : elle serait annulée.
+        expect(tx.user.update).not.toHaveBeenCalled();
+        expect(tx.auditLog.create).not.toHaveBeenCalled();
         // Le gel doit intervenir AVANT toute écriture sur les compteurs de plafond.
         expect(tx.wallet.update).not.toHaveBeenCalled();
     });
@@ -337,6 +357,89 @@ describe('LimitEngine.verifyAndIncrementConsumption', () => {
             await LimitEngine.verifyAndIncrementConsumption(tx, 'user_1', 'wallet_1', 1000, settings);
 
             expect(tx.transaction.aggregate).not.toHaveBeenCalled();
+        });
+    });
+
+    // Régression fuseau horaire : les frontières jour/mois doivent suivre SystemSettings.timezone
+    // (Africa/Libreville, UTC+1 par défaut), jamais l'heure locale du process serveur (UTC sur
+    // Render) — voir utils/timezone.ts. `jest.setSystemTime` fixe "now" à un instant choisi pour
+    // que le jour ET le mois calendaires diffèrent entre UTC et Africa/Libreville : une frontière
+    // basée sur l'heure serveur (UTC) ne déclencherait PAS encore le reset ici, alors que la bonne
+    // frontière (Libreville) le doit déjà.
+    describe('Frontières jour/mois — fuseau CONFIGURÉ, pas heure serveur', () => {
+        afterEach(() => {
+            jest.useRealTimers();
+        });
+
+        it('devrait remettre à zéro les compteurs journalier ET mensuel dès minuit à Africa/Libreville, même si le serveur (UTC) est encore "hier"/"le mois dernier"', async () => {
+            jest.useFakeTimers();
+            // 31 janvier 23h30 UTC == 1er février 00h30 à Libreville (UTC+1) : nouveau jour ET
+            // nouveau mois déjà entamés à Libreville, alors qu'en UTC pur on est encore le 31 janvier.
+            jest.setSystemTime(new Date('2024-01-31T23:30:00.000Z'));
+
+            const tx = buildTx({
+                wallet: {
+                    dailySpent: 40000, monthlySpent: 900000,
+                    // 31 janvier 22h00 UTC == 31 janvier 23h00 Libreville : encore AVANT minuit
+                    // Libreville, donc bien "hier"/"le mois dernier" du point de vue Libreville,
+                    // malgré un horodatage encore situé le 31 janvier côté UTC.
+                    dailySpentResetAt: new Date('2024-01-31T22:00:00.000Z'),
+                    monthlySpentResetAt: new Date('2024-01-31T22:00:00.000Z'),
+                },
+            });
+
+            await LimitEngine.verifyAndIncrementConsumption(tx, 'user_1', 'wallet_1', 5000, { ...settings, timezone: 'Africa/Libreville' });
+
+            const call = (tx.wallet.update as jest.Mock).mock.calls[0][0];
+            // Reset réellement déclenché (SET au montant de la requête, pas un increment sur
+            // l'ancien cumul) : la frontière utilisée est bien celle de Libreville, pas celle du
+            // serveur UTC (qui n'aurait pas encore déclenché ce reset à cet instant précis).
+            expect(call.data.dailySpent).toBe(5000);
+            expect(call.data.monthlySpent).toBe(5000);
+        });
+
+        it('ne devrait PAS remettre à zéro si le reset est déjà à jour du point de vue du fuseau CONFIGURÉ', async () => {
+            jest.useFakeTimers();
+            jest.setSystemTime(new Date('2024-01-31T23:30:00.000Z')); // == 1er février 00h30 Libreville
+
+            const tx = buildTx({
+                wallet: {
+                    dailySpent: 1000, monthlySpent: 2000,
+                    // 1er février 00h00 Libreville == 31 janvier 23h00 UTC : déjà la bonne frontière.
+                    dailySpentResetAt: new Date('2024-01-31T23:00:00.000Z'),
+                    monthlySpentResetAt: new Date('2024-01-31T23:00:00.000Z'),
+                },
+            });
+
+            await LimitEngine.verifyAndIncrementConsumption(tx, 'user_1', 'wallet_1', 5000, { ...settings, timezone: 'Africa/Libreville' });
+
+            expect(tx.wallet.update).toHaveBeenCalledWith({
+                where: { id: 'wallet_1' },
+                data: {
+                    dailySpent: { increment: 5000 },
+                    dailySpentResetAt: undefined,
+                    monthlySpent: { increment: 5000 },
+                    monthlySpentResetAt: undefined,
+                },
+            });
+        });
+
+        it('devrait calculer le cumul hebdomadaire (Compte Enfant WEEKLY) sur la frontière de semaine du fuseau CONFIGURÉ', async () => {
+            jest.useFakeTimers();
+            // Dimanche 14 janvier 2024, 23h30 UTC == lundi 15 janvier 00h30 à Libreville : la
+            // semaine EN COURS a déjà commencé à Libreville, pas encore côté UTC serveur.
+            jest.setSystemTime(new Date('2024-01-14T23:30:00.000Z'));
+
+            const tx = buildTx({
+                user: { role: 'CHILD', childSpendLimitAmount: 20000, childSpendLimitPeriod: 'WEEKLY' },
+                weeklySpent: 5000,
+            });
+
+            await LimitEngine.verifyAndIncrementConsumption(tx, 'user_1', 'wallet_1', 1000, { ...settings, timezone: 'Africa/Libreville' });
+
+            const aggregateArgs = (tx.transaction.aggregate as jest.Mock).mock.calls[0][0];
+            // Lundi 15 janvier 00h00 heure de Libreville == dimanche 14 janvier 23h00 UTC.
+            expect(aggregateArgs.where.createdAt.gte).toEqual(new Date('2024-01-14T23:00:00.000Z'));
         });
     });
 });

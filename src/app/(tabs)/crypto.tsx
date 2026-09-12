@@ -10,12 +10,18 @@ import { useAuth } from '../../context/AuthContext';
 import { request } from '../../services/api';
 
 export default function CryptoScreen() {
-    const { token } = useAuth();
+    const { token, user } = useAuth();
     const router = useRouter();
     const COLORS = useAppTheme();
     const insets = useSafeAreaInsets();
     const isDark = COLORS.background === '#0A0F1C';
     const styles = getStyles(COLORS, isDark);
+
+    // Filet de sécurité UX (pas la barrière de sécurité — le backend refuse déjà ces routes
+    // pour un CHILD) : couvre un lien profond périmé, une notification, ou tout autre chemin
+    // qui contournerait les boutons/onglet masqués côté navigation ((tabs)/index.tsx et
+    // (tabs)/_layout.tsx).
+    const isChild = user?.role === 'CHILD';
 
     const [market, setMarket] = useState<any[]>([]);
     const [wallets, setWallets] = useState<any[]>([]);
@@ -52,8 +58,8 @@ export default function CryptoScreen() {
     };
 
     useEffect(() => {
-        if (token) fetchCryptoData();
-    }, [token]);
+        if (token && !isChild) fetchCryptoData();
+    }, [token, isChild]);
 
     const handleBuy = (asset: string) => {
         const amount = amounts[asset];
@@ -107,6 +113,20 @@ export default function CryptoScreen() {
         const w = wallets.find(w => w.asset === asset);
         return w ? w.balance : 0;
     };
+
+    if (isChild) {
+        return (
+            <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+                <Ionicons name="lock-closed-outline" size={48} color={COLORS.textSecondary} style={{ marginBottom: 16 }} />
+                <Text style={{ fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: COLORS.textPrimary, textAlign: 'center', marginBottom: 24 }}>
+                    Cette fonctionnalité n'est pas disponible pour les comptes enfant.
+                </Text>
+                <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={{ backgroundColor: COLORS.primary, paddingVertical: 14, paddingHorizontal: 28, borderRadius: 14 }}>
+                    <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>Retour à l'accueil</Text>
+                </TouchableOpacity>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.primary }}>

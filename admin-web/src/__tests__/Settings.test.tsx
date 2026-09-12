@@ -42,14 +42,14 @@ describe('PlatformConfig (Settings)', () => {
     });
 
     it("affiche l'onglet Général avec les paramètres chargés", async () => {
-        render(<PlatformConfig token="tok" />);
+        render(<PlatformConfig token="tok" hasPerm={() => true} />);
 
         expect(await screen.findByDisplayValue('Mongain V6')).toBeInTheDocument();
         expect(screen.getByDisplayValue('support@mongain.com')).toBeInTheDocument();
     });
 
     it("affiche le badge de demandes en attente sur l'onglet Approbation", async () => {
-        render(<PlatformConfig token="tok" />);
+        render(<PlatformConfig token="tok" hasPerm={() => true} />);
         await screen.findByDisplayValue('Mongain V6');
 
         expect(screen.getByRole('button', { name: /Approbation \(Checker\) \(1\)/i })).toBeInTheDocument();
@@ -57,7 +57,7 @@ describe('PlatformConfig (Settings)', () => {
 
     it("navigue vers l'onglet Approbation et affiche la demande en attente", async () => {
         const user = userEvent.setup();
-        render(<PlatformConfig token="tok" />);
+        render(<PlatformConfig token="tok" hasPerm={() => true} />);
         await screen.findByDisplayValue('Mongain V6');
 
         await user.click(screen.getByRole('button', { name: /Approbation \(Checker\)/i }));
@@ -69,7 +69,7 @@ describe('PlatformConfig (Settings)', () => {
 
     it("navigue vers l'onglet Historique et affiche les changements appliqués", async () => {
         const user = userEvent.setup();
-        render(<PlatformConfig token="tok" />);
+        render(<PlatformConfig token="tok" hasPerm={() => true} />);
         await screen.findByDisplayValue('Mongain V6');
 
         await user.click(screen.getByRole('button', { name: /Historique/i }));
@@ -92,7 +92,7 @@ describe('PlatformConfig (Settings)', () => {
         (global.fetch as any) = fetchMock;
 
         const user = userEvent.setup();
-        render(<PlatformConfig token="tok" />);
+        render(<PlatformConfig token="tok" hasPerm={() => true} />);
         await screen.findByDisplayValue('Mongain V6');
         await user.click(screen.getByRole('button', { name: /Approbation \(Checker\)/i }));
         await screen.findByText('UPDATE_FEES');
@@ -120,7 +120,7 @@ describe('PlatformConfig (Settings)', () => {
         (global.fetch as any) = fetchMock;
 
         const user = userEvent.setup();
-        render(<PlatformConfig token="tok" />);
+        render(<PlatformConfig token="tok" hasPerm={() => true} />);
         await screen.findByDisplayValue('Mongain V6');
         await user.click(screen.getByRole('button', { name: /Approbation \(Checker\)/i }));
         await screen.findByText('UPDATE_FEES');
@@ -146,7 +146,7 @@ describe('PlatformConfig (Settings)', () => {
         (global.fetch as any) = fetchMock;
 
         const user = userEvent.setup();
-        render(<PlatformConfig token="tok" />);
+        render(<PlatformConfig token="tok" hasPerm={() => true} />);
         await screen.findByDisplayValue('Mongain V6');
         await user.click(screen.getByRole('button', { name: /Approbation \(Checker\)/i }));
         await screen.findByText('UPDATE_FEES');
@@ -172,7 +172,7 @@ describe('PlatformConfig (Settings)', () => {
         (global.fetch as any) = fetchMock;
 
         const user = userEvent.setup();
-        render(<PlatformConfig token="tok" />);
+        render(<PlatformConfig token="tok" hasPerm={() => true} />);
         await screen.findByDisplayValue('Mongain V6');
         await user.click(screen.getByRole('button', { name: /Circuit Breaker/i }));
 
@@ -194,7 +194,7 @@ describe('PlatformConfig (Settings)', () => {
 
     it("calcule l'aperçu des frais simulés dans l'onglet Frais", async () => {
         const user = userEvent.setup();
-        render(<PlatformConfig token="tok" />);
+        render(<PlatformConfig token="tok" hasPerm={() => true} />);
         await screen.findByDisplayValue('Mongain V6');
         await user.click(screen.getByRole('button', { name: /Politique de Frais/i }));
 
@@ -205,7 +205,7 @@ describe('PlatformConfig (Settings)', () => {
 
     it("onglet Sécurité Réseau : affiche l'IP détectée et refuse de déposer une activation avec une liste vide", async () => {
         const user = userEvent.setup();
-        render(<PlatformConfig token="tok" />);
+        render(<PlatformConfig token="tok" hasPerm={() => true} />);
         await screen.findByDisplayValue('Mongain V6');
         await user.click(screen.getByRole('button', { name: /Sécurité Réseau/i }));
 
@@ -234,7 +234,7 @@ describe('PlatformConfig (Settings)', () => {
         (global.fetch as any) = fetchMock;
 
         const user = userEvent.setup();
-        render(<PlatformConfig token="tok" />);
+        render(<PlatformConfig token="tok" hasPerm={() => true} />);
         await screen.findByDisplayValue('Mongain V6');
         await user.click(screen.getByRole('button', { name: /Sécurité Réseau/i }));
         await screen.findByText('203.0.113.5');
@@ -254,5 +254,21 @@ describe('PlatformConfig (Settings)', () => {
         });
         confirmSpy.mockRestore();
         promptSpy.mockRestore();
+    });
+
+    it("désactive les boutons de dépôt de changement pour un rôle sans perm_system_settings_edit (ex: COMPLIANCE_CHECKER)", async () => {
+        // Régression : POST /api/settings/request exige perm_system_settings_edit
+        // (settings.ts) mais aucun bouton "Déposer Changement" ne le vérifiait — un
+        // COMPLIANCE_CHECKER (a perm_system_settings_approve mais pas _edit) pouvait
+        // remplir n'importe quel formulaire avant de recevoir un 403 au clic final.
+        const user = userEvent.setup();
+        render(<PlatformConfig token="tok" hasPerm={() => false} />);
+        await screen.findByDisplayValue('Mongain V6');
+
+        expect(screen.getByRole('button', { name: /Enregistrer les Modifications/i })).toBeDisabled();
+
+        await user.click(screen.getByRole('button', { name: /Circuit Breaker/i }));
+        await screen.findByText('CIRCUIT BREAKER (Kill Switch)');
+        expect(screen.getByRole('button', { name: /DÉCLENCHER LE CIRCUIT BREAKER/i })).toBeDisabled();
     });
 });

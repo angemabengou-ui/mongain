@@ -2,7 +2,7 @@ import { Archive, ArrowRight, Building2, DoorClosed, LockKeyhole, Store, Users }
 import { useEffect, useState } from 'react';
 import { API_URL } from './config';
 
-export default function BranchDashboard({ token, onNavigateToTreasury }: { token: string; onNavigateToTreasury?: () => void }) {
+export default function BranchDashboard({ token, onNavigateToTreasury, hasPerm }: { token: string; onNavigateToTreasury?: () => void; hasPerm: (perms: string[]) => boolean }) {
     const [branch, setBranch] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -208,7 +208,7 @@ export default function BranchDashboard({ token, onNavigateToTreasury }: { token
                     <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 15 }}>
                         Demandez au siège d'allouer de la liquidité électronique à l'agence.
                     </p>
-                    <FundingForm token={token} onRefresh={fetchBranchInfo} />
+                    <FundingForm token={token} onRefresh={fetchBranchInfo} hasPerm={hasPerm} />
                 </div>
 
                 {/* HISTORIQUE ALLOCATIONS DU SIÈGE */}
@@ -236,7 +236,7 @@ export default function BranchDashboard({ token, onNavigateToTreasury }: { token
             </div>
 
             {/* RAPPORT DE RECONCILIATION */}
-            <ReconciliationReport token={token} />
+            <ReconciliationReport token={token} hasPerm={hasPerm} />
 
         </div>
     );
@@ -245,10 +245,17 @@ export default function BranchDashboard({ token, onNavigateToTreasury }: { token
 // ─────────────────────────────────────────────────────────────────
 // COMPOSANT ADDITIONNEL : FUNDING FORM
 // ─────────────────────────────────────────────────────────────────
-function FundingForm({ token, onRefresh }: { token: string, onRefresh: () => void }) {
+function FundingForm({ token, onRefresh, hasPerm }: { token: string, onRefresh: () => void, hasPerm: (perms: string[]) => boolean }) {
     const [amount, setAmount] = useState('');
     const [reason, setReason] = useState('');
     const [loading, setLoading] = useState(false);
+
+    // Réservé au Manager côté serveur (perm_branch_manage, agency.ts POST /treasury-requests) —
+    // sans ce garde, un TELLER pouvait remplir tout le formulaire et ne découvrait le 403
+    // qu'à la soumission finale.
+    if (!hasPerm(['perm_branch_manage'])) {
+        return <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Réservé au Manager d'agence (perm_branch_manage).</p>;
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -291,9 +298,13 @@ function FundingForm({ token, onRefresh }: { token: string, onRefresh: () => voi
 // ─────────────────────────────────────────────────────────────────
 // COMPOSANT ADDITIONNEL : RECONCILIATION REPORT (Ecarts Caisse)
 // ─────────────────────────────────────────────────────────────────
-function ReconciliationReport({ token }: { token: string }) {
+function ReconciliationReport({ token, hasPerm }: { token: string, hasPerm: (perms: string[]) => boolean }) {
     const [report, setReport] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
+    // Réservé au Manager côté serveur (agency.ts, GET /reconciliation, perm_branch_manage) —
+    // un TELLER cliquant ici recevait un 403 silencieux, bouton perçu comme cassé. Le garde
+    // ci-dessous masque le bouton en amont au lieu de laisser cliquer pour rien.
+    const canManage = hasPerm(['perm_branch_manage']);
 
     const fetchReport = async () => {
         setLoading(true);
@@ -307,6 +318,15 @@ function ReconciliationReport({ token }: { token: string }) {
             // un 403 silencieux, bouton perçu comme cassé.
             else alert(d.error || 'Impossible de générer le rapport.');
         } catch (e: any) { alert('Erreur réseau lors de la génération du rapport.'); console.error('Reconciliation fetch err', e); } finally { setLoading(false); }
+    }
+
+    if (!canManage) {
+        return (
+            <div className="card" style={{ padding: 30, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ margin: 0 }}>Opérations & Réconciliation des Caisses</h3>
+                <span style={{ color: 'var(--text-muted)', fontSize: 13 }} title="Réservé au Manager d'agence (perm_branch_manage).">Accès restreint au Manager</span>
+            </div>
+        )
     }
 
     if (!report.length && !loading) {

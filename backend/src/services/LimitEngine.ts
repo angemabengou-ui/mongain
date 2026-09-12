@@ -1,3 +1,6 @@
+import { prisma } from '../prisma';
+import { startOfDayInTimezone, startOfMonthInTimezone, startOfWeekInTimezone } from '../utils/timezone';
+
 // Plafond Absolu Réglementaire CEMAC / COBAC (Exemple: 10M FCFA)
 export const MAXIMUM_ALLOWED_LIMIT = 10000000;
 
@@ -89,24 +92,28 @@ export class LimitEngine {
         });
 
         if (velocity > 15) {
-            await tx.user.update({
-                where: { id: userId },
-                data: { isActive: false, kycStatus: 'REJECTED' }
-            });
-            // BUG CORRIGÉ : ce create() passait `userId`/`ipAddress`, deux champs qui n'existent
-            // PAS sur AuditLog (voir schema.prisma — seul `adminId` existe, référence libre
-            // User OU Staff). Le Prisma Client réel (contrairement au mock `tx: any` des tests)
-            // rejette tout argument inconnu et lève une erreur de validation ICI MÊME, à
-            // l'intérieur de la même transaction que le gel (`tx.user.update` juste au-dessus) —
-            // qui se retrouvait donc annulé (rollback) à chaque déclenchement réel du SAR, sans
-            // qu'aucun test ne puisse le détecter puisque le tx mocké n'y voit que du feu.
-            await tx.auditLog.create({
-                data: {
-                    adminId: userId,
-                    action: 'AML_FREEZE_SAR',
-                    details: `Vélocité suspecte détectée (${velocity} tx/h). Compte gelé automatiquement.`,
-                }
-            });
+            // BUG CORRIGÉ : écrire le gel via `tx` (le client transactionnel de l'appelant) ne
+            // servait à rien, même une fois les champs d'AuditLog corrigés — `verifyAndIncrementConsumption`
+            // lève volontairement une exception juste après ce retour pour bloquer l'opération en
+            // cours, et un `throw` à l'intérieur d'un `$transaction` interactif Prisma annule
+            // TOUTES ses écritures. Le gel et l'entrée d'audit se retrouvaient donc annulés
+            // (ROLLBACK) à chaque déclenchement réel du SAR — silencieusement, puisque le tx mocké
+            // des tests n'a pas cette sémantique et laissait croire que le gel persistait. On
+            // écrit ici via le client racine `prisma`, dans sa propre transaction indépendante,
+            // qui committe immédiatement quel que soit le sort de la transaction appelante.
+            await prisma.$transaction([
+                prisma.user.update({
+                    where: { id: userId },
+                    data: { isActive: false, kycStatus: 'REJECTED' }
+                }),
+                prisma.auditLog.create({
+                    data: {
+                        adminId: userId,
+                        action: 'AML_FREEZE_SAR',
+                        details: `Vélocité suspecte détectée (${velocity} tx/h). Compte gelé automatiquement.`,
+                    }
+                })
+            ]);
             return true;
         }
         return false;
@@ -176,10 +183,17 @@ export class LimitEngine {
             throw new Error(`Plafond par transaction dépassé. (Max autorisé: ${limits.effectivePerTx.toLocaleString('fr-FR')} FCFA).`);
         }
 
-        // 5. Réinitialisation temporelle si on a changé de jour/mois
+        // 5. Réinitialisation temporelle si on a changé de jour/mois — frontière calculée dans
+        // le fuseau CONFIGURÉ (SystemSettings.timezone, Africa/Libreville par défaut), jamais
+        // l'heure locale du process serveur (UTC sur Render) : `new Date(now.getFullYear(),
+        // now.getMonth(), now.getDate())` calculait minuit heure SERVEUR, décalé jusqu'à 1h de
+        // minuit à Libreville — le reset des plafonds journaliers/mensuels AML pouvait donc se
+        // déclencher jusqu'à 1h trop tôt ou trop tard par rapport à la journée réglementaire
+        // voulue (même bug que merchant.ts /stats, déjà corrigé avec ce même helper).
         const now = new Date();
-        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const timezone = settings?.timezone || 'Africa/Libreville';
+        const startOfDay = startOfDayInTimezone(timezone, now);
+        const startOfMonth = startOfMonthInTimezone(timezone, now);
 
         // `dailyReset`/`monthlyReset` calculés UNE SEULE FOIS ici, sur les valeurs ORIGINALES
         // de `wallet` (jamais mutées) — la version précédente écrivait `wallet.dailySpentResetAt
@@ -212,7 +226,7 @@ export class LimitEngine {
         // Gaté par `effectiveWeekly !== null` : sans coût pour tout compte non-CHILD, qui ne
         // déclenche jamais cette requête.
         if (limits.effectiveWeekly !== null) {
-            const currentWeeklySpent = await this.getWeeklySpent(tx, walletId);
+            const currentWeeklySpent = await this.getWeeklySpent(tx, walletId, settings);
             const newWeekly = currentWeeklySpent + requestedAmount;
 
             if (newWeekly > limits.effectiveWeekly) {
@@ -247,12 +261,19 @@ export class LimitEngine {
      * ce fichier), pour ne rien écrire de supplémentaire à chaque transaction de chaque
      * utilisateur pour un besoin propre aux seuls comptes enfant. Partagée entre l'application
      * du plafond (verifyAndIncrementConsumption) et son affichage (GET /wallet/limits).
+     *
+     * `settings` optionnel (et non le 3e argument obligatoire) pour rester appelable sans
+     * changement partout où seul le fuseau par défaut importe ; les deux appelants réels
+     * (verifyAndIncrementConsumption, GET /wallet/limits) ont déjà `settings` sous la main et
+     * le passent, pour éviter tout aller-retour DB supplémentaire dans ce chemin financier.
      */
-    static async getWeeklySpent(tx: any, walletId: string): Promise<number> {
-        const now = new Date();
-        const dayOfWeek = now.getDay(); // 0 (dim.) .. 6 (sam.)
-        const diffToMonday = (dayOfWeek + 6) % 7;
-        const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diffToMonday);
+    static async getWeeklySpent(tx: any, walletId: string, settings?: any): Promise<number> {
+        // Même correctif de fuseau que verifyAndIncrementConsumption ci-dessus (heure du
+        // process serveur -> heure configurée, Africa/Libreville par défaut) : sans lui, le
+        // début de semaine glissant pouvait basculer jusqu'à 1h trop tôt/trop tard, faussant le
+        // plafond hebdomadaire des Comptes Enfant tout comme les plafonds journalier/mensuel.
+        const timezone = settings?.timezone || 'Africa/Libreville';
+        const startOfWeek = startOfWeekInTimezone(timezone);
 
         const weeklyAgg = await tx.transaction.aggregate({
             where: {

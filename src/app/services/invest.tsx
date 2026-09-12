@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../constants/theme';
+import { useAuth } from '../../context/AuthContext';
 import { apiGetStakingVaults, apiWithdrawStakingVault, StakingVault } from '../../services/api';
 
 // Liste des coffres de staking (backend/src/routes/invest.ts) — même schéma que
@@ -25,6 +26,13 @@ export default function InvestScreen() {
     const COLORS = useAppTheme();
     const styles = getStyles(COLORS);
     const router = useRouter();
+    const { user } = useAuth();
+
+    // Filet de sécurité UX (pas la barrière de sécurité — le backend refuse déjà ces routes
+    // pour un CHILD) : couvre un lien profond périmé, une notification, ou tout autre chemin
+    // qui contournerait les boutons/onglet masqués côté navigation ((tabs)/index.tsx et
+    // (tabs)/_layout.tsx).
+    const isChild = user?.role === 'CHILD';
 
     const [vaults, setVaults] = useState<StakingVault[]>([]);
     const [loading, setLoading] = useState(true);
@@ -49,7 +57,7 @@ export default function InvestScreen() {
     // Un simple montage ne rejoue jamais au retour d'un écran poussé par-dessus (création) —
     // sans ça, un coffre tout juste ouvert n'apparaissait dans la liste qu'après avoir quitté
     // puis rouvert cet onglet (même correctif que services/vaults.tsx).
-    useFocusEffect(useCallback(() => { loadVaults(); }, [loadVaults]));
+    useFocusEffect(useCallback(() => { if (!isChild) loadVaults(); }, [loadVaults, isChild]));
 
     const handleWithdraw = (vault: StakingVault) => {
         Alert.alert(
@@ -74,6 +82,20 @@ export default function InvestScreen() {
             ]
         );
     };
+
+    if (isChild) {
+        return (
+            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background, justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+                <Ionicons name="lock-closed-outline" size={48} color={COLORS.textSecondary} style={{ marginBottom: 16 }} />
+                <Text style={{ fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: COLORS.textPrimary, textAlign: 'center', marginBottom: 24 }}>
+                    Cette fonctionnalité n'est pas disponible pour les comptes enfant.
+                </Text>
+                <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={{ backgroundColor: COLORS.primary, paddingVertical: 14, paddingHorizontal: 28, borderRadius: 14 }}>
+                    <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>Retour à l'accueil</Text>
+                </TouchableOpacity>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]} edges={['top']}>

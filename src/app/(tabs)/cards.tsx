@@ -1,12 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../services/api';
 
 export default function CardsScreen() {
-    const { token } = useAuth();
+    const { token, user } = useAuth();
+    const router = useRouter();
+    // Filet de sécurité UX (pas la barrière de sécurité — le backend refuse déjà ces routes
+    // pour un CHILD) : couvre un lien profond périmé, une notification, ou tout autre chemin
+    // qui contournerait les boutons/onglet masqués côté navigation ((tabs)/index.tsx et
+    // (tabs)/_layout.tsx).
+    const isChild = user?.role === 'CHILD';
     const [cards, setCards] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [revealCvv, setRevealCvv] = useState<{ [key: string]: boolean }>({});
@@ -42,8 +49,8 @@ export default function CardsScreen() {
     };
 
     useEffect(() => {
-        if (token) fetchCards();
-    }, [token]);
+        if (token && !isChild) fetchCards();
+    }, [token, isChild]);
 
     // Anti double-tap (même correctif que vault-detail.tsx : `disabled={actionLoading}` seul
     // ne protège pas contre deux appuis assez rapprochés pour lire `actionLoading` avant que le
@@ -102,6 +109,20 @@ export default function CardsScreen() {
             setActionLoading(false);
         }
     };
+
+    if (isChild) {
+        return (
+            <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+                <Ionicons name="lock-closed-outline" size={48} color="#94a3b8" style={{ marginBottom: 16 }} />
+                <Text style={{ fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: '#ffffff', textAlign: 'center', marginBottom: 24 }}>
+                    Cette fonctionnalité n'est pas disponible pour les comptes enfant.
+                </Text>
+                <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={{ backgroundColor: '#2563EB', paddingVertical: 14, paddingHorizontal: 28, borderRadius: 14 }}>
+                    <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>Retour à l'accueil</Text>
+                </TouchableOpacity>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container}>

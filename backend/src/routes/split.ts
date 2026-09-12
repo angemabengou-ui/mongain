@@ -107,17 +107,32 @@ router.post('/pay/:id', authMiddleware, circuitBreakerMiddleware, async (req: Au
 
         let paidAmount = 0;
         await prisma.$transaction(async (tx: any) => {
+            const splitReqCheck = await tx.splitRequest.findUnique({ where: { id: splitId } });
+            if (!splitReqCheck) throw new Error('Demande introuvable.');
+            if (splitReqCheck.targetId !== req.userId) {
+                throw new Error('Vous n\'êtes pas le destinataire de cette demande.');
+            }
+
+            // Réclamation atomique : la lecture ci-dessus (`splitReqCheck.status`) n'est là que
+            // pour un message d'erreur clair et n'engage rien — deux requêtes concurrentes ou
+            // rejouées pour le même split (double-clic, retry réseau) la liraient toutes les
+            // deux à PENDING avant que l'une des deux n'écrive, payant la même demande deux
+            // fois. Le vrai contrôle est ce `updateMany` : le statut dans le WHERE le rend
+            // atomique au niveau SQL, une seule des requêtes concurrentes peut faire passer
+            // `count` à 1, l'autre trouve 0 ligne PENDING restante.
+            const claim = await tx.splitRequest.updateMany({
+                where: { id: splitId, status: 'PENDING' },
+                data: { status: 'PAID' }
+            });
+            if (claim.count !== 1) {
+                throw new Error('Cette demande a déjà été réglée.');
+            }
+
             const splitReq = await tx.splitRequest.findUnique({
                 where: { id: splitId },
                 include: { requester: { include: { wallet: true } } }
             });
-
-            if (!splitReq || splitReq.status !== 'PENDING') {
-                throw new Error('Demande introuvable ou déjà réglée.');
-            }
-            if (splitReq.targetId !== req.userId) {
-                throw new Error('Vous n\'êtes pas le destinataire de cette demande.');
-            }
+            if (!splitReq) throw new Error('Demande introuvable.');
 
             const payer = await tx.user.findUnique({
                 where: { id: req.userId },
@@ -150,11 +165,7 @@ router.post('/pay/:id', authMiddleware, circuitBreakerMiddleware, async (req: Au
                 data: { balance: { increment: splitReq.amount } }
             });
 
-            // Mark Paid
-            await tx.splitRequest.update({
-                where: { id: splitReq.id },
-                data: { status: 'PAID' }
-            });
+            // Statut déjà passé à PAID par la réclamation atomique ci-dessus.
 
             // Log Transaction
             await tx.transaction.create({

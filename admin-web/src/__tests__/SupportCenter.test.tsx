@@ -160,4 +160,43 @@ describe('SupportCenter', () => {
 
         expect(await screen.findByText('Suivi en cours')).toBeInTheDocument();
     });
+
+    it('masque les actions de changement de statut/escalade sur un ticket pour un rôle sans perm_ticket_resolve', async () => {
+        // Régression : PATCH /api/admin/reclamations/:id exige perm_ticket_resolve
+        // (admin.ts) — un agent avec seulement perm_ticket_view voyait ces boutons puis
+        // recevait un 403 au clic.
+        const user = userEvent.setup();
+        render(<SupportCenter token="tok" hasPerm={() => false} />);
+        await user.click(screen.getByRole('button', { name: /Boîte de Réception/i }));
+        await user.click(await screen.findByText('Jean Dupont'));
+        await screen.findByText('Le retrait a échoué mais le compte a été débité.');
+
+        expect(screen.queryByRole('button', { name: /ESCALADE/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /→ RESOLVED/i })).not.toBeInTheDocument();
+    });
+
+    it("masque le bouton d'ajout de note pour un rôle sans perm_support_note ni perm_ticket_resolve", async () => {
+        // Régression : POST /api/admin/reclamations/:id/notes exige perm_support_note
+        // OU perm_ticket_resolve (admin.ts).
+        const user = userEvent.setup();
+        render(<SupportCenter token="tok" hasPerm={() => false} />);
+        await user.click(screen.getByRole('button', { name: /Boîte de Réception/i }));
+        await user.click(await screen.findByText('Jean Dupont'));
+        await screen.findByText('Le retrait a échoué mais le compte a été débité.');
+
+        expect(screen.queryByRole('button', { name: 'Envoyer' })).not.toBeInTheDocument();
+        expect(screen.getByText('Envoi non autorisé')).toBeInTheDocument();
+    });
+
+    it('masque les actions de traitement des dossiers de fraude pour un rôle sans perm_customer_flag', async () => {
+        // Régression : GET/PATCH /api/admin/fraud-cases exigent perm_customer_flag
+        // (admin.ts) — sans ce garde, un agent sans cette permission voyait les boutons
+        // de traitement (Investiguer/Confirmer/Faux Positif/Clore) puis échouait en 403.
+        const user = userEvent.setup();
+        render(<SupportCenter token="tok" hasPerm={() => false} />);
+        await user.click(screen.getByRole('button', { name: /Fraudes/i }));
+
+        expect(await screen.findByText('Marie Curie')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Investiguer/i })).not.toBeInTheDocument();
+    });
 });

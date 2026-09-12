@@ -31,7 +31,7 @@ describe('BranchDashboard', () => {
     it("affiche un message de chargement puis les données de l'agence", async () => {
         fetchMock.mockResolvedValueOnce({ ok: true, json: async () => branchData });
 
-        render(<BranchDashboard token={token} />);
+        render(<BranchDashboard token={token} hasPerm={() => true} />);
 
         expect(screen.getByText(/Chargement sécurisé de l'agence/)).toBeInTheDocument();
 
@@ -45,7 +45,7 @@ describe('BranchDashboard', () => {
     it("affiche un message d'erreur si le chargement échoue", async () => {
         fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'Accès refusé' }) });
 
-        render(<BranchDashboard token={token} />);
+        render(<BranchDashboard token={token} hasPerm={() => true} />);
 
         await screen.findByText(/Erreur critique/);
         expect(screen.getByText(/Accès refusé/)).toBeInTheDocument();
@@ -57,7 +57,7 @@ describe('BranchDashboard', () => {
         fetchMock.mockResolvedValueOnce({ ok: true, json: async () => branchData }); // refetch après ouverture
 
         const user = userEvent.setup();
-        render(<BranchDashboard token={token} />);
+        render(<BranchDashboard token={token} hasPerm={() => true} />);
 
         await screen.findByText(/Tableau de Bord Agence/);
 
@@ -84,7 +84,7 @@ describe('BranchDashboard', () => {
         };
         fetchMock.mockResolvedValueOnce({ ok: true, json: async () => dataWithMyOwnSessionExcluded });
 
-        render(<BranchDashboard token={token} />);
+        render(<BranchDashboard token={token} hasPerm={() => true} />);
 
         await screen.findByText(/Tableau de Bord Agence/);
         expect(screen.getByText(/Guichet/)).toBeInTheDocument();
@@ -99,7 +99,7 @@ describe('BranchDashboard', () => {
         fetchMock.mockResolvedValueOnce({ ok: true, json: async () => hqData });
         const onNavigateToTreasury = vi.fn();
 
-        render(<BranchDashboard token={token} onNavigateToTreasury={onNavigateToTreasury} />);
+        render(<BranchDashboard token={token} hasPerm={() => true} onNavigateToTreasury={onNavigateToTreasury} />);
 
         await screen.findByText(/Tableau de Bord Agence — Siège/);
         expect(screen.getByText(/fonctionne comme une agence normale/)).toBeInTheDocument();
@@ -109,5 +109,30 @@ describe('BranchDashboard', () => {
         const user = userEvent.setup();
         await user.click(screen.getByRole('button', { name: /Voir la Trésorerie Centrale/ }));
         expect(onNavigateToTreasury).toHaveBeenCalled();
+    });
+
+    it("masque le formulaire de demande de financement pour un rôle sans perm_branch_manage (ex: TELLER)", async () => {
+        // Régression : POST /api/agency/treasury-requests exige perm_branch_manage
+        // (agency.ts) mais rien ici n'empêchait un TELLER de remplir tout le formulaire
+        // avant de recevoir un 403 seulement à la soumission.
+        fetchMock.mockResolvedValueOnce({ ok: true, json: async () => branchData });
+
+        render(<BranchDashboard token={token} hasPerm={() => false} />);
+
+        await screen.findByText(/Tableau de Bord Agence/);
+        expect(screen.getByText("Réservé au Manager d'agence (perm_branch_manage).")).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Envoyer au Trésorier HQ/i })).not.toBeInTheDocument();
+    });
+
+    it("masque le bouton de génération du rapport de réconciliation pour un rôle sans perm_branch_manage", async () => {
+        // Régression : GET /api/agency/reconciliation exige perm_branch_manage
+        // (agency.ts) — un TELLER cliquant recevait un 403 silencieux.
+        fetchMock.mockResolvedValueOnce({ ok: true, json: async () => branchData });
+
+        render(<BranchDashboard token={token} hasPerm={() => false} />);
+
+        await screen.findByText(/Tableau de Bord Agence/);
+        expect(screen.getByText('Accès restreint au Manager')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Générer le rapport consolidé/i })).not.toBeInTheDocument();
     });
 });

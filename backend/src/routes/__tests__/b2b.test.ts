@@ -116,11 +116,75 @@ describe('B2B Routes', () => {
 
             const res = await request(app).post('/b2b/payouts').send({
                 name: 'Paie',
-                entries: [{ phone: '074000001', amount: 10000 }]
+                entries: [{ phone: '074000001', amount: 10000 }],
+                pin: '1234'
             });
 
             expect(res.status).toBe(202);
             expect(prisma.payoutBulk.create).toHaveBeenCalled();
+        });
+
+        it('devrait refuser un virement de masse sans PIN (régression : débitait le marchand sans consentement explicite)', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(merchant);
+
+            const res = await request(app).post('/b2b/payouts').send({
+                name: 'Paie',
+                entries: [{ phone: '074000001', amount: 10000 }]
+            });
+
+            expect(res.status).toBe(400);
+            expect(res.body.error).toMatch(/PIN requis/);
+            expect(prisma.payoutBulk.create).not.toHaveBeenCalled();
+        });
+
+        it('devrait refuser un virement de masse si le PIN est incorrect', async () => {
+            const { verifyUserPin } = require('../../utils/pinAuth');
+            (verifyUserPin as jest.Mock).mockResolvedValueOnce({ ok: false, status: 400, error: 'Code PIN incorrect. Tentative 1/3.' });
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(merchant);
+
+            const res = await request(app).post('/b2b/payouts').send({
+                name: 'Paie',
+                entries: [{ phone: '074000001', amount: 10000 }],
+                pin: '0000'
+            });
+
+            expect(res.status).toBe(400);
+            expect(prisma.payoutBulk.create).not.toHaveBeenCalled();
+        });
+
+        it('ne devrait pas retraiter un lot déjà soumis avec la même clé d\'idempotence (régression : double-clic/retry payait deux fois chaque bénéficiaire)', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(merchant);
+            (prisma.payoutBulk.findUnique as jest.Mock).mockResolvedValue({ id: 'bulk_existant', entries: [] });
+
+            const res = await request(app).post('/b2b/payouts').send({
+                name: 'Paie',
+                entries: [{ phone: '074000001', amount: 10000 }],
+                pin: '1234',
+                idempotencyKey: 'clef-abc-123'
+            });
+
+            expect(res.status).toBe(202);
+            expect(res.body.bulkId).toBe('bulk_existant');
+            expect(prisma.payoutBulk.create).not.toHaveBeenCalled();
+        });
+
+        it('devrait créer un nouveau lot et enregistrer sa clé d\'idempotence si elle est inédite', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(merchant);
+            (prisma.payoutBulk.findUnique as jest.Mock).mockResolvedValue(null);
+            (prisma.payoutBulk.create as jest.Mock).mockResolvedValue({ id: 'bulk_neuf', entries: [] });
+            (prisma.wallet.findUnique as jest.Mock).mockResolvedValue({ id: 'w1', balance: 1000000 });
+
+            const res = await request(app).post('/b2b/payouts').send({
+                name: 'Paie',
+                entries: [{ phone: '074000001', amount: 10000 }],
+                pin: '1234',
+                idempotencyKey: 'clef-neuve-456'
+            });
+
+            expect(res.status).toBe(202);
+            expect(prisma.payoutBulk.create).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({ idempotencyKey: 'clef-neuve-456' })
+            }));
         });
     });
 });

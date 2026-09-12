@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -37,8 +37,23 @@ export default function FamilyDetailScreen() {
 
     const [child, setChild] = useState<ChildAccount | null>(null);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
+    // Distinct de `transactions.length === 0` : un enfant qui n'a VRAIMENT rien dépensé et un
+    // échec réseau/serveur sur GET /family/children/:id/transactions rendaient jusqu'ici le
+    // MÊME message ("Aucune transaction pour l'instant."), puisque le .catch(() => []) plus bas
+    // absorbait l'erreur en silence pour ne pas faire échouer tout l'écran (même préoccupation
+    // "white screen" que le commit d'origine de cette fonctionnalité) — un parent qui consulte
+    // cet historique justement pour une supervision ne pouvait alors pas distinguer "rien à
+    // signaler" d'un chargement qui a réellement échoué.
+    const [txLoadFailed, setTxLoadFailed] = useState(false);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    // Garde anti double-tap (synchrone, voir transfer-confirm.tsx/vault-detail.tsx pour le même
+    // schéma) : `actionLoading` (état React) ne suffit pas seul — deux appuis rapides sur le
+    // bouton "Confirmer" du PinPromptModal peuvent tous deux s'exécuter avant que le premier
+    // setActionLoading(true) ne soit commité, et apiTransfer (recharge du solde de l'enfant)
+    // n'est ni idempotent ni protégé par une idempotencyKey côté mobile ici : sans cette garde,
+    // un double-tap pouvait recharger l'enfant deux fois pour une seule intention du parent.
+    const submittingRef = useRef(false);
 
     const [limitPeriod, setLimitPeriod] = useState<'DAILY' | 'WEEKLY'>('DAILY');
     const [limitAmount, setLimitAmount] = useState('');
@@ -55,11 +70,17 @@ export default function FamilyDetailScreen() {
         try {
             const [res, txRes] = await Promise.all([
                 apiGetChildDetail(id),
-                apiGetChildTransactions(id).catch(() => []),
+                // `null` en cas d'échec (jamais un tableau vide) — distingué explicitement de
+                // "vraiment aucune transaction" juste en dessous, voir commentaire sur
+                // txLoadFailed. Un échec ici ne doit pas faire échouer tout l'écran (le
+                // solde/plafond de l'enfant restent consultables), d'où le .catch() plutôt que
+                // de laisser l'erreur remonter au catch englobant.
+                apiGetChildTransactions(id).catch(() => null),
             ]);
             setChild(res);
             setLimitPeriod((res.childSpendLimitPeriod as 'DAILY' | 'WEEKLY') || 'DAILY');
             setLimitAmount(res.childSpendLimitAmount ? String(res.childSpendLimitAmount) : '');
+            setTxLoadFailed(txRes === null);
             setTransactions(txRes || []);
         } catch (e: any) {
             Alert.alert('Erreur', e.response?.data?.error || e.message || 'Impossible de charger ce compte enfant.');
@@ -84,8 +105,10 @@ export default function FamilyDetailScreen() {
     };
 
     const handlePinConfirm = async (pin: string) => {
+        if (submittingRef.current) return; // Garde anti double-tap (synchrone, voir submittingRef).
         const prompt = pinPrompt;
         if (!prompt || !child) return;
+        submittingRef.current = true;
         setActionLoading(true);
         try {
             if (prompt.type === 'limit') {
@@ -103,6 +126,7 @@ export default function FamilyDetailScreen() {
         } catch (e: any) {
             Alert.alert('Erreur', e.response?.data?.error || e.message || 'L\'opération a échoué.');
         } finally {
+            submittingRef.current = false;
             setActionLoading(false);
         }
     };
@@ -204,7 +228,16 @@ export default function FamilyDetailScreen() {
                     {/* Historique — supervision parentale : voir ce que dépense l'enfant, en plus de
                         la notification en temps réel (voir routes/wallet.ts, notifyParentOfChildSpend). */}
                     <SectionHeading colors={COLORS} title="Historique des transactions" marginTop={24} />
-                    {transactions.length === 0 ? (
+                    {txLoadFailed ? (
+                        <View style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border }]}>
+                            <Text style={[styles.helper, { color: COLORS.error, marginTop: 0 }]}>
+                                Impossible de charger l'historique des transactions.
+                            </Text>
+                            <TouchableOpacity onPress={() => load()}>
+                                <Text style={[styles.retryText, { color: COLORS.primary }]}>Réessayer</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : transactions.length === 0 ? (
                         <Text style={[styles.helper, { color: COLORS.textSecondary }]}>Aucune transaction pour l'instant.</Text>
                     ) : (
                         <View style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border, padding: 6 }]}>
@@ -259,6 +292,7 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>) => StyleSheet.create(
     inlineBtnText: { color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700', fontSize: 14 },
     disabled: { opacity: 0.5 },
     helper: { fontSize: 12.5, lineHeight: 18, marginTop: 8 },
+    retryText: { fontSize: 13, fontFamily: 'Satoshi-SemiBold', fontWeight: '700', marginTop: 10 },
 
     card: { borderRadius: 16, borderWidth: 1, padding: 16 },
     toggleRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },

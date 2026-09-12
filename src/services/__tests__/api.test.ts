@@ -389,6 +389,128 @@ describe('api service', () => {
             expect(global.fetch).toHaveBeenCalledTimes(2);
         });
 
+        // Régression : /api/auth/refresh passait par un fetch() brut, sans le moindre retry —
+        // contrairement à request() (voir WAKEUP_MAX_RETRIES/WAKEUP_RETRY_DELAY_MS dans api.ts).
+        // Un access token expiré (30 min, ACCESS_TOKEN_TTL côté backend) après une pause
+        // suffisamment longue pour que Render (plan gratuit) se rendorme ENTRE-temps faisait
+        // donc échouer CE renouvellement silencieux avec un 503 (réveil à froid), traité à tort
+        // comme "refresh token invalide" -> déconnexion complète alors que le refresh token
+        // était parfaitement valide. Le fix : attemptTokenRefresh() retente désormais un 502/503/504
+        // exactement comme request() le fait pour toute autre requête.
+        it('retries the refresh call on a 502/503/504 cold start instead of logging out, then transparently retries the original request', async () => {
+            const onUnauthorized = jest.fn();
+            setUnauthorizedHandler(onUnauthorized);
+            (SecureStore.getItemAsync as jest.Mock)
+                .mockResolvedValueOnce('expired-token') // getToken() for the initial request
+                .mockResolvedValueOnce('stored-refresh') // getRefreshToken() inside attemptTokenRefresh
+                .mockResolvedValueOnce('new-access-token'); // getToken() for the transparent retry
+
+            let refreshCalls = 0;
+            let meCallCount = 0;
+            (global as any).fetch = jest.fn((url: string) => {
+                if (url === `${BASE_URL}/api/auth/refresh`) {
+                    refreshCalls++;
+                    // First two attempts land on a Render cold start (502/503), only the third
+                    // one hits an actually-awake backend.
+                    if (refreshCalls < 3) return Promise.resolve({ ok: false, status: 503, json: async () => ({}) });
+                    return Promise.resolve(okResponse({ token: 'new-access-token', refreshToken: 'new-refresh-token' }));
+                }
+                meCallCount++;
+                if (meCallCount === 1) {
+                    return Promise.resolve({ ok: false, status: 401, json: async () => ({}) });
+                }
+                return Promise.resolve(okResponse({ id: '1', name: 'Jean', phone: '+24177000000', wallet: null }));
+            });
+
+            const user = await apiGetMe();
+
+            expect(user.name).toBe('Jean');
+            expect(onUnauthorized).not.toHaveBeenCalled();
+            expect(refreshCalls).toBe(3);
+            expect(SecureStore.setItemAsync).toHaveBeenCalledWith('mongain_token', 'new-access-token');
+            expect(SecureStore.setItemAsync).toHaveBeenCalledWith('mongain_refresh_token', 'new-refresh-token');
+        }, 20000);
+
+        // Même scénario que ci-dessus mais le réveil à froid ne finit jamais : le refresh doit
+        // épuiser ses tentatives puis se comporter EXACTEMENT comme avant (déconnexion), pas
+        // rester bloqué indéfiniment.
+        it('gives up and logs out if the refresh call keeps hitting a cold start past the retry budget', async () => {
+            const onUnauthorized = jest.fn();
+            setUnauthorizedHandler(onUnauthorized);
+            (SecureStore.getItemAsync as jest.Mock)
+                .mockResolvedValueOnce('expired-token')
+                .mockResolvedValueOnce('stored-refresh');
+
+            let refreshCalls = 0;
+            (global as any).fetch = jest.fn((url: string) => {
+                if (url === `${BASE_URL}/api/auth/refresh`) {
+                    refreshCalls++;
+                    return Promise.resolve({ ok: false, status: 503, json: async () => ({}) });
+                }
+                return Promise.resolve({ ok: false, status: 401, json: async () => ({}) });
+            });
+
+            await expect(apiGetMe()).rejects.toThrow('Session expirée');
+            expect(onUnauthorized).toHaveBeenCalledTimes(1);
+            // Initial WAKEUP_MAX_RETRIES(4) + 1 = 5 attempts against /auth/refresh before giving up.
+            expect(refreshCalls).toBe(5);
+        }, 30000);
+
+        // Un vrai refus du serveur applicatif (le refresh token lui-même est expiré/invalide, pas
+        // un problème de réveil à froid) ne doit JAMAIS être retenté — sinon un utilisateur
+        // réellement déconnecté attendrait ~16s de plus pour rien avant de voir l'écran de login.
+        it('does not retry a genuine 401 from the refresh endpoint (invalid refresh token)', async () => {
+            const onUnauthorized = jest.fn();
+            setUnauthorizedHandler(onUnauthorized);
+            (SecureStore.getItemAsync as jest.Mock)
+                .mockResolvedValueOnce('expired-token')
+                .mockResolvedValueOnce('stale-refresh');
+
+            let refreshCalls = 0;
+            (global as any).fetch = jest.fn((url: string) => {
+                if (url === `${BASE_URL}/api/auth/refresh`) {
+                    refreshCalls++;
+                    return Promise.resolve({ ok: false, status: 401, json: async () => ({ error: 'Session expirée.' }) });
+                }
+                return Promise.resolve({ ok: false, status: 401, json: async () => ({}) });
+            });
+
+            await expect(apiGetMe()).rejects.toThrow('Session expirée');
+            expect(onUnauthorized).toHaveBeenCalledTimes(1);
+            expect(refreshCalls).toBe(1); // No retry on a genuine rejection.
+        });
+
+        // Un échec de CONNEXION (conteneur pas encore à l'écoute) sur /auth/refresh doit lui
+        // aussi être retenté comme un 502/503/504 — même cause (réveil à froid), détectée avant
+        // la réponse plutôt qu'après (voir isConnectionFailure dans attemptTokenRefresh).
+        it('retries the refresh call on a raw connection failure, not just an HTTP 502/503/504', async () => {
+            const onUnauthorized = jest.fn();
+            setUnauthorizedHandler(onUnauthorized);
+            (SecureStore.getItemAsync as jest.Mock)
+                .mockResolvedValueOnce('expired-token')
+                .mockResolvedValueOnce('stored-refresh')
+                .mockResolvedValueOnce('new-access-token');
+
+            let refreshCalls = 0;
+            let meCallCount = 0;
+            (global as any).fetch = jest.fn((url: string) => {
+                if (url === `${BASE_URL}/api/auth/refresh`) {
+                    refreshCalls++;
+                    if (refreshCalls < 2) return Promise.reject(new Error('Network request failed'));
+                    return Promise.resolve(okResponse({ token: 'new-access-token', refreshToken: 'new-refresh-token' }));
+                }
+                meCallCount++;
+                if (meCallCount === 1) return Promise.resolve({ ok: false, status: 401, json: async () => ({}) });
+                return Promise.resolve(okResponse({ id: '1', name: 'Jean', phone: '+24177000000', wallet: null }));
+            });
+
+            const user = await apiGetMe();
+
+            expect(user.name).toBe('Jean');
+            expect(onUnauthorized).not.toHaveBeenCalled();
+            expect(refreshCalls).toBe(2);
+        }, 20000);
+
         it('deduplicates concurrent refresh attempts into a single /auth/refresh call', async () => {
             (SecureStore.getItemAsync as jest.Mock).mockResolvedValue('stored-refresh');
 

@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { LimitEngine } from '../services/LimitEngine';
@@ -7,6 +8,21 @@ import { applyRoleChangeGuards, executeVaultWithdraw } from '../services/vaultSe
 import { notifyParentOfChildSpend, sendPush } from './wallet';
 
 const router = express.Router();
+
+// Anti-abus sur les deux rails qui déplacent réellement du solde d'une caisse commune (même
+// raisonnement que wallet.ts moneyMovementLimiter) : keyGenerator PAR COMPTE, pas par IP par
+// défaut, pour ne pas pénaliser collectivement les nombreux comptes distincts partageant la
+// même IP publique (CGNAT des opérateurs mobiles gabonais). 30 requêtes/15 min couvre
+// largement l'usage réel (déposer/demander un retrait n'est jamais fait en rafale par un
+// membre légitime) tout en bloquant un script en boucle.
+const moneyMovementLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    keyGenerator: (req) => (req as AuthRequest).userId || 'anonymous',
+    message: { success: false, message: 'Trop d\'opérations sur les caisses communes en peu de temps. Veuillez réessayer plus tard.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
 
 // ==========================================
 // 1. VAULT MANAGEMENT
@@ -338,10 +354,12 @@ router.post('/:id/leave', authMiddleware, async (req: AuthRequest, res) => {
 // ==========================================
 
 // Déposer dans la caisse
-router.post('/:id/deposit', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/:id/deposit', authMiddleware, moneyMovementLimiter, async (req: AuthRequest, res) => {
     const vaultId = req.params.id as string;
-    const { amount } = req.body;
-    const parsedAmount = parseFloat(amount);
+    const { amount, idempotencyKey } = req.body;
+    // Le FCFA n'a aucune sous-unité — arrondi ici, sinon l'écriture Prisma échoue sur un
+    // montant décimal (Vault.balance/VaultTransaction.amount sont Int).
+    const parsedAmount = Math.round(parseFloat(amount));
 
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
         return res.status(400).json({ success: false, message: "Montant invalide" });
@@ -349,6 +367,16 @@ router.post('/:id/deposit', authMiddleware, async (req: AuthRequest, res) => {
 
     try {
         const result = await prisma.$transaction(async (tx) => {
+            // Idempotence : un double-tap ou un retry réseau avec la même idempotencyKey ne
+            // doit JAMAIS re-débiter le déposant pour un seul dépôt — sans ce garde, un simple
+            // problème réseau côté mobile pouvait lui faire perdre le montant du dépôt une
+            // seconde fois. Vérifié avant toute lecture/écriture, même convention que
+            // CashOperationService.executeCashIn.
+            if (idempotencyKey) {
+                const dup = await tx.vaultTransaction.findUnique({ where: { idempotencyKey } });
+                if (dup) return { vtx: dup, isNew: false as const };
+            }
+
             // Vérifier profil
             const membership = await tx.vaultMember.findUnique({
                 where: { vaultId_userId: { vaultId, userId: req.userId! } }
@@ -409,7 +437,8 @@ router.post('/:id/deposit', authMiddleware, async (req: AuthRequest, res) => {
                     type: 'DEPOSIT',
                     amount: parsedAmount,
                     status: 'COMPLETED',
-                    requestedById: req.userId!
+                    requestedById: req.userId!,
+                    idempotencyKey
                 }
             });
 
@@ -443,27 +472,33 @@ router.post('/:id/deposit', authMiddleware, async (req: AuthRequest, res) => {
                 });
             }
 
-            return vtx;
+            return { vtx, isNew: true as const };
         });
 
-        await notifyParentOfChildSpend(req.userId!, parsedAmount, 'dépôt dans une caisse commune');
+        // Notification sautée pour un rejeu idempotent (isNew === false) : déjà envoyée lors
+        // du tout premier passage de cette idempotencyKey.
+        if (result.isNew) {
+            await notifyParentOfChildSpend(req.userId!, parsedAmount, 'dépôt dans une caisse commune');
+        }
 
-        res.json({ success: true, message: "Dépôt réussi", data: result });
+        res.json({ success: true, message: "Dépôt réussi", data: result.vtx });
     } catch (error: any) {
         res.status(400).json({ success: false, message: error.message });
     }
 });
 
 // Demander un retrait
-router.post('/:id/withdraw-request', authMiddleware, async (req: AuthRequest, res) => {
+router.post('/:id/withdraw-request', authMiddleware, moneyMovementLimiter, async (req: AuthRequest, res) => {
     const vaultId = req.params.id as string;
     // destinationType: TREASURER (vers un membre trésorier), VOUCHER (bon à
     // redeemer plus tard), ou TRANSFER (envoi direct à n'importe quel numéro
     // Mongain — pratique pour payer un prestataire externe, mais c'est aussi
     // le chemin le plus à risque : un seul commissaire, seul, ne doit jamais
     // pouvoir faire sortir de l'argent vers un tiers quelconque sans second avis.
-    const { amount, destinationType, destinationId, destinationPhone, reason } = req.body;
-    const parsedAmount = parseFloat(amount);
+    const { amount, destinationType, destinationId, destinationPhone, reason, idempotencyKey } = req.body;
+    // Le FCFA n'a aucune sous-unité — arrondi ici, sinon l'écriture Prisma échoue sur un
+    // montant décimal (Vault.balance/VaultTransaction.amount sont Int).
+    const parsedAmount = Math.round(parseFloat(amount));
 
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
         return res.status(400).json({ success: false, message: "Montant invalide" });
@@ -473,6 +508,19 @@ router.post('/:id/withdraw-request', authMiddleware, async (req: AuthRequest, re
     }
 
     try {
+        // Idempotence : contrairement à /deposit, cette route n'exécute elle-même aucun
+        // mouvement de fonds (voir POST /:id/approve/:txId, qui applique déjà une réclamation
+        // atomique PENDING -> COMPLETED contre la double-exécution D'UNE MÊME demande) — cette
+        // garde évite seulement qu'un double-tap sur "Demander un retrait" ne crée DEUX
+        // demandes PENDING distinctes pour un seul geste, chacune pouvant ensuite être
+        // approuvée et exécutée indépendamment, doublant la sortie de fonds réelle.
+        if (idempotencyKey) {
+            const dup = await prisma.vaultTransaction.findUnique({ where: { idempotencyKey } });
+            if (dup) {
+                return res.json({ success: true, message: "Demande de retrait initiée. En attente de validations.", data: dup });
+            }
+        }
+
         const membership = await prisma.vaultMember.findUnique({
             where: { vaultId_userId: { vaultId, userId: req.userId! } }
         });
@@ -547,6 +595,7 @@ router.post('/:id/withdraw-request', authMiddleware, async (req: AuthRequest, re
                 requestedById: req.userId!,
                 requiredApprovalsSnapshot,
                 requiredValidatorIdsSnapshot,
+                idempotencyKey,
             }
         });
 

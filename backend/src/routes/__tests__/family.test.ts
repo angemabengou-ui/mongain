@@ -15,6 +15,8 @@ jest.mock('../../prisma', () => ({
         user: { findUnique: jest.fn(), findFirst: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn() },
         verificationCode: { count: jest.fn(), upsert: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
         auditLog: { create: jest.fn() },
+        wallet: { findUnique: jest.fn() },
+        transaction: { findMany: jest.fn() },
     },
 }));
 
@@ -159,6 +161,21 @@ describe('Family Routes (Comptes Enfant)', () => {
             expect(res.status).toBe(200);
             expect(res.body.id).toBe('child_1');
         });
+
+        // IDOR (voir audit) : le filtre DOIT porter sur { id, parentId, role } ensemble, jamais
+        // sur { id } seul — sans quoi n'importe quel USER authentifié pourrait consulter le
+        // compte enfant d'un AUTRE parent en devinant/énumérant son id. `findFirst` étant mocké
+        // ci-dessus indépendamment de son `where`, un test qui ne vérifie QUE le code retour ne
+        // détecterait pas une régression qui retirerait `parentId: req.userId` de la requête.
+        it('devrait filtrer la recherche par { id, parentId: appelant, role: CHILD } (pas id seul)', async () => {
+            (prisma.user.findFirst as jest.Mock).mockResolvedValue({ id: 'child_1', name: 'Junior' });
+
+            await request(app).get('/family/children/child_1');
+
+            expect(prisma.user.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+                where: { id: 'child_1', parentId: 'parent_1', role: 'CHILD' },
+            }));
+        });
     });
 
     describe('PUT /family/children/:id/limit', () => {
@@ -186,6 +203,23 @@ describe('Family Routes (Comptes Enfant)', () => {
             expect(res.status).toBe(404);
         });
 
+        // IDOR (voir audit) : même précaution que GET /family/children/:id ci-dessus — le PIN
+        // vérifié est bien celui du PARENT (req.userId), mais ENCORE FAUT-IL que l'enfant
+        // recherché soit filtré par CE parent, pas seulement par son id. Sans `parentId` dans
+        // le where, un parent authentifié pourrait ajuster le plafond du compte enfant de
+        // n'importe quel autre parent avec son PROPRE PIN.
+        it('devrait filtrer l\'enfant par { id, parentId: appelant, role: CHILD } (pas id seul)', async () => {
+            (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+            (prisma.user.findFirst as jest.Mock).mockResolvedValue({ id: 'child_1', parentId: 'parent_1', role: 'CHILD' });
+            (prisma.user.update as jest.Mock).mockResolvedValue({ id: 'child_1', childSpendLimitAmount: 5000, childSpendLimitPeriod: 'DAILY' });
+
+            await request(app).put('/family/children/child_1/limit').send({ period: 'DAILY', amount: 5000, pin: '1234' });
+
+            expect(prisma.user.findFirst).toHaveBeenCalledWith({
+                where: { id: 'child_1', parentId: 'parent_1', role: 'CHILD' },
+            });
+        });
+
         it('devrait plafonner le montant demandé au maximum réglementaire absolu', async () => {
             (bcrypt.compare as jest.Mock).mockResolvedValue(true);
             (prisma.user.findFirst as jest.Mock).mockResolvedValue({ id: 'child_1', parentId: 'parent_1', role: 'CHILD' });
@@ -210,6 +244,57 @@ describe('Family Routes (Comptes Enfant)', () => {
             expect(res.status).toBe(200);
             expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
                 data: expect.objectContaining({ adminId: 'parent_1', action: 'CHILD_LIMIT_UPDATED' }),
+            }));
+        });
+    });
+
+    // Aucun test n'existait jusqu'ici pour cette route (voir audit) — pourtant c'est LA route de
+    // supervision parentale proprement dite (voir historique des transactions de l'enfant dans
+    // family-detail.tsx, mobile), et elle a la même surface d'IDOR que les routes ci-dessus.
+    describe('GET /family/children/:id/transactions', () => {
+        it('devrait retourner 404 si l\'enfant n\'appartient pas à l\'appelant (IDOR)', async () => {
+            (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
+
+            const res = await request(app).get('/family/children/child_999/transactions');
+
+            expect(res.status).toBe(404);
+            expect(prisma.user.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+                where: { id: 'child_999', parentId: 'parent_1', role: 'CHILD' },
+            }));
+            // Ne doit même pas atteindre la recherche du wallet/des transactions de l'enfant.
+            expect(prisma.wallet.findUnique).not.toHaveBeenCalled();
+        });
+
+        it('devrait retourner 404 si le portefeuille de l\'enfant est introuvable', async () => {
+            (prisma.user.findFirst as jest.Mock).mockResolvedValue({ id: 'child_1' });
+            (prisma.wallet.findUnique as jest.Mock).mockResolvedValue(null);
+
+            const res = await request(app).get('/family/children/child_1/transactions');
+
+            expect(res.status).toBe(404);
+        });
+
+        it('devrait retourner l\'historique formaté (entrant/sortant) du portefeuille de l\'enfant', async () => {
+            (prisma.user.findFirst as jest.Mock).mockResolvedValue({ id: 'child_1' });
+            (prisma.wallet.findUnique as jest.Mock).mockResolvedValue({ id: 'w_child', currency: 'FCFA' });
+            (prisma.transaction.findMany as jest.Mock).mockResolvedValue([
+                {
+                    id: 'tx1', amount: 2000, status: 'COMPLETED', reference: 'TRF-1', createdAt: new Date(),
+                    senderWalletId: 'w_parent', receiverWalletId: 'w_child',
+                    senderWallet: { user: { phone: '+24177000001', name: 'Parent' } },
+                    receiverWallet: { user: { phone: '+24177000000', name: 'Junior' } },
+                },
+            ]);
+
+            const res = await request(app).get('/family/children/child_1/transactions');
+
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual([
+                expect.objectContaining({ id: 'tx1', type: 'incoming', amount: 2000, counterpart: 'Parent' }),
+            ]);
+            // Scopé au wallet de CET enfant, jamais à tous les wallets du système.
+            expect(prisma.transaction.findMany).toHaveBeenCalledWith(expect.objectContaining({
+                where: { OR: [{ senderWalletId: 'w_child' }, { receiverWalletId: 'w_child' }] },
             }));
         });
     });

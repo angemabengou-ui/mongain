@@ -75,7 +75,9 @@ router.post('/charge', async (req, res) => {
         }
 
         const { customerPhone, amount, orderId } = req.body;
-        const chargeAmount = parseFloat(amount);
+        // Le FCFA n'a aucune sous-unité — arrondi ici, sinon l'écriture Prisma échoue sur un
+        // montant décimal (Invoice.amount est Int).
+        const chargeAmount = Math.round(parseFloat(amount));
 
         if (!customerPhone || isNaN(chargeAmount) || chargeAmount < 100) {
             return res.status(400).json({ error: "Invalid Checkout Payload" });

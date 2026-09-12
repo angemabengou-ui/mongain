@@ -120,4 +120,49 @@ describe('(tabs)/index (DashboardScreen)', () => {
         fireEvent.press(screen.getByText('Envoyer'));
         expect(mockPush).toHaveBeenCalledWith('/transfer');
     });
+
+    // Restriction de navigation "Comptes Enfant" : Cartes/Diviser (actions rapides) et
+    // Internat. (services & factures) ne font pas partie de la liste approuvée par le
+    // fondateur pour un compte CHILD — voir (tabs)/_layout.tsx pour l'onglet "Services"
+    // masqué de la même façon, et cards.tsx/credit.tsx/crypto.tsx/bnpl.tsx/invest.tsx/remit.tsx
+    // pour le filet de sécurité côté écrans eux-mêmes (lien profond direct).
+    it('hides Cartes, Diviser and Internat. for a CHILD-role user, and shows the "Compte Enfant" badge', async () => {
+        mockUseAuth.mockReturnValue({
+            user: { ...baseUser, role: 'CHILD', gender: 'FEMALE' },
+            logout: jest.fn(),
+            settings: { seegEnabled: true, tontineEnabled: true },
+        });
+        mockApiGetBalance.mockResolvedValue({ balance: 1000, currency: 'FCFA' });
+        mockApiGetTransactions.mockResolvedValue([]);
+
+        await render(<DashboardScreen />);
+        await screen.findByText("Aucune transaction.");
+
+        expect(screen.queryByText('Cartes')).toBeNull();
+        expect(screen.queryByText('Diviser')).toBeNull();
+        expect(screen.queryByText('Internat.')).toBeNull();
+        expect(screen.getByText('Compte Enfant')).toBeTruthy();
+
+        // Le reste des fonctionnalités approuvées (voir AGENTS/consignes du fondateur) reste
+        // pleinement visible pour l'enfant.
+        expect(screen.getByText('Envoyer')).toBeTruthy();
+        expect(screen.getByText('Recharger')).toBeTruthy();
+        expect(screen.getByText('Retirer')).toBeTruthy();
+        expect(screen.getByText('Factures')).toBeTruthy();
+        expect(screen.getByText('Recharge')).toBeTruthy();
+        expect(screen.getByText('Eau')).toBeTruthy();
+    });
+
+    it('still shows Cartes, Diviser and Internat. for a non-CHILD (USER) account — no regression', async () => {
+        mockApiGetBalance.mockResolvedValue({ balance: 1000, currency: 'FCFA' });
+        mockApiGetTransactions.mockResolvedValue([]);
+
+        await render(<DashboardScreen />);
+        await screen.findByText("Aucune transaction.");
+
+        expect(screen.getByText('Cartes')).toBeTruthy();
+        expect(screen.getByText('Diviser')).toBeTruthy();
+        expect(screen.getByText('Internat.')).toBeTruthy();
+        expect(screen.queryByText('Compte Enfant')).toBeNull();
+    });
 });
