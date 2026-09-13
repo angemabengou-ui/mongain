@@ -8,6 +8,10 @@ import { request } from '../services/api';
 export default function SplitScreen() {
     const router = useRouter();
     const { user } = useAuth();
+    // Marchand Géant — palier consultation-seule sur mobile (voir User.merchantTier,
+    // (tabs)/index.tsx, où le bouton "Diviser" qui mène ici est déjà masqué) : filet de
+    // sécurité UX pour un lien profond direct, même schéma que crypto.tsx/cards.tsx/etc.
+    const isGiantMerchant = user?.merchantTier === 'GIANT';
     const [amountStr, setAmountStr] = useState('');
     const [phonesStr, setPhonesStr] = useState('');
     const [loading, setLoading] = useState(false);
@@ -23,8 +27,8 @@ export default function SplitScreen() {
     const payingSplitRef = useRef(false);
 
     useEffect(() => {
-        fetchPending();
-    }, []);
+        if (!isGiantMerchant) fetchPending();
+    }, [isGiantMerchant]);
 
     const fetchPending = async () => {
         try {
@@ -91,6 +95,20 @@ export default function SplitScreen() {
             setLoading(false);
         }
     };
+
+    if (isGiantMerchant) {
+        return (
+            <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+                <Ionicons name="lock-closed-outline" size={48} color="#94a3b8" style={{ marginBottom: 16 }} />
+                <Text style={{ fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: '#ffffff', textAlign: 'center', marginBottom: 24 }}>
+                    Cette fonctionnalité est réservée au portail web pour un compte marchand géant.
+                </Text>
+                <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={{ backgroundColor: '#2563EB', paddingVertical: 14, paddingHorizontal: 28, borderRadius: 14 }}>
+                    <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>Retour à l'accueil</Text>
+                </TouchableOpacity>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container}>

@@ -14,6 +14,10 @@ export default function CardsScreen() {
     // qui contournerait les boutons/onglet masqués côté navigation ((tabs)/index.tsx et
     // (tabs)/_layout.tsx).
     const isChild = user?.role === 'CHILD';
+    // Marchand Géant — palier consultation-seule sur mobile (voir User.merchantTier,
+    // (tabs)/index.tsx) : émettre/recharger une carte déplace de l'argent, même filet de
+    // sécurité UX ci-dessous que pour un Compte Enfant.
+    const isGiantMerchant = user?.merchantTier === 'GIANT';
     const [cards, setCards] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [revealCvv, setRevealCvv] = useState<{ [key: string]: boolean }>({});
@@ -49,8 +53,8 @@ export default function CardsScreen() {
     };
 
     useEffect(() => {
-        if (token && !isChild) fetchCards();
-    }, [token, isChild]);
+        if (token && !isChild && !isGiantMerchant) fetchCards();
+    }, [token, isChild, isGiantMerchant]);
 
     // Anti double-tap (même correctif que vault-detail.tsx : `disabled={actionLoading}` seul
     // ne protège pas contre deux appuis assez rapprochés pour lire `actionLoading` avant que le
@@ -110,12 +114,12 @@ export default function CardsScreen() {
         }
     };
 
-    if (isChild) {
+    if (isChild || isGiantMerchant) {
         return (
             <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
                 <Ionicons name="lock-closed-outline" size={48} color="#94a3b8" style={{ marginBottom: 16 }} />
                 <Text style={{ fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: '#ffffff', textAlign: 'center', marginBottom: 24 }}>
-                    Cette fonctionnalité n'est pas disponible pour les comptes enfant.
+                    {isGiantMerchant ? "Cette fonctionnalité est réservée au portail web pour un compte marchand géant." : "Cette fonctionnalité n'est pas disponible pour les comptes enfant."}
                 </Text>
                 <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={{ backgroundColor: '#2563EB', paddingVertical: 14, paddingHorizontal: 28, borderRadius: 14 }}>
                     <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>Retour à l'accueil</Text>

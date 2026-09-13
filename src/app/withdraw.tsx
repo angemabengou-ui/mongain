@@ -19,6 +19,10 @@ export default function WithdrawScreen() {
     const styles = getStyles(COLORS);
     const router = useRouter();
     const { user } = useAuth();
+    // Marchand Géant — palier consultation-seule sur mobile (voir User.merchantTier,
+    // (tabs)/index.tsx, où le bouton "Retirer" qui mène ici est déjà masqué) : filet de
+    // sécurité UX pour un lien profond direct, même schéma que crypto.tsx/cards.tsx/etc.
+    const isGiantMerchant = user?.merchantTier === 'GIANT';
 
     const [showAmountModal, setShowAmountModal] = useState(false);
     const [codeAmount, setCodeAmount] = useState('');
@@ -34,13 +38,14 @@ export default function WithdrawScreen() {
 
     useFocusEffect(
         useCallback(() => {
+            if (isGiantMerchant) return;
             apiGetBalance().then(res => {
                 if (res && res.balance !== undefined) {
                     setBalance(res.balance);
                     setBalanceStale(false);
                 }
             }).catch(() => setBalanceStale(true));
-        }, [])
+        }, [isGiantMerchant])
     );
 
     useEffect(() => {
@@ -146,6 +151,20 @@ export default function WithdrawScreen() {
 
                 <TouchableOpacity style={[styles.btn, { width: '100%', marginTop: 60 }]} onPress={() => setShowCode(false)}>
                     <Text style={styles.btnText}>Fermer</Text>
+                </TouchableOpacity>
+            </SafeAreaView>
+        );
+    }
+
+    if (isGiantMerchant) {
+        return (
+            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background, justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+                <Ionicons name="lock-closed-outline" size={48} color={COLORS.textSecondary} style={{ marginBottom: 16 }} />
+                <Text style={{ fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: COLORS.textPrimary, textAlign: 'center', marginBottom: 24 }}>
+                    Cette fonctionnalité est réservée au portail web pour un compte marchand géant.
+                </Text>
+                <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={{ backgroundColor: COLORS.primary, paddingVertical: 14, paddingHorizontal: 28, borderRadius: 14 }}>
+                    <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>Retour à l'accueil</Text>
                 </TouchableOpacity>
             </SafeAreaView>
         );

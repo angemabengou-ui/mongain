@@ -206,6 +206,29 @@ describe('Wallet Routes', () => {
         });
     });
 
+    describe('POST /wallet/qr-cash-out (garde géant)', () => {
+        // Garde de canal : même contrôle que /transfer — voir commentaire équivalent. Le rejet
+        // doit avoir lieu avant toute lecture de l'agence/session (prisma.branch n'est même
+        // pas mocké dans ce fichier, la route ne doit donc jamais l'atteindre ici).
+        it('devrait refuser un retrait guichet depuis le mobile pour un marchand géant', async () => {
+            (prisma.user.findUnique as jest.Mock).mockImplementation(async (args: any) => {
+                if (args.select?.jwtVersion) return { id: 'user123', isActive: true, jwtVersion: 0 };
+                if (args.where?.id === 'user123' && args.include?.wallet) {
+                    return { id: 'user123', merchantTier: 'GIANT', wallet: { id: 'w_client', balance: 100000 } };
+                }
+                return null;
+            });
+
+            const res = await request(app)
+                .post('/wallet/qr-cash-out')
+                .set('Authorization', 'Bearer dummy-token')
+                .send({ branchCode: 'MNG-001', amount: 1000, pin: '1234' });
+
+            expect(res.status).toBe(403);
+            expect(res.body.error).toContain('portail web');
+        });
+    });
+
     // Un retrait Mobile Money débite le client + crédite la Passerelle Externe (contrepartie
     // comptable) AVANT même d'appeler PVit — si PVit refuse la demande, ce pré-débit doit être
     // repris intégralement, sinon l'argent existe à la fois chez le client (remboursé plus
@@ -228,6 +251,26 @@ describe('Wallet Routes', () => {
             (prisma.wallet.update as jest.Mock).mockResolvedValue({});
             (prisma.transaction.create as jest.Mock).mockResolvedValue({ id: 'tx1' });
         };
+
+        // Garde de canal : même contrôle que /transfer — voir commentaire équivalent.
+        it('devrait refuser un retrait Mobile Money depuis le mobile pour un marchand géant', async () => {
+            (prisma.user.findUnique as jest.Mock).mockImplementation(async (args: any) => {
+                if (args.select?.jwtVersion) return { id: 'user123', isActive: true, jwtVersion: 0 };
+                if (args.where?.id === 'user123') {
+                    return { id: 'user123', merchantTier: 'GIANT', pin: 'hashed-pin', failedPinAttempts: 0, lockedUntil: null };
+                }
+                return null;
+            });
+
+            const res = await request(app)
+                .post('/wallet/push')
+                .set('Authorization', 'Bearer dummy-token')
+                .send({ phone: '077000000', amount: 5000, network: 'AIRTEL', pin: '1234' });
+
+            expect(res.status).toBe(403);
+            expect(res.body.error).toContain('portail web');
+            expect(prisma.wallet.updateMany).not.toHaveBeenCalled();
+        });
 
         it('devrait débiter le client et créditer la Passerelle sans jamais reprendre si PVit accepte', async () => {
             mockSenderAndGateway();
@@ -328,6 +371,26 @@ describe('Wallet Routes', () => {
     // d'être fondue dans le même wallet que la vente — voir merchantService.ts et le
     // commentaire dans wallet.ts /client-initiated-withdraw.
     describe('POST /wallet/client-initiated-withdraw (commission marchand séparée)', () => {
+        // Garde de canal : même contrôle que /transfer — voir commentaire équivalent.
+        it('devrait refuser un retrait depuis le mobile pour un marchand géant (canal réservé au portail web)', async () => {
+            (prisma.user.findUnique as jest.Mock).mockImplementation(async (args: any) => {
+                if (args.select?.jwtVersion) return { id: 'user123', isActive: true, jwtVersion: 0 };
+                if (args.where?.id === 'user123' && !args.include) {
+                    return { id: 'user123', merchantTier: 'GIANT', pin: 'hashed-pin', failedPinAttempts: 0, lockedUntil: null };
+                }
+                return null;
+            });
+
+            const res = await request(app)
+                .post('/wallet/client-initiated-withdraw')
+                .set('Authorization', 'Bearer dummy-token')
+                .send({ receiverPhone: '077888888', amount: 5000, pin: '1234' });
+
+            expect(res.status).toBe(403);
+            expect(res.body.error).toContain('portail web');
+            expect(prisma.wallet.update).not.toHaveBeenCalled();
+        });
+
         const mockClientAndReceiver = (receiver: any, commissionWallet: any | null) => {
             (prisma.user.findUnique as jest.Mock).mockImplementation(async (args: any) => {
                 if (args.select?.jwtVersion) return { id: 'user123', isActive: true, jwtVersion: 0 };
@@ -432,6 +495,10 @@ describe('Wallet Routes', () => {
             expect(res.status).toBe(501);
         });
 
+        // Note : pas de test de garde géant dédié ici — un géant garde role='MERCHANT' (jamais
+        // 'USER'), donc le contrôle `role !== 'USER'` déjà existant sur cette route bloque déjà
+        // intrinsèquement tout marchand, géant compris (voir commentaire dans wallet.ts).
+
         // Régression : le crédit vers la réserve centrale avait disparu entièrement — le
         // client était débité mais l'argent n'atterrissait nulle part (ni la réserve, ni
         // aucun autre wallet), alors que la ligne Transaction prétendait qu'il l'était.
@@ -487,6 +554,30 @@ describe('Wallet Routes', () => {
     // POST /wallet/transfer
     // ==========================================
     describe('POST /wallet/transfer', () => {
+        // Garde de canal : un marchand géant (merchantTier==='GIANT') ne doit jamais pouvoir
+        // déplacer d'argent depuis l'application mobile, uniquement depuis le portail web
+        // dédié (voir middleware/auth.ts authMerchantPortal, routes/merchant-portal.ts).
+        it('devrait refuser un transfert depuis le mobile pour un marchand géant (canal réservé au portail web)', async () => {
+            (prisma.user.findUnique as jest.Mock).mockImplementation(async (args: any) => {
+                if (args.select?.jwtVersion) return { id: 'user123', isActive: true, jwtVersion: 0 };
+                if (args.where?.id === 'user123' && !args.include) {
+                    return { id: 'user123', merchantTier: 'GIANT', pin: 'hashed-pin', failedPinAttempts: 0, lockedUntil: null };
+                }
+                return null;
+            });
+
+            const res = await request(app)
+                .post('/wallet/transfer')
+                .set('Authorization', 'Bearer dummy-token')
+                .send({ receiverPhone: '077000000', amount: 1000, pin: '1234' });
+
+            expect(res.status).toBe(403);
+            expect(res.body.error).toContain('portail web');
+            // Aucun mouvement de fonds : le rejet a lieu avant même la vérification du PIN.
+            expect(bcrypt.compare).not.toHaveBeenCalled();
+            expect(prisma.wallet.update).not.toHaveBeenCalled();
+        });
+
         // Régression : LimitEngine verrouille sender.wallet.id en interne (FOR UPDATE). S'il
         // s'exécutait AVANT le verrou trié (sender+receiver), deux /transfer concurrents en
         // sens opposé entre les deux mêmes wallets pouvaient se verrouiller mutuellement

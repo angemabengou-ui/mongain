@@ -29,6 +29,10 @@ export default function BNPLScreen() {
     // qui contournerait les boutons/onglet masqués côté navigation ((tabs)/index.tsx et
     // (tabs)/_layout.tsx).
     const isChild = user?.role === 'CHILD';
+    // Marchand Géant — palier consultation-seule sur mobile (voir User.merchantTier,
+    // (tabs)/index.tsx) : souscrire/rembourser un BNPL déplace de l'argent, même filet de
+    // sécurité UX ci-dessous que pour un Compte Enfant.
+    const isGiantMerchant = user?.merchantTier === 'GIANT';
 
     // Le FCFA n'a aucune sous-unité — arrondi à l'entier avant envoi, et virgule acceptée en
     // saisie comme séparateur décimal (voir docs/AUTO_CRITIQUE_PROJET.md).
@@ -63,12 +67,12 @@ export default function BNPLScreen() {
     const simFee = Math.round(cleanAmount() * bnplInterest);
     const simTotal = cleanAmount() + simFee;
 
-    if (isChild) {
+    if (isChild || isGiantMerchant) {
         return (
             <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
                 <Ionicons name="lock-closed-outline" size={48} color={COLORS.textSecondary} style={{ marginBottom: 16 }} />
                 <Text style={{ fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: COLORS.textPrimary, textAlign: 'center', marginBottom: 24 }}>
-                    Cette fonctionnalité n'est pas disponible pour les comptes enfant.
+                    {isGiantMerchant ? "Cette fonctionnalité est réservée au portail web pour un compte marchand géant." : "Cette fonctionnalité n'est pas disponible pour les comptes enfant."}
                 </Text>
                 <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={{ backgroundColor: COLORS.primary, paddingVertical: 14, paddingHorizontal: 28, borderRadius: 14 }}>
                     <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>Retour à l'accueil</Text>

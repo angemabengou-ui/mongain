@@ -24,6 +24,11 @@ export default function TabLayout() {
     const childAccent = isChild ? getChildAccent(user?.gender) : null;
     const activeTint = childAccent ? childAccent.color : COLORS.primary;
 
+    // Marchand Géant — voir (tabs)/index.tsx pour le détail : Micro-crédit/BNPL/Crypto/
+    // Staking (onglet "Services") ne sont pas plus approuvés pour ce palier consultation-seule
+    // que pour un Compte Enfant.
+    const isGiantMerchant = user?.merchantTier === 'GIANT';
+
     // Hauteur totale (base + inset bas défensif) — voir useTabBarHeight.ts. Chaque écran
     // d'onglet réutilise le même hook pour compenser dans son propre padding bas, la tab
     // bar étant en position absolute et ne réservant donc pas sa place dans le flux.
@@ -109,9 +114,10 @@ export default function TabLayout() {
                         <Ionicons name={focused ? 'grid' : 'grid-outline'} size={24} color={color} />
                     ),
                     // Micro-crédit / BNPL / Crypto / Staking (services.tsx) : aucun n'est
-                    // approuvé pour un Compte Enfant. Onglet entièrement masqué pour ce rôle
+                    // approuvé pour un Compte Enfant, ni pour un marchand géant (palier
+                    // consultation-seule). Onglet entièrement masqué pour ces deux cas
                     // uniquement — inchangé (visible, normal) pour tout autre utilisateur.
-                    href: isChild ? null : undefined,
+                    href: (isChild || isGiantMerchant) ? null : undefined,
                 }}
             />
 

@@ -1,12 +1,13 @@
-import { Router } from 'express';
+import { Response, Router } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { LimitEngine } from '../services/LimitEngine';
 import { friendlyErrorMessage } from '../utils/errors';
+import logger from '../utils/logger';
+import { GIANT_MOBILE_BLOCK_ERROR, isGiantMerchant } from '../utils/merchantTier';
 import { verifyUserPin } from '../utils/pinAuth';
 import { getSystemSettings } from './settings';
 import { notifyParentOfChildSpend } from './wallet';
-import logger from '../utils/logger';
 
 const router = Router();
 
@@ -211,14 +212,17 @@ router.post('/invoices/:id/reject', authMiddleware, async (req: AuthRequest, res
 // MASS PAYOUTS (PAYROLL)
 // ==========================================
 
-router.post('/payouts', authMiddleware, async (req: AuthRequest, res) => {
+// Logique métier factorée hors de la route mobile ci-dessous pour être réutilisée TELLE
+// QUELLE par le portail web des marchands géants (routes/merchant-portal.ts, POST /payouts,
+// derrière authMerchantPortal) — un géant garde role='MERCHANT' (voir schema.prisma), donc
+// cette fonction n'a besoin d'aucune branche spécifique au tier, seul le CANAL (mobile vs
+// portail) diffère et est tranché par l'appelant avant d'y entrer. Choix documenté au niveau
+// du point d'entrée mobile ci-dessous : une fonction partagée plutôt qu'un middleware
+// double-token, pour toucher le minimum de code existant tout en gardant les deux routes
+// strictement identiques métier.
+export async function runMassPayout(user: any, req: AuthRequest, res: Response) {
     try {
         const { name, entries, pin, idempotencyKey } = req.body; // entries: [{ phone, amount }]
-
-        const user = await getActiveUser(req.userId);
-        if (!user || user.role !== 'MERCHANT') {
-            return res.status(403).json({ error: "Réservé aux Marchands." });
-        }
 
         if (!entries || !Array.isArray(entries) || entries.length === 0) {
             return res.status(400).json({ error: "Liste de bénéficiaires invalide." });
@@ -302,6 +306,26 @@ router.post('/payouts', authMiddleware, async (req: AuthRequest, res) => {
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }
+}
+
+router.post('/payouts', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const user = await getActiveUser(req.userId);
+        if (!user || user.role !== 'MERCHANT') {
+            return res.status(403).json({ error: "Réservé aux Marchands." });
+        }
+
+        // Garde de canal : un marchand géant ne peut initier un paiement de masse que depuis
+        // le portail web dédié (voir routes/merchant-portal.ts POST /payouts, qui appelle
+        // cette même runMassPayout derrière authMerchantPortal), jamais depuis le mobile.
+        if (isGiantMerchant(user)) {
+            return res.status(403).json({ error: GIANT_MOBILE_BLOCK_ERROR });
+        }
+
+        return runMassPayout(user, req, res);
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
 });
 
 router.get('/payouts', authMiddleware, async (req: AuthRequest, res) => {
@@ -318,6 +342,81 @@ router.get('/payouts', authMiddleware, async (req: AuthRequest, res) => {
         });
 
         res.json({ success: true, bulks });
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+// ==========================================
+// RÉPERTOIRE D'EMPLOYÉS (MARCHAND MOBILE)
+// ==========================================
+// Simple carnet d'adresses réutilisable à chaque paie groupée (POST /payouts ci-dessus) — même
+// modèle que routes/merchant-portal.ts côté géant (schema.prisma MerchantEmployee), mais
+// accessible à TOUT marchand (géant ou non) : contrairement à /payouts (qui bloque un géant
+// via isGiantMerchant, LUI devant passer par le portail pour le mouvement d'argent lui-même),
+// ce répertoire n'est qu'un carnet d'adresses sans aucun mouvement de fonds — aucune garde de
+// tier nécessaire ici.
+
+router.get('/employees', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const user = await getActiveUser(req.userId);
+        if (!user || user.role !== 'MERCHANT') {
+            return res.status(403).json({ error: "Réservé aux Marchands." });
+        }
+
+        const employees = await prisma.merchantEmployee.findMany({
+            where: { merchantId: user.id, isActive: true },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        res.json({ success: true, employees });
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+router.post('/employees', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const user = await getActiveUser(req.userId);
+        if (!user || user.role !== 'MERCHANT') {
+            return res.status(403).json({ error: "Réservé aux Marchands." });
+        }
+
+        const { name, phone } = req.body;
+        if (!name || typeof name !== 'string' || !name.trim()) {
+            return res.status(400).json({ error: "Nom requis." });
+        }
+        if (!phone || typeof phone !== 'string' || !phone.trim()) {
+            return res.status(400).json({ error: "Numéro de téléphone requis." });
+        }
+
+        const employee = await prisma.merchantEmployee.create({
+            data: { merchantId: user.id, name: name.trim(), phone: phone.replace(/\s+/g, '') },
+        });
+
+        res.status(201).json({ success: true, employee });
+    } catch (e: any) {
+        // @@unique([merchantId, phone]) — cet employé existe déjà pour ce marchand.
+        if (e.code === 'P2002') return res.status(409).json({ error: "Cet employé existe déjà." });
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+router.delete('/employees/:id', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const user = await getActiveUser(req.userId);
+        if (!user || user.role !== 'MERCHANT') {
+            return res.status(403).json({ error: "Réservé aux Marchands." });
+        }
+
+        const employee = await prisma.merchantEmployee.findUnique({ where: { id: req.params.id as string } });
+        if (!employee || employee.merchantId !== user.id) {
+            return res.status(404).json({ error: "Employé introuvable." });
+        }
+
+        await prisma.merchantEmployee.update({ where: { id: employee.id }, data: { isActive: false } });
+
+        res.json({ success: true });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
     }

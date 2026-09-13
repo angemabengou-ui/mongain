@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, SafeAreaView, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useAuth } from '../context/AuthContext';
 import { request } from '../services/api';
 
 export default function BillersScreen() {
@@ -12,6 +13,11 @@ export default function BillersScreen() {
     const [loading, setLoading] = useState(false);
 
     const router = useRouter();
+    const { user } = useAuth();
+    // Marchand Géant — palier consultation-seule sur mobile (voir User.merchantTier,
+    // (tabs)/index.tsx) : filet de sécurité UX pour un lien profond direct, même schéma que
+    // crypto.tsx/cards.tsx/etc.
+    const isGiantMerchant = user?.merchantTier === 'GIANT';
 
     const handlePayment = async () => {
         if (!reference || !amount || !pin) {
@@ -33,6 +39,20 @@ export default function BillersScreen() {
         }
         setLoading(false);
     };
+
+    if (isGiantMerchant) {
+        return (
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#F8F9FA', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+                <Ionicons name="lock-closed-outline" size={48} color="#64748b" style={{ marginBottom: 16 }} />
+                <Text style={{ fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: '#0A0F1C', textAlign: 'center', marginBottom: 24 }}>
+                    Cette fonctionnalité est réservée au portail web pour un compte marchand géant.
+                </Text>
+                <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={{ backgroundColor: '#059669', paddingVertical: 14, paddingHorizontal: 28, borderRadius: 14 }}>
+                    <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>Retour à l'accueil</Text>
+                </TouchableOpacity>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <ScrollView style={{ flex: 1, backgroundColor: '#F8F9FA' }}>

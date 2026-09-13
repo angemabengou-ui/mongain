@@ -42,6 +42,25 @@ model User {
   refreshTokenHash      String?   @unique
   refreshTokenExpiresAt DateTime?
 
+  // Marchands Géants (mairie, impôts, grandes entreprises) — raffinement additif de
+  // role="MERCHANT", pas un nouveau rôle : tout code existant qui filtre déjà sur
+  // role==='MERCHANT' (ex. merchant.ts loadMerchant) continue de fonctionner tel quel pour
+  // un géant. null = marchand normal. Un géant est piloté depuis un portail web dédié
+  // (voir merchant-portal.ts) ; le mobile reste consultation seule pour ce palier.
+  merchantTier String? // null | "GIANT"
+
+  // Session du portail web marchand géant — volontairement SÉPARÉE de
+  // jwtVersion/refreshTokenHash ci-dessus (qui restent la session mobile). Sans cette
+  // séparation, se connecter sur le portail web invaliderait immédiatement la session
+  // mobile du même compte (et vice-versa) via le mécanisme single-device existant ; deux
+  // chaînes de session indépendantes permettent une connexion mobile + web simultanée,
+  // chacune restant single-session sur son propre canal (une 2e connexion web invalide
+  // bien la 1ère session web). Même schéma de révocation que jwtVersion : bump sur
+  // changement de mot de passe/PIN portail et sur suspension admin (voir admin.ts).
+  portalTokenVersion          Int       @default(0)
+  portalRefreshTokenHash      String?   @unique
+  portalRefreshTokenExpiresAt DateTime?
+
   // Rattachement agence (pertinent pour role=AGENT) — référence libre, cohérente avec
   // Transaction.branchId/tellerId (bounded context Ledger volontairement découplé, voir
   // Reclamation.branchId plus bas). Les opérations effectuées par un agent rattaché sont
@@ -136,6 +155,92 @@ model User {
   // V17 Relations
   billerTxs                  BillerTransaction[]   @relation("UserBillerTxs")
   bnplContracts              BnplContract[]        @relation("UserBnpl")
+
+  // Affiliations marchand géant <-> marchand affilié (voir MerchantAffiliation plus bas)
+  giantAffiliations    MerchantAffiliation[] @relation("GiantAffiliations")
+  merchantAffiliations MerchantAffiliation[] @relation("MerchantAffiliations")
+
+  // Comptes membres du portail web (voir MerchantPortalMember plus bas) — un géant reste
+  // seul propriétaire (login via son propre User.phone, toujours niveau ADMIN implicite),
+  // ses membres d'équipe sont des lignes séparées avec leur propre téléphone/session.
+  portalMembers MerchantPortalMember[] @relation("GiantPortalMembers")
+
+  // Répertoire d'employés (voir MerchantEmployee plus bas) — utilisable par tout marchand
+  // (géant ou normal) pour éviter de ressaisir la liste à chaque paie groupée (b2b.ts /payouts).
+  employees MerchantEmployee[] @relation("MerchantEmployees")
+}
+
+// Membre d'équipe du portail web d'un marchand géant — permet des "niveaux de permission"
+// (demande initiale) sans faire porter au géant lui-même la gestion de plusieurs identifiants
+// partagés. Le géant (son propre User.phone/PIN mobile) reste toujours niveau ADMIN implicite
+// et n'a pas de ligne ici ; seuls les membres INVITÉS en ont une. Session indépendante
+// (tokenVersion/refreshTokenHash propres) — révoquer un membre ne touche jamais la session du
+// géant ni celle des autres membres, symétrique au principe déjà appliqué à
+// portalTokenVersion vs jwtVersion (mobile vs web).
+model MerchantPortalMember {
+  id       String @id @default(uuid())
+  giantId  String
+  giant    User   @relation("GiantPortalMembers", fields: [giantId], references: [id])
+
+  name  String
+  phone String @unique
+
+  // ADMIN : mêmes droits que le géant (affiliations, paiement employés, retrait agence).
+  // VIEWER : consultation seule (dashboard, rapports, liste des affiliations) — voir
+  // middleware/auth.ts requirePortalAdmin et routes/merchant-portal.ts.
+  role     String  @default("VIEWER")
+  isActive Boolean @default(true)
+
+  tokenVersion          Int       @default(0)
+  refreshTokenHash      String?   @unique
+  refreshTokenExpiresAt DateTime?
+
+  createdAt DateTime @default(now())
+}
+
+// Répertoire d'employés d'un marchand (géant ou normal) — évite de ressaisir téléphone/nom à
+// chaque paie groupée (b2b.ts POST /payouts, routes/merchant-portal.ts POST /payouts). Le
+// montant reste saisi à chaque paie (il varie), seuls l'identité et le numéro sont mémorisés.
+model MerchantEmployee {
+  id         String  @id @default(uuid())
+  merchantId String
+  merchant   User    @relation("MerchantEmployees", fields: [merchantId], references: [id])
+  name       String
+  phone      String
+  isActive   Boolean @default(true)
+  createdAt  DateTime @default(now())
+
+  @@unique([merchantId, phone])
+}
+
+// Lien entre un marchand géant (mairie, impôts...) et un marchand plus petit qu'il affilie
+// pour suivre la régularité de ses versements ("qui n'a pas honoré sa taxe"). Nécessite le
+// consentement explicite du marchand affilié — pas une simple notification après coup : le
+// lien reste PENDING tant que ce dernier n'a pas répondu depuis le mobile (voir
+// routes/merchant.ts /affiliations/:id/respond), et seules les lignes ACCEPTED comptent dans
+// les rapports du géant (routes/merchant-portal.ts).
+model MerchantAffiliation {
+  id     String @id @default(uuid())
+  giantId    String
+  merchantId String
+  giant    User @relation("GiantAffiliations", fields: [giantId], references: [id])
+  merchant User @relation("MerchantAffiliations", fields: [merchantId], references: [id])
+
+  status String @default("PENDING") // PENDING, ACCEPTED, REJECTED, REVOKED
+
+  // Fréquence de versement ATTENDUE, fixée par le géant (null = aucune attente définie, pas
+  // de calcul de conformité) — permet de répondre automatiquement à "qui n'a pas honoré sa
+  // taxe" (routes/merchant-portal.ts GET /affiliations, champ calculé isCompliant) plutôt que
+  // de forcer le géant à interpréter lui-même un simple historique de montants.
+  expectedFrequency String? // MONTHLY, WEEKLY, null
+
+  createdAt   DateTime  @default(now())
+  respondedAt DateTime?
+  revokedAt   DateTime?
+
+  @@unique([giantId, merchantId])
+  @@index([merchantId, status])
+  @@index([giantId, status])
 }
 
 model Reclamation {

@@ -11,6 +11,7 @@ import { getOrCreateMerchantCommissionWallet } from '../services/merchantService
 import { initiatePvitPayment, initiatePvitTransfer, isPvitConfigured, toPvitCustomerAccountNumber } from '../services/pvit';
 import { getSystemAccount } from '../services/systemAccounts';
 import { friendlyErrorMessage } from '../utils/errors';
+import { GIANT_MOBILE_BLOCK_ERROR, isGiantMerchant } from '../utils/merchantTier';
 import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
 import { getSystemSettings } from './settings';
@@ -30,7 +31,7 @@ export async function getOrCreateCorporateWallet(tx: any) {
 export const sendPush = async (token: string | null | undefined, title: string, body: string, data?: Record<string, any>) => {
     if (token && Expo.isExpoPushToken(token)) {
         try {
-            await expo.sendPushNotificationsAsync([{
+            const tickets = await expo.sendPushNotificationsAsync([{
                 to: token,
                 sound: 'default',
                 title,
@@ -47,6 +48,20 @@ export const sendPush = async (token: string | null | undefined, title: string, 
                 // nouveau canal, garanti avec le son, sur les appareils déjà installés.
                 channelId: 'transactions-v2'
             }]);
+
+            // Expo répond HTTP 200 (donc AUCUNE exception ci-dessus) même quand l'envoi à CE
+            // token précis a échoué : chaque ticket peut individuellement porter
+            // status: 'error' (DeviceNotRegistered — token périmé/désinstallé, MessageTooBig,
+            // MessageRateExceeded, ou une erreur générique qui trahit le plus souvent des
+            // credentials FCM invalides/absents côté compte Expo). Sans cette lecture, ces
+            // échecs restaient invisibles de bout en bout — aucun log, aucune alerte — alors
+            // qu'ils expliquent précisément un « je ne reçois jamais mes push » côté
+            // utilisateur quand le payload, le token et l'appel du site sont pourtant corrects.
+            for (const ticket of tickets) {
+                if (ticket.status === 'error') {
+                    console.error(`Erreur Push Notification (ticket Expo, code=${ticket.details?.error || 'inconnu'}):`, ticket.message);
+                }
+            }
         } catch (e) {
             console.error('Erreur Push Notification:', e);
         }
@@ -201,6 +216,11 @@ router.post('/qr-cash-out', authMiddleware, moneyMovementLimiter, async (req: Au
 
         const client = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
         if (!client || !client.wallet) return res.status(404).json({ error: 'Client introuvable.' });
+
+        // Garde de canal : voir commentaire équivalent dans /transfer plus haut dans ce fichier.
+        if (isGiantMerchant(client)) {
+            return res.status(403).json({ error: GIANT_MOBILE_BLOCK_ERROR });
+        }
 
         // Applique aussi le verrouillage 3 échecs/15min — absent ici jusqu'ici (bcrypt.compare
         // seul), ce qui permettait de brute-forcer le PIN (4 chiffres) sans aucune limite dès
@@ -558,6 +578,14 @@ router.post('/transfer', authMiddleware, moneyMovementLimiter, async (req: AuthR
         const senderPreCheck = await prisma.user.findUnique({ where: { id: req.userId } });
         if (!senderPreCheck) return res.status(400).json({ error: 'Compte expéditeur introuvable.' });
 
+        // Garde de canal : un marchand géant ne doit jamais pouvoir déplacer d'argent depuis
+        // l'application mobile, uniquement depuis le portail web dédié (voir middleware/auth.ts
+        // authMerchantPortal et routes/merchant-portal.ts). Contrôle métier, pas juste une
+        // restriction d'UI — vérifié ici côté serveur avant toute autre logique.
+        if (isGiantMerchant(senderPreCheck)) {
+            return res.status(403).json({ error: GIANT_MOBILE_BLOCK_ERROR });
+        }
+
         if (senderPreCheck.lockedUntil && senderPreCheck.lockedUntil > new Date()) {
             return res.status(400).json({ error: 'Votre compte est temporairement bloqué suite à plusieurs échecs. Réessayez plus tard.' });
         }
@@ -780,6 +808,11 @@ router.post('/client-initiated-withdraw', authMiddleware, moneyMovementLimiter, 
         // sous peine d'être annulées par le rollback en cas d'échec.
         const senderPreCheck = await prisma.user.findUnique({ where: { id: req.userId } });
         if (!senderPreCheck) return res.status(400).json({ error: 'Compte client introuvable.' });
+
+        // Garde de canal : voir commentaire équivalent dans /transfer ci-dessus.
+        if (isGiantMerchant(senderPreCheck)) {
+            return res.status(403).json({ error: GIANT_MOBILE_BLOCK_ERROR });
+        }
 
         if (senderPreCheck.lockedUntil && senderPreCheck.lockedUntil > new Date()) {
             return res.status(400).json({ error: 'Votre compte est temporairement bloqué suite à plusieurs échecs. Réessayez plus tard.' });
@@ -1179,6 +1212,11 @@ router.post('/pay-service', authMiddleware, moneyMovementLimiter, async (req: Au
         if (!amount || amount <= 0) throw new Error('Montant invalide');
 
         const user = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
+        // Un marchand géant garde role='MERCHANT' (jamais 'USER', voir schema.prisma) : ce
+        // contrôle bloque déjà intrinsèquement tout compte marchand, géant compris, sans
+        // besoin d'une garde merchantTier séparée ici (contrairement à /transfer,
+        // /client-initiated-withdraw, /qr-cash-out et /push, où un géant a bien role='MERCHANT'
+        // mais où la route reste par ailleurs ouverte à ce rôle).
         if (!user || user.role !== 'USER') throw new Error('Seuls les clients peuvent utiliser ce service.');
         if (!user.wallet || user.wallet.balance < amount) throw new Error('Solde insuffisant pour ce paiement.');
 
@@ -1322,6 +1360,11 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
         // 1. Vérification du profil et du PIN (hors transaction pour incrémenter les échecs)
         const senderPreCheck = await prisma.user.findUnique({ where: { id: req.userId } });
         if (!senderPreCheck) throw new Error('Compte expéditeur introuvable.');
+
+        // Garde de canal : voir commentaire équivalent dans /transfer plus haut dans ce fichier.
+        if (isGiantMerchant(senderPreCheck)) {
+            return res.status(403).json({ error: GIANT_MOBILE_BLOCK_ERROR });
+        }
 
         if (senderPreCheck.lockedUntil && senderPreCheck.lockedUntil > new Date()) {
             throw new Error('Votre compte est temporairement bloqué suite à plusieurs échecs. Réessayez plus tard.');

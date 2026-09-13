@@ -5,6 +5,7 @@ import { ActivityIndicator, Animated, KeyboardAvoidingView, Platform, ScrollView
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ContactPickerModal from '../components/ui/ContactPickerModal';
 import { useAppTheme } from '../constants/theme';
+import { useAuth } from '../context/AuthContext';
 import { apiLookupUser } from '../services/api';
 import type { MongainContact } from '../services/contacts';
 
@@ -12,6 +13,11 @@ export default function TransferScreen() {
     const COLORS = useAppTheme();
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const { user } = useAuth();
+    // Marchand Géant — palier consultation-seule sur mobile (voir User.merchantTier,
+    // (tabs)/index.tsx, où le bouton "Envoyer" qui mène ici est déjà masqué) : filet de
+    // sécurité UX pour un lien profond direct, même schéma que crypto.tsx/cards.tsx/etc.
+    const isGiantMerchant = user?.merchantTier === 'GIANT';
     const [phone, setPhone] = useState('');
     const [recipient, setRecipient] = useState<{ id: string; name: string; phone: string; role?: string } | null>(null);
     const [lookupError, setLookupError] = useState('');
@@ -95,6 +101,20 @@ export default function TransferScreen() {
         setLookupError('');
         setRecipient({ id: contact.id, name: contact.name, phone: contact.phone, role: contact.role });
     };
+
+    if (isGiantMerchant) {
+        return (
+            <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.background, justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+                <Ionicons name="lock-closed-outline" size={48} color={COLORS.textSecondary} style={{ marginBottom: 16 }} />
+                <Text style={{ fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: COLORS.textPrimary, textAlign: 'center', marginBottom: 24 }}>
+                    Cette fonctionnalité est réservée au portail web pour un compte marchand géant.
+                </Text>
+                <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={{ backgroundColor: COLORS.primary, paddingVertical: 14, paddingHorizontal: 28, borderRadius: 14 }}>
+                    <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>Retour à l'accueil</Text>
+                </TouchableOpacity>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={[styles.safeArea, { backgroundColor: COLORS.primary }]}>

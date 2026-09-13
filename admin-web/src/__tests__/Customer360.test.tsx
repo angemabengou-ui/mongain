@@ -227,4 +227,104 @@ describe('Customer360', () => {
 
         expect(screen.getByText('+ Nouveau ticket')).toBeInTheDocument();
     });
+
+    it("masque la gestion du palier marchand pour un compte non-MERCHANT même avec perm_merchant_manage", async () => {
+        setupFetch();
+        const user = userEvent.setup();
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
+        await screen.findByText('Sophie Ndong');
+
+        await user.click(screen.getByRole('button', { name: /Identité/i }));
+
+        expect(screen.queryByText('Palier Marchand')).not.toBeInTheDocument();
+    });
+
+    it("masque la gestion du palier marchand pour un compte MERCHANT sans perm_merchant_manage", async () => {
+        setupFetch({ main: { ...mainData, user: { ...baseUser, role: 'MERCHANT', merchantTier: null } } });
+        const user = userEvent.setup();
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="AGENCY_STAFF" hasPerm={() => false} />);
+        await screen.findByText('Sophie Ndong');
+
+        await user.click(screen.getByRole('button', { name: /Identité/i }));
+
+        expect(screen.queryByText('Palier Marchand')).not.toBeInTheDocument();
+    });
+
+    it("affiche « Promouvoir en marchand géant » pour un compte MERCHANT normal avec perm_merchant_manage", async () => {
+        setupFetch({ main: { ...mainData, user: { ...baseUser, role: 'MERCHANT', merchantTier: null } } });
+        const user = userEvent.setup();
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
+        await screen.findByText('Sophie Ndong');
+
+        await user.click(screen.getByRole('button', { name: /Identité/i }));
+
+        expect(screen.getByText('Palier Marchand')).toBeInTheDocument();
+        expect(screen.getByText('Promouvoir en marchand géant')).toBeInTheDocument();
+        expect(screen.queryByText('Rétrograder en marchand normal')).not.toBeInTheDocument();
+    });
+
+    it("affiche « Rétrograder en marchand normal » pour un marchand déjà GIANT", async () => {
+        setupFetch({ main: { ...mainData, user: { ...baseUser, role: 'MERCHANT', merchantTier: 'GIANT' } } });
+        const user = userEvent.setup();
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
+        await screen.findByText('Sophie Ndong');
+
+        await user.click(screen.getByRole('button', { name: /Identité/i }));
+
+        expect(screen.getByText('Rétrograder en marchand normal')).toBeInTheDocument();
+        expect(screen.queryByText('Promouvoir en marchand géant')).not.toBeInTheDocument();
+    });
+
+    it("promeut un marchand en géant après confirmation (succès)", async () => {
+        const fetchMock = setupFetch({ main: { ...mainData, user: { ...baseUser, role: 'MERCHANT', merchantTier: null } } });
+        const user = userEvent.setup();
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
+        await screen.findByText('Sophie Ndong');
+
+        await user.click(screen.getByRole('button', { name: /Identité/i }));
+        await user.click(screen.getByText('Promouvoir en marchand géant'));
+
+        expect(window.confirm).toHaveBeenCalled();
+        await waitFor(() => {
+            expect(fetchMock).toHaveBeenCalledWith(
+                expect.stringContaining(`/api/admin/users/user-123456789/merchant-tier`),
+                expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ merchantTier: 'GIANT' }) })
+            );
+        });
+        expect(alertSpy).toHaveBeenCalledWith('✅ Marchand promu en marchand géant.');
+    });
+
+    it("n'appelle pas l'API si la confirmation est annulée", async () => {
+        const fetchMock = setupFetch({ main: { ...mainData, user: { ...baseUser, role: 'MERCHANT', merchantTier: null } } });
+        window.confirm = vi.fn(() => false) as any;
+        const user = userEvent.setup();
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
+        await screen.findByText('Sophie Ndong');
+
+        await user.click(screen.getByRole('button', { name: /Identité/i }));
+        await user.click(screen.getByText('Promouvoir en marchand géant'));
+
+        expect(fetchMock).not.toHaveBeenCalledWith(
+            expect.stringContaining('/merchant-tier'),
+            expect.anything()
+        );
+    });
+
+    it("affiche une alerte d'erreur si la rétrogradation échoue côté serveur", async () => {
+        (global.fetch as any) = vi.fn(async (url: string, opts?: any) => {
+            if (url.includes('/360')) return jsonResponse({ ...mainData, user: { ...baseUser, role: 'MERCHANT', merchantTier: 'GIANT' } });
+            if (opts?.method === 'PATCH' && url.includes('/merchant-tier')) return jsonResponse({ error: 'Action refusée.' }, false, 403);
+            return jsonResponse({});
+        });
+        const user = userEvent.setup();
+        render(<Customer360 token="tok" userId="user-123456789" onBack={onBack} staffRole="SUPER_ADMIN" hasPerm={() => true} />);
+        await screen.findByText('Sophie Ndong');
+
+        await user.click(screen.getByRole('button', { name: /Identité/i }));
+        await user.click(screen.getByText('Rétrograder en marchand normal'));
+
+        await waitFor(() => {
+            expect(alertSpy).toHaveBeenCalledWith('Erreur: Action refusée.');
+        });
+    });
 });

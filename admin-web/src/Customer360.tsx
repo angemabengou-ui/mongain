@@ -140,6 +140,10 @@ export default function Customer360({ token, userId, onBack, staffRole, hasPerm 
     // par défaut, seuls les rôles Maker (TELLER, SUPPORT_MAKER, BRANCH_MANAGER) l'ont. Aligné
     // ici sur le même contrôle plutôt qu'un rôle codé en dur qui divergeait des deux endpoints.
     const canCreateTicketAsStaff = hasPerm(['perm_ticket_create']);
+    // PATCH /api/admin/users/:id/merchant-tier (backend/src/routes/admin.ts, en cours) vérifie
+    // cette même permission — promouvoir/rétrograder un compte MERCHANT en marchand géant
+    // ('GIANT') ou l'inverse (null). N'affecte jamais un compte qui n'est pas déjà MERCHANT.
+    const canManageMerchantTier = hasPerm(['perm_merchant_manage']);
 
     const api = async (path: string, method = 'GET', body?: any) => {
         const resp = await fetch(`${API_URL}/api/admin${path}`, {
@@ -216,6 +220,27 @@ export default function Customer360({ token, userId, onBack, staffRole, hasPerm 
             else alert('Erreur: ' + d.error);
         } catch (e: any) {
             alert('Erreur réseau : le dégel n\'a pas pu être effectué. Réessayez.');
+        } finally { setActionLoading(false); }
+    };
+
+    // Promotion/rétrogradation d'un compte MERCHANT vers/depuis le palier GIANT (voir
+    // merchantTier, backend/prisma/schema.prisma) — jamais une modification de solde ni de
+    // rôle (role reste 'MERCHANT' dans les deux cas), donc pas de rechargement de secData
+    // requis contrairement à doAction (freeze/reset-pin) qui invalide les sessions.
+    const doMerchantTierChange = async (newTier: 'GIANT' | null) => {
+        const promote = newTier === 'GIANT';
+        const confirmMsg = promote
+            ? `Promouvoir ${user?.name} en marchand géant ? Il aura accès au portail marchand géant et pourra suivre la conformité de ses marchands affiliés.`
+            : `Rétrograder ${user?.name} en marchand normal ? Il perdra l'accès au portail marchand géant.`;
+        if (!window.confirm(confirmMsg)) return;
+        setActionLoading(true);
+        try {
+            const r = await api(`/users/${userId}/merchant-tier`, 'PATCH', { merchantTier: newTier });
+            const d = await r.json();
+            if (r.ok) { alert(promote ? '✅ Marchand promu en marchand géant.' : '✅ Marchand rétrogradé en marchand normal.'); fetchMain(); }
+            else alert('Erreur: ' + d.error);
+        } catch (e: any) {
+            alert('Erreur réseau : l\'action n\'a pas pu être effectuée. Réessayez.');
         } finally { setActionLoading(false); }
     };
 
@@ -462,30 +487,49 @@ export default function Customer360({ token, userId, onBack, staffRole, hasPerm 
     );
 
     // ── IDENTITY ──────────────────────────────────────────────
-    const Identity = () => card(
-        <>
-            {sectionTitle('Identité du Client')}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                {[
-                    ['Compte (MONG-ID RIB)', user?.accountNumber ? user.accountNumber.replace(/(.{5})(.{5})(.{11})(.{2})/, '$1 $2 $3 $4') : 'Non généré'],
-                    ['ID Technique', user?.id?.substring(0, 8)],
-                    ['Nom complet', user?.name],
-                    ['Téléphone', user?.phone],
-                    ['Pseudo', user?.username || '—'],
-                    ['Email', canViewAnySensitiveData ? (user?.email || '—') : '•••@•••'],
-                    ['Rôle', user?.role],
-                    ['Statut', user?.accountStatus],
-                    ['Date inscription', fmtDate(user?.createdAt)],
-                    ['Dernière MàJ', fmtDate(user?.updatedAt)],
-                    ['Motif gel', user?.freezeReason || '—'],
-                ].map(([label, val]) => (
-                    <div key={label as string}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>{label}</span>
-                        <div style={{ fontWeight: 600, marginTop: 4, wordBreak: 'break-all' }}>{val}</div>
-                    </div>
-                ))}
-            </div>
-        </>
+    const Identity = () => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {card(<>
+                {sectionTitle('Identité du Client')}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                    {[
+                        ['Compte (MONG-ID RIB)', user?.accountNumber ? user.accountNumber.replace(/(.{5})(.{5})(.{11})(.{2})/, '$1 $2 $3 $4') : 'Non généré'],
+                        ['ID Technique', user?.id?.substring(0, 8)],
+                        ['Nom complet', user?.name],
+                        ['Téléphone', user?.phone],
+                        ['Pseudo', user?.username || '—'],
+                        ['Email', canViewAnySensitiveData ? (user?.email || '—') : '•••@•••'],
+                        ['Rôle', user?.role],
+                        ['Statut', user?.accountStatus],
+                        ['Date inscription', fmtDate(user?.createdAt)],
+                        ['Dernière MàJ', fmtDate(user?.updatedAt)],
+                        ['Motif gel', user?.freezeReason || '—'],
+                    ].map(([label, val]) => (
+                        <div key={label as string}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>{label}</span>
+                            <div style={{ fontWeight: 600, marginTop: 4, wordBreak: 'break-all' }}>{val}</div>
+                        </div>
+                    ))}
+                </div>
+            </>)}
+            {canManageMerchantTier && user?.role === 'MERCHANT' && card(<>
+                {sectionTitle('Palier Marchand')}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                        Palier actuel : <strong>{user?.merchantTier === 'GIANT' ? 'Marchand Géant' : 'Marchand Normal'}</strong>
+                    </span>
+                    {user?.merchantTier === 'GIANT' ? (
+                        <button style={btnStyle('var(--warning)')} onClick={() => doMerchantTierChange(null)} disabled={actionLoading}>
+                            Rétrograder en marchand normal
+                        </button>
+                    ) : (
+                        <button style={btnStyle('var(--accent)')} onClick={() => doMerchantTierChange('GIANT')} disabled={actionLoading}>
+                            Promouvoir en marchand géant
+                        </button>
+                    )}
+                </div>
+            </>)}
+        </div>
     );
 
     // ── KYC ───────────────────────────────────────────────────

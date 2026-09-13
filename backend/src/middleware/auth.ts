@@ -18,6 +18,18 @@ export const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toStr
 
 export interface AuthRequest extends Request {
     userId?: string;
+
+    // Portail web marchand géant uniquement (voir authMerchantPortal ci-dessous) — niveau de
+    // permission de la session courante : 'ADMIN' pour le géant lui-même (implicite, voir
+    // schema.prisma MerchantPortalMember) ou un membre d'équipe invité en rôle ADMIN, 'VIEWER'
+    // pour un membre en lecture seule. Absent en dehors du portail (authMiddleware/authCorp).
+    portalRole?: 'ADMIN' | 'VIEWER';
+    // Id de la ligne MerchantPortalMember à l'origine de la session, uniquement quand un
+    // membre d'équipe (pas le géant lui-même) est connecté — sert à router la déconnexion et
+    // la rotation de refresh token sur les bons champs (voir routes/merchant-portal.ts
+    // /auth/logout et /auth/refresh, qui manipulent tokenVersion/refreshTokenHash du MEMBRE
+    // plutôt que ceux du géant dans ce cas).
+    portalMemberId?: string;
 }
 
 // ─── Session longue durée (access token court + refresh token) ────────────
@@ -94,6 +106,85 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
     } catch {
         return res.status(401).json({ error: 'Token expiré ou invalide.' });
     }
+};
+
+// Portail web des marchands géants (mairie, impôts...) — chaîne d'authentification
+// COMPLÈTEMENT SÉPARÉE de authMiddleware ci-dessus, sur le même principe que authCorp :
+// vérifie portalTokenVersion (jamais jwtVersion) contre un claim `portal: true` dédié. Une
+// connexion sur ce portail n'invalide donc jamais la session mobile du même compte (et
+// inversement), tout en restant single-session sur SON PROPRE canal (une 2e connexion web
+// invalide la 1ère session web). Voir routes/merchant-portal.ts.
+export const authMerchantPortal = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Token manquant ou invalide.' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as {
+            userId: string;
+            portal?: boolean;
+            portalTokenVersion?: number;
+            // Présents uniquement quand un MEMBRE D'ÉQUIPE (pas le géant lui-même) s'est
+            // connecté — voir routes/merchant-portal.ts /auth/verify-otp. `userId` reste alors
+            // TOUJOURS l'id du géant (jamais celui du membre), pour que toute route existante
+            // qui filtre déjà par req.userId/loadGiant continue de fonctionner sans
+            // modification pour un membre connecté.
+            memberId?: string;
+            memberTokenVersion?: number;
+        };
+        if (!decoded.portal) return res.status(403).json({ error: 'Jeton mobile refusé sur le portail marchand.' });
+
+        // Le géant PROPRIÉTAIRE est toujours revérifié, que ce soit lui qui se connecte
+        // directement ou l'un de ses membres d'équipe — un géant rétrogradé/suspendu coupe
+        // ainsi immédiatement l'accès de tous ses membres, pas seulement le sien.
+        const giant = await prisma.user.findUnique({
+            where: { id: decoded.userId },
+            select: { id: true, merchantTier: true, accountStatus: true, portalTokenVersion: true }
+        });
+        if (!giant || giant.merchantTier !== 'GIANT') return res.status(403).json({ error: 'Accès réservé aux marchands géants.' });
+        if (giant.accountStatus !== 'ACTIVE') return res.status(403).json({ error: 'Votre compte a été suspendu.' });
+
+        if (decoded.memberId) {
+            const member = await prisma.merchantPortalMember.findUnique({ where: { id: decoded.memberId } });
+            // isActive/giantId vérifiés en plus de l'existence : un membre désactivé, ou dont
+            // la ligne ne correspond (par construction impossible mais défensif) pas au géant
+            // porté par le token, ne doit jamais passer.
+            if (!member || !member.isActive || member.giantId !== giant.id) {
+                return res.status(401).json({ error: 'Votre session a expiré car vous vous êtes connecté ailleurs.' });
+            }
+            if (decoded.memberTokenVersion !== undefined && decoded.memberTokenVersion !== member.tokenVersion) {
+                return res.status(401).json({ error: 'Votre session a expiré car vous vous êtes connecté ailleurs.' });
+            }
+
+            req.userId = giant.id;
+            req.portalRole = member.role === 'ADMIN' ? 'ADMIN' : 'VIEWER';
+            req.portalMemberId = member.id;
+            return next();
+        }
+
+        if (decoded.portalTokenVersion !== undefined && decoded.portalTokenVersion !== giant.portalTokenVersion) {
+            return res.status(401).json({ error: 'Votre session a expiré car vous vous êtes connecté ailleurs.' });
+        }
+
+        req.userId = giant.id;
+        req.portalRole = 'ADMIN'; // Le géant lui-même est toujours implicitement ADMIN.
+        next();
+    } catch {
+        return res.status(401).json({ error: 'Token expiré ou invalide.' });
+    }
+};
+
+// Garde de rôle portail — réservée aux routes de mutation (création/modification/suppression)
+// de merchant-portal.ts ; les routes de simple lecture (dashboard, rapports, listes) restent
+// accessibles à un membre VIEWER. Toujours placée APRÈS authMerchantPortal dans la chaîne de
+// middlewares (dépend de req.portalRole, qu'elle seule renseigne).
+export const requirePortalAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (req.portalRole !== 'ADMIN') {
+        return res.status(403).json({ error: 'Action réservée aux administrateurs du portail (accès lecture seule).' });
+    }
+    next();
 };
 
 export const authCorp = async (req: AuthRequest, res: Response, next: NextFunction) => {

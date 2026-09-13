@@ -43,6 +43,10 @@ export default function CreditScreen() {
     // qui contournerait les boutons/onglet masqués côté navigation ((tabs)/index.tsx et
     // (tabs)/_layout.tsx).
     const isChild = user?.role === 'CHILD';
+    // Marchand Géant — palier consultation-seule sur mobile (voir User.merchantTier,
+    // (tabs)/index.tsx) : souscrire/rembourser un crédit déplace de l'argent, même filet de
+    // sécurité UX ci-dessous que pour un Compte Enfant.
+    const isGiantMerchant = user?.merchantTier === 'GIANT';
 
     const [loading, setLoading] = useState(true);
     const [eligibility, setEligibility] = useState<any>(null);
@@ -69,10 +73,10 @@ export default function CreditScreen() {
     };
 
     useEffect(() => {
-        if (token && !isChild) {
+        if (token && !isChild && !isGiantMerchant) {
             loadData();
         }
-    }, [token, isChild]);
+    }, [token, isChild, isGiantMerchant]);
 
     const handleApply = async () => {
         if (!eligibility || !eligibility.eligible) {
@@ -135,12 +139,12 @@ export default function CreditScreen() {
         else if (prompt?.type === 'repay') executeRepay(prompt.loanId, pin);
     };
 
-    if (isChild) {
+    if (isChild || isGiantMerchant) {
         return (
             <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
                 <Ionicons name="lock-closed-outline" size={48} color={COLORS.textSecondary} style={{ marginBottom: 16 }} />
                 <Text style={{ fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: COLORS.textPrimary, textAlign: 'center', marginBottom: 24 }}>
-                    Cette fonctionnalité n'est pas disponible pour les comptes enfant.
+                    {isGiantMerchant ? "Cette fonctionnalité est réservée au portail web pour un compte marchand géant." : "Cette fonctionnalité n'est pas disponible pour les comptes enfant."}
                 </Text>
                 <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={{ backgroundColor: COLORS.primary, paddingVertical: 14, paddingHorizontal: 28, borderRadius: 14 }}>
                     <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>Retour à l'accueil</Text>

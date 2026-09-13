@@ -22,6 +22,10 @@ export default function CryptoScreen() {
     // qui contournerait les boutons/onglet masqués côté navigation ((tabs)/index.tsx et
     // (tabs)/_layout.tsx).
     const isChild = user?.role === 'CHILD';
+    // Marchand Géant — palier consultation-seule sur mobile (voir User.merchantTier,
+    // (tabs)/index.tsx) : mêmes raisons qu'un Compte Enfant pour bloquer cet écran (achat/
+    // vente de crypto déplace de l'argent), même filet de sécurité UX ci-dessous.
+    const isGiantMerchant = user?.merchantTier === 'GIANT';
 
     const [market, setMarket] = useState<any[]>([]);
     const [wallets, setWallets] = useState<any[]>([]);
@@ -58,8 +62,8 @@ export default function CryptoScreen() {
     };
 
     useEffect(() => {
-        if (token && !isChild) fetchCryptoData();
-    }, [token, isChild]);
+        if (token && !isChild && !isGiantMerchant) fetchCryptoData();
+    }, [token, isChild, isGiantMerchant]);
 
     const handleBuy = (asset: string) => {
         const amount = amounts[asset];
@@ -114,12 +118,12 @@ export default function CryptoScreen() {
         return w ? w.balance : 0;
     };
 
-    if (isChild) {
+    if (isChild || isGiantMerchant) {
         return (
             <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
                 <Ionicons name="lock-closed-outline" size={48} color={COLORS.textSecondary} style={{ marginBottom: 16 }} />
                 <Text style={{ fontSize: 16, fontFamily: 'Satoshi-SemiBold', fontWeight: '600', color: COLORS.textPrimary, textAlign: 'center', marginBottom: 24 }}>
-                    Cette fonctionnalité n'est pas disponible pour les comptes enfant.
+                    {isGiantMerchant ? "Cette fonctionnalité est réservée au portail web pour un compte marchand géant." : "Cette fonctionnalité n'est pas disponible pour les comptes enfant."}
                 </Text>
                 <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={{ backgroundColor: COLORS.primary, paddingVertical: 14, paddingHorizontal: 28, borderRadius: 14 }}>
                     <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: '700' }}>Retour à l'accueil</Text>

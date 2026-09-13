@@ -321,7 +321,33 @@ export interface User {
     // fois connecté sur SON PROPRE compte (dashboard, tab bar), pas seulement dans la gestion
     // parentale (family-hub/family-create/family-detail) qui en dépendait déjà.
     gender?: 'MALE' | 'FEMALE' | null;
+    // Raffinement additif de role==='MERCHANT' (jamais un rôle à part) — 'GIANT' pour un
+    // marchand géant (mairie, impôts, grandes entreprises), null pour un marchand normal.
+    // Un géant est piloté depuis un portail web dédié (voir backend/prisma/schema.prisma) :
+    // le mobile reste consultation seule pour ce palier, voir isGiantMerchant dans les
+    // écrans concernés ((tabs)/index.tsx, merchant-hub.tsx, crypto/cards/credit/bnpl/
+    // invest/remit).
+    merchantTier?: string | null;
     wallet: Wallet | null;
+}
+
+// Une des deux extrémités d'un lien MerchantAffiliation (backend/prisma/schema.prisma) —
+// vue depuis le marchand NORMAL qui reçoit la demande d'affiliation d'un marchand géant.
+export interface MerchantAffiliation {
+    id: string;
+    status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'REVOKED';
+    createdAt: string;
+    respondedAt?: string | null;
+    revokedAt?: string | null;
+    giant: { id: string; name: string; phone?: string };
+    // Rythme de versement attendu par le géant, fixé à la création de l'affiliation (voir
+    // MerchantAffiliation, backend/prisma/schema.prisma) — absent (undefined/null) si le
+    // géant n'en a précisé aucun.
+    expectedFrequency?: 'MONTHLY' | 'WEEKLY' | null;
+    // Calculé côté serveur uniquement pour les affiliations ACCEPTED (GET /api/merchant/affiliations)
+    // à partir des versements réels comparés à expectedFrequency — absent tant que le lien n'a
+    // pas encore été accepté ou qu'aucune fréquence n'est fixée.
+    complianceStatus?: 'OK' | 'LATE' | null;
 }
 
 export interface Transaction {
@@ -514,6 +540,15 @@ export const apiCreateMerchantPayout = (sourceAccount: 'SALES' | 'COMMISSION', a
 
 export const apiGetMerchantPayouts = () =>
     request('GET', '/api/merchant/payouts', undefined, true) as Promise<any[]>;
+
+// Demandes d'affiliation reçues par un marchand NORMAL de la part d'un marchand géant (voir
+// MerchantAffiliation, backend/prisma/schema.prisma) — le lien reste PENDING tant que ce
+// marchand n'a pas répondu depuis ici.
+export const apiGetMerchantAffiliations = () =>
+    request('GET', '/api/merchant/affiliations', undefined, true) as Promise<MerchantAffiliation[]>;
+
+export const apiRespondMerchantAffiliation = (id: string, accept: boolean) =>
+    request('POST', `/api/merchant/affiliations/${id}/respond`, { accept }, true) as Promise<MerchantAffiliation>;
 
 // Tontine
 export const apiGetTontineGroups = () =>

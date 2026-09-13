@@ -165,4 +165,53 @@ describe('(tabs)/index (DashboardScreen)', () => {
         expect(screen.getByText('Internat.')).toBeTruthy();
         expect(screen.queryByText('Compte Enfant')).toBeNull();
     });
+
+    // Marchand Géant (mairie, impôts, grandes entreprises) — palier consultation-seule sur
+    // mobile (voir User.merchantTier, services/api.ts) : contrairement à un Compte Enfant,
+    // TOUT mouvement d'argent est masqué ici, sans exception (voir merchant-hub.tsx pour le
+    // reste du garde-fou côté hub marchand, et cards.tsx/remit.tsx pour le filet de sécurité
+    // des écrans que Cartes/Internat. auraient sinon menés à).
+    it('hides Envoyer, Recharger, Retirer, Cartes, Diviser and Internat. for a GIANT merchant account, and shows the read-only explainer', async () => {
+        mockUseAuth.mockReturnValue({
+            user: { ...baseUser, role: 'MERCHANT', merchantTier: 'GIANT' },
+            logout: jest.fn(),
+            settings: { seegEnabled: true, tontineEnabled: true },
+        });
+        mockApiGetBalance.mockResolvedValue({ balance: 1000, currency: 'FCFA' });
+        mockApiGetTransactions.mockResolvedValue([]);
+
+        await render(<DashboardScreen />);
+        await screen.findByText("Aucune transaction.");
+
+        expect(screen.queryByText('Envoyer')).toBeNull();
+        expect(screen.queryByText('Retirer')).toBeNull();
+        expect(screen.queryByText('Cartes')).toBeNull();
+        expect(screen.queryByText('Diviser')).toBeNull();
+        expect(screen.queryByText('Internat.')).toBeNull();
+        expect(screen.getByText(/réservées au portail web/)).toBeTruthy();
+
+        // Recharger reste géré à part (auto-financement du propre solde, pas un transfert
+        // vers un tiers) — non listé dans les points bloqués explicitement demandés.
+        expect(screen.getByText('Recharger')).toBeTruthy();
+        expect(screen.getByText('Factures')).toBeTruthy();
+    });
+
+    it('still shows Envoyer, Retirer, Cartes, Diviser and Internat. for a normal (non-GIANT) MERCHANT account — no regression', async () => {
+        mockUseAuth.mockReturnValue({
+            user: { ...baseUser, role: 'MERCHANT', merchantTier: null },
+            logout: jest.fn(),
+            settings: { seegEnabled: true, tontineEnabled: true },
+        });
+        mockApiGetBalance.mockResolvedValue({ balance: 1000, currency: 'FCFA' });
+        mockApiGetTransactions.mockResolvedValue([]);
+
+        await render(<DashboardScreen />);
+        await screen.findByText("Aucune transaction.");
+
+        expect(screen.getByText('Envoyer')).toBeTruthy();
+        expect(screen.getByText('Retirer')).toBeTruthy();
+        expect(screen.getByText('Cartes')).toBeTruthy();
+        expect(screen.getByText('Diviser')).toBeTruthy();
+        expect(screen.getByText('Internat.')).toBeTruthy();
+    });
 });

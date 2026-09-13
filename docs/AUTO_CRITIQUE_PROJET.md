@@ -242,6 +242,33 @@ Dans les trois cas, une fois un partenaire choisi et signé, l'intégration tech
 
 - Reprendre les points déjà identifiés précédemment : hébergement sans cold start, sauvegardes testées, revue de sécurité externe, validation juridique des services affichés (crypto, crédit, remittance, cartes) — en particulier la question BEAC/CEMAC sur la remise internationale (section 9).
 
+## 11. Marchands Géants — portail web dédié + affiliation avec consentement (2026-09-13)
+
+Nouveau palier de compte marchand (`User.merchantTier === 'GIANT'`, additif à `role='MERCHANT'`) pour les institutions qui reçoivent de l'argent d'un grand nombre d'autres marchands (mairie, impôts, grandes entreprises) : tableau de bord web dédié, affiliation d'autres marchands pour suivre leur régularité de versement, mobile restreint à la consultation.
+
+**Sessions mobile + web concurrentes** — le besoin explicite d'une connexion simultanée sur les deux canaux pour un même compte a nécessité une deuxième chaîne de session complète, séparée de `jwtVersion`/`refreshTokenHash` (mobile) : `User.portalTokenVersion`/`portalRefreshTokenHash`/`portalRefreshTokenExpiresAt`, nouveau middleware `authMerchantPortal` (`backend/src/middleware/auth.ts`) vérifiant un claim JWT `portal: true`. Une connexion sur un canal n'invalide jamais l'autre, mais chaque canal reste single-session sur lui-même. Les 4 endroits qui bumpent déjà `jwtVersion` en cas de suspension/révocation admin (`admin.ts` : `/users/:id/block`, `/freeze`, `/logout-all`, `/revoke-sessions`, `/reset-pin`) bumpent désormais aussi `portalTokenVersion`.
+
+**Affiliation avec consentement** — nouveau modèle `MerchantAffiliation` (statuts PENDING/ACCEPTED/REJECTED/REVOKED, contrainte unique par paire géant/marchand). Un géant ne peut pas suivre les versements d'un marchand sans que celui-ci l'accepte explicitement depuis son mobile (`GET/POST /api/merchant/affiliations`, nouvel écran `src/app/merchant-affiliations.tsx`) — pas de notification-seule unilatérale. Un géant ne peut pas s'affilier un autre géant.
+
+**Garde de canal côté back-end** (pas seulement l'UI) — un marchand géant ne peut initier aucun mouvement d'argent depuis le mobile : garde `isGiantMerchant()` (`backend/src/utils/merchantTier.ts`) ajoutée sur `wallet.ts` (`/transfer`, `/client-initiated-withdraw`, `/qr-cash-out`, `/push`) et `b2b.ts` (`/payouts`). La logique métier de paiement de masse (`b2b.ts`) et de demande de retrait (`merchant.ts`) a été factorée en fonctions exportées (`runMassPayout`, `createMerchantPayoutRequest`) réutilisées telles quelles par le nouveau routeur `backend/src/routes/merchant-portal.ts` (dashboard jour/mois, rapports, affiliations côté géant, paiement employés, retrait vers agence), toutes derrière `authMerchantPortal`.
+
+**Nouvelle appli web** `merchant-portal/` (React 19 + Vite, en miroir de `admin-web/`, stockage de session dans une clé `localStorage` distincte pour coexister avec `admin-web` dans le même navigateur) : login OTP, dashboard, rapports, affiliations, paiement employés et retrait vers agence — ces deux derniers reproduisent le mécanisme anti-double-paiement déjà établi dans `B2BHub.tsx` (clé d'idempotence stable par tentative, régénérée seulement après succès).
+
+Revue de sécurité dédiée (agent indépendant) : aucune faille bloquante trouvée sur les gardes de canal, le flux d'affiliation ou les messages d'erreur (pas de fuite d'énumération de compte). Un seul point mineur relevé — `/users/:id/block`/`/freeze` ne bumpaient pas les versions de session (couvert de toute façon par la revérification d'`accountStatus` à chaque requête) — corrigé par cohérence avec les autres routes de révocation.
+
+Vérifié : `cd backend && npx tsc --noEmit` propre, `npx jest --maxWorkers=2` → 813/813 ; racine (mobile) `npx tsc --noEmit` propre, `npx jest --maxWorkers=2` → 150/150 ; `merchant-portal/` : `npx tsc -b --noEmit` et `npm run build` propres. Migrations Prisma : `20260913000000_add_merchant_tier_and_portal_session`, `20260913010000_add_merchant_affiliation`.
+
+### 11bis. Marchands Géants — 4 manques comblés (2026-09-13)
+
+Après revue, 4 manques réels identifiés et comblés :
+
+1. **Promotion staff → géant** : `PATCH /api/admin/users/:id/merchant-tier` (`admin.ts`, permission `perm_merchant_manage` déjà existante), garde `role==='MERCHANT'`, bump `portalTokenVersion` sur rétrogradation, écran dans `admin-web/src/Customer360.tsx` ("Promouvoir en marchand géant" / "Rétrograder").
+2. **Niveaux de permission sur le portail web** : nouveau modèle `MerchantPortalMember` (rôle ADMIN/VIEWER, session indépendante — `tokenVersion`/`refreshTokenHash` propres). Un membre se connecte avec son propre téléphone via le même flux OTP que le géant ; le JWT porte toujours `userId = giant.id` (routes existantes inchangées) plus `memberId`/`role`. Nouveau middleware `requirePortalAdmin` posé sur toutes les routes d'écriture. Nouvel écran `merchant-portal/src/Team.tsx`.
+3. **Conformité automatique** : `MerchantAffiliation.expectedFrequency` (MONTHLY/WEEKLY), `complianceStatus` (OK/LATE) calculé en comparant le dernier versement complété à la fenêtre attendue (`startOfMonthInTimezone`/`startOfWeekInTimezone`), affiché en badge sur le portail web et sur l'écran mobile `merchant-affiliations.tsx`.
+4. **Répertoire d'employés** : modèle `MerchantEmployee`, routes côté géant (`merchant-portal.ts`) et côté marchand normal mobile (`b2b.ts`), intégré au formulaire de paie groupée du portail web.
+
+Vérifié : backend `npx jest --maxWorkers=2` → 878/878 (813 + 65 nouveaux) ; mobile 156/156 ; admin-web (vitest) 193/193 ; `merchant-portal/` build Vite propre. Migration : `20260913020000_add_merchant_portal_team_and_employees`.
+
 ## Sources
 
 1. Preuves de première main : sorties de `npm test`, `npx tsc --noEmit`, `npm run build`, `npm audit` (backend, mobile, admin-web), `git show`/`git blame` sur `corp.ts`, `vite.config.ts`, la migration `restore_wiped_schema_incident`.

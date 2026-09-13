@@ -25,6 +25,7 @@ import gatewayRoutes from './routes/gateway';
 import investRoutes from './routes/invest';
 import loyaltyRoutes from './routes/loyalty';
 import merchantRoutes from './routes/merchant';
+import merchantPortalRoutes from './routes/merchant-portal';
 import notificationRoutes from './routes/notifications';
 import payRoutes from './routes/pay';
 import pushRoutes from './routes/push';
@@ -216,6 +217,12 @@ app.use('/api/loyalty', circuitBreakerMiddleware, loyaltyRoutes);
 app.use('/api/split', circuitBreakerMiddleware, splitRoutes);
 app.use('/api/remit', circuitBreakerMiddleware, remitRoutes);
 app.use('/api/merchant', circuitBreakerMiddleware, merchantRoutes);
+// Portail web des marchands géants — PAS de circuitBreakerMiddleware au niveau du mount,
+// même raison que /api/auth ci-dessus : ce routeur contient aussi son propre flux de
+// connexion (phone+OTP), qui doit rester utilisable même en verrouillage d'urgence. Les deux
+// routes qui déplacent réellement de l'argent (POST /payouts, POST /withdraw-to-agency)
+// appliquent circuitBreakerMiddleware elles-mêmes (voir routes/merchant-portal.ts).
+app.use('/api/merchant-portal', merchantPortalRoutes);
 app.use('/api/vaults', circuitBreakerMiddleware, vaultRoutes);
 app.use('/api/tontine', circuitBreakerMiddleware, tontineRoutes);
 app.use('/api/services', circuitBreakerMiddleware, servicesRoutes);

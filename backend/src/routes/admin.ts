@@ -804,6 +804,60 @@ router.put('/users/:id/branch', authMiddleware, async (req: AuthRequest, res) =>
     }
 });
 
+// PATCH /api/admin/users/:id/merchant-tier — promeut un compte Marchand en "marchand géant"
+// (accès au portail web dédié, voir routes/merchant-portal.ts) ou le rétrograde. Réutilise
+// perm_merchant_manage (déjà la permission des décisions marchand côté staff, voir
+// admin.merchants.ts) plutôt qu'une nouvelle permission dédiée à ce seul geste.
+router.patch('/users/:id/merchant-tier', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const staff = await prisma.staff.findUnique({ where: { id: req.userId }, select: { id: true, name: true, role: true, isActive: true, permissions: true, permissionsCustomized: true, branchId: true } });
+        if (!staff || !hasPermission(staff, 'perm_merchant_manage')) return res.status(403).json({ error: 'Accès refusé.' });
+
+        const { merchantTier } = req.body;
+        if (merchantTier !== 'GIANT' && merchantTier !== null) {
+            return res.status(400).json({ error: "merchantTier doit être 'GIANT' ou null." });
+        }
+
+        const targetId = req.params.id as string;
+        const target = await prisma.user.findUnique({ where: { id: targetId } });
+        if (!target) return res.status(404).json({ error: 'Utilisateur introuvable.' });
+        if (target.role !== 'MERCHANT') {
+            return res.status(400).json({ error: 'Seul un compte Marchand peut être promu marchand géant.' });
+        }
+
+        const updated = await prisma.user.update({
+            where: { id: targetId },
+            data: {
+                merchantTier,
+                // Rétrogradation : coupe toute session portail en cours. authMerchantPortal
+                // rejette de toute façon un compte qui n'est plus GIANT, mais on bump quand
+                // même par cohérence avec le reste du code de révocation de session déjà en
+                // place (voir /users/:id/revoke-sessions ci-dessus).
+                ...(merchantTier === null ? { portalTokenVersion: { increment: 1 } } : {}),
+            },
+        });
+
+        await prisma.auditLog.create({
+            data: {
+                adminId: staff.id,
+                action: 'UPDATE_MERCHANT_TIER',
+                details: `${target.phone} ${merchantTier === 'GIANT' ? 'promu marchand géant' : 'rétrogradé en marchand normal'} par ${staff.name}.`,
+            },
+        });
+
+        const title = merchantTier === 'GIANT' ? 'Compte promu marchand géant' : 'Statut marchand géant retiré';
+        const body = merchantTier === 'GIANT'
+            ? 'Votre compte a été promu marchand géant, vous pouvez désormais accéder au portail web dédié.'
+            : "Votre compte n'est plus marchand géant, l'accès au portail web dédié a été retiré.";
+        await prisma.notification.create({ data: { userId: target.id, title, body, type: 'INFO' } });
+        await notifyCustomer(req, target, title, body);
+
+        res.json({ success: true, user: { id: updated.id, merchantTier: updated.merchantTier } });
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
 // GET /api/admin/logs
 router.get('/logs', authMiddleware, async (req: AuthRequest, res) => {
     try {
@@ -1474,7 +1528,10 @@ router.post('/users/:id/logout-all', authMiddleware, async (req: AuthRequest, re
         await prisma.$transaction([
             prisma.user.update({
                 where: { id: targetId },
-                data: { jwtVersion: { increment: 1 } }
+                // portalTokenVersion en plus de jwtVersion : ce Log Out universel doit aussi
+                // couper une éventuelle session portail marchand géant (voir
+                // routes/merchant-portal.ts), pas seulement la session mobile.
+                data: { jwtVersion: { increment: 1 }, portalTokenVersion: { increment: 1 } }
             }),
             prisma.auditLog.create({
                 data: { adminId: staff.id, action: 'LOGOUT_ALL_SESSIONS', details: `Invalidation forcée de toutes les sessions mobiles (Client : ${targetId}).` }
@@ -2044,7 +2101,11 @@ router.post('/users/:id/block', authMiddleware, async (req: AuthRequest, res) =>
         await prisma.$transaction([
             prisma.user.update({
                 where: { id: customerId },
-                data: { accountStatus: 'SUSPENDED', isActive: false, freezeReason: reason }
+                // jwtVersion/portalTokenVersion bumpés en plus du statut : révocation
+                // immédiate des sessions déjà ouvertes (mobile ET portail marchand géant),
+                // cohérent avec logout-all/revoke-sessions/reset-pin ci-dessous, plutôt que de
+                // compter uniquement sur la revérification d'accountStatus au prochain appel.
+                data: { accountStatus: 'SUSPENDED', isActive: false, freezeReason: reason, jwtVersion: { increment: 1 }, portalTokenVersion: { increment: 1 } }
             }),
             prisma.auditLog.create({
                 data: {
@@ -2334,7 +2395,9 @@ router.post('/users/:id/revoke-sessions', authMiddleware, async (req: AuthReques
         await prisma.$transaction([
             prisma.user.update({
                 where: { id: customerId },
-                data: { jwtVersion: { increment: 1 } }
+                // portalTokenVersion en plus de jwtVersion : révoque aussi la session portail
+                // marchand géant, pas seulement la session mobile (voir merchant-portal.ts).
+                data: { jwtVersion: { increment: 1 }, portalTokenVersion: { increment: 1 } }
             }),
             prisma.auditLog.create({
                 data: {
@@ -2538,7 +2601,8 @@ router.post('/users/:id/freeze', authMiddleware, async (req: AuthRequest, res) =
         await prisma.$transaction([
             prisma.user.update({
                 where: { id: customerId },
-                data: { accountStatus: 'FROZEN', isActive: false, freezeReason: freezeNote }
+                // Voir commentaire équivalent dans POST /users/:id/block ci-dessus.
+                data: { accountStatus: 'FROZEN', isActive: false, freezeReason: freezeNote, jwtVersion: { increment: 1 }, portalTokenVersion: { increment: 1 } }
             }),
             prisma.auditLog.create({
                 data: {
@@ -2626,7 +2690,9 @@ router.post('/users/:id/reset-pin', authMiddleware, async (req: AuthRequest, res
         await prisma.$transaction([
             prisma.user.update({
                 where: { id: customerId },
-                data: { failedPinAttempts: 0, lockedUntil: null, jwtVersion: { increment: 1 } }
+                // portalTokenVersion en plus de jwtVersion : révoque aussi la session portail
+                // marchand géant, pas seulement la session mobile (voir merchant-portal.ts).
+                data: { failedPinAttempts: 0, lockedUntil: null, jwtVersion: { increment: 1 }, portalTokenVersion: { increment: 1 } }
             }),
             prisma.auditLog.create({
                 data: {

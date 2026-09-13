@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
@@ -18,8 +19,10 @@ import BalanceCard from '../components/ui/BalanceCard';
 import ScreenHeader from '../components/ui/ScreenHeader';
 import SectionHeading from '../components/ui/SectionHeading';
 import { useAppTheme } from '../constants/theme';
+import { useAuth } from '../context/AuthContext';
 import {
     apiCreateMerchantPayout,
+    apiGetMerchantAffiliations,
     apiGetMerchantPayouts,
     apiGetMerchantStats,
     apiGetMerchantTransactions,
@@ -48,6 +51,13 @@ export default function MerchantHubScreen() {
     const router = useRouter();
     const COLORS = useAppTheme();
     const styles = getStyles(COLORS);
+    const { user } = useAuth();
+
+    // Marchand Géant (mairie, impôts, grandes entreprises) — voir User.merchantTier,
+    // (tabs)/index.tsx : ce hub reste accessible mais devient intégralement lecture seule
+    // pour ce palier (solde + historique uniquement) — encaissement et demandes de retrait
+    // sont pilotés depuis le portail web dédié.
+    const isGiantMerchant = user?.merchantTier === 'GIANT';
 
     const [stats, setStats] = useState<any>(null);
     const [transactions, setTransactions] = useState<any[]>([]);
@@ -61,6 +71,21 @@ export default function MerchantHubScreen() {
     const [payoutSource, setPayoutSource] = useState<'SALES' | 'COMMISSION'>('SALES');
     const [payoutNote, setPayoutNote] = useState('');
     const [payoutLoading, setPayoutLoading] = useState(false);
+
+    // Nombre de demandes d'affiliation PENDING reçues d'un marchand géant (voir
+    // MerchantAffiliation, backend/prisma/schema.prisma) — simple raccourci d'affichage vers
+    // merchant-affiliations.tsx, qui porte lui la vraie gestion des états de chargement/erreur.
+    // `null` (pas 0) tant que non chargé OU si ce best-effort échoue : le libellé du bouton
+    // omet alors le compteur plutôt que d'afficher un "(0)" trompeur.
+    const [pendingAffiliationCount, setPendingAffiliationCount] = useState<number | null>(null);
+    const showAffiliationsEntry = user?.role === 'MERCHANT' && !isGiantMerchant;
+
+    useFocusEffect(useCallback(() => {
+        if (!showAffiliationsEntry) return;
+        apiGetMerchantAffiliations()
+            .then(list => setPendingAffiliationCount(list.filter(a => a.status === 'PENDING').length))
+            .catch(() => setPendingAffiliationCount(null));
+    }, [showAffiliationsEntry]));
 
     const load = useCallback(async (isRefresh = false) => {
         if (isRefresh) setRefreshing(true);
@@ -138,28 +163,63 @@ export default function MerchantHubScreen() {
                         Aujourd'hui : {stats.todaySalesAmount.toLocaleString('fr-FR')} FCFA de ventes ({stats.todaySalesCount}) · {stats.todayCommission.toLocaleString('fr-FR')} FCFA de commission
                     </Text>
 
+                    {/* Marchand géant : hub intégralement lecture seule, voir isGiantMerchant
+                        ci-dessus — solde et historique restent consultables plus bas, mais
+                        aucune action de mouvement d'argent (encaissement, retrait) n'est
+                        proposée ; ces opérations sont pilotées depuis le portail web dédié. */}
+                    {isGiantMerchant && (
+                        <View style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border, marginBottom: 20, flexDirection: 'row', alignItems: 'center', gap: 10 }]}>
+                            <Ionicons name="eye-outline" size={20} color={COLORS.textSecondary} />
+                            <Text style={{ flex: 1, color: COLORS.textSecondary, fontSize: 12.5, lineHeight: 18, fontFamily: 'Satoshi-Regular' }}>
+                                Compte marchand géant : encaissement et retraits sont réservés au portail web. Ce mobile reste en consultation seule.
+                            </Text>
+                        </View>
+                    )}
+
+                    {showAffiliationsEntry && (
+                        <TouchableOpacity
+                            style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border, marginBottom: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+                            onPress={() => router.push('/merchant-affiliations')}
+                        >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                <Ionicons name="business-outline" size={20} color={COLORS.primary} />
+                                <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', fontSize: 14 }}>
+                                    Demandes d'affiliation{pendingAffiliationCount ? ` (${pendingAffiliationCount})` : ''}
+                                </Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                        </TouchableOpacity>
+                    )}
+
                     {/* Seul point d'entrée vers pay.tsx (encaissement via code + PIN client,
                         POST /api/pay/qr-scan) — cet écran existait déjà, câblé à une vraie route
                         backend, mais était devenu inatteignable : l'onglet central de la tab bar
                         qui y menait a été réaffecté au scanner QR "je paie" (src/app/qr.tsx),
-                        un flux différent (le payeur scanne, pas le marchand qui encaisse). */}
-                    <TouchableOpacity
-                        style={[styles.card, { backgroundColor: COLORS.primary, borderColor: COLORS.primary, marginBottom: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }]}
-                        onPress={() => router.push('/pay')}
-                    >
-                        <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', fontSize: 15 }}>Encaisser un client</Text>
-                    </TouchableOpacity>
+                        un flux différent (le payeur scanne, pas le marchand qui encaisse).
+                        Masqué pour un marchand géant : lecture seule, voir isGiantMerchant. */}
+                    {!isGiantMerchant && (
+                        <TouchableOpacity
+                            style={[styles.card, { backgroundColor: COLORS.primary, borderColor: COLORS.primary, marginBottom: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }]}
+                            onPress={() => router.push('/pay')}
+                        >
+                            <Text style={{ color: '#fff', fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', fontSize: 15 }}>Encaisser un client</Text>
+                        </TouchableOpacity>
+                    )}
 
-                    <SectionHeading
-                        colors={COLORS}
-                        title="Demander un retrait"
-                        marginTop={4}
-                        marginBottom={0}
-                        actionIcon={showPayoutForm ? 'chevron-up' : 'chevron-down'}
-                        onAction={() => setShowPayoutForm(!showPayoutForm)}
-                    />
+                    {/* Demande de retrait : masquée pour un marchand géant (lecture seule) —
+                        l'historique des retraits déjà effectués reste visible plus bas. */}
+                    {!isGiantMerchant && (
+                        <SectionHeading
+                            colors={COLORS}
+                            title="Demander un retrait"
+                            marginTop={4}
+                            marginBottom={0}
+                            actionIcon={showPayoutForm ? 'chevron-up' : 'chevron-down'}
+                            onAction={() => setShowPayoutForm(!showPayoutForm)}
+                        />
+                    )}
 
-                    {showPayoutForm && (
+                    {!isGiantMerchant && showPayoutForm && (
                         <View style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border, marginTop: 12 }]}>
                             <Text style={[styles.label, { color: COLORS.textSecondary }]}>Compte source</Text>
                             <View style={styles.toggleRow}>

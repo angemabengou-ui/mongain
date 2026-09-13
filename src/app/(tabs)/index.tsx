@@ -68,6 +68,14 @@ export default function DashboardScreen() {
   const isChild = user?.role === 'CHILD';
   const childAccent = isChild ? getChildAccent(user?.gender) : null;
 
+  // Marchand Géant (mairie, impôts, grandes entreprises) — palier consultation-seule sur
+  // mobile (voir User.merchantTier, services/api.ts) : contrairement à un Compte Enfant
+  // (qui garde Envoyer/Recharger/Retirer), TOUT mouvement d'argent est masqué ici, sans
+  // exception — ce palier est piloté depuis un portail web dédié, jamais l'app mobile (voir
+  // aussi merchant-hub.tsx, et cards.tsx/remit.tsx pour le filet de sécurité des écrans que
+  // Cartes/Internat. auraient sinon menés à, désormais eux aussi bloqués pour ce palier).
+  const isGiantMerchant = user?.merchantTier === 'GIANT';
+
   const loadData = useCallback(async () => {
     try {
       const [walletData, txData, unreadData] = await Promise.all([
@@ -203,19 +211,36 @@ export default function DashboardScreen() {
             {/* Quick Actions (Actions rapides) */}
             <Text style={styles.sectionTitle}>Actions rapides</Text>
             <View style={styles.actionsCard}>
-              <ActionItem icon="paper-plane" label="Envoyer" bgColor="#2563FF15" color="#2563FF" onPress={() => router.push('/transfer')} styles={styles} />
+              {/* Envoyer/Retirer : mouvement d'argent, réservé au portail web pour un
+                  marchand géant — voir isGiantMerchant ci-dessus. */}
+              {!isGiantMerchant && (
+                <ActionItem icon="paper-plane" label="Envoyer" bgColor="#2563FF15" color="#2563FF" onPress={() => router.push('/transfer')} styles={styles} />
+              )}
               <ActionItem icon="wallet" label="Recharger" bgColor="#00C27A15" color="#00C27A" onPress={() => router.push('/recharge')} styles={styles} />
-              <ActionItem icon="lock-closed" label="Retirer" bgColor="#FFB02015" color="#FFB020" onPress={() => router.push('/withdraw')} styles={styles} />
+              {!isGiantMerchant && (
+                <ActionItem icon="lock-closed" label="Retirer" bgColor="#FFB02015" color="#FFB020" onPress={() => router.push('/withdraw')} styles={styles} />
+              )}
               {/* Cartes et Diviser (partage de facture) ne font pas partie des fonctionnalités
-                  approuvées pour un Compte Enfant — masquées ici pour cette session. cards.tsx
-                  porte en plus son propre filet de sécurité (lien profond direct). */}
-              {!isChild && (
+                  approuvées pour un Compte Enfant NI pour un marchand géant — masquées ici
+                  pour ces deux sessions. cards.tsx porte en plus son propre filet de sécurité
+                  (lien profond direct). */}
+              {!isChild && !isGiantMerchant && (
                 <ActionItem icon="card" label="Cartes" bgColor="#7E3AF215" color="#7E3AF2" onPress={() => router.push('/cards')} styles={styles} />
               )}
-              {!isChild && (
+              {!isChild && !isGiantMerchant && (
                 <ActionItem icon="people" label="Diviser" bgColor="#EC489915" color="#EC4899" onPress={() => router.push('/split')} styles={styles} />
               )}
             </View>
+
+            {/* Info explicative : contrairement au badge "Compte Enfant" (qui garde la
+                plupart des actions), un marchand géant perd la quasi-totalité des actions
+                rapides ci-dessus — un simple masquage sans explication aurait pu laisser
+                penser à une erreur d'affichage. */}
+            {isGiantMerchant && (
+              <Text style={styles.giantReadOnlyNote}>
+                Compte marchand géant : les opérations financières (envoi, retrait, cartes, diviser une note) sont réservées au portail web. Ce mobile reste en consultation seule.
+              </Text>
+            )}
 
             {/* Mon Épargne */}
             <TouchableOpacity activeOpacity={0.8} onPress={() => router.push('/epargne-hub')} style={styles.epargneCard}>
@@ -237,8 +262,8 @@ export default function DashboardScreen() {
               <ServiceSquareItem icon="flash" label="Factures" bgColor="#FFB02015" color="#FFB020" disabled={!appConfig.seegEnabled} onPress={() => router.push('/billers')} styles={styles} />
               <ServiceSquareItem icon="phone-portrait" label="Recharge" bgColor="#2563FF15" color="#2563FF" onPress={() => router.push('/services/airtime')} styles={styles} />
               <ServiceSquareItem icon="water" label="Eau" bgColor="#EF444415" color="#EF4444" onPress={() => router.push('/services/water')} styles={styles} />
-              {/* Transfert international : non approuvé pour un Compte Enfant. */}
-              {!isChild && (
+              {/* Transfert international : non approuvé pour un Compte Enfant ni pour un marchand géant. */}
+              {!isChild && !isGiantMerchant && (
                 <ServiceSquareItem icon="earth" label="Internat." bgColor="#00C27A15" color="#00C27A" onPress={() => router.push('/remit')} styles={styles} />
               )}
             </View>
@@ -434,6 +459,8 @@ const getStyles = (COLORS: ReturnType<typeof useAppTheme>, isDark: boolean) => S
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 2,
     marginBottom: 28,
   },
+  giantReadOnlyNote: { fontSize: 12, fontFamily: 'Satoshi-Regular', color: COLORS.textSecondary, lineHeight: 17, marginTop: -12, marginBottom: 24 },
+
   epargneIconFrame: { width: 48, height: 48, borderRadius: 16, backgroundColor: '#7E3AF215', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   epargneTitle: { fontSize: 15, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', color: COLORS.textPrimary, marginBottom: 2 },
   epargneSub: { fontSize: 12, fontFamily: 'Satoshi-Regular', color: COLORS.textSecondary },

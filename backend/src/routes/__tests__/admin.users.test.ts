@@ -18,11 +18,17 @@ jest.mock('../../prisma', () => ({
         auditLog: { create: jest.fn(), findMany: jest.fn() },
         transaction: { findMany: jest.fn() },
         branch: { findUnique: jest.fn() },
+        notification: { create: jest.fn() },
         $transaction: jest.fn((arg: any) => Array.isArray(arg) ? Promise.all(arg) : arg(prisma)),
     },
 }));
 
 jest.mock('../../services/sms', () => ({ sendSms: jest.fn() }));
+
+const mockSendPush = jest.fn().mockResolvedValue(undefined);
+jest.mock('../wallet', () => ({
+    sendPush: (...args: any[]) => mockSendPush(...args),
+}));
 
 const app = express();
 app.use(express.json());
@@ -251,6 +257,86 @@ describe('Admin Users/Logs/Ledger Routes', () => {
 
             expect(res.status).toBe(200);
             expect(res.body.user.branchId).toBe('b1');
+        });
+    });
+
+    describe('PATCH /admin/users/:id/merchant-tier', () => {
+        const RISK = { id: 'test_staff_id', name: 'Agent Risk', role: 'RISK' };
+
+        it('devrait retourner 403 pour un rôle sans perm_merchant_manage', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(TELLER);
+
+            const res = await request(app).patch('/admin/users/u1/merchant-tier').send({ merchantTier: 'GIANT' });
+
+            expect(res.status).toBe(403);
+            expect(prisma.user.update).not.toHaveBeenCalled();
+        });
+
+        it('devrait retourner 400 si merchantTier n\'est ni GIANT ni null', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(RISK);
+
+            const res = await request(app).patch('/admin/users/u1/merchant-tier').send({ merchantTier: 'SUPER' });
+
+            expect(res.status).toBe(400);
+            expect(prisma.user.findUnique).not.toHaveBeenCalled();
+        });
+
+        it('devrait retourner 404 si l\'utilisateur cible est introuvable', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(RISK);
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+
+            const res = await request(app).patch('/admin/users/u1/merchant-tier').send({ merchantTier: 'GIANT' });
+
+            expect(res.status).toBe(404);
+        });
+
+        it('devrait retourner 400 si la cible n\'est pas un compte Marchand', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(RISK);
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1', role: 'USER', phone: '+241X' });
+
+            const res = await request(app).patch('/admin/users/u1/merchant-tier').send({ merchantTier: 'GIANT' });
+
+            expect(res.status).toBe(400);
+            expect(prisma.user.update).not.toHaveBeenCalled();
+        });
+
+        it('devrait promouvoir un marchand en géant, journaliser et notifier (sans bump portalTokenVersion)', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(RISK);
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1', role: 'MERCHANT', phone: '+241070000000', pushToken: 'ExponentPushToken[x]' });
+            (prisma.user.update as jest.Mock).mockResolvedValue({ id: 'u1', merchantTier: 'GIANT' });
+
+            const res = await request(app).patch('/admin/users/u1/merchant-tier').send({ merchantTier: 'GIANT' });
+
+            expect(res.status).toBe(200);
+            expect(res.body.user).toEqual({ id: 'u1', merchantTier: 'GIANT' });
+
+            const updateCall = (prisma.user.update as jest.Mock).mock.calls[0][0];
+            expect(updateCall.where).toEqual({ id: 'u1' });
+            expect(updateCall.data.merchantTier).toBe('GIANT');
+            expect(updateCall.data).not.toHaveProperty('portalTokenVersion');
+
+            expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({ adminId: 'test_staff_id', action: 'UPDATE_MERCHANT_TIER' }),
+            }));
+            expect(prisma.notification.create).toHaveBeenCalledWith(expect.objectContaining({
+                data: expect.objectContaining({ userId: 'u1', type: 'INFO' }),
+            }));
+            expect(mockSendPush).toHaveBeenCalledWith('ExponentPushToken[x]', expect.any(String), expect.any(String));
+        });
+
+        it('devrait rétrograder un géant (merchantTier: null) et bump portalTokenVersion pour couper sa session portail', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(RISK);
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'u1', role: 'MERCHANT', merchantTier: 'GIANT', phone: '+241070000000', pushToken: null });
+            (prisma.user.update as jest.Mock).mockResolvedValue({ id: 'u1', merchantTier: null });
+
+            const res = await request(app).patch('/admin/users/u1/merchant-tier').send({ merchantTier: null });
+
+            expect(res.status).toBe(200);
+            const updateCall = (prisma.user.update as jest.Mock).mock.calls[0][0];
+            expect(updateCall.data).toEqual(expect.objectContaining({
+                merchantTier: null,
+                portalTokenVersion: { increment: 1 },
+            }));
         });
     });
 

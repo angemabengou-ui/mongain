@@ -18,6 +18,7 @@ jest.mock('../../prisma', () => ({
         payoutEntry: { update: jest.fn() },
         wallet: { findUnique: jest.fn(), update: jest.fn() },
         transaction: { create: jest.fn() },
+        merchantEmployee: { findMany: jest.fn(), create: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
         $transaction: jest.fn((callback) => callback(prisma)),
     },
 }));
@@ -79,6 +80,22 @@ describe('B2B Routes', () => {
 
     describe('POST /b2b/payouts', () => {
         const merchant = { id: 'merchant_1', role: 'MERCHANT', wallet: { id: 'w1', balance: 1000000 } };
+
+        // Garde de canal : un marchand géant ne peut initier un paiement de masse que depuis
+        // le portail web dédié (voir routes/merchant-portal.ts POST /payouts), jamais depuis
+        // le mobile — même principe que wallet.ts /transfer, /client-initiated-withdraw...
+        it('devrait refuser un paiement de masse depuis le mobile pour un marchand géant', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ ...merchant, merchantTier: 'GIANT' });
+
+            const res = await request(app).post('/b2b/payouts').send({
+                name: 'Paie',
+                entries: [{ phone: '074000001', amount: 10000 }],
+                pin: '1234'
+            });
+
+            expect(res.status).toBe(403);
+            expect(prisma.payoutBulk.create).not.toHaveBeenCalled();
+        });
 
         it('devrait refuser tout le lot si une entrée a un montant négatif (vol de fonds sinon)', async () => {
             (prisma.user.findUnique as jest.Mock).mockResolvedValue(merchant);
@@ -185,6 +202,101 @@ describe('B2B Routes', () => {
             expect(prisma.payoutBulk.create).toHaveBeenCalledWith(expect.objectContaining({
                 data: expect.objectContaining({ idempotencyKey: 'clef-neuve-456' })
             }));
+        });
+    });
+
+    // ==========================================
+    // RÉPERTOIRE D'EMPLOYÉS (MARCHAND MOBILE)
+    // ==========================================
+    // Même modèle que routes/merchant-portal.ts côté géant — voir sa propre couverture pour ce
+    // même comportement côté portail web.
+    describe('GET /b2b/employees', () => {
+        const merchant = { id: 'merchant_1', role: 'MERCHANT', wallet: { id: 'w1' } };
+
+        it('devrait refuser un non-marchand', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'client_1', role: 'USER' });
+
+            const res = await request(app).get('/b2b/employees');
+
+            expect(res.status).toBe(403);
+        });
+
+        it('devrait lister les employés actifs du marchand', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(merchant);
+            const mockEmployees = [{ id: 'emp1', name: 'Jean', phone: '074000001' }];
+            (prisma.merchantEmployee.findMany as jest.Mock).mockResolvedValue(mockEmployees);
+
+            const res = await request(app).get('/b2b/employees');
+
+            expect(res.status).toBe(200);
+            expect(res.body.employees).toEqual(mockEmployees);
+            expect(prisma.merchantEmployee.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { merchantId: 'merchant_1', isActive: true } }));
+        });
+    });
+
+    describe('POST /b2b/employees', () => {
+        const merchant = { id: 'merchant_1', role: 'MERCHANT', wallet: { id: 'w1' } };
+
+        it('devrait refuser un non-marchand', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'client_1', role: 'USER' });
+
+            const res = await request(app).post('/b2b/employees').send({ name: 'Jean', phone: '074000001' });
+
+            expect(res.status).toBe(403);
+        });
+
+        it('devrait retourner 400 si le nom ou le téléphone manque', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(merchant);
+
+            const res = await request(app).post('/b2b/employees').send({ name: 'Jean' });
+
+            expect(res.status).toBe(400);
+            expect(prisma.merchantEmployee.create).not.toHaveBeenCalled();
+        });
+
+        it('devrait créer un employé', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(merchant);
+            (prisma.merchantEmployee.create as jest.Mock).mockResolvedValue({ id: 'emp1', name: 'Jean', phone: '074000001' });
+
+            const res = await request(app).post('/b2b/employees').send({ name: 'Jean', phone: '074000001' });
+
+            expect(res.status).toBe(201);
+            expect(prisma.merchantEmployee.create).toHaveBeenCalledWith({
+                data: { merchantId: 'merchant_1', name: 'Jean', phone: '074000001' },
+            });
+        });
+
+        it('devrait retourner 409 en cas de doublon (P2002 sur @@unique([merchantId, phone]))', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(merchant);
+            (prisma.merchantEmployee.create as jest.Mock).mockRejectedValue({ code: 'P2002' });
+
+            const res = await request(app).post('/b2b/employees').send({ name: 'Jean', phone: '074000001' });
+
+            expect(res.status).toBe(409);
+        });
+    });
+
+    describe('DELETE /b2b/employees/:id', () => {
+        const merchant = { id: 'merchant_1', role: 'MERCHANT', wallet: { id: 'w1' } };
+
+        it('devrait retourner 404 si l\'employé n\'appartient pas à ce marchand', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(merchant);
+            (prisma.merchantEmployee.findUnique as jest.Mock).mockResolvedValue({ id: 'emp1', merchantId: 'un_autre_marchand' });
+
+            const res = await request(app).delete('/b2b/employees/emp1');
+
+            expect(res.status).toBe(404);
+        });
+
+        it('devrait désactiver (pas supprimer) l\'employé', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(merchant);
+            (prisma.merchantEmployee.findUnique as jest.Mock).mockResolvedValue({ id: 'emp1', merchantId: 'merchant_1' });
+            (prisma.merchantEmployee.update as jest.Mock).mockResolvedValue({ id: 'emp1', isActive: false });
+
+            const res = await request(app).delete('/b2b/employees/emp1');
+
+            expect(res.status).toBe(200);
+            expect(prisma.merchantEmployee.update).toHaveBeenCalledWith({ where: { id: 'emp1' }, data: { isActive: false } });
         });
     });
 });

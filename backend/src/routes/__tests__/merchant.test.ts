@@ -15,7 +15,17 @@ jest.mock('../../prisma', () => ({
         user: { findUnique: jest.fn() },
         transaction: { aggregate: jest.fn(), findMany: jest.fn() },
         merchantPayoutRequest: { create: jest.fn(), findMany: jest.fn() },
+        merchantAffiliation: { findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
+        notification: { create: jest.fn() },
     },
+}));
+
+// merchant.ts notifie le géant (sendPush) à la réponse d'une affiliation — mocké en entier
+// pour isoler ces tests de l'implémentation réelle d'Expo (même convention que
+// CashOperationService.test.ts pour ../../routes/wallet).
+const mockSendPush = jest.fn().mockResolvedValue(undefined);
+jest.mock('../wallet', () => ({
+    sendPush: (...args: any[]) => mockSendPush(...args),
 }));
 
 // merchant.ts calcule désormais la frontière "aujourd'hui" dans le fuseau configuré
@@ -229,6 +239,101 @@ describe('Merchant Routes', () => {
                 where: { merchantId: 'merchant_1' },
                 orderBy: { createdAt: 'desc' },
             });
+        });
+    });
+
+    // ==========================================
+    // AFFILIATIONS (côté marchand affilié, mobile) — consentement explicite requis avant
+    // qu'un géant (routes/merchant-portal.ts) ne puisse suivre les versements de ce marchand.
+    // ==========================================
+    describe('GET /merchant/affiliations', () => {
+        it('devrait lister les affiliations où ce compte est le marchand affilié', async () => {
+            const mockAffiliations = [{ id: 'aff1', giantId: 'giant_1', merchantId: 'merchant_1', status: 'PENDING', giant: { name: 'Mairie de Libreville', phone: '+24177000000' } }];
+            (prisma.merchantAffiliation.findMany as jest.Mock).mockResolvedValue(mockAffiliations);
+
+            const res = await request(app).get('/merchant/affiliations');
+
+            expect(res.status).toBe(200);
+            expect(res.body.affiliations).toEqual(mockAffiliations);
+            expect(prisma.merchantAffiliation.findMany).toHaveBeenCalledWith(expect.objectContaining({
+                where: { merchantId: 'merchant_1' },
+            }));
+        });
+    });
+
+    describe('POST /merchant/affiliations/:id/respond', () => {
+        const pendingAffiliation = {
+            id: 'aff1',
+            giantId: 'giant_1',
+            merchantId: 'merchant_1',
+            status: 'PENDING',
+            giant: { id: 'giant_1', name: 'Mairie de Libreville', pushToken: 'ExponentPushToken[giant]' },
+        };
+
+        it('devrait rejeter un accept manquant/non-booléen', async () => {
+            const res = await request(app).post('/merchant/affiliations/aff1/respond').send({});
+            expect(res.status).toBe(400);
+        });
+
+        it('devrait retourner 404 si l\'affiliation n\'existe pas', async () => {
+            (prisma.merchantAffiliation.findUnique as jest.Mock).mockResolvedValue(null);
+
+            const res = await request(app).post('/merchant/affiliations/does-not-exist/respond').send({ accept: true });
+
+            expect(res.status).toBe(404);
+        });
+
+        // Flux complet demandé : création PENDING (côté géant, testé dans
+        // merchant-portal.test.ts) → réponse par le mauvais user → 403 → réponse par le bon →
+        // ACCEPTED.
+        it('devrait retourner 403 si l\'affiliation appartient à un autre marchand (mauvais user)', async () => {
+            (prisma.merchantAffiliation.findUnique as jest.Mock).mockResolvedValue({
+                ...pendingAffiliation,
+                merchantId: 'un_autre_marchand', // req.userId est toujours 'merchant_1' dans ce fichier de test
+            });
+
+            const res = await request(app).post('/merchant/affiliations/aff1/respond').send({ accept: true });
+
+            expect(res.status).toBe(403);
+            expect(prisma.merchantAffiliation.update).not.toHaveBeenCalled();
+        });
+
+        it('devrait rejeter une réponse sur une affiliation déjà traitée (pas PENDING)', async () => {
+            (prisma.merchantAffiliation.findUnique as jest.Mock).mockResolvedValue({ ...pendingAffiliation, status: 'ACCEPTED' });
+
+            const res = await request(app).post('/merchant/affiliations/aff1/respond').send({ accept: true });
+
+            expect(res.status).toBe(400);
+            expect(prisma.merchantAffiliation.update).not.toHaveBeenCalled();
+        });
+
+        it('devrait accepter une affiliation PENDING appartenant au bon marchand et notifier le géant', async () => {
+            (prisma.merchantAffiliation.findUnique as jest.Mock).mockResolvedValue(pendingAffiliation);
+            (prisma.merchantAffiliation.update as jest.Mock).mockResolvedValue({ ...pendingAffiliation, status: 'ACCEPTED', respondedAt: new Date() });
+
+            const res = await request(app).post('/merchant/affiliations/aff1/respond').send({ accept: true });
+
+            expect(res.status).toBe(200);
+            expect(res.body.affiliation.status).toBe('ACCEPTED');
+            expect(prisma.merchantAffiliation.update).toHaveBeenCalledWith({
+                where: { id: 'aff1' },
+                data: { status: 'ACCEPTED', respondedAt: expect.any(Date) },
+            });
+            expect(mockSendPush).toHaveBeenCalledWith('ExponentPushToken[giant]', expect.any(String), expect.any(String));
+        });
+
+        it('devrait rejeter (REJECTED) sans notification push si le géant n\'a pas de pushToken', async () => {
+            (prisma.merchantAffiliation.findUnique as jest.Mock).mockResolvedValue({
+                ...pendingAffiliation,
+                giant: { id: 'giant_1', name: 'Mairie de Libreville', pushToken: null },
+            });
+            (prisma.merchantAffiliation.update as jest.Mock).mockResolvedValue({ ...pendingAffiliation, status: 'REJECTED', respondedAt: new Date() });
+
+            const res = await request(app).post('/merchant/affiliations/aff1/respond').send({ accept: false });
+
+            expect(res.status).toBe(200);
+            expect(res.body.affiliation.status).toBe('REJECTED');
+            expect(mockSendPush).not.toHaveBeenCalled();
         });
     });
 });
