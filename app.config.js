@@ -113,6 +113,21 @@ module.exports = () => ({
         },
       ],
       'expo-secure-store',
+      // Manquant jusqu'ici : aucune fonctionnalité JS ne dépend de ce plugin (la création du
+      // canal Android et la récupération du token se font au runtime, voir AuthContext.tsx),
+      // MAIS la doc officielle SDK 57 (docs.expo.dev/versions/v57.0.0/sdk/notifications) est
+      // explicite — ce plugin est "required" pour EAS Build sur les deux plateformes, et sans
+      // lui l'entitlement iOS `aps-environment` n'est écrit dans AUCUN build (ni dev ni
+      // release) : Xcode ne fait que PROMOUVOIR 'development' en 'production' à l'archivage,
+      // il ne peut rien promouvoir si la clé n'existe pas du tout. Résultat concret sur iOS :
+      // push totalement muet/absent, indépendamment des identifiants APNs côté EAS (l'autre
+      // moitié de l'enquête) — un bug purement côté build client, jamais visible en JS. Sur
+      // Android ce plugin ne fait qu'ajouter icône/couleur de notification (cosmétique, pas
+      // encore configuré ici faute d'asset dédié) ; la permission POST_NOTIFICATIONS, elle,
+      // vient déjà automatiquement du AndroidManifest.xml propre au module expo-notifications
+      // (fusionné par Gradle via l'autolinking), pas de ce plugin — donc son absence n'explique
+      // PAS un silence sur Android, seulement sur iOS.
+      'expo-notifications',
       [
         'expo-camera',
         {
@@ -140,9 +155,9 @@ module.exports = () => ({
     },
     extra: {
       router: {},
-      owner: 'ange0808',
+      owner: 'ange1994',
       eas: {
-        projectId: '67ca9078-22b1-4d3f-b9a4-15de1478e47c',
+        projectId: '62c3cfa7-ad7e-4ec8-8c22-df55b5c34464',
       },
     },
   },

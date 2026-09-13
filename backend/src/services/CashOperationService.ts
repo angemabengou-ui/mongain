@@ -28,11 +28,14 @@ export class CashOperationService {
         const { amount, clientPhone, tellerId, branchId, idempotencyKey, io } = params;
         if (amount <= 0) throw new Error("Le montant doit être positif.");
 
-        const transaction = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx) => {
             // 1. Idempotence Guard
             if (idempotencyKey) {
                 const dup = await tx.transaction.findUnique({ where: { idempotencyKey } });
-                if (dup) return dup;
+                // Rejeu idempotent : ne pousse pas une seconde notification (push/socket) pour un
+                // dépôt déjà notifié lors de son tout premier passage — même garde `isNew` que
+                // /transfer (wallet.ts) et executeCashOut ci-dessous.
+                if (dup) return { transaction: dup, isNew: false as const };
             }
 
             // 2. Vérification Session
@@ -117,20 +120,36 @@ export class CashOperationService {
 
             // Comme /transfer et /refund-requests : sans ça, le client n'a aucune trace de ce
             // dépôt physique en agence dans son historique de notifications.
+            const depositTitle = 'Dépôt reçu';
+            const depositBody = `Vous avez reçu un dépôt de ${amount.toLocaleString('fr-FR')} FCFA en agence.`;
             await tx.notification.create({
-                data: { userId: client.id, title: 'Dépôt reçu', body: `Vous avez reçu un dépôt de ${amount.toLocaleString('fr-FR')} FCFA en agence.`, type: 'TRANSACTION' }
+                data: { userId: client.id, title: depositTitle, body: depositBody, type: 'TRANSACTION' }
             });
 
-            return transaction;
+            return { transaction, isNew: true as const, depositTitle, depositBody, clientPushToken: client.pushToken };
         });
 
-        // Notification temps réel (Socket.IO), comme /transfer : le déposant n'est pas
-        // forcément le titulaire du compte (dépôt fait par un tiers pour lui) — sans cet
-        // événement, le client ne voyait ce dépôt qu'à la prochaine ouverture de son onglet
-        // Notifications, jamais en direct pendant qu'il est en ligne dans l'app.
-        io?.to(`user_${clientPhone}`).emit('payment_received', { amount, from: 'Dépôt en agence' });
+        // Rejeu idempotent : ni socket ni push pour un dépôt déjà notifié au tout premier
+        // passage de cette idempotencyKey (voir garde `isNew` ci-dessus).
+        if (result.isNew) {
+            // Notification temps réel (Socket.IO), comme /transfer : le déposant n'est pas
+            // forcément le titulaire du compte (dépôt fait par un tiers pour lui) — sans cet
+            // événement, le client ne voyait ce dépôt qu'à la prochaine ouverture de son onglet
+            // Notifications, jamais en direct pendant qu'il est en ligne dans l'app.
+            io?.to(`user_${clientPhone}`).emit('payment_received', { amount, from: 'Dépôt en agence' });
 
-        return transaction;
+            // Notification PUSH Expo (son/vibration même app fermée) — jusqu'ici totalement
+            // absente de ce chemin : seule la ligne `Notification` en base (ci-dessus) et le
+            // Socket.IO temps réel existaient, contrairement à executeCashOut (le retrait) qui
+            // pousse bien via sendPush(). Un client recevant un dépôt en agence — la première
+            // chose qu'un utilisateur associe à "je reçois de l'argent" — ne voyait donc JAMAIS
+            // son téléphone sonner/vibrer pour cette opération, seulement une notification muette
+            // découverte plus tard dans l'onglet Notifications. Même correctif que celui déjà
+            // appliqué à executeCashOut juste en dessous.
+            await sendPush(result.clientPushToken, result.depositTitle, result.depositBody);
+        }
+
+        return result.transaction;
     }
 
     /**

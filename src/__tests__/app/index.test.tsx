@@ -1,12 +1,14 @@
-import { render } from '@testing-library/react-native';
+import { act, render } from '@testing-library/react-native';
 import React from 'react';
 
 const mockRedirect = jest.fn((_props: any) => null);
+const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({
     Redirect: (props: any) => {
         mockRedirect(props);
         return null;
     },
+    useRouter: () => ({ replace: mockReplace }),
 }));
 
 const mockUseAuth = jest.fn();
@@ -19,6 +21,7 @@ import Index from '../../app/index';
 describe('app/index (entry redirect)', () => {
     beforeEach(() => {
         mockRedirect.mockClear();
+        mockReplace.mockClear();
     });
 
     it('redirects to the (tabs) group once a session is confirmed', async () => {
@@ -60,5 +63,35 @@ describe('app/index (entry redirect)', () => {
         mockUseAuth.mockReturnValue({ token: null, isLoading: true });
         const { toJSON } = await render(<Index />);
         expect(toJSON()).not.toBeNull();
+    });
+
+    describe('filet de sécurité — blocage indéfini signalé après un changement de build/projet EAS', () => {
+        beforeEach(() => {
+            jest.useFakeTimers();
+        });
+        afterEach(() => {
+            jest.useRealTimers();
+        });
+
+        // Régression : cet écran restait bloqué indéfiniment sur l'indicateur de chargement sur
+        // un appareil réel, sans jamais basculer vers /auth/login — la redirection normale
+        // (gérée par _layout.tsx) n'aboutissait pas, pour une raison non confirmée avec
+        // certitude. Après le délai de sécurité, cet écran force lui-même la navigation.
+        it("force la navigation vers /auth/login si toujours bloqué après le délai de sécurité", async () => {
+            mockUseAuth.mockReturnValue({ token: null, isLoading: false });
+            await render(<Index />);
+
+            expect(mockReplace).not.toHaveBeenCalled();
+            await act(async () => { await jest.advanceTimersByTimeAsync(6000); });
+            expect(mockReplace).toHaveBeenCalledWith('/auth/login');
+        });
+
+        it("ne force rien si la session est confirmée avant l'expiration du délai (cas nominal)", async () => {
+            mockUseAuth.mockReturnValue({ token: 'abc', isLoading: false });
+            await render(<Index />);
+
+            await act(async () => { await jest.advanceTimersByTimeAsync(6000); });
+            expect(mockReplace).not.toHaveBeenCalled();
+        });
     });
 });
