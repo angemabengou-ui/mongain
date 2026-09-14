@@ -58,6 +58,19 @@ router.post('/', authMiddleware, async (req: AuthRequest, res) => {
         ? Math.floor(Number(requiredApprovals))
         : 1;
     try {
+        // Le créateur devient automatiquement admin/initiateur/validateur/trésorier (voir
+        // juste en dessous) avec un seuil d'approbation qu'il choisit lui-même (par défaut 1) :
+        // un compte enfant pouvait ainsi créer sa propre caisse, y déposer sur plusieurs jours
+        // (chaque dépôt correctement plafonné par LimitEngine), puis s'auto-approuver un retrait
+        // de la totalité accumulée — contournant entièrement son plafond de dépense parental en
+        // un seul retrait. Un enfant reste libre de REJOINDRE une caisse créée par un adulte
+        // (dépôt toujours plafonné, retrait soumis à l'approbation d'autrui) ; seule la CRÉATION,
+        // qui donne un contrôle unilatéral, est bloquée ici.
+        const caller = await prisma.user.findUnique({ where: { id: req.userId! }, select: { role: true } });
+        if (!caller) return res.status(404).json({ success: false, message: "Utilisateur introuvable." });
+        if (caller.role === 'CHILD') {
+            return res.status(403).json({ success: false, message: "Un compte enfant ne peut pas créer de caisse commune." });
+        }
         const vault = await prisma.$transaction(async (tx) => {
             const newVault = await tx.vault.create({
                 data: {
@@ -652,6 +665,16 @@ router.post('/:id/approve/:txId', authMiddleware, async (req: AuthRequest, res) 
 
             if (!membership || !membership.isValidator) {
                 throw new Error("Vous n'êtes pas autorisé à valider des retraits.");
+            }
+
+            // Défense en profondeur : la création de caisse bloque déjà les comptes enfant
+            // (POST / ci-dessus), seul chemin normal pour devenir validateur automatiquement.
+            // Ce contrôle couvre le cas résiduel où un adulte aurait explicitement désigné un
+            // enfant validateur via PUT /:id/roles ou l'override admin — un enfant ne doit
+            // jamais pouvoir débloquer lui-même un mouvement de fonds, quelle qu'en soit la cause.
+            const approver = await tx.user.findUnique({ where: { id: req.userId! }, select: { role: true } });
+            if (approver?.role === 'CHILD') {
+                throw new Error("Un compte enfant ne peut pas approuver de retrait.");
             }
 
             const vaultTx = await tx.vaultTransaction.findUnique({

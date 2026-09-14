@@ -31,7 +31,14 @@ jest.mock('../../services/LimitEngine', () => ({
         // ("calculateWithdrawalFee is not a function") puisque LimitEngine est entièrement
         // mocké dans ce fichier. 0 par défaut : aucun test existant ne dépend d'un frais
         // agence non nul calculé par cette fonction.
-        calculateWithdrawalFee: jest.fn().mockResolvedValue(0)
+        calculateWithdrawalFee: jest.fn().mockResolvedValue(0),
+        // Ajouté avec le contrôle anti-fractionnement partagé (wallet.ts /qr-cash-out et
+        // /client-initiated-withdraw appellent désormais LimitEngine.checkAntiFractioning,
+        // même helper que CashOperationService.executeCashOut) — même raison que
+        // calculateWithdrawalFee ci-dessus : sans ce mock, l'appel réel plantait
+        // ("checkAntiFractioning is not a function"). 0 par défaut : aucun test existant ne
+        // dépend d'une pénalité anti-fractionnement non nulle.
+        checkAntiFractioning: jest.fn().mockResolvedValue(0)
     }
 }));
 

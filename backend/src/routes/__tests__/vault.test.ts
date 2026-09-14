@@ -101,6 +101,10 @@ describe('Vault Routes', () => {
         // payant (crédit du corporate, éventuellement getOrCreateCorporateWallet) sans
         // jamais l'avoir demandé.
         (prisma.systemSettings.findFirst as jest.Mock).mockResolvedValue(null);
+        // Baseline "appelant adulte" pour le contrôle anti-CHILD sur POST / et
+        // POST /:id/approve/:txId (voir tests dédiés plus bas pour le cas CHILD) — même
+        // raisonnement que systemSettings ci-dessus, posé une fois ici plutôt que répété.
+        (prisma.user.findUnique as jest.Mock).mockResolvedValue({ role: 'ADULT' });
     });
 
     // ==========================================
@@ -173,6 +177,16 @@ describe('Vault Routes', () => {
 
             expect(res.status).toBe(500);
             expect(res.body.success).toBe(false);
+        });
+
+        it('devrait refuser la création par un compte enfant (auto-admin/validateur, contournerait son plafond de dépense)', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ role: 'CHILD' });
+
+            const res = await request(app).post('/vault').send({ name: 'Caisse D' });
+
+            expect(res.status).toBe(403);
+            expect(res.body.success).toBe(false);
+            expect(prisma.vault.create).not.toHaveBeenCalled();
         });
     });
 
@@ -848,6 +862,20 @@ describe('Vault Routes', () => {
 
             expect(res.status).toBe(400);
             expect(res.body.message).toContain('déjà approuvé');
+        });
+
+        it('devrait refuser l\'approbation par un compte enfant même désigné validateur (défense en profondeur)', async () => {
+            (prisma.vaultMember.findUnique as jest.Mock).mockResolvedValue({ isValidator: true });
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ role: 'CHILD' });
+            (prisma.vaultTransaction.findUnique as jest.Mock).mockResolvedValue({
+                status: 'PENDING', approvals: [], vault: { requiredApprovals: 1, name: 'Caisse A' }
+            });
+
+            const res = await request(app).post('/vault/v1/approve/tx1');
+
+            expect(res.status).toBe(400);
+            expect(res.body.message).toContain('enfant');
+            expect(prisma.vaultApproval.create).not.toHaveBeenCalled();
         });
 
         it('devrait enregistrer l\'approbation mais ne pas exécuter si le seuil n\'est pas atteint', async () => {

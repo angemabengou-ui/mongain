@@ -160,6 +160,15 @@ router.post('/vaults/:id/unfreeze', authMiddleware, async (req: AuthRequest, res
 // circuit multisig normal. APPROVE réutilise la même logique d'exécution que le quorum
 // self-service (executeVaultWithdraw, vaultService.ts) ; REJECT active le statut REJECTED
 // déjà prévu au schéma mais jamais écrit par aucune route jusqu'ici.
+//
+// Maker/checker en DEUX appels distincts de cette même route (même schéma que
+// TreasuryRequest) : un premier appel (par n'importe quel staff perm_vault_manage)
+// ENREGISTRE la décision proposée sans rien exécuter ; un second appel, par un staff
+// DIFFÉRENT du premier, confirme et déclenche réellement REJECT/l'exécution. Avant ce
+// correctif, un unique compte staff compromis ou malveillant détenant cette seule
+// permission pouvait, seul, débloquer n'importe quel retrait vers n'importe quelle
+// destination — aucun autre mouvement de fonds aussi sensible de ce backend (Trésorerie,
+// Remboursements) ne se contentait d'un contrôleur unique.
 router.post('/vaults/:id/withdraw-requests/:txId/force-resolve', authMiddleware, async (req: AuthRequest, res) => {
     const vaultId = req.params.id as string;
     const txId = req.params.txId as string;
@@ -176,6 +185,36 @@ router.post('/vaults/:id/withdraw-requests/:txId/force-resolve', authMiddleware,
         const staff = await loadStaffWithPerm(req.userId, 'perm_vault_manage');
         if (!staff) return res.status(403).json({ error: 'Accès refusé.' });
 
+        const vaultTxCheck = await prisma.vaultTransaction.findUnique({ where: { id: txId } });
+        if (!vaultTxCheck || vaultTxCheck.vaultId !== vaultId) return res.status(404).json({ error: "Demande de retrait introuvable." });
+        if (vaultTxCheck.status !== 'PENDING') return res.status(400).json({ error: "Cette demande a déjà été traitée." });
+
+        // Étape 1 (MAKER) : personne n'a encore proposé de décision pour cette demande — on
+        // l'enregistre et on s'arrête là, sans toucher au statut PENDING ni à aucun wallet.
+        if (!vaultTxCheck.forceResolveMakerId) {
+            await prisma.vaultTransaction.update({
+                where: { id: txId },
+                data: { forceResolveMakerId: staff.id, forceResolveDecision: decision, forceResolveReason: reason }
+            });
+            await prisma.auditLog.create({
+                data: { adminId: staff.id, action: 'PROPOSE_FORCE_RESOLVE_VAULT_WITHDRAWAL', details: `Retrait ${txId} (caisse ${vaultId}) : décision ${decision} proposée. Motif : ${reason}. En attente de confirmation par un second responsable.` }
+            });
+            return res.json({ success: true, executed: false, pendingConfirmation: true, message: 'Décision enregistrée. Un second responsable (différent de vous) doit la confirmer avant toute exécution.' });
+        }
+
+        // Le second appel doit venir d'un STAFF DIFFÉRENT du premier — c'est le cœur du
+        // contrôle : sans cette égalité, le même compte pourrait « confirmer » sa propre
+        // proposition en rappelant simplement la route deux fois.
+        if (vaultTxCheck.forceResolveMakerId === staff.id) {
+            return res.status(403).json({ error: "Cette décision a déjà été proposée par vous — un second responsable, différent, doit la confirmer." });
+        }
+
+        // Étape 2 (CHECKER) : on exécute la décision TELLE QU'ENREGISTRÉE à l'étape 1, pas
+        // celle éventuellement soumise à ce second appel — un checker ne fait que confirmer
+        // ou non ce qui a été proposé, il ne peut pas substituer une autre décision/motif.
+        const finalDecision = vaultTxCheck.forceResolveDecision;
+        const finalReason = vaultTxCheck.forceResolveReason;
+
         const result = await prisma.$transaction(async (tx) => {
             const vaultTx = await tx.vaultTransaction.findUnique({
                 where: { id: txId },
@@ -184,7 +223,7 @@ router.post('/vaults/:id/withdraw-requests/:txId/force-resolve', authMiddleware,
             if (!vaultTx || vaultTx.vaultId !== vaultId) throw new Error("Demande de retrait introuvable.");
             if (vaultTx.status !== 'PENDING') throw new Error("Cette demande a déjà été traitée.");
 
-            if (decision === 'REJECT') {
+            if (finalDecision === 'REJECT') {
                 const claim = await tx.vaultTransaction.updateMany({
                     where: { id: txId, status: 'PENDING' },
                     data: { status: 'REJECTED' }
@@ -192,7 +231,7 @@ router.post('/vaults/:id/withdraw-requests/:txId/force-resolve', authMiddleware,
                 if (claim.count === 0) throw new Error("Cette demande vient d'être traitée.");
 
                 const rejectTitle = 'Retrait de caisse rejeté';
-                const rejectBody = `Votre demande de ${vaultTx.amount.toLocaleString('fr-FR')} FCFA sur « ${vaultTx.vault.name} » a été rejetée par l'administration : ${reason}`;
+                const rejectBody = `Votre demande de ${vaultTx.amount.toLocaleString('fr-FR')} FCFA sur « ${vaultTx.vault.name} » a été rejetée par l'administration : ${finalReason}`;
                 await tx.notification.create({
                     data: { userId: vaultTx.requestedById, title: rejectTitle, body: rejectBody, type: 'TRANSACTION' }
                 });
@@ -217,12 +256,12 @@ router.post('/vaults/:id/withdraw-requests/:txId/force-resolve', authMiddleware,
         await prisma.auditLog.create({
             data: {
                 adminId: staff.id,
-                action: decision === 'APPROVE' ? 'FORCE_APPROVE_VAULT_WITHDRAWAL' : 'FORCE_REJECT_VAULT_WITHDRAWAL',
-                details: `Retrait ${txId} (caisse ${vaultId}) résolu manuellement : ${decision}. Motif : ${reason}`
+                action: finalDecision === 'APPROVE' ? 'FORCE_APPROVE_VAULT_WITHDRAWAL' : 'FORCE_REJECT_VAULT_WITHDRAWAL',
+                details: `Retrait ${txId} (caisse ${vaultId}) résolu manuellement : ${finalDecision} (proposé par ${vaultTxCheck.forceResolveMakerId}, confirmé par ${staff.id}). Motif : ${finalReason}`
             }
         });
 
-        res.json({ success: true, ...result });
+        res.json({ success: true, pendingConfirmation: false, ...result });
     } catch (e: any) {
         res.status(400).json({ error: e.message || friendlyErrorMessage(e) });
     }

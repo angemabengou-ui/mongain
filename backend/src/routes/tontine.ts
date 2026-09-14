@@ -2,8 +2,10 @@ import express, { Request, Response } from 'express';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { prisma } from '../prisma';
 import { hasPermission } from '../services/RBAC';
+import { LimitEngine } from '../services/LimitEngine';
 import { contributeNow, executeTontineCycle, resolveRenewalPoll } from '../services/tontineService';
 import { friendlyErrorMessage } from '../utils/errors';
+import { getSystemSettings } from './settings';
 
 const router = express.Router();
 
@@ -15,6 +17,18 @@ router.post('/create', authMiddleware, async (req: Request, res: Response) => {
 
         if (!name || !contribution) {
             return res.status(400).json({ success: false, message: "Nom et contribution requis." });
+        }
+
+        // Le créateur contrôle unilatéralement le club (paramètres, annulation, réordonnancement
+        // des tours — voir PUT /settings, POST /cancel, POST /reorder ci-dessous) et démarre en
+        // position payoutOrder=1. Un compte enfant reste libre de REJOINDRE un club créé par un
+        // adulte (cotisations toujours plafonnées par LimitEngine, tour de versement fixé par le
+        // créateur) ; seule la création, qui donne ce contrôle unilatéral, est bloquée ici — même
+        // principe que la création de Caisse Commune (routes/vault.ts).
+        const caller = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+        if (!caller) return res.status(404).json({ success: false, message: "Utilisateur introuvable." });
+        if (caller.role === 'CHILD') {
+            return res.status(403).json({ success: false, message: "Un compte enfant ne peut pas créer de club de tontine." });
         }
 
         // Le FCFA n'a aucune sous-unité (TontineGroup.contribution est désormais Int, voir
@@ -404,6 +418,13 @@ router.post('/leave', authMiddleware, async (req: Request, res: Response) => {
 
         await prisma.$transaction(async (tx) => {
             if (debt > 0 && remainingBeneficiaryUserIds.length > 0) {
+                // Seul débit de tout ce fichier à ne passer par aucun plafond AML/KYC — un
+                // compte enfant qui a déjà touché sa cagnotte pouvait donc se voir prélever
+                // `debt` (potentiellement élevé, proportionnel au nombre de membres restants)
+                // sans jamais être contraint par son plafond de dépense parental, ni par les
+                // contrôles de vélocité appliqués à tout autre mouvement de fonds sortant.
+                await LimitEngine.verifyAndIncrementConsumption(tx, userId, myWallet!.id, debt, await getSystemSettings());
+
                 const debited = await tx.wallet.updateMany({
                     where: { userId, balance: { gte: debt } },
                     data: { balance: { decrement: debt } }
@@ -472,8 +493,11 @@ router.post('/leave', authMiddleware, async (req: Request, res: Response) => {
             return { leaveTitle, leaveBody };
         }).then(async ({ leaveTitle, leaveBody }) => {
             const leavingUser = await prisma.user.findUnique({ where: { id: userId }, select: { pushToken: true } });
-            const { sendPush } = await import('./wallet');
+            const { sendPush, notifyParentOfChildSpend } = await import('./wallet');
             await sendPush(leavingUser?.pushToken, leaveTitle, leaveBody);
+            // Seule dépense de ce fichier restée invisible du parent avant ce correctif —
+            // toutes les autres (cotisation, voir tontineService.ts) sont désormais couvertes.
+            if (debt > 0) await notifyParentOfChildSpend(userId, debt, 'règlement de dette en quittant une tontine');
         });
 
         res.json({ success: true, message: debt > 0 ? `Dette de ${debt.toLocaleString('fr-FR')} FCFA réglée. Vous avez quitté le club.` : "Vous avez quitté le club de tontine. Vous ne serez plus prélevé aux prochains cycles." });
@@ -490,9 +514,11 @@ router.post('/leave', authMiddleware, async (req: Request, res: Response) => {
 router.post('/contribute', authMiddleware, async (req: Request, res: Response) => {
     try {
         const userId = (req as AuthRequest).userId!;
-        const { groupId, amount } = req.body;
+        const { groupId, amount, idempotencyKey } = req.body;
 
-        const result = await contributeNow(String(groupId), userId, Math.round(Number(amount)));
+        // Un double-tap ou un retry réseau sur « Cotiser » ne doit jamais prélever deux fois
+        // pour le même geste — même convention que vault.ts POST /:id/deposit.
+        const result = await contributeNow(String(groupId), userId, Math.round(Number(amount)), idempotencyKey ? String(idempotencyKey) : undefined);
 
         res.json({
             success: true,

@@ -435,6 +435,13 @@ model VerificationCode {
   code      String
   expiresAt DateTime
   createdAt DateTime @default(now())
+  // Compteur d'essais erronés sur CE code précis (voir utils/otpAuth.ts, verifyOtpAttempt) —
+  // défense en profondeur en plus des rate-limiters par IP (smsLimiter/loginLimiter dans
+  // routes/auth.ts) : sans lui, un attaquant qui reste sous le seuil du rate-limiter (ou qui
+  // le contourne en distribuant ses requêtes sur plusieurs IP) pouvait brute-forcer les 10 000
+  // combinaisons à 4 chiffres d'un même code OTP sans aucune limite. Additif, défaut 0 pour
+  // toutes les lignes existantes.
+  attempts  Int      @default(0)
 
   @@unique([phone, purpose])
 }
@@ -850,6 +857,7 @@ model Staff {
   reclamationsAssigned     Reclamation[]           @relation("ReclamationAssignee")
   treasuryMakerRequests    TreasuryRequest[]       @relation("TreasuryMaker")
   treasuryCheckerRequests  TreasuryRequest[]       @relation("TreasuryChecker")
+  vaultForceResolvesMade   VaultTransaction[]      @relation("VaultForceResolveMaker")
   settingHistoryMade       SettingHistory[]        @relation("HistoryMaker")
   settingHistoryChecked    SettingHistory[]        @relation("HistoryChecker")
   riskFlagsReported        RiskFlag[]              @relation("RiskAuthor")
@@ -1087,6 +1095,15 @@ model VaultTransaction {
   requiredApprovalsSnapshot    Int?
   requiredValidatorIdsSnapshot String[] @default([])
 
+  // Maker/checker sur la résolution forcée admin (admin.vaults.ts, force-resolve) — même
+  // convention que TreasuryRequest.makerId/checkerId. Sans second contrôleur DISTINCT du
+  // premier, un unique compte staff détenant perm_vault_manage pouvait, seul, débloquer
+  // n'importe quel retrait en attente de quorum vers n'importe quelle destination.
+  forceResolveMakerId   String?
+  forceResolveMaker     Staff?  @relation("VaultForceResolveMaker", fields: [forceResolveMakerId], references: [id])
+  forceResolveDecision  String? // APPROVE ou REJECT — décision proposée par le maker, exécutée seulement après confirmation
+  forceResolveReason    String?
+
   approvals VaultApproval[]
 }
 
@@ -1176,6 +1193,13 @@ model Loan {
   status       String   @default("ACTIVE") // ACTIVE, PAID, DEFAULTED
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  // Échéance de remboursement — fixée à la souscription (credit.ts /apply, +30 jours par
+  // défaut faute de durée métier définie ailleurs). Nullable pour les prêts créés avant
+  // cette colonne (aucune échéance n'était promise à l'époque) : services/creditRisk.ts
+  // ne les fait donc jamais basculer en DEFAULTED rétroactivement (filtre `lt: now`,
+  // toujours faux sur NULL côté Postgres).
+  dueDate DateTime?
 
   user User @relation(fields: [userId], references: [id])
 }
@@ -1273,6 +1297,14 @@ model StakingVault {
   lockedUntil DateTime
   status      String // "ACTIVE", "MATURED", "WITHDRAWN"
   createdAt   DateTime @default(now())
+
+  // Durée réellement demandée à la souscription (invest.ts /stake), en mois — persistée
+  // pour que le retrait (/vaults/:id/withdraw) calcule l'intérêt sur CETTE valeur plutôt
+  // que de la re-dériver de (lockedUntil - createdAt), sujet au débordement de mois JS
+  // (ex: 31 janvier + 1 mois -> 3 mars) qui surpayait l'intérêt. Nullable : les coffres
+  // créés avant cette colonne n'ont pas cette valeur et retombent sur l'ancien calcul par
+  // différence de dates (voir invest.ts).
+  lockMonths Int?
 }
 
 // ==========================================
@@ -1312,6 +1344,13 @@ model BnplContract {
   nextPaymentDate DateTime
   status      String   @default("ACTIVE") // ACTIVE, DEFAULTED, CLOSED
   createdAt   DateTime @default(now())
+
+  // Capital d'origine (hors frais), figé à la souscription (bnpl.ts /apply) — nécessaire
+  // pour répartir chaque remboursement partiel entre capital (-> Trésorerie) et frais (->
+  // Corporate) au prorata, comme credit.ts /repay. Nullable : les contrats créés avant
+  // cette colonne n'ont pas cette valeur ; /repay retombe alors sur l'ancien comportement
+  // (100% vers la Trésorerie) plutôt que de deviner une répartition.
+  originalPrincipal Int?
 }
 model RemittanceTransaction {
   id               String   @id @default(cuid())

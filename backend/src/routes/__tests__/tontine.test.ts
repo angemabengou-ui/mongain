@@ -17,6 +17,7 @@ jest.mock('../../middleware/auth', () => ({
 // moins un autre participant actif à notifier de la dissolution.
 jest.mock('../wallet', () => ({
     sendPush: jest.fn(),
+    notifyParentOfChildSpend: jest.fn(),
 }));
 
 jest.mock('../../services/tontineService', () => ({
@@ -24,6 +25,15 @@ jest.mock('../../services/tontineService', () => ({
     getTontineVaultWallet: jest.fn(),
     resolveRenewalPoll: jest.fn(),
     contributeNow: jest.fn()
+}));
+
+// Introduits par le contrôle de plafond AML/KYC sur le règlement de dette de POST /leave
+// (tontine.ts ne passait auparavant par aucun plafond sur ce débit — voir LimitEngine plus bas).
+jest.mock('../settings', () => ({
+    getSystemSettings: jest.fn().mockResolvedValue({}),
+}));
+jest.mock('../../services/LimitEngine', () => ({
+    LimitEngine: { verifyAndIncrementConsumption: jest.fn() },
 }));
 
 jest.mock('../../prisma', () => ({
@@ -55,6 +65,10 @@ app.use('/tontine', tontineRoutes);
 describe('Tontine Routes', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        // Baseline "appelant adulte" pour le contrôle anti-CHILD sur POST /create (voir test
+        // dédié au cas CHILD plus bas) — jest.clearAllMocks() ne réinitialise que l'historique
+        // d'appels, jamais une implémentation posée par un test précédent.
+        (prisma.user.findUnique as jest.Mock).mockResolvedValue({ role: 'ADULT' });
     });
 
     // ==========================================
@@ -86,6 +100,16 @@ describe('Tontine Routes', () => {
             expect(prisma.tontineParticipant.create).toHaveBeenCalledWith({
                 data: { userId: 'test_user_id', tontineGroupId: 'group1', payoutOrder: 1 }
             });
+        });
+
+        it('devrait refuser la création par un compte enfant (créateur = contrôle unilatéral du club)', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ role: 'CHILD' });
+
+            const res = await request(app).post('/tontine/create').send({ name: 'Club A', contribution: 5000 });
+
+            expect(res.status).toBe(403);
+            expect(res.body.success).toBe(false);
+            expect(prisma.tontineGroup.create).not.toHaveBeenCalled();
         });
 
         it('devrait retourner 500 en cas d\'erreur serveur', async () => {
@@ -519,7 +543,7 @@ describe('Tontine Routes', () => {
             const res = await request(app).post('/tontine/contribute').send({ groupId: 'group1', amount: 2000 });
 
             expect(res.status).toBe(200);
-            expect(contributeNow).toHaveBeenCalledWith('group1', 'test_user_id', 2000);
+            expect(contributeNow).toHaveBeenCalledWith('group1', 'test_user_id', 2000, undefined);
             expect(res.body.payoutTriggered).toBe(false);
             expect(res.body.remaining).toBe(3000);
         });

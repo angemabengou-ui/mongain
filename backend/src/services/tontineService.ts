@@ -44,11 +44,25 @@ export async function collectParticipantContribution(
     cycleId: string,
     vaultWalletId: string,
     settings: Awaited<ReturnType<typeof getSystemSettings>>,
-    amount: number
+    amount: number,
+    idempotencyKey?: string
 ): Promise<{ success: boolean; totalPaid: number }> {
     if (amount <= 0) {
         const existing = await prisma.tontineContribution.findUnique({ where: { cycleId_participantId: { cycleId, participantId } } });
         return { success: true, totalPaid: existing?.amount || 0 };
+    }
+
+    // Idempotence sur un double-tap/retry réseau de contributeNow (routes/tontine.ts,
+    // POST /contribute) — même convention que vault.ts /deposit, sur Transaction.idempotencyKey
+    // plutôt qu'un nouveau champ dédié. Seul contributeNow fournit une clé (le CRON et
+    // retryFailedContributions passent undefined : leurs propres appelants gèrent déjà leur
+    // idempotence autrement — lastPayoutDate pour le cycle, statut FAILED/PARTIAL pour la relance).
+    if (idempotencyKey) {
+        const dup = await prisma.transaction.findUnique({ where: { idempotencyKey } });
+        if (dup) {
+            const existing = await prisma.tontineContribution.findUnique({ where: { cycleId_participantId: { cycleId, participantId } } });
+            return { success: true, totalPaid: existing?.amount || 0 };
+        }
     }
 
     const wallet = await prisma.wallet.findUnique({ where: { userId } });
@@ -101,7 +115,8 @@ export async function collectParticipantContribution(
                     senderWalletId: wallet.id,
                     receiverWalletId: vaultWalletId,
                     status: 'COMPLETED',
-                    reference: `TONT_DBT_G${group.id}_C${group.currentCycle}_U${userId}_${crypto.randomUUID()}`
+                    reference: `TONT_DBT_G${group.id}_C${group.currentCycle}_U${userId}_${crypto.randomUUID()}`,
+                    idempotencyKey
                 }
             });
 
@@ -131,10 +146,16 @@ export async function collectParticipantContribution(
                 data: { userId, title: collectedTitle, body: collectedBody, type: 'INFO' }
             });
 
-            return { amount: updatedContribution.amount, collectedTitle, collectedBody };
+            return { amount: updatedContribution.amount, collectedTitle, collectedBody, cappedAmount };
         });
 
         await pushToParticipant(userId, totalPaid.collectedTitle, totalPaid.collectedBody);
+        // Seul mouvement d'argent sortant de ce fichier resté invisible du parent d'un compte
+        // enfant avant ce correctif (no-op silencieux pour tout compte non-CHILD, voir
+        // notifyParentOfChildSpend) — routes/wallet.ts, cards.ts, crypto.ts, remit.ts, credit.ts,
+        // bnpl.ts, split.ts, vault.ts l'appellent déjà tous sur leurs propres débits.
+        const { notifyParentOfChildSpend } = await import('../routes/wallet');
+        await notifyParentOfChildSpend(userId, totalPaid.cappedAmount, 'cotisation de tontine');
 
         return { success: true, totalPaid: totalPaid.amount };
     } catch (err: any) {
@@ -324,6 +345,22 @@ export async function notifyUpcomingCycle(group: { id: string; name: string; con
 }
 
 export async function executeTontineCycle(groupId: string) {
+    // Verrou consultatif Postgres, tenu pour toute la durée de la fonction (relâché dans le
+    // `finally` en bas, quel que soit le chemin de sortie) : sans lui, deux exécutions
+    // concurrentes pour le MÊME groupe (deux instances du serveur dont le setInterval se
+    // déclenche au même instant, ou un tick CRON qui recouvre le précédent sur un cycle lent)
+    // peuvent chacune lire le même total de cotisation "pas encore terminé" avant que l'autre
+    // n'ait validé la sienne, et débiter chacune leur propre montant plafonné pour CE MÊME
+    // participant — dépassant au final le vrai montant de cotisation du cycle (double
+    // prélèvement réel, pas seulement une écriture perdue). `pg_try_advisory_lock` (non
+    // bloquant) plutôt que la variante bloquante : si une autre exécution tient déjà ce
+    // groupe, on abandonne immédiatement ce tick plutôt que de faire attendre le CRON — le
+    // prochain passage (ou le prochain appel de contributeNow) retentera normalement.
+    const lockRows = await prisma.$queryRaw<{ locked: boolean }[]>`SELECT pg_try_advisory_lock(hashtext(${groupId})) as locked`;
+    if (!lockRows[0]?.locked) {
+        return { success: false, completed: false, debitedCount: 0, failedCount: 0, totalPot: 0, currentCycle: -1, payoutFailed: false, message: 'Cycle déjà en cours de traitement par un autre processus.' };
+    }
+    try {
     const group: any = await prisma.tontineGroup.findUnique({
         where: { id: groupId },
         include: { participants: { include: { user: { select: { pushToken: true } } } } }
@@ -456,6 +493,9 @@ export async function executeTontineCycle(groupId: string) {
 
     console.log(`✅ Cycle ${group.currentCycle} pour ${group.name} exécuté: ${totalPot} FCFA${payoutFailed ? ' (versement en échec, à relancer)' : ''}`);
     return { success: true, debitedCount, failedCount, totalPot, currentCycle: group.currentCycle, payoutFailed };
+    } finally {
+        await prisma.$queryRaw`SELECT pg_advisory_unlock(hashtext(${groupId}))`;
+    }
 }
 
 // Cotisation volontaire, à l'initiative du participant (routes/tontine.ts, POST /contribute)
@@ -467,7 +507,7 @@ export async function executeTontineCycle(groupId: string) {
 // group.contribution pour ce cycle, la cagnotte est versée immédiatement — sans attendre
 // l'échéance normale. Si certains n'ont pas fini à temps, le CRON reste le filet de sécurité
 // habituel à la date prévue, en prélevant alors uniquement leur solde restant dû.
-export async function contributeNow(groupId: string, userId: string, amount: number) {
+export async function contributeNow(groupId: string, userId: string, amount: number, idempotencyKey?: string) {
     if (!Number.isFinite(amount) || amount <= 0) throw new Error('Indiquez un montant valide à cotiser.');
 
     const group: any = await prisma.tontineGroup.findUnique({ where: { id: groupId }, include: { participants: true } });
@@ -497,7 +537,7 @@ export async function contributeNow(groupId: string, userId: string, amount: num
         throw new Error(`Il ne vous reste que ${remaining.toLocaleString('fr-FR')} FCFA à cotiser pour ce tour — vous ne pouvez pas déposer plus.`);
     }
 
-    const result = await collectParticipantContribution(group, participant.id, userId, cycle.id, vaultWallet.id, settings, amount);
+    const result = await collectParticipantContribution(group, participant.id, userId, cycle.id, vaultWallet.id, settings, amount, idempotencyKey);
     if (!result.success) throw new Error('Solde insuffisant pour ce dépôt.');
 
     const activeParticipants = group.participants.filter((p: any) => p.status === 'ACTIVE');

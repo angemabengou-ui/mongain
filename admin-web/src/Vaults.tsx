@@ -111,14 +111,14 @@ export default function Vaults({ token, hasPerm, initialSelectedId }: { token: s
     useEffect(() => { fetchList(); }, []);
     useEffect(() => { if (selectedId) fetchDetail(selectedId); else setDetail(null); }, [selectedId]);
 
-    const runAction = async (path: string, method: 'POST' | 'PUT', body: any, successMessage: string) => {
+    const runAction = async (path: string, method: 'POST' | 'PUT', body: any, successMessage: string | ((data: any) => string)) => {
         try {
-            await apiFetch(`${API_URL}/api/admin${path}`, {
+            const data = await apiFetch(`${API_URL}/api/admin${path}`, {
                 method,
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify(body || {}),
             });
-            push(successMessage, 'success');
+            push(typeof successMessage === 'function' ? successMessage(data) : successMessage, 'success');
             setConfirmState(null);
             setEditingMemberId(null);
             if (selectedId) fetchDetail(selectedId);
@@ -328,13 +328,24 @@ export default function Vaults({ token, hasPerm, initialSelectedId }: { token: s
                 {confirmState?.type === 'resolve' && (
                     <ConfirmDialog
                         title={confirmState.decision === 'APPROVE' ? "Forcer l'approbation de ce retrait" : 'Rejeter ce retrait'}
-                        subtitle={`${fmt(confirmState.amount)} — cette décision contourne le quorum multisig normal. Elle est tracée et notifiée au demandeur.`}
-                        confirmLabel={confirmState.decision === 'APPROVE' ? 'Approuver et exécuter' : 'Confirmer le rejet'}
+                        subtitle={`${fmt(confirmState.amount)} — cette décision contourne le quorum multisig normal et exige la confirmation d'un second responsable (différent de vous) avant toute exécution. Elle est tracée et notifiée au demandeur.`}
+                        confirmLabel={confirmState.decision === 'APPROVE' ? 'Proposer cette approbation' : 'Proposer ce rejet'}
                         danger={confirmState.decision === 'REJECT'}
                         requireReason
                         reasonLabel="Motif de la décision"
                         onClose={() => setConfirmState(null)}
-                        onConfirm={reason => runAction(`/vaults/${selectedId}/withdraw-requests/${confirmState.txId}/force-resolve`, 'POST', { decision: confirmState.decision, reason }, confirmState.decision === 'APPROVE' ? 'Retrait approuvé et exécuté.' : 'Retrait rejeté.')}
+                        onConfirm={reason => runAction(
+                            `/vaults/${selectedId}/withdraw-requests/${confirmState.txId}/force-resolve`,
+                            'POST',
+                            { decision: confirmState.decision, reason },
+                            // Maker/checker en deux appels (voir backend, admin.vaults.ts) : le
+                            // premier appel n'exécute rien, il ne fait qu'enregistrer la décision
+                            // proposée — le message doit refléter cet état réel, pas annoncer une
+                            // exécution qui n'a pas encore eu lieu.
+                            (data) => data?.pendingConfirmation
+                                ? 'Décision enregistrée — en attente de confirmation par un second responsable.'
+                                : (confirmState.decision === 'APPROVE' ? 'Retrait approuvé et exécuté.' : 'Retrait rejeté.')
+                        )}
                     />
                 )}
                 {confirmState?.type === 'void-voucher' && (

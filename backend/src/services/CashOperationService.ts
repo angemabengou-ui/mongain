@@ -5,6 +5,15 @@ import { getOrCreateCorporateWallet, sendPush } from '../routes/wallet';
 import { generateReference } from '../utils/reference';
 import { LimitEngine } from './LimitEngine';
 
+// Points de fidélité gagnés par le client à chaque Cash-In/Cash-Out agence complété — un des
+// deux mécanismes d'accrual de production ajoutés ici (voir aussi credit.ts/bnpl.ts pour le
+// contexte : loyalty.ts /simulate-earn, le seul writer existant de User.loyaltyPoints, est 404
+// hors dev, rendant l'éligibilité micro-crédit — seuil 100 points, credit.ts — inatteignable
+// pour un vrai client). 2 points par opération : un client actif atteint le seuil après ~50
+// opérations réelles, un usage répété plutôt qu'un geste unique, sans construire un moteur de
+// récompenses complet (hors périmètre ici).
+const LOYALTY_POINTS_PER_CASH_OP = 2;
+
 export class CashOperationService {
 
     /**
@@ -88,6 +97,14 @@ export class CashOperationService {
             await tx.wallet.update({
                 where: { id: client.wallet.id },
                 data: { balance: { increment: amount } }
+            });
+
+            // Accrual fidélité — voir constante LOYALTY_POINTS_PER_CASH_OP plus haut. Dans la
+            // même transaction que le crédit ci-dessus : un Cash-In qui échoue ne doit jamais
+            // laisser un gain de points fantôme.
+            await tx.user.update({
+                where: { id: client.id },
+                data: { loyaltyPoints: { increment: LOYALTY_POINTS_PER_CASH_OP } }
             });
 
             // 6. Enregistrement Transaction
@@ -224,61 +241,15 @@ export class CashOperationService {
             // service ne comptent pas dans le suivi AML du montant réellement déplacé.
             await LimitEngine.verifyAndIncrementConsumption(tx, client.id, client.wallet.id, amount, settings);
 
-            // 6. Anti-Fractionnement Check global (Toutes succursales confondues)
-            // Seule la branche BLOCK avait un effet réel : APPLY_FEE (pourtant la VALEUR PAR
-            // DÉFAUT en base, schema.prisma) et ALERT ne faisaient absolument rien — ni frais,
-            // ni alerte, ni RiskFlag — un fractionnement détecté passait alors normalement,
-            // rendant tout le contrôle anti-structuration inerte sur toute installation n'ayant
-            // pas explicitement basculé sur BLOCK.
+            // 6. Anti-Fractionnement Check global (Toutes succursales confondues) — logique
+            // extraite dans LimitEngine.checkAntiFractioning (voir ce fichier) pour être
+            // partagée avec /qr-cash-out et /client-initiated-withdraw (wallet.ts), qui
+            // n'appliquaient jusqu'ici aucune protection anti-structuration alors qu'ils
+            // déplacent eux aussi de l'argent vers du cash réel.
             const agencyRate = settings?.agencyTaxWithdraw ?? 0.01;
-            let antiFractioningPenalty = 0;
-            if (settings) {
-                const hours = settings.antiFractioningWindowHours || 24;
-                const windowEnd = new Date();
-                const windowStart = new Date(windowEnd.getTime() - hours * 3600 * 1000);
-
-                const pastOps = await tx.transaction.findMany({
-                    where: {
-                        senderWalletId: client.wallet.id,
-                        type: 'CASH_OUT',
-                        createdAt: { gte: windowStart }
-                    },
-                    select: { amount: true, branchId: true }
-                });
-
-                const totalPastAmount = pastOps.reduce((sum, t) => sum + t.amount, 0);
-                const combinedAmount = totalPastAmount + amount;
-
-                const uniqueBranches = new Set(pastOps.map(t => t.branchId).filter(Boolean));
-                uniqueBranches.add(branchId);
-
-                if (combinedAmount > settings.antiFractioningMaxAmount && (uniqueBranches.size > 1 || pastOps.length >= settings.antiFractioningMaxCount)) {
-                    const action = settings.antiFractioningAction;
-                    if (action === 'BLOCK') {
-                        await tx.riskFlag.create({
-                            data: {
-                                userId: client.id, authorId: tellerId, type: 'ANTI_FRACTIONING',
-                                description: `Action bloquage Cash-Out de ${amount} suite dépassement du seuil par cumul.`
-                            }
-                        });
-                        throw new Error("Opération rejetée : Politique d'Anti-Fractionnement activée.");
-                    } else if (action === 'ALERT' || action === 'APPLY_FEE') {
-                        await tx.riskFlag.create({
-                            data: {
-                                userId: client.id, authorId: tellerId, type: 'ANTI_FRACTIONING',
-                                description: `${action === 'ALERT' ? 'Alerte' : 'Frais dissuasif appliqué'} sur Cash-Out de ${amount} suite dépassement du seuil par cumul (${combinedAmount} FCFA cumulés).`
-                            }
-                        });
-                        if (action === 'APPLY_FEE') {
-                            // Même formule que le taux marginal agence ci-dessous (taux déjà
-                            // configurable par l'admin, pas une valeur inventée ici) : appliqué
-                            // au seul dépassement du seuil anti-fractionnement, en plus des frais
-                            // normaux calculés plus bas.
-                            antiFractioningPenalty = Math.round((combinedAmount - settings.antiFractioningMaxAmount) * agencyRate);
-                        }
-                    }
-                }
-            }
+            const antiFractioningPenalty = await LimitEngine.checkAntiFractioning(
+                tx, client.id, client.wallet.id, amount, branchId, tellerId, settings
+            );
 
             // 6. Facturation et Frais dynamiques — un guichet Staff/Agence (TellerTerminal)
             // applique le modèle Agence (gratuit jusqu'au seuil, puis un taux marginal sur
@@ -324,6 +295,13 @@ export class CashOperationService {
                 // (corporateWallet, plus haut) plutôt que re-cherché ici.
                 await tx.wallet.update({ where: { id: corporateWallet.id }, data: { balance: { increment: fee } } });
             }
+
+            // Accrual fidélité — voir constante LOYALTY_POINTS_PER_CASH_OP plus haut (même
+            // raisonnement que executeCashIn), dans la même transaction que le débit ci-dessus.
+            await tx.user.update({
+                where: { id: client.id },
+                data: { loyaltyPoints: { increment: LOYALTY_POINTS_PER_CASH_OP } }
+            });
 
             // 8. Opération transaction
             const transaction = await tx.transaction.create({

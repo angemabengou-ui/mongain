@@ -43,6 +43,7 @@ function buildDepositTx(overrides: Partial<Record<string, any>> = {}) {
             // pushToken truthy : c'est précisément le cas qui doit déclencher sendPush — un
             // client réel dont le téléphone a bien enregistré son token auprès du serveur.
             findUnique: jest.fn().mockResolvedValue({ id: 'client_1', accountStatus: 'ACTIVE', pushToken: 'ExponentPushToken[client]', wallet: { id: 'w_client', balance: 1000 } }),
+            update: jest.fn().mockResolvedValue({}),
         },
         wallet: { update: jest.fn().mockResolvedValue({}) },
         notification: { create: jest.fn().mockResolvedValue({}) },

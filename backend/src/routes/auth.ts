@@ -10,6 +10,7 @@ import { runKycVendorCheck } from '../services/kycVendorCheck';
 import { isSmsConfigured, sendSms } from '../services/sms';
 import { friendlyErrorMessage, isDbConnectivityError, withDbRetry } from '../utils/errors';
 import logger from '../utils/logger';
+import { verifyOtpAttempt } from '../utils/otpAuth';
 import { verifyUserPin } from '../utils/pinAuth';
 
 const router = Router();
@@ -170,7 +171,7 @@ const resetPinSchema = z.object({
 });
 
 // POST /api/auth/reset-pin
-router.post('/reset-pin', async (req, res) => {
+router.post('/reset-pin', loginLimiter, async (req, res) => {
     const parsed = resetPinSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
@@ -178,9 +179,8 @@ router.post('/reset-pin', async (req, res) => {
 
     try {
         const otpRecord = await prisma.verificationCode.findUnique({ where: { phone_purpose: { phone, purpose: 'RESET_PIN' } } });
-        if (!otpRecord || otpRecord.code !== otpCode || otpRecord.expiresAt < new Date()) {
-            return res.status(400).json({ error: 'Code expiré ou invalide.' });
-        }
+        const otpCheck = await verifyOtpAttempt(otpRecord, otpCode, 'Code expiré ou invalide.');
+        if (!otpCheck.ok) return res.status(otpCheck.status).json({ error: otpCheck.error });
 
         const hashedPin = await bcrypt.hash(newPin, 10);
         await prisma.verificationCode.delete({ where: { phone_purpose: { phone, purpose: 'RESET_PIN' } } });
@@ -205,7 +205,7 @@ router.post('/reset-pin', async (req, res) => {
 });
 
 // POST /api/auth/register
-router.post('/register', async (req, res) => {
+router.post('/register', loginLimiter, async (req, res) => {
     const parsed = registerSchema.safeParse(req.body);
     if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.issues[0].message });
@@ -215,9 +215,8 @@ router.post('/register', async (req, res) => {
 
     try {
         const otpRecord = await prisma.verificationCode.findUnique({ where: { phone_purpose: { phone, purpose: 'REGISTER' } } });
-        if (!otpRecord || otpRecord.code !== otpCode || otpRecord.expiresAt < new Date()) {
-            return res.status(400).json({ error: 'Code de vérification invalide ou expiré.' });
-        }
+        const otpCheck = await verifyOtpAttempt(otpRecord, otpCode, 'Code de vérification invalide ou expiré.');
+        if (!otpCheck.ok) return res.status(otpCheck.status).json({ error: otpCheck.error });
 
         const hashedPin = await bcrypt.hash(pin, 10);
         const accNum = '1000100001' + crypto.randomInt(10000000000, 100000000000).toString() + crypto.randomInt(10, 100).toString();
@@ -308,34 +307,22 @@ router.post('/login', loginLimiter, async (req, res) => {
             return res.status(400).json({ error: 'Numéro ou code PIN incorrect.' });
         }
 
-        if (user.lockedUntil && user.lockedUntil > new Date()) {
-            const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
-            return res.status(403).json({ error: `Compte sécurisé. Veuillez réessayer dans ${minutesLeft} minute(s).` });
-        }
-
-        const pinMatch = await bcrypt.compare(pin, user.pin);
-        if (!pinMatch) {
-            const attemptsInfo = user.failedPinAttempts + 1;
-            const updates: any = { failedPinAttempts: attemptsInfo };
-
-            if (attemptsInfo >= 3) {
-                updates.lockedUntil = new Date(Date.now() + 15 * 60000); // 15 minutes
-            }
-
-            await prisma.user.update({ where: { id: user.id }, data: updates });
-
-            // 400, pas 401 — voir commentaire ci-dessus (même correctif que /transfer).
-            return res.status(400).json({
-                error: attemptsInfo >= 3
+        // Verrouillage 3 échecs / 15 min délégué à verifyUserPin (utils/pinAuth.ts) — même
+        // logique que PUT /auth/pin, /transfer, etc., pour ne plus la réimplémenter ici.
+        // Messages/status personnalisés : identiques à ceux renvoyés par ce endpoint avant ce
+        // correctif (403 pour un compte déjà verrouillé, décompte des tentatives restantes),
+        // seul le calcul du compteur est désormais partagé.
+        const pinCheck = await verifyUserPin(user, pin, {
+            locked: (minutesLeft) => ({ status: 403, error: `Compte sécurisé. Veuillez réessayer dans ${minutesLeft} minute(s).` }),
+            wrong: (attempts, isLocked) => ({
+                status: 400,
+                error: isLocked
                     ? 'Compte bloqué suite à trop de tentatives.'
-                    : `Code PIN incorrect. Tentatives restantes : ${3 - attemptsInfo}`
-            });
-        }
-
-        await prisma.user.update({
-            where: { id: user.id },
-            data: { failedPinAttempts: 0, lockedUntil: null },
+                    : `Code PIN incorrect. Tentatives restantes : ${3 - attempts}`
+            }),
         });
+        // 400, pas 401 — voir commentaire ci-dessus (même correctif que /transfer).
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         // Mode démo jamais atteignable en production, même si isSmsConfigured est faux par
         // erreur de configuration : un code aléatoire non livrable est préférable à un code
@@ -376,7 +363,7 @@ const verifyLoginOtpSchema = z.object({
 });
 
 // POST /api/auth/verify-login-otp
-router.post('/verify-login-otp', async (req, res) => {
+router.post('/verify-login-otp', loginLimiter, async (req, res) => {
     const parsed = verifyLoginOtpSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message });
 
@@ -401,9 +388,8 @@ router.post('/verify-login-otp', async (req, res) => {
         if (!user) return res.status(404).json({ error: 'Compte introuvable.' });
 
         const otpRecord = await withDbRetry(() => prisma.verificationCode.findUnique({ where: { phone_purpose: { phone: user.phone, purpose: 'LOGIN' } } }));
-        if (!otpRecord || otpRecord.code !== otpCode || otpRecord.expiresAt < new Date()) {
-            return res.status(400).json({ error: 'Code OTP expiré ou invalide.' });
-        }
+        const otpCheck = await verifyOtpAttempt(otpRecord, otpCode, 'Code OTP expiré ou invalide.');
+        if (!otpCheck.ok) return res.status(otpCheck.status).json({ error: otpCheck.error });
 
         await prisma.verificationCode.delete({ where: { phone_purpose: { phone: user.phone, purpose: 'LOGIN' } } });
 
@@ -680,27 +666,16 @@ router.post('/verify-pin', authMiddleware, async (req: AuthRequest, res) => {
             return res.status(404).json({ error: 'Utilisateur non trouvé.' });
         }
 
-        if (user.lockedUntil && user.lockedUntil > new Date()) {
-            return res.status(403).json({ error: 'Compte temporairement verrouillé.' });
-        }
-
-        const pinMatch = await bcrypt.compare(pin, user.pin);
-
-        if (!pinMatch) {
-            const newAttempts = user.failedPinAttempts + 1;
-            const updateProps: any = { failedPinAttempts: newAttempts };
-            if (newAttempts >= 3) {
-                updateProps.lockedUntil = new Date(Date.now() + 15 * 60000); // Lock 15 mins
-            }
-            await prisma.user.update({ where: { id: user.id }, data: updateProps });
-
-            // 400, pas 401 — ce PIN protège le déverrouillage de l'app-lock (SecurityWrapper),
-            // pas le token JWT. Voir commentaire dans /login pour le détail de l'incident évité.
-            return res.status(400).json({ error: newAttempts >= 3 ? 'Compte bloqué.' : 'Code PIN incorrect.' });
-        }
-
-        // Reset attempts on success
-        await prisma.user.update({ where: { id: user.id }, data: { failedPinAttempts: 0, lockedUntil: null } });
+        // Verrouillage 3 échecs / 15 min délégué à verifyUserPin (utils/pinAuth.ts) — voir
+        // /login pour le même correctif. Messages/status inchangés (403 verrou déjà actif,
+        // messages génériques sur échec) pour ne rien changer côté client (SecurityWrapper).
+        const pinCheck = await verifyUserPin(user, pin, {
+            locked: () => ({ status: 403, error: 'Compte temporairement verrouillé.' }),
+            wrong: (_attempts, isLocked) => ({ status: 400, error: isLocked ? 'Compte bloqué.' : 'Code PIN incorrect.' }),
+        });
+        // 400, pas 401 — ce PIN protège le déverrouillage de l'app-lock (SecurityWrapper),
+        // pas le token JWT. Voir commentaire dans /login pour le détail de l'incident évité.
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         return res.json({ success: true });
     } catch (error) {

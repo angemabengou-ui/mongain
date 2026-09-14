@@ -3,7 +3,7 @@ import express from 'express';
 import helmet from 'helmet';
 import http from 'http';
 import { Server } from 'socket.io';
-import { executeTontineAutomations, initCronJobs } from './cron';
+import { checkOverdueBnpl, checkOverdueLoans, executeTontineAutomations, initCronJobs } from './cron';
 import adminRoutes from './routes/admin';
 import adminMerchantsRoutes from './routes/admin.merchants';
 import adminSearchRoutes from './routes/admin.search';
@@ -316,3 +316,11 @@ seedCorporateAccount();
 
 // CRON JOBS V17
 setInterval(() => { executeTontineAutomations().catch(console.error); }, 86400000); // Runs daily in Prod
+
+// CRON JOBS — Défaut de paiement (Loan/BNPL, audit sécurité). Intervalle plus court que
+// l'automation tontine ci-dessus (horaire plutôt que quotidien) : une échéance de crédit peut
+// être dépassée à n'importe quelle heure, et 24h de latence avant la détection retarderait
+// d'autant le blocage d'un client déjà en défaut (voir credit.ts computeCreditEligibility et
+// bnpl.ts, qui bloquent tout nouveau produit tant qu'une dette DEFAULTED existe).
+setInterval(() => { checkOverdueLoans().catch(console.error); }, 3600000); // Toutes les heures
+setInterval(() => { checkOverdueBnpl().catch(console.error); }, 3600000); // Toutes les heures

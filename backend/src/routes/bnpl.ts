@@ -3,7 +3,9 @@ import rateLimit from 'express-rate-limit';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
+import { hasDefaultedCreditDebt } from '../services/creditRisk';
 import { LimitEngine } from '../services/LimitEngine';
+import { getSystemAccount } from '../services/systemAccounts';
 import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
 import { generateReference } from '../utils/reference';
@@ -65,9 +67,10 @@ router.post('/apply', authMiddleware, moneyMovementLimiter, circuitBreakerMiddle
         // point d'application.
         if (user.role === 'CHILD') return res.status(403).json({ error: 'Cette fonctionnalité n\'est pas disponible pour les comptes enfant.' });
 
-        if (user.kycLevel < 1) {
-            return res.status(403).json({ error: "Validation KYC Premium requise pour débloquer le crédit." });
-        }
+        // Le niveau KYC est re-vérifié PLUS BAS, DANS la transaction (mirroring credit.ts
+        // /apply, computeCreditEligibility) plutôt qu'ici sur cet instantané pré-transaction :
+        // un rejet KYC compliance ou un gel de compte survenant entre ce point et l'ouverture
+        // de la transaction ne devait jamais être ignoré par la décision d'octroi réelle.
 
         const pinCheck = await verifyUserPin(user, pin);
         if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
@@ -100,31 +103,54 @@ router.post('/apply', authMiddleware, moneyMovementLimiter, circuitBreakerMiddle
             // l'exposition au-delà du plafond KYC prévu pour ce produit de microcrédit.
             await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${user.id}))`;
 
+            // Re-vérification DANS la transaction (comme credit.ts /apply,
+            // computeCreditEligibility, sur un `tx.user.findUnique` frais) : le contrôle KYC
+            // avant l'ouverture de cette transaction lisait un instantané qui pouvait être
+            // devenu obsolète (rejet KYC compliance, gel de compte) entre-temps.
+            const freshUser = await tx.user.findUnique({ where: { id: user.id }, include: { wallet: true } });
+            if (!freshUser || !freshUser.wallet) throw new Error("Utilisateur introuvable.");
+            if (freshUser.kycLevel < 1) {
+                throw new Error("Validation KYC Premium requise pour débloquer le crédit.");
+            }
+
+            // DEFAULTED inclus (en plus d'ACTIVE) : un contrat déjà en défaut de paiement doit
+            // continuer à bloquer un nouvel emprunt tant qu'il n'est pas régularisé.
             const existingDebt = await tx.bnplContract.findFirst({
-                where: { userId: user.id, status: 'ACTIVE' }
+                where: { userId: freshUser.id, status: { in: ['ACTIVE', 'DEFAULTED'] } }
             });
             if (existingDebt) {
-                throw new Error("Vous devez rembourser votre dette BNPL en cours avant d'emprunter à nouveau.");
+                throw new Error(existingDebt.status === 'DEFAULTED'
+                    ? "Votre précédent contrat BNPL est en défaut de paiement — contactez le support avant d'emprunter à nouveau."
+                    : "Vous devez rembourser votre dette BNPL en cours avant d'emprunter à nouveau.");
+            }
+
+            // Un micro-crédit (Loan, credit.ts) DEFAULTED bloque également un nouveau BNPL —
+            // pas seulement une dette du même produit (voir services/creditRisk.ts).
+            if (await hasDefaultedCreditDebt(freshUser.id, tx)) {
+                throw new Error("Un crédit Mongain est en défaut de paiement sur votre compte — contactez le support avant de souscrire un nouveau produit de crédit.");
             }
 
             // Plafonds AML/KYC — l'octroi d'un crédit était le seul mouvement de fonds de ce
             // fichier à ne passer par aucun contrôle de plafond.
-            await LimitEngine.verifyAndIncrementConsumption(tx, user.id, user.wallet!.id, requestedAmount, settings);
+            await LimitEngine.verifyAndIncrementConsumption(tx, freshUser.id, freshUser.wallet.id, requestedAmount, settings);
 
             // Unify Treasury provider
             const treasury = await tx.centralTreasury.findFirst({ include: { wallet: true } });
             if (!treasury) throw new Error("Les fonds de la trésorerie centrale sont inaccessibles.");
             if (treasury.wallet.balance < requestedAmount) throw new Error("Réserve système insuffisante.");
 
-            // Create Debt Contract
+            // Create Debt Contract — originalPrincipal (capital hors frais) figé ici pour que
+            // /repay puisse répartir chaque remboursement partiel entre capital et frais au
+            // prorata (voir BnplContract.originalPrincipal, schema.prisma).
             await tx.bnplContract.create({
                 data: {
-                    userId: user.id,
+                    userId: freshUser.id,
                     totalAmount: totalOwed,
                     remaining: totalOwed,
                     months: duration,
                     nextPaymentDate: nextPayment,
-                    status: 'ACTIVE'
+                    status: 'ACTIVE',
+                    originalPrincipal: requestedAmount
                 }
             });
 
@@ -135,7 +161,7 @@ router.post('/apply', authMiddleware, moneyMovementLimiter, circuitBreakerMiddle
             });
 
             await tx.wallet.update({
-                where: { id: user.wallet!.id },
+                where: { id: freshUser.wallet.id },
                 data: { balance: { increment: requestedAmount } }
             });
 
@@ -147,14 +173,14 @@ router.post('/apply', authMiddleware, moneyMovementLimiter, circuitBreakerMiddle
                     reference: generateReference('BNPL_IN'),
                     fee: 0,
                     senderWalletId: treasury.wallet.id,
-                    receiverWalletId: user.wallet!.id,
+                    receiverWalletId: freshUser.wallet.id,
                     idempotencyKey
                 }
             });
 
             await tx.notification.create({
                 data: {
-                    userId: user.id,
+                    userId: freshUser.id,
                     title: 'Crédit BNPL Approuvé',
                     body: `Félicitations, votre avance de ${requestedAmount} FCFA a été virée. Reste à devoir: ${totalOwed} FCFA.`,
                     type: 'SYSTEM'
@@ -232,8 +258,18 @@ router.post('/repay', authMiddleware, moneyMovementLimiter, circuitBreakerMiddle
 
             if (user.wallet!.balance < effectiveRepay) throw new Error("Solde insuffisant pour le remboursement.");
 
-            // Pull to Treasury
             const treasury = await tx.centralTreasury.findFirst({ include: { wallet: true } });
+            if (!treasury) throw new Error("Les fonds de la trésorerie centrale sont inaccessibles.");
+
+            // Répartition capital/frais au prorata du contrat d'origine — comme credit.ts
+            // /repay (principal -> Trésorerie, intérêts -> Corporate), au lieu de router 100%
+            // du remboursement vers la Trésorerie quels que soient les frais BNPL inclus dans
+            // totalAmount. `originalPrincipal` (figé à /apply) donne le capital hors frais ;
+            // repli sur l'ancien comportement (100% Trésorerie) pour les contrats créés avant
+            // l'ajout de cette colonne, où l'on ne peut pas deviner la répartition d'origine.
+            const originalFee = debt.originalPrincipal != null ? debt.totalAmount - debt.originalPrincipal : 0;
+            const feePortion = originalFee > 0 ? Math.round(effectiveRepay * (originalFee / debt.totalAmount)) : 0;
+            const principalPortion = effectiveRepay - feePortion;
 
             await tx.wallet.update({
                 where: { id: user.wallet!.id, balance: { gte: effectiveRepay } },
@@ -241,30 +277,50 @@ router.post('/repay', authMiddleware, moneyMovementLimiter, circuitBreakerMiddle
             });
 
             await tx.wallet.update({
-                where: { id: treasury!.wallet.id },
-                data: { balance: { increment: effectiveRepay } }
+                where: { id: treasury.wallet.id },
+                data: { balance: { increment: principalPortion } }
             });
+
+            if (feePortion > 0) {
+                const corporate = await getSystemAccount('CORPORATE', tx);
+                await tx.wallet.update({
+                    where: { id: corporate.walletId },
+                    data: { balance: { increment: feePortion } }
+                });
+            }
 
             await tx.transaction.create({
                 data: {
                     type: 'SYSTEM',
-                    amount: effectiveRepay,
+                    amount: principalPortion,
+                    fee: feePortion,
                     status: 'COMPLETED',
                     reference: generateReference('BNPL_OUT'),
-                    fee: 0,
                     senderWalletId: user.wallet!.id,
-                    receiverWalletId: treasury!.wallet.id,
+                    receiverWalletId: treasury.wallet.id,
                     idempotencyKey
                 }
             });
 
-            // Amortization tracking
+            // Amortization tracking — nextPaymentDate avancée d'un mois à chaque remboursement
+            // (partiel ou total) qui laisse le contrat ACTIVE : jusqu'ici cette date n'était
+            // JAMAIS relue après /apply, rendant "l'échéancier" décoratif (voir
+            // services/creditRisk.ts, checkOverdueBnplContracts, qui bascule désormais en
+            // DEFAULTED tout contrat ACTIVE dont nextPaymentDate est dépassée). BnplContract ne
+            // modélise pas de plan de mensualités individuelles (seul un total `remaining` est
+            // suivi) : avancer la prochaine échéance à chaque paiement reçu est l'interprétation
+            // la plus simple compatible avec ce modèle — un client qui paie régulièrement, même
+            // partiellement, ne se fait donc jamais défaillir tant qu'il respecte ce rythme.
             const newRemaining = debt.remaining - effectiveRepay;
+            const stillActive = newRemaining > 0;
+            const nextPaymentDate = new Date();
+            nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
             await tx.bnplContract.update({
                 where: { id: debt.id },
                 data: {
                     remaining: newRemaining,
-                    status: newRemaining <= 0 ? 'CLOSED' : 'ACTIVE'
+                    status: stillActive ? 'ACTIVE' : 'CLOSED',
+                    ...(stillActive ? { nextPaymentDate } : {})
                 }
             });
             return true;

@@ -16,6 +16,11 @@ jest.mock('../../prisma', () => ({
         wallet: { findUnique: jest.fn() },
         notification: { create: jest.fn(), createMany: jest.fn() },
         $transaction: jest.fn(),
+        // Verrou consultatif Postgres pris par executeTontineCycle (voir services/tontineService.ts) —
+        // acquis (lock) puis relâché (unlock) via deux appels $queryRaw distincts, tous deux mockés
+        // ici pour se comporter comme si le verrou était toujours immédiatement disponible ; le test
+        // dédié à l'échec d'acquisition (plus bas) surcharge ce mock ponctuellement.
+        $queryRaw: jest.fn().mockResolvedValue([{ locked: true }]),
     },
 }));
 
@@ -26,6 +31,10 @@ jest.mock('../../routes/settings', () => ({
 jest.mock('../../routes/wallet', () => ({
     sendPush: jest.fn(),
     getOrCreateCorporateWallet: jest.fn().mockResolvedValue({ wallet: { id: 'w_corporate', balance: 0 } }),
+    // No-op côté test : le comportement réel (n'alerte que si le débiteur est un compte
+    // CHILD) est déjà couvert par les tests de wallet.ts lui-même — ici on vérifie seulement
+    // que collectParticipantContribution l'appelle bien, pas sa logique interne.
+    notifyParentOfChildSpend: jest.fn(),
 }));
 
 jest.mock('../LimitEngine', () => ({

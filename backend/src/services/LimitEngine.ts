@@ -287,18 +287,107 @@ export class LimitEngine {
     }
 
     /**
+     * Anti-Fractionnement (Structuration) — extrait de CashOperationService.executeCashOut
+     * pour être partagé par TOUS les rails de cash-out (retrait guichet Staff, /qr-cash-out et
+     * /client-initiated-withdraw dans wallet.ts) : seul executeCashOut appliquait jusqu'ici
+     * cette protection, laissant les deux autres rails totalement ouverts au fractionnement
+     * (structuring) d'un retrait sur plusieurs opérations/agences pour rester sous le radar.
+     *
+     * `authorId` (Staff.id) est utilisé comme auteur du RiskFlag créé en cas d'ALERT/BLOCK/
+     * APPLY_FEE — RiskFlag.authorId est une FK vers Staff (jamais vers User), donc `null`
+     * doit être passé depuis les rails self-service (aucun Staff impliqué, ex: retrait chez
+     * un Agent/Commerçant initié par le client lui-même) : le blocage et la pénalité
+     * s'appliquent alors identiquement, seule la trace RiskFlag (best-effort, réservée aux
+     * guichets tenus par un Staff) est omise faute d'auteur valide.
+     */
+    static async checkAntiFractioning(
+        tx: any,
+        clientId: string,
+        walletId: string,
+        amount: number,
+        branchId: string | null | undefined,
+        authorId: string | null | undefined,
+        settings: any
+    ): Promise<number> {
+        if (!settings) return 0;
+
+        const hours = settings.antiFractioningWindowHours || 24;
+        const windowEnd = new Date();
+        const windowStart = new Date(windowEnd.getTime() - hours * 3600 * 1000);
+
+        const pastOps = await tx.transaction.findMany({
+            where: {
+                senderWalletId: walletId,
+                type: 'CASH_OUT',
+                createdAt: { gte: windowStart }
+            },
+            select: { amount: true, branchId: true }
+        });
+
+        const totalPastAmount = pastOps.reduce((sum: number, t: any) => sum + t.amount, 0);
+        const combinedAmount = totalPastAmount + amount;
+
+        const uniqueBranches = new Set(pastOps.map((t: any) => t.branchId).filter(Boolean));
+        if (branchId) uniqueBranches.add(branchId);
+
+        let penalty = 0;
+        if (combinedAmount > settings.antiFractioningMaxAmount && (uniqueBranches.size > 1 || pastOps.length >= settings.antiFractioningMaxCount)) {
+            const action = settings.antiFractioningAction;
+            if (action === 'BLOCK') {
+                if (authorId) {
+                    await tx.riskFlag.create({
+                        data: {
+                            userId: clientId, authorId, type: 'ANTI_FRACTIONING',
+                            description: `Action bloquage Cash-Out de ${amount} suite dépassement du seuil par cumul.`
+                        }
+                    });
+                }
+                throw new Error("Opération rejetée : Politique d'Anti-Fractionnement activée.");
+            } else if (action === 'ALERT' || action === 'APPLY_FEE') {
+                if (authorId) {
+                    await tx.riskFlag.create({
+                        data: {
+                            userId: clientId, authorId, type: 'ANTI_FRACTIONING',
+                            description: `${action === 'ALERT' ? 'Alerte' : 'Frais dissuasif appliqué'} sur Cash-Out de ${amount} suite dépassement du seuil par cumul (${combinedAmount} FCFA cumulés).`
+                        }
+                    });
+                }
+                if (action === 'APPLY_FEE') {
+                    // Même taux marginal agence que calculateWithdrawalFee/executeCashOut (taux
+                    // déjà configurable par l'admin, pas une valeur inventée ici) : appliqué au
+                    // seul dépassement du seuil anti-fractionnement.
+                    const agencyRate = settings?.agencyTaxWithdraw ?? 0.01;
+                    penalty = Math.round((combinedAmount - settings.antiFractioningMaxAmount) * agencyRate);
+                }
+            }
+        }
+        return penalty;
+    }
+
+    /**
      * Anti-Fractionnement (Taxation centralisée)
      * Calcule la taxe sur un retrait en tenant compte du cumul journalier du client.
      * Si le client a déjà épuisé son quota gratuit du jour, TOUT nouveau retrait est taxé.
      */
     static async calculateWithdrawalFee(tx: any, walletId: string, amount: number, settings: any): Promise<number> {
-        const startOfDay = new Date();
-        startOfDay.setHours(0, 0, 0, 0);
+        // Fuseau CONFIGURÉ (SystemSettings.timezone), jamais l'heure locale du process
+        // serveur (UTC sur Render) — même bug et même correctif que verifyAndIncrementConsumption
+        // ci-dessus : `new Date(); setHours(0,0,0,0)` calculait minuit heure SERVEUR, décalé
+        // jusqu'à 1h de minuit à Libreville, faisant démarrer/finir le cumul journalier des
+        // frais de retrait jusqu'à 1h trop tôt ou trop tard par rapport à la journée réelle.
+        const timezone = settings?.timezone || 'Africa/Libreville';
+        const startOfDay = startOfDayInTimezone(timezone, new Date());
 
         const todaysWithdrawals = await tx.transaction.aggregate({
             where: {
                 senderWalletId: walletId,
-                reference: { startsWith: 'QROUT' }, // Both client-initiated and agent-initiated use QROUT or similar
+                // `type: 'CASH_OUT'` (posé par TOUS les rails de retrait — executeCashOut,
+                // /qr-cash-out, /client-initiated-withdraw, /push) au lieu de l'ancien
+                // `reference: { startsWith: 'QROUT' }`, qui n'était en réalité écrit que par
+                // /qr-cash-out : les retraits AGENT de /client-initiated-withdraw (référence
+                // par défaut, sans préfixe QROUT) ne comptaient donc jamais dans ce cumul
+                // journalier, permettant de contourner le seuil de frais en alternant les rails.
+                type: 'CASH_OUT',
                 createdAt: { gte: startOfDay },
                 status: 'COMPLETED'
             },

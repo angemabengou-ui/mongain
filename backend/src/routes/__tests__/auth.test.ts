@@ -8,7 +8,7 @@ import authRoutes from '../auth';
 jest.mock('../../prisma', () => ({
     prisma: {
         user: { findUnique: jest.fn(), findFirst: jest.fn(), create: jest.fn(), update: jest.fn() },
-        verificationCode: { count: jest.fn(), upsert: jest.fn(), findUnique: jest.fn(), delete: jest.fn() },
+        verificationCode: { count: jest.fn(), upsert: jest.fn(), findUnique: jest.fn(), update: jest.fn(), delete: jest.fn() },
     },
 }));
 
@@ -57,6 +57,39 @@ describe('Auth Routes', () => {
 
             expect(res.status).toBe(400);
             expect(res.body.error).toBe('Code de vérification invalide ou expiré.');
+        });
+    });
+
+    describe('POST /auth/verify-login-otp', () => {
+        it('grille le code après 5 tentatives erronées (VUL-01 : compteur anti brute-force par code), même si le bon code est finalement soumis', async () => {
+            const user = { id: 'u1', phone: '+24166123456', role: 'CLIENT', wallet: null, username: 'tester', email: null, name: 'Test' };
+            (prisma.user.findFirst as jest.Mock).mockResolvedValue(user);
+
+            // Simule VerificationCode.attempts persistant en base : findUnique renvoie l'état
+            // courant, update incrémente ce même état — comme le ferait Prisma/Postgres.
+            let attempts = 0;
+            (prisma.verificationCode.findUnique as jest.Mock).mockImplementation(() => Promise.resolve({
+                id: 'otp1', code: '1234', expiresAt: new Date(Date.now() + 5 * 60 * 1000), attempts,
+            }));
+            (prisma.verificationCode.update as jest.Mock).mockImplementation(({ data }: any) => {
+                attempts += data.attempts.increment;
+                return Promise.resolve({});
+            });
+            (prisma.verificationCode.delete as jest.Mock).mockResolvedValue({});
+
+            for (let i = 0; i < 5; i++) {
+                const res = await request(app).post('/auth/verify-login-otp').send({ phone: '066123456', otpCode: '0000' });
+                expect(res.status).toBe(400);
+            }
+
+            // 6e essai : même en soumettant enfin le VRAI code, le compteur (5 échecs déjà
+            // enregistrés) rejette la tentative au lieu de la laisser passer indéfiniment.
+            const finalRes = await request(app).post('/auth/verify-login-otp').send({ phone: '066123456', otpCode: '1234' });
+            expect(finalRes.status).toBe(400);
+            expect(finalRes.body.error).toMatch(/tentatives/i);
+            expect(prisma.verificationCode.delete).toHaveBeenCalledWith({ where: { id: 'otp1' } });
+            // Le compte n'a jamais été authentifié malgré le bon code au 6e essai.
+            expect(prisma.user.update).not.toHaveBeenCalled();
         });
     });
 

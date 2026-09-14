@@ -3,10 +3,12 @@ import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
 import { getCentralTreasury } from '../services/centralTreasury';
+import { hasDefaultedCreditDebt } from '../services/creditRisk';
 import { LimitEngine } from '../services/LimitEngine';
 import { getSystemAccount } from '../services/systemAccounts';
 import { friendlyErrorMessage } from '../utils/errors';
 import { verifyUserPin } from '../utils/pinAuth';
+import { computeUserScore } from './scoring';
 import { getSystemSettings } from './settings';
 import { notifyParentOfChildSpend } from './wallet';
 
@@ -17,12 +19,25 @@ import { notifyParentOfChildSpend } from './wallet';
 
 const router = express.Router();
 
-// Algo IA de décision simple : KYC 1+ et Points de fidélité >= 100. Extrait en fonction
-// partagée : /apply recalculait ces mêmes règles indépendamment et avait dérivé — plus de
-// seuil de 100 points, plus de plafond à 500k — laissant passer des prêts que /eligibility
-// annonçait pourtant refusés ou plafonnés.
-function computeCreditEligibility(user: { kycLevel: number; loyaltyPoints: number }) {
-    const eligible = user.kycLevel >= 1 && user.loyaltyPoints >= 100;
+// Durée par défaut d'un micro-crédit — aucune durée métier n'est définie ailleurs dans le
+// code ni la documentation produit ; 30 jours est une valeur de repli raisonnable pour un
+// produit de MICRO-crédit à ce montant (max 500 000 FCFA), à ajuster si une durée officielle
+// est un jour fixée côté produit.
+const LOAN_TERM_DAYS = 30;
+
+// Score minimum requis pour obtenir un crédit — aligné sur le seuil "High Risk" déjà défini
+// par scoring.ts (score < 400 => tier 'High Risk' dans GET /admin/v6/scoring) : un compte
+// classé High Risk par ce même algorithme ne doit pas non plus pouvoir obtenir de crédit réel.
+const MIN_CREDIT_SCORE = 400;
+
+// Algo IA de décision simple : KYC 1+, Points de fidélité >= 100, ET score de risque
+// (scoring.ts, jusqu'ici analytics admin-only jamais consommé par une décision réelle) au-
+// dessus du seuil High Risk, et aucune dette (Loan OU BnplContract) actuellement DEFAULTED.
+// Extrait en fonction partagée : /apply recalculait ces mêmes règles indépendamment et avait
+// dérivé — plus de seuil de 100 points, plus de plafond à 500k — laissant passer des prêts que
+// /eligibility annonçait pourtant refusés ou plafonnés.
+function computeCreditEligibility(user: { kycLevel: number; loyaltyPoints: number }, score: number, hasDefaultedDebt: boolean) {
+    const eligible = !hasDefaultedDebt && user.kycLevel >= 1 && user.loyaltyPoints >= 100 && score >= MIN_CREDIT_SCORE;
     let maxAmount = 0;
     if (eligible) {
         maxAmount = 50000 + (user.loyaltyPoints * 50); // E.g., 100 points = 55,000 FCFA
@@ -43,7 +58,9 @@ router.get('/eligibility', authMiddleware, async (req: AuthRequest, res) => {
             return res.status(403).json({ eligible: false, message: 'Compte inactif.' });
         }
 
-        const { eligible: isEligible, maxAmount } = computeCreditEligibility(user);
+        const score = computeUserScore(user);
+        const hasDefaultedDebt = await hasDefaultedCreditDebt(user.id);
+        const { eligible: isEligible, maxAmount } = computeCreditEligibility(user, score, hasDefaultedDebt);
 
         // Taux fixe V14
         const interestRate = 0.05;
@@ -113,13 +130,24 @@ router.post('/apply', authMiddleware, circuitBreakerMiddleware, async (req: Auth
             // et recalculait maxAmount sans jamais appliquer le plafond de 500 000 FCFA :
             // un utilisateur inéligible (< 100 points) pouvait quand même obtenir 50 000 FCFA,
             // et un utilisateur très fidèle pouvait obtenir plus du double du plafond annoncé.
-            const { eligible, maxAmount } = computeCreditEligibility(user);
-            if (!eligible) throw new Error('Vous n\'êtes pas éligible au crédit (KYC Niveau 1 et 100 points de fidélité minimum requis).');
+            // Score et dette DEFAULTED recalculés DANS la transaction (pas seulement au moment
+            // de GET /eligibility) : sans ça, un utilisateur pouvait consulter son éligibilité
+            // juste avant qu'un prêt ne bascule en DEFAULTED (job périodique, voir
+            // services/creditRisk.ts) puis soumettre /apply sur la base de l'ancien état.
+            const score = computeUserScore(user);
+            const hasDefaultedDebt = await hasDefaultedCreditDebt(user.id, tx);
+            const { eligible, maxAmount } = computeCreditEligibility(user, score, hasDefaultedDebt);
+            if (!eligible) throw new Error('Vous n\'êtes pas éligible au crédit (KYC Niveau 1, 100 points de fidélité minimum, score de risque suffisant, et aucune dette en défaut requis).');
 
+            // DEFAULTED inclus (en plus d'ACTIVE) : un prêt déjà en défaut de paiement doit
+            // continuer à bloquer un nouveau crédit tant qu'il n'est pas régularisé — un
+            // simple `status: 'ACTIVE'` laissait un prêt DEFAULTED silencieusement ignoré ici
+            // (déjà redondant avec le garde hasDefaultedDebt ci-dessus, gardé en défense en
+            // profondeur sur le même champ que l'ancien contrôle).
             const activeLoans = await tx.loan.count({
-                where: { userId: req.userId, status: 'ACTIVE' }
+                where: { userId: req.userId, status: { in: ['ACTIVE', 'DEFAULTED'] } }
             });
-            if (activeLoans > 0) throw new Error('Vous avez déjà un crédit en cours.');
+            if (activeLoans > 0) throw new Error('Vous avez déjà un crédit en cours ou en défaut de paiement.');
 
             if (amount > maxAmount) {
                 throw new Error(`Montant non autorisé. Vous êtes éligible jusqu'à ${maxAmount} FCFA.`);
@@ -134,13 +162,18 @@ router.post('/apply', authMiddleware, circuitBreakerMiddleware, async (req: Auth
             const interestRate = 0.05;
             const totalOwed = amount + Math.round(amount * interestRate);
 
-            // 1. Création du contrat de prêt
+            // 1. Création du contrat de prêt — dueDate posée ici (voir LOAN_TERM_DAYS) :
+            // sans échéance, le statut DEFAULTED était inatteignable (aucun job ne pouvait
+            // jamais savoir qu'un prêt était en retard). Voir services/creditRisk.ts
+            // (checkOverdueLoans, appelé périodiquement depuis index.ts).
+            const dueDate = new Date(Date.now() + LOAN_TERM_DAYS * 24 * 60 * 60 * 1000);
             const loan = await tx.loan.create({
                 data: {
                     userId: user.id,
                     amount,
                     interestRate,
-                    totalOwed
+                    totalOwed,
+                    dueDate
                 }
             });
 

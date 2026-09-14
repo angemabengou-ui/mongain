@@ -10,15 +10,36 @@ type PinCheckSubject = {
 
 type PinCheckResult = { ok: true } | { ok: false; status: number; error: string };
 
+// Messages/status personnalisables par appelant, sans dupliquer la logique de verrouillage
+// elle-même. Paramètre optionnel (valeur par défaut = comportement historique de cette
+// fonction, utilisé tel quel par PUT /auth/pin) : ajouté pour que /login et /verify-pin
+// (routes/auth.ts) puissent déléguer tout le calcul (compteur, seuil, durée du verrou) à cette
+// fonction unique tout en renvoyant EXACTEMENT le même statut HTTP / texte d'erreur qu'avant
+// leur propre logique dupliquée — la seule chose éliminée est la duplication du calcul, pas le
+// contrat déjà observé par les clients existants (app mobile).
+export type PinCheckMessages = {
+    locked: (minutesLeft: number) => { status: number; error: string };
+    wrong: (attempts: number, isLocked: boolean) => { status: number; error: string };
+};
+
+const defaultMessages: PinCheckMessages = {
+    locked: () => ({ status: 400, error: 'Votre compte est temporairement bloqué suite à plusieurs échecs. Réessayez plus tard.' }),
+    wrong: (attempts, isLocked) => isLocked
+        ? { status: 400, error: 'Compte bloqué (3 échecs). Réessayez dans 15 minutes.' }
+        : { status: 400, error: `Code PIN incorrect. Tentative ${attempts}/3.` },
+};
+
 // Vérification centralisée du PIN client (verrouillage 3 échecs / 15 min). Plusieurs
 // endpoints authentifiés (transfert, retrait...) réimplémentaient ce contrôle indépendamment
 // et certains (PUT /auth/pin, /wallet/qr-cash-out, /services/pay-bill, /services/topup)
 // l'avaient tout simplement omis : bcrypt.compare seul, sans lire lockedUntil ni incrémenter
 // failedPinAttempts, ce qui permettait de brute-forcer l'espace à 4 chiffres (10 000
 // combinaisons) sans aucun verrou dès qu'une session valide était compromise.
-export async function verifyUserPin(user: PinCheckSubject, pin: string): Promise<PinCheckResult> {
+export async function verifyUserPin(user: PinCheckSubject, pin: string, messages: PinCheckMessages = defaultMessages): Promise<PinCheckResult> {
     if (user.lockedUntil && user.lockedUntil > new Date()) {
-        return { ok: false, status: 400, error: 'Votre compte est temporairement bloqué suite à plusieurs échecs. Réessayez plus tard.' };
+        const minutesLeft = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60000);
+        const m = messages.locked(minutesLeft);
+        return { ok: false, status: m.status, error: m.error };
     }
 
     const pinMatch = await bcrypt.compare(pin, user.pin);
@@ -32,8 +53,8 @@ export async function verifyUserPin(user: PinCheckSubject, pin: string): Promise
             data: { failedPinAttempts: attempts, lockedUntil },
         });
 
-        if (isLocked) return { ok: false, status: 400, error: 'Compte bloqué (3 échecs). Réessayez dans 15 minutes.' };
-        return { ok: false, status: 400, error: `Code PIN incorrect. Tentative ${attempts}/3.` };
+        const m = messages.wrong(attempts, isLocked);
+        return { ok: false, status: m.status, error: m.error };
     }
 
     if (user.failedPinAttempts > 0) {

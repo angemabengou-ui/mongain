@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { checkOverdueBnplContracts, checkOverdueLoans as checkOverdueLoansRisk } from './services/creditRisk';
 import { executeTontineCycle, notifyUpcomingCycle, resolveRenewalPoll } from './services/tontineService';
 import logger from './utils/logger';
 
@@ -84,6 +85,35 @@ export async function executeTontineAutomations() {
     }
 }
 
+/**
+ * Fait basculer en DEFAULTED les micro-crédits (Loan) dont l'échéance (dueDate, voir
+ * credit.ts /apply) est dépassée sans remboursement, et notifie le client concerné. Logique
+ * réelle dans services/creditRisk.ts (partagée avec checkOverdueBnpl ci-dessous pour éviter de
+ * dupliquer le couple transition/notification) — cette fonction n'est qu'un point d'entrée
+ * nommé, au même niveau que executeTontineAutomations, pour le wiring setInterval de index.ts.
+ */
+export async function checkOverdueLoans() {
+    logger.info('[Credit Risk] Vérification des prêts en retard...');
+    try {
+        await checkOverdueLoansRisk();
+    } catch (e: any) {
+        logger.error(`[Credit Risk Loans Error] ${e.message}`);
+    }
+}
+
+/**
+ * Même automation que checkOverdueLoans ci-dessus, pour les contrats BNPL (BnplContract) dont
+ * la prochaine échéance (nextPaymentDate) est dépassée avec un solde restant dû.
+ */
+export async function checkOverdueBnpl() {
+    logger.info('[Credit Risk] Vérification des contrats BNPL en retard...');
+    try {
+        await checkOverdueBnplContracts();
+    } catch (e: any) {
+        logger.error(`[Credit Risk BNPL Error] ${e.message}`);
+    }
+}
+
 export const initCronJobs = () => {
-    logger.info('[CRON] Prêt — executeTontineAutomations est déclenché par le setInterval(24h) de index.ts.');
+    logger.info('[CRON] Prêt — executeTontineAutomations/checkOverdueLoans/checkOverdueBnpl sont déclenchés par les setInterval() de index.ts.');
 };

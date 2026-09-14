@@ -1,4 +1,3 @@
-import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { Expo } from 'expo-server-sdk';
 import { Router } from 'express';
@@ -146,13 +145,30 @@ const moneyMovementLimiter = rateLimit({
 
 router.post('/generate-withdraw-code', authMiddleware, async (req: AuthRequest, res) => {
     try {
-        const { amount } = req.body;
+        const { amount, pin } = req.body;
         if (!amount || typeof amount !== 'number' || amount <= 0) {
             return res.status(400).json({ error: 'Montant invalide.' });
+        }
+        if (!pin || typeof pin !== 'string' || pin.length !== 4) {
+            return res.status(400).json({ error: 'Code PIN invalide.' });
         }
 
         const user = await prisma.user.findUnique({ where: { id: req.userId } });
         if (!user) return res.status(404).json({ error: 'User not found' });
+
+        // Garde de canal : ce code est ensuite saisi par un agent (POST /agency/cash-out-code)
+        // pour déclencher un vrai retrait de cash via CashOperationService.executeCashOut —
+        // même contrôle que /transfer, /client-initiated-withdraw, /qr-cash-out et /push.
+        if (isGiantMerchant(user)) {
+            return res.status(403).json({ error: GIANT_MOBILE_BLOCK_ERROR });
+        }
+
+        // Vérification du PIN (avec verrouillage 3 échecs/15min) avant d'émettre un code
+        // redeemable pour un retrait réel — absente jusqu'ici, ce qui permettait de générer
+        // un code de retrait sans jamais prouver la possession du PIN. Même helper et même
+        // convention que /qr-cash-out ci-dessous.
+        const pinCheck = await verifyUserPin(user, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         const code = crypto.randomInt(100000, 1000000).toString(); // 6 digits
         const dbCode = `${code}:${amount}`;
@@ -268,8 +284,18 @@ router.post('/qr-cash-out', authMiddleware, moneyMovementLimiter, async (req: Au
             // en retirant via QR guichet plutôt que par un transfert P2P classique.
             await LimitEngine.verifyAndIncrementConsumption(tx, client.id, client.wallet!.id, amount, settings);
 
+            // Anti-Fractionnement (structuration) : même contrôle que
+            // CashOperationService.executeCashOut (retrait guichet côté Staff) — absent ici
+            // jusqu'ici alors que ce rail déplace lui aussi de l'argent vers du cash réel en
+            // agence. authorId = activeSession.tellerId : le Staff qui supervise physiquement
+            // ce guichet, seul acteur disponible ici pour tracer un éventuel RiskFlag (FK vers
+            // Staff) — voir LimitEngine.checkAntiFractioning.
+            const antiFractioningPenalty = await LimitEngine.checkAntiFractioning(
+                tx, client.id, client.wallet!.id, amount, branch.id, activeSession.tellerId, settings
+            );
+
             // Calcul de frais basé sur le cumul (DOIT être dans $transaction pour l'intégrité)
-            const feeAmount = await LimitEngine.calculateWithdrawalFee(tx, client.wallet!.id, amount, settings);
+            const feeAmount = (await LimitEngine.calculateWithdrawalFee(tx, client.wallet!.id, amount, settings)) + antiFractioningPenalty;
             const totalDebit = amount + feeAmount;
 
             if (client.wallet!.balance < totalDebit) {
@@ -287,7 +313,7 @@ router.post('/qr-cash-out', authMiddleware, moneyMovementLimiter, async (req: Au
             }
 
             await tx.transaction.create({
-                data: { senderWalletId: client.wallet!.id, receiverWalletId: branch.wallet!.id, amount: amount, fee: feeAmount, status: 'COMPLETED', reference: generateReference('QROUT'), idempotencyKey }
+                data: { senderWalletId: client.wallet!.id, receiverWalletId: branch.wallet!.id, amount: amount, fee: feeAmount, status: 'COMPLETED', type: 'CASH_OUT', reference: generateReference('QROUT'), idempotencyKey }
             });
 
             await tx.branch.update({ where: { id: branch.id, balance: { gte: amount } }, data: { balance: { decrement: amount } } });
@@ -586,28 +612,10 @@ router.post('/transfer', authMiddleware, moneyMovementLimiter, async (req: AuthR
             return res.status(403).json({ error: GIANT_MOBILE_BLOCK_ERROR });
         }
 
-        if (senderPreCheck.lockedUntil && senderPreCheck.lockedUntil > new Date()) {
-            return res.status(400).json({ error: 'Votre compte est temporairement bloqué suite à plusieurs échecs. Réessayez plus tard.' });
-        }
-
-        const pinMatch = await bcrypt.compare(pin, senderPreCheck.pin);
-        if (!pinMatch) {
-            const attempts = senderPreCheck.failedPinAttempts + 1;
-            const isLocked = attempts >= 3;
-            const lockedUntil = isLocked ? new Date(Date.now() + 15 * 60 * 1000) : null;
-
-            await prisma.user.update({
-                where: { id: senderPreCheck.id },
-                data: { failedPinAttempts: attempts, lockedUntil }
-            });
-
-            if (isLocked) return res.status(400).json({ error: 'Compte bloqué (3 échecs). Réessayez dans 15 minutes.' });
-            return res.status(400).json({ error: `Code PIN incorrect. Tentative ${attempts}/3.` });
-        }
-
-        if (senderPreCheck.failedPinAttempts > 0) {
-            await prisma.user.update({ where: { id: senderPreCheck.id }, data: { failedPinAttempts: 0, lockedUntil: null } });
-        }
+        // Vérification centralisée du PIN (verrouillage 3 échecs/15min inclus) — voir
+        // utils/pinAuth.ts, même helper et même convention que /qr-cash-out.
+        const pinCheck = await verifyUserPin(senderPreCheck, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         const result = await prisma.$transaction(async (tx) => {
             // Idempotence : un double-tap ou un retry réseau avec la même idempotencyKey ne
@@ -814,28 +822,10 @@ router.post('/client-initiated-withdraw', authMiddleware, moneyMovementLimiter, 
             return res.status(403).json({ error: GIANT_MOBILE_BLOCK_ERROR });
         }
 
-        if (senderPreCheck.lockedUntil && senderPreCheck.lockedUntil > new Date()) {
-            return res.status(400).json({ error: 'Votre compte est temporairement bloqué suite à plusieurs échecs. Réessayez plus tard.' });
-        }
-
-        const pinMatchPreCheck = await bcrypt.compare(pin, senderPreCheck.pin);
-        if (!pinMatchPreCheck) {
-            const attempts = senderPreCheck.failedPinAttempts + 1;
-            const isLocked = attempts >= 3;
-            const lockedUntil = isLocked ? new Date(Date.now() + 15 * 60 * 1000) : null;
-
-            await prisma.user.update({
-                where: { id: senderPreCheck.id },
-                data: { failedPinAttempts: attempts, lockedUntil }
-            });
-
-            if (isLocked) return res.status(400).json({ error: 'Compte bloqué (3 échecs). Réessayez dans 15 minutes.' });
-            return res.status(400).json({ error: `Code PIN incorrect. Tentative ${attempts}/3.` });
-        }
-
-        if (senderPreCheck.failedPinAttempts > 0) {
-            await prisma.user.update({ where: { id: senderPreCheck.id }, data: { failedPinAttempts: 0, lockedUntil: null } });
-        }
+        // Vérification centralisée du PIN (verrouillage 3 échecs/15min inclus) — voir
+        // utils/pinAuth.ts, même helper et même convention que /qr-cash-out.
+        const pinCheck = await verifyUserPin(senderPreCheck, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
 
         const result = await prisma.$transaction(async (tx) => {
             // Idempotence : même garde que /transfer ci-dessus — un double-tap ou un retry
@@ -891,6 +881,20 @@ router.post('/client-initiated-withdraw', authMiddleware, moneyMovementLimiter, 
             // retirant via QR agent/marchand plutôt que par un transfert P2P classique.
             await LimitEngine.verifyAndIncrementConsumption(tx, sender.id, sender.wallet.id, amount, settings);
 
+            // Anti-Fractionnement (structuration) : même contrôle que
+            // CashOperationService.executeCashOut et /qr-cash-out — absent ici jusqu'ici alors
+            // que ce rail déplace lui aussi de l'argent vers du cash réel (agent ou
+            // commerçant). Aucun Staff n'est impliqué dans ce rail self-service : authorId
+            // omis (le RiskFlag d'audit, dont authorId pointe vers Staff, reste réservé aux
+            // guichets tenus par un agent Mongain), seuls le blocage/la pénalité s'appliquent
+            // — voir LimitEngine.checkAntiFractioning.
+            const antiFractioningPenalty = await LimitEngine.checkAntiFractioning(
+                tx, sender.id, sender.wallet.id, amount,
+                agent.role === 'AGENT' ? (agent as any).branchId ?? null : null,
+                null,
+                settings
+            );
+
             let fee = 0;
             let merchantReward = 0;
 
@@ -901,6 +905,8 @@ router.post('/client-initiated-withdraw', authMiddleware, moneyMovementLimiter, 
             } else if (agent.role === 'AGENT') {
                 fee = await LimitEngine.calculateWithdrawalFee(tx, sender.wallet.id, amount, settings);
             }
+
+            fee += antiFractioningPenalty;
 
             const totalRequired = amount + fee;
 
@@ -948,6 +954,11 @@ router.post('/client-initiated-withdraw', authMiddleware, moneyMovementLimiter, 
                     senderWalletId: sender.wallet.id,
                     receiverWalletId: agent.wallet.id,
                     status: 'COMPLETED',
+                    // `type` explicite (défaut Prisma sinon "TRANSFER") : LimitEngine.calculateWithdrawalFee
+                    // et LimitEngine.checkAntiFractioning agrègent tous deux les retraits cash sur
+                    // `type: 'CASH_OUT'` — sans lui, ce rail (retrait chez un Agent/Commerçant) ne
+                    // comptait jamais dans le cumul journalier de frais ni dans la fenêtre anti-fractionnement.
+                    type: 'CASH_OUT',
                     // Idem /transfer : si l'agent qui reçoit ce retrait guichet est rattaché
                     // à une agence, l'opération doit apparaître dans les rapports de celle-ci.
                     branchId: agent.role === 'AGENT' ? (agent as any).branchId : undefined,
@@ -1366,25 +1377,12 @@ router.post('/push', authMiddleware, async (req: AuthRequest, res) => {
             return res.status(403).json({ error: GIANT_MOBILE_BLOCK_ERROR });
         }
 
-        if (senderPreCheck.lockedUntil && senderPreCheck.lockedUntil > new Date()) {
-            throw new Error('Votre compte est temporairement bloqué suite à plusieurs échecs. Réessayez plus tard.');
-        }
-
-        const pinMatch = await bcrypt.compare(pin, senderPreCheck.pin);
-        if (!pinMatch) {
-            const attempts = senderPreCheck.failedPinAttempts + 1;
-            const isLocked = attempts >= 3;
-            const lockedUntil = isLocked ? new Date(Date.now() + 15 * 60 * 1000) : null;
-            await prisma.user.update({
-                where: { id: senderPreCheck.id },
-                data: { failedPinAttempts: attempts, lockedUntil }
-            });
-            throw new Error(isLocked ? 'Compte bloqué (3 échecs). Réessayez dans 15 minutes.' : `Code PIN incorrect. Tentative ${attempts}/3.`);
-        }
-
-        if (senderPreCheck.failedPinAttempts > 0) {
-            await prisma.user.update({ where: { id: senderPreCheck.id }, data: { failedPinAttempts: 0, lockedUntil: null } });
-        }
+        // Vérification centralisée du PIN (verrouillage 3 échecs/15min inclus) — voir
+        // utils/pinAuth.ts, même helper et même convention que /qr-cash-out. `throw` (pas un
+        // `res.status` direct) : cohérent avec le reste de cette route, catché plus bas et
+        // renvoyé en 400 via friendlyErrorMessage(e) — même statut que verifyUserPin lui-même.
+        const pinCheck = await verifyUserPin(senderPreCheck, pin);
+        if (!pinCheck.ok) throw new Error(pinCheck.error);
 
         const reference = generateReference('PUSH').replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
         const customerAccountNumber = toPvitCustomerAccountNumber(String(phone));

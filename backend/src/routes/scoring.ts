@@ -7,6 +7,28 @@ import { withCache } from '../utils/redis';
 
 const router = express.Router();
 
+// Extrait de la route ci-dessous pour être réellement consommé par credit.ts
+// (computeCreditEligibility) — jusqu'ici ce score n'était qu'un affichage analytics
+// admin-only ("MOCK ALGORITHM"), jamais lu par aucune décision de prêt réelle. Reste un
+// algorithme volontairement simple (KYC, statut de compte, solde) : pas un scoring crédit
+// bancaire complet, mais un signal réel de mieux que rien, appliqué de façon identique ici et
+// dans GET / ci-dessous (plus de risque de divergence entre l'affichage admin et la décision).
+export function computeUserScore(user: { kycLevel: number; accountStatus: string; wallet?: { balance: number } | null }): number {
+    let score = 500; // Base Score
+
+    if (user.kycLevel === 1) score += 100;
+    if (user.kycLevel === 2) score += 250;
+
+    if (user.accountStatus === 'FROZEN') score -= 300;
+    if (user.accountStatus === 'SUSPENDED') score -= 200;
+
+    const balance = user.wallet?.balance || 0;
+    if (balance > 100000) score += 100; // High balance adds trust
+    else if (balance === 0) score -= 50;
+
+    return score;
+}
+
 // GET /api/admin/v6/scoring
 router.get('/', authMiddleware, async (req: AuthRequest, res) => {
     try {
@@ -26,19 +48,10 @@ router.get('/', authMiddleware, async (req: AuthRequest, res) => {
             });
 
             return users.map((user: any) => {
-                // MOCK ALGORITHM FOR MONGGAI V6 SCORING
-                // Based on KYC Level, Verification Status, and Wallet Balance
-                let score = 500; // Base Score
-
-                if (user.kycLevel === 1) score += 100;
-                if (user.kycLevel === 2) score += 250;
-
-                if (user.accountStatus === 'FROZEN') score -= 300;
-                if (user.accountStatus === 'SUSPENDED') score -= 200;
-
-                const balance = user.wallet?.balance || 0;
-                if (balance > 100000) score += 100; // High balance adds trust
-                else if (balance === 0) score -= 50;
+                // Algorithme simple (KYC, statut de compte, solde) — désormais réellement
+                // consommé par credit.ts (computeCreditEligibility) en plus de cet affichage
+                // admin, voir computeUserScore ci-dessus.
+                const score = computeUserScore(user);
 
                 let tier = 'Monitoring';
                 if (score >= 700) tier = 'Trusted';

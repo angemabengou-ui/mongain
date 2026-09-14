@@ -86,6 +86,11 @@ router.post('/stake', authMiddleware, circuitBreakerMiddleware, async (req: Auth
                     amount: stakeAmount,
                     apy: apy,
                     lockedUntil: lockedUntil,
+                    // Durée réellement demandée, persistée telle quelle — le retrait
+                    // (/vaults/:id/withdraw) l'utilise directement pour l'intérêt au lieu de
+                    // la re-dériver de (lockedUntil - createdAt), sujet au débordement de
+                    // mois JS ci-dessus.
+                    lockMonths: duration,
                     status: 'ACTIVE'
                 }
             });
@@ -153,6 +158,7 @@ router.get('/vaults', authMiddleware, async (req: AuthRequest, res) => {
 router.post('/vaults/:id/withdraw', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         if (!req.userId) return res.status(401).json({ error: "Unauthorized" });
+        const { pin } = req.body;
 
         const vault = await prisma.stakingVault.findUnique({ where: { id: req.params.id as string } });
         if (!vault || vault.userId !== req.userId) return res.status(404).json({ error: "Coffre introuvable." });
@@ -161,9 +167,20 @@ router.post('/vaults/:id/withdraw', authMiddleware, circuitBreakerMiddleware, as
             return res.status(400).json({ error: `Ce coffre reste bloqué jusqu'au ${vault.lockedUntil.toLocaleDateString('fr-FR')}. Aucun retrait anticipé n'est possible.` });
         }
 
-        // Intérêt calculé sur la durée réelle de blocage (createdAt -> lockedUntil), pas un
-        // nombre de mois codé en dur : /stake ne persistait que lockedUntil, pas lockMonths.
-        const termMonths = Math.max(1, Math.round(
+        // Même exigence que /stake (débit réel de la Trésorerie vers le client) : sans
+        // PIN, un jeton de session volé suffisait à déclencher ce déblocage de fonds.
+        if (!pin) return res.status(400).json({ error: "Code PIN requis." });
+        const userForPin = await prisma.user.findUnique({ where: { id: req.userId } });
+        if (!userForPin) return res.status(401).json({ error: "Utilisateur non valide." });
+        const pinCheck = await verifyUserPin(userForPin, pin);
+        if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error });
+
+        // Intérêt calculé sur la durée EFFECTIVEMENT demandée à la souscription
+        // (StakingVault.lockMonths), pas re-dérivée de (lockedUntil - createdAt) : le
+        // débordement de mois JS (ex: 31 janvier + 1 mois -> 3 mars) faussait ce calcul et
+        // surpayait l'intérêt. Repli sur l'ancienne dérivation par différence de dates
+        // uniquement pour les coffres créés avant l'ajout de cette colonne (lockMonths null).
+        const termMonths = vault.lockMonths ?? Math.max(1, Math.round(
             (vault.lockedUntil.getFullYear() - vault.createdAt.getFullYear()) * 12
             + (vault.lockedUntil.getMonth() - vault.createdAt.getMonth())
         ));

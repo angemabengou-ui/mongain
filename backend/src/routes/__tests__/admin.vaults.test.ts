@@ -25,6 +25,10 @@ jest.mock('../../prisma', () => ({
         vault: { findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
         vaultMember: { findUnique: jest.fn(), count: jest.fn(), update: jest.fn() },
         vaultVoucher: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
+        // Lu/écrit HORS transaction, avant même d'ouvrir $transaction (voir admin.vaults.ts,
+        // force-resolve) : le premier appel (maker) doit pouvoir enregistrer sa décision SANS
+        // jamais toucher au statut PENDING ni à aucun wallet.
+        vaultTransaction: { findUnique: jest.fn(), update: jest.fn() },
         notification: { create: jest.fn(), createMany: jest.fn() },
         auditLog: { create: jest.fn() },
         $transaction: jest.fn(),
@@ -154,6 +158,10 @@ describe('Admin Vaults Routes', () => {
         });
     });
 
+    // Maker/checker en deux appels (voir admin.vaults.ts) : un premier appel (staff A)
+    // n'exécute rien, il enregistre seulement la décision proposée ; un second appel, par un
+    // staff DIFFÉRENT, la confirme et déclenche l'exécution réelle — plus aucun compte staff
+    // unique ne peut, seul, débloquer un retrait.
     describe('POST /admin/vaults/:id/withdraw-requests/:txId/force-resolve', () => {
         it('devrait exiger decision et reason', async () => {
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(RISK);
@@ -161,8 +169,47 @@ describe('Admin Vaults Routes', () => {
             expect(res.status).toBe(400);
         });
 
-        it('REJECT : devrait rejeter la demande et notifier le demandeur', async () => {
-            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(RISK);
+        it('Étape 1 (maker) : devrait enregistrer la décision proposée sans rien exécuter', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(RISK); // staff_1
+            (prisma.vaultTransaction.findUnique as jest.Mock).mockResolvedValue({
+                id: 'tx1', vaultId: 'v1', status: 'PENDING', forceResolveMakerId: null,
+            });
+
+            const res = await request(app)
+                .post('/admin/vaults/v1/withdraw-requests/tx1/force-resolve')
+                .send({ decision: 'REJECT', reason: 'Justificatif insuffisant' });
+
+            expect(res.status).toBe(200);
+            expect(res.body.pendingConfirmation).toBe(true);
+            expect(res.body.executed).toBe(false);
+            expect(prisma.vaultTransaction.update).toHaveBeenCalledWith({
+                where: { id: 'tx1' },
+                data: { forceResolveMakerId: 'staff_1', forceResolveDecision: 'REJECT', forceResolveReason: 'Justificatif insuffisant' },
+            });
+            expect(prisma.$transaction).not.toHaveBeenCalled();
+        });
+
+        it('devrait refuser qu\'un staff confirme sa propre proposition', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(RISK); // staff_1
+            (prisma.vaultTransaction.findUnique as jest.Mock).mockResolvedValue({
+                id: 'tx1', vaultId: 'v1', status: 'PENDING',
+                forceResolveMakerId: 'staff_1', forceResolveDecision: 'REJECT', forceResolveReason: 'Justificatif insuffisant',
+            });
+
+            const res = await request(app)
+                .post('/admin/vaults/v1/withdraw-requests/tx1/force-resolve')
+                .send({ decision: 'REJECT', reason: 'Justificatif insuffisant' });
+
+            expect(res.status).toBe(403);
+            expect(prisma.$transaction).not.toHaveBeenCalled();
+        });
+
+        it('Étape 2 (checker), REJECT : devrait rejeter la demande et notifier le demandeur', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(RISK); // staff_1 confirme staff_2
+            (prisma.vaultTransaction.findUnique as jest.Mock).mockResolvedValue({
+                id: 'tx1', vaultId: 'v1', status: 'PENDING',
+                forceResolveMakerId: 'staff_2', forceResolveDecision: 'REJECT', forceResolveReason: 'Justificatif insuffisant',
+            });
             const vaultTx = { id: 'tx1', vaultId: 'v1', status: 'PENDING', amount: 5000, requestedById: 'u1', vault: { name: 'Caisse A' } };
             const tx = {
                 vaultTransaction: {
@@ -179,6 +226,7 @@ describe('Admin Vaults Routes', () => {
                 .send({ decision: 'REJECT', reason: 'Justificatif insuffisant' });
 
             expect(res.status).toBe(200);
+            expect(res.body.pendingConfirmation).toBe(false);
             expect(res.body.status).toBe('REJECTED');
             expect(tx.vaultTransaction.updateMany).toHaveBeenCalledWith(expect.objectContaining({
                 data: { status: 'REJECTED' },
@@ -186,8 +234,12 @@ describe('Admin Vaults Routes', () => {
             expect(tx.notification.create).toHaveBeenCalled();
         });
 
-        it('APPROVE (VOUCHER) : devrait exécuter le retrait et créer un bon', async () => {
-            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(RISK);
+        it('Étape 2 (checker), APPROVE (VOUCHER) : devrait exécuter le retrait et créer un bon', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(RISK); // staff_1 confirme staff_2
+            (prisma.vaultTransaction.findUnique as jest.Mock).mockResolvedValue({
+                id: 'tx1', vaultId: 'v1', status: 'PENDING',
+                forceResolveMakerId: 'staff_2', forceResolveDecision: 'APPROVE', forceResolveReason: 'Quorum bloqué, motif vérifié manuellement',
+            });
             const vaultTx = { id: 'tx1', vaultId: 'v1', status: 'PENDING', amount: 5000, destinationType: 'VOUCHER', destinationId: null, requestedById: 'u1', vault: { name: 'Caisse A' } };
             const tx = {
                 vaultTransaction: {
@@ -214,14 +266,25 @@ describe('Admin Vaults Routes', () => {
 
         it('devrait retourner 400 si la demande a déjà été traitée', async () => {
             (prisma.staff.findUnique as jest.Mock).mockResolvedValue(RISK);
-            const tx = { vaultTransaction: { findUnique: jest.fn().mockResolvedValue({ id: 'tx1', vaultId: 'v1', status: 'COMPLETED' }) } };
-            (prisma.$transaction as jest.Mock).mockImplementation((cb: any) => cb(tx));
+            (prisma.vaultTransaction.findUnique as jest.Mock).mockResolvedValue({ id: 'tx1', vaultId: 'v1', status: 'COMPLETED' });
 
             const res = await request(app)
                 .post('/admin/vaults/v1/withdraw-requests/tx1/force-resolve')
                 .send({ decision: 'REJECT', reason: 'Trop tard' });
 
             expect(res.status).toBe(400);
+            expect(prisma.$transaction).not.toHaveBeenCalled();
+        });
+
+        it('devrait retourner 404 si la demande est introuvable', async () => {
+            (prisma.staff.findUnique as jest.Mock).mockResolvedValue(RISK);
+            (prisma.vaultTransaction.findUnique as jest.Mock).mockResolvedValue(null);
+
+            const res = await request(app)
+                .post('/admin/vaults/v1/withdraw-requests/tx1/force-resolve')
+                .send({ decision: 'REJECT', reason: 'Introuvable' });
+
+            expect(res.status).toBe(404);
         });
     });
 
