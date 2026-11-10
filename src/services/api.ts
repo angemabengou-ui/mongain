@@ -81,6 +81,46 @@ export const deleteRefreshToken = async () => {
     }
 };
 
+// ─── Stockage du token GUICHET (MerchantTill) ───────────────────────
+// Un guichet (téléphone + PIN dédiés, POST /api/till/auth/login) n'est PAS un utilisateur
+// authentifié au sens AuthContext — il n'a ni compte Mongain, ni refresh token (session
+// simple, expiration ~12h côté serveur). Clé de stockage volontairement distincte de
+// TOKEN_KEY : les deux sessions (utilisateur normal éventuellement connecté sur le même
+// appareil, et guichet) doivent pouvoir coexister sans jamais se piétiner, voir le garde-fou
+// de redirection dans app/_layout.tsx qui les distingue.
+const TILL_TOKEN_KEY = 'mongain_till_token';
+let cachedTillToken: string | null = null;
+
+export const saveTillToken = async (token: string) => {
+    cachedTillToken = token;
+    if (Platform.OS === 'web') {
+        localStorage.setItem(TILL_TOKEN_KEY, token);
+    } else {
+        await SecureStore.setItemAsync(TILL_TOKEN_KEY, token);
+    }
+};
+
+export const getTillToken = async (): Promise<string | null> => {
+    if (cachedTillToken) return cachedTillToken;
+    let t = null;
+    if (Platform.OS === 'web') {
+        t = localStorage.getItem(TILL_TOKEN_KEY);
+    } else {
+        t = await SecureStore.getItemAsync(TILL_TOKEN_KEY);
+    }
+    if (t) cachedTillToken = t;
+    return t;
+};
+
+export const deleteTillToken = async () => {
+    cachedTillToken = null;
+    if (Platform.OS === 'web') {
+        localStorage.removeItem(TILL_TOKEN_KEY);
+    } else {
+        await SecureStore.deleteItemAsync(TILL_TOKEN_KEY);
+    }
+};
+
 // ─── Auto-logout callback ──────────────────────────────────────────
 // Enregistrer ici une fonction de logout depuis AuthContext
 let _onUnauthorized: (() => void) | null = null;
@@ -192,7 +232,12 @@ const tryRefreshSession = async (): Promise<boolean> => {
 
 // ─── Client HTTP de base ───────────────────────────────────────────
 
-export const request = async (method: string, path: string, body?: object, auth = false, _isRetry = false, _wakeupAttempt = 0): Promise<any> => {
+// `auth` accepte aussi 'till' : une session guichet (MerchantTill, voir saveTillToken
+// ci-dessus) présente son propre Bearer token, distinct de celui d'un utilisateur normal,
+// et ne doit JAMAIS déclencher le renouvellement silencieux ni l'auto-logout ci-dessous
+// (aucun refresh token, aucun AuthContext concerné) — voir les deux gardes `auth !== 'till'`
+// plus bas.
+export const request = async (method: string, path: string, body?: object, auth: boolean | 'till' = false, _isRetry = false, _wakeupAttempt = 0): Promise<any> => {
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Bypass-Tunnel-Reminder': 'true',
@@ -200,7 +245,7 @@ export const request = async (method: string, path: string, body?: object, auth 
     };
 
     if (auth) {
-        const token = await getToken();
+        const token = auth === 'till' ? await getTillToken() : await getToken();
         if (token) headers['Authorization'] = `Bearer ${token}`;
     }
 
@@ -229,15 +274,21 @@ export const request = async (method: string, path: string, body?: object, auth 
 
         // Token expiré : on tente un renouvellement silencieux une seule fois avant
         // de déclencher la déconnexion complète (voir tryRefreshSession ci-dessus).
-        if (res.status === 401 && !_isRetry) {
+        // Jamais pour une session guichet ('till') : pas de refresh token côté serveur pour
+        // un MerchantTill (session simple, expiration ~12h) — un 401 y est toujours définitif,
+        // laissé tel quel ci-dessous (`!res.ok` plus bas) pour que l'écran appelant
+        // (till-collect.tsx) le détecte et renvoie vers till-login.tsx.
+        if (res.status === 401 && !_isRetry && auth !== 'till') {
             const refreshed = await tryRefreshSession();
             if (refreshed) {
                 return request(method, path, body, auth, true);
             }
         }
 
-        // Auto-logout si le renouvellement a échoué (ou n'était pas applicable)
-        if (res.status === 401 && _onUnauthorized) {
+        // Auto-logout si le renouvellement a échoué (ou n'était pas applicable) — réservé à la
+        // session utilisateur normale (AuthContext) : un 401 guichet ne doit jamais déconnecter
+        // un éventuel utilisateur normal par ailleurs connecté sur le même appareil.
+        if (res.status === 401 && _onUnauthorized && auth !== 'till') {
             if (path === '/api/auth/logout') {
                 return; // Empêcher la boucle infinie si le logout retourne 401 (token déjà invalidé).
             }
@@ -276,7 +327,11 @@ export const request = async (method: string, path: string, body?: object, auth 
         // premier essai après un réveil à froid de Render (mesuré ~12-20s) échouait toujours
         // avec "Impossible de vérifier vos contacts", donnant l'impression que la synchro des
         // contacts Mongain ne fonctionne plus, alors qu'un simple retry aurait suffi.
-        const SAFE_TO_RETRY_POST_PATHS = ['/api/wallet/match-contacts'];
+        // /api/till/auth/login (connexion guichet) suit la même règle que /api/auth/login
+        // (préfixe /api/auth/, cf. allowConnectionRetry ci-dessous) : une simple connexion,
+        // jamais un mouvement d'argent, rejouable sans risque si la première tentative n'a
+        // fait que croiser un réveil à froid.
+        const SAFE_TO_RETRY_POST_PATHS = ['/api/wallet/match-contacts', '/api/till/auth/login'];
         const allowConnectionRetry = method === 'GET' || path.startsWith('/api/auth/') || SAFE_TO_RETRY_POST_PATHS.includes(path);
         if ((isConnectionFailure || isColdStart) && allowConnectionRetry && _wakeupAttempt < WAKEUP_MAX_RETRIES) {
             await new Promise(r => setTimeout(r, WAKEUP_RETRY_DELAY_MS));
@@ -550,6 +605,52 @@ export const apiGetMerchantAffiliations = () =>
 export const apiRespondMerchantAffiliation = (id: string, accept: boolean) =>
     request('POST', `/api/merchant/affiliations/${id}/respond`, { accept }, true) as Promise<MerchantAffiliation>;
 
+// ==========================================
+// GUICHETS MARCHAND (MerchantTill)
+// ==========================================
+// Un marchand (géant ou normal) avec plusieurs points d'encaissement physiques (plusieurs
+// caissiers) peut créer un login dédié par guichet — téléphone + PIN propres, PAS un compte
+// Mongain complet. Un guichet ne sert QU'à encaisser : tout encaissement crédite directement
+// le wallet du marchand PROPRIÉTAIRE (voir merchant-tills.tsx pour la gestion côté marchand,
+// till-login.tsx/till-collect.tsx pour la session guichet elle-même).
+
+export interface MerchantTill {
+    id: string;
+    name: string;
+    phone: string;
+    isActive: boolean;
+    createdAt: string;
+}
+
+// Gestion des guichets — appelée avec la session NORMALE du marchand propriétaire (connecté
+// comme n'importe quel utilisateur), jamais avec une session guichet.
+export const apiGetMerchantTills = () =>
+    request('GET', '/api/b2b/tills', undefined, true) as Promise<MerchantTill[]>;
+
+export const apiCreateMerchantTill = (name: string, phone: string, pin: string) =>
+    request('POST', '/api/b2b/tills', { name, phone, pin }, true) as Promise<MerchantTill>;
+
+// Désactive le guichet (n'efface rien) — voir isActive ci-dessus.
+export const apiDeleteMerchantTill = (id: string) =>
+    request('DELETE', `/api/b2b/tills/${id}`, undefined, true) as Promise<{ success?: boolean; message?: string }>;
+
+// Connexion depuis le terminal physique du guichet (téléphone + PIN du guichet, PAS le compte
+// du marchand) — pas d'OTP, pas de refresh token, session simple à courte durée (~12h côté
+// serveur). Le token renvoyé se stocke via saveTillToken() ci-dessus, JAMAIS via saveToken()
+// (qui appartient à la session utilisateur normale d'AuthContext).
+export const apiTillLogin = (phone: string, pin: string) =>
+    request('POST', '/api/till/auth/login', { phone, pin }) as Promise<{ token: string }>;
+
+// Encaissement depuis une session guichet active (auth: 'till', voir request() ci-dessus) —
+// délègue CÔTÉ SERVEUR à la MÊME logique que /api/pay/qr-scan ((tabs)/pay.tsx,
+// executeQrCollection, backend/src/routes/pay.ts et till.ts POST /collect), avec exactement
+// le même contrat de champs : `scannedCode` est l'ID Mongain du client (issu d'un scan QR ou
+// saisi manuellement, jamais un numéro de téléphone), `amountXaf` le montant (nom de champ
+// imposé par le serveur malgré la devise réelle FCFA), et `pin` (celui du CLIENT, pas du
+// guichet) TOUJOURS requis — le serveur renvoie 400 sans lui, aucun mode sans PIN n'existe.
+export const apiTillCollect = (scannedCode: string, amountXaf: number, pin: string) =>
+    request('POST', '/api/till/collect', { scannedCode, amountXaf, pin }, 'till') as Promise<{ message?: string; amount?: number }>;
+
 // Tontine
 export const apiGetTontineGroups = () =>
     request('GET', '/api/tontine/groups', undefined, true) as Promise<{ data: { groups: any[]; myParticipations: any[] } }>;
@@ -715,3 +816,69 @@ export const apiGetChildTransactions = (id: string, limit?: number) =>
 export const apiGetMyInvoices = () => request('GET', '/api/b2b/invoices/my', undefined, true) as Promise<{ success: boolean, invoices: any[] }>;
 export const apiPayInvoice = (id: string, pin: string) => request('POST', `/api/b2b/invoices/${id}/pay`, { pin }, true) as Promise<{ success: boolean, message: string }>;
 export const apiRejectInvoice = (id: string) => request('POST', `/api/b2b/invoices/${id}/reject`, undefined, true) as Promise<{ success: boolean, message: string }>;
+
+// ==========================================
+// MONGAIN CONNECT (Clés API / Webhooks marchand)
+// ==========================================
+// Un marchand normal (role === 'MERCHANT') peut générer lui-même une clé d'intégration pour
+// brancher son propre site web (self-service — voir merchant-api-keys.tsx). `secret` et
+// `webhookSigningSecret` ne sont JAMAIS renvoyés par le serveur en dehors de la génération et
+// de la rotation : au-delà de cet unique appel, ils restent irrécupérables (seul un hash est
+// conservé côté serveur), d'où l'avertissement one-shot affiché par l'écran.
+
+export interface ApiIntegration {
+    id: string;
+    appName: string;
+    environment: string;
+    publicKey: string;
+    webhookUrl?: string | null;
+    isActive: boolean;
+    createdAt: string;
+    rotatedAt: string;
+    // Renseigné uniquement si le serveur l'inclut dans la liste (raccourci d'affichage) —
+    // absent sinon, voir merchant-api-keys.tsx qui masque alors ce compteur plutôt que
+    // d'afficher un faux "0".
+    recentDeliveriesCount?: number;
+}
+
+export const apiGenerateGatewayKey = (appName: string, webhookUrl?: string) =>
+    request('POST', '/api/gateway/keys/generate', { appName, webhookUrl }, true) as Promise<{
+        publicKey: string; secret: string; webhookSigningSecret: string;
+    }>;
+
+// Le serveur enveloppe la liste dans `{ success, integrations }` (backend/src/routes/
+// gateway.ts, GET /keys) plutôt que de renvoyer un tableau nu — dépaquetée ici pour que
+// l'écran consomme directement un ApiIntegration[].
+export const apiGetGatewayKeys = () =>
+    request('GET', '/api/gateway/keys', undefined, true).then((res: { integrations: ApiIntegration[] }) => res.integrations);
+
+// Même remarque que ci-dessus : le serveur renvoie `{ success, integration }`, pas
+// l'ApiIntegration nu (gateway.ts, PATCH /keys/:id).
+export const apiUpdateGatewayKey = (id: string, data: { webhookUrl?: string; isActive?: boolean }) =>
+    request('PATCH', `/api/gateway/keys/${id}`, data, true).then((res: { integration: ApiIntegration }) => res.integration);
+
+// Régénère secret + webhookSigningSecret (même avertissement one-shot que la génération
+// initiale) — publicKey et l'historique des livraisons restent inchangés.
+export const apiRotateGatewayKey = (id: string) =>
+    request('POST', `/api/gateway/keys/${id}/rotate`, undefined, true) as Promise<{
+        secret: string; webhookSigningSecret: string;
+    }>;
+
+export interface WebhookDelivery {
+    id: string;
+    eventType: string;
+    status: 'PENDING' | 'DELIVERED' | 'FAILED';
+    httpStatus?: number | null;
+    lastError?: string | null;
+    attempts: number;
+    createdAt: string;
+    deliveredAt?: string | null;
+}
+
+// Même remarque : le serveur renvoie `{ success, deliveries }`, pas un tableau nu
+// (gateway.ts, GET /webhook-deliveries).
+export const apiGetWebhookDeliveries = (integrationId: string) =>
+    request('GET', `/api/gateway/webhook-deliveries?integrationId=${encodeURIComponent(integrationId)}`, undefined, true).then((res: { deliveries: WebhookDelivery[] }) => res.deliveries);
+
+export const apiRetryWebhookDelivery = (id: string) =>
+    request('POST', `/api/gateway/webhook-deliveries/${id}/retry`, undefined, true) as Promise<{ success?: boolean; message?: string }>;

@@ -3,8 +3,9 @@ import express from 'express';
 import helmet from 'helmet';
 import http from 'http';
 import { Server } from 'socket.io';
-import { checkOverdueBnpl, checkOverdueLoans, executeTontineAutomations, initCronJobs } from './cron';
+import { checkOverdueBnpl, checkOverdueLoans, executeAffiliationAutoPay, executeAutoSettlements, executeTontineAutomations, initCronJobs } from './cron';
 import adminRoutes from './routes/admin';
+import adminGiantsRoutes from './routes/admin.giants';
 import adminMerchantsRoutes from './routes/admin.merchants';
 import adminSearchRoutes from './routes/admin.search';
 import adminSystemAccountsRoutes from './routes/admin.systemAccounts';
@@ -35,6 +36,7 @@ import scoringRoutes from './routes/scoring';
 import servicesRoutes from './routes/services';
 import settingsRoutes from './routes/settings';
 import splitRoutes from './routes/split';
+import tillRoutes from './routes/till';
 import tontineRoutes from './routes/tontine';
 import treasuryRoutes from './routes/treasury';
 import ussdRoutes from './routes/ussd';
@@ -76,6 +78,9 @@ function isOriginAllowed(origin: string | undefined): boolean {
     if (!origin) return true;
     const allowed = [
         'http://localhost:5173',
+        'http://localhost:5174',
+        'http://127.0.0.1:5173',
+        'http://127.0.0.1:5174',
         'http://localhost:3000',
         'http://localhost:8081',
         'https://mongain-backend.onrender.com',
@@ -84,7 +89,7 @@ function isOriginAllowed(origin: string | undefined): boolean {
     ];
     if (allowed.includes(origin)) return true;
 
-    if (!isProd && (origin.startsWith('http://192.168.') || origin.startsWith('http://10.'))) {
+    if (!isProd && (origin.startsWith('http://192.168.') || origin.startsWith('http://10.') || origin.startsWith('http://172.'))) {
         return true;
     }
 
@@ -163,6 +168,7 @@ app.use('/api/admin', adminIpAllowlistMiddleware, rbacRoutes); // RBAC: /api/adm
 app.use('/api/admin', adminIpAllowlistMiddleware, adminVaultsRoutes);
 app.use('/api/admin', adminIpAllowlistMiddleware, adminTontinesRoutes);
 app.use('/api/admin', adminIpAllowlistMiddleware, adminMerchantsRoutes);
+app.use('/api/admin/giants', adminIpAllowlistMiddleware, adminGiantsRoutes);
 app.use('/api/admin', adminIpAllowlistMiddleware, adminSearchRoutes);
 app.use('/api/admin', adminIpAllowlistMiddleware, adminSystemAccountsRoutes);
 app.use('/api/admin/push', adminIpAllowlistMiddleware, pushRoutes);
@@ -223,6 +229,11 @@ app.use('/api/merchant', circuitBreakerMiddleware, merchantRoutes);
 // routes qui déplacent réellement de l'argent (POST /payouts, POST /withdraw-to-agency)
 // appliquent circuitBreakerMiddleware elles-mêmes (voir routes/merchant-portal.ts).
 app.use('/api/merchant-portal', merchantPortalRoutes);
+// Guichets/caisses — PAS de circuitBreakerMiddleware au niveau du mount, même raison que
+// /api/auth et /api/merchant-portal ci-dessus : POST /auth/login doit rester utilisable même
+// en verrouillage d'urgence. La seule route qui déplace réellement de l'argent (POST /collect)
+// applique circuitBreakerMiddleware elle-même (voir routes/till.ts).
+app.use('/api/till', tillRoutes);
 app.use('/api/vaults', circuitBreakerMiddleware, vaultRoutes);
 app.use('/api/tontine', circuitBreakerMiddleware, tontineRoutes);
 app.use('/api/services', circuitBreakerMiddleware, servicesRoutes);
@@ -316,6 +327,8 @@ seedCorporateAccount();
 
 // CRON JOBS V17
 setInterval(() => { executeTontineAutomations().catch(console.error); }, 86400000); // Runs daily in Prod
+setInterval(() => { executeAutoSettlements().catch(console.error); }, 86400000); // Daily (T+1) settlement check
+setInterval(() => { executeAffiliationAutoPay().catch(console.error); }, 86400000); // Prélèvement automatique affiliations (quotidien)
 
 // CRON JOBS — Défaut de paiement (Loan/BNPL, audit sécurité). Intervalle plus court que
 // l'automation tontine ci-dessus (horaire plutôt que quotidien) : une échéance de crédit peut

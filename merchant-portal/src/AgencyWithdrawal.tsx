@@ -1,6 +1,6 @@
 import { Banknote, Clock, Landmark, RefreshCw, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { apiRequest, ENDPOINTS, isPortalViewer } from './api';
+import { apiRequest, canExecutePayments, ENDPOINTS } from './api';
 import { fmtFCFA, parseAmountInput } from './utils/format';
 
 type PayoutRequest = {
@@ -32,11 +32,13 @@ function StatusBadge({ status }: { status: string }) {
 // PENDING, exécutée manuellement plus tard par un membre du staff Mongain. Pas de PIN — le
 // serveur ne débite rien à la création, seulement à l'exécution manuelle côté staff.
 export default function AgencyWithdrawal({ onSessionExpired }: { onSessionExpired: () => void }) {
-    // Le serveur (requirePortalAdmin, voir routes/merchant-portal.ts POST /withdraw-to-agency)
-    // renvoie 403 à un membre VIEWER — masqué ici plutôt que désactivé, même principe que
-    // EmployeePayouts.tsx/Team.tsx/Affiliations.tsx : un VIEWER ne doit jamais voir un bouton
-    // qui échouera de toute façon.
-    const viewer = isPortalViewer();
+    // ADMIN, MANAGER et OPERATOR peuvent soumettre une demande de retrait — seul AUDITOR (lecture
+    // seule) en est exclu. Le serveur (requirePortalAdmin ou son équivalent enrichi une fois
+    // mergé, voir routes/merchant-portal.ts POST /withdraw-to-agency) renverrait 403 à un
+    // AUDITOR — masqué ici plutôt que désactivé, même principe que EmployeePayouts.tsx/
+    // Team.tsx/Affiliations.tsx : un rôle sans ce droit ne doit jamais voir un bouton qui
+    // échouera de toute façon.
+    const canExecute = canExecutePayments();
     const [sourceAccount, setSourceAccount] = useState<'SALES' | 'COMMISSION'>('SALES');
     const [amount, setAmount] = useState('');
     const [note, setNote] = useState('');
@@ -125,14 +127,14 @@ export default function AgencyWithdrawal({ onSessionExpired }: { onSessionExpire
 
             {error && <div className="banner error mb-8">⚠️ {error}</div>}
             {success && <div className="banner success mb-8">{success}</div>}
-            {viewer && (
+            {!canExecute && (
                 <div className="banner info mb-8">
-                    Vous êtes connecté en lecture seule. Seul le géant principal ou un membre Admin peut soumettre une demande de retrait.
+                    Vous êtes connecté en lecture seule. Seuls Admin, Manager et Opérateur peuvent soumettre une demande de retrait.
                 </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: viewer ? '1fr' : '1fr 1fr', gap: 32, alignItems: 'start' }}>
-                {!viewer && (
+            <div style={{ display: 'grid', gridTemplateColumns: canExecute ? '1fr 1fr' : '1fr', gap: 32, alignItems: 'start' }}>
+                {canExecute && (
                     <form onSubmit={handleSubmit} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                         <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Nouvelle demande</h2>
 

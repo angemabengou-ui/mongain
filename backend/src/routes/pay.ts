@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Response } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
@@ -14,11 +14,15 @@ import { notifyParentOfChildSpend, sendPush } from './wallet';
 const router = express.Router();
 
 /**
- * POST /api/pay/qr-scan
- * Used by Merchants to scan a customer's QR code and pull funds.
- * In this mock, the QR code contains the customer's User ID.
+ * Encaissement client par scan (marchand mobile, POST /qr-scan ci-dessous) OU guichet/caisse
+ * (routes/till.ts POST /api/till/collect, authMerchantTill) — factorée ici pour être
+ * RÉUTILISÉE TELLE QUELLE par les deux canaux plutôt que dupliquée : la seule différence entre
+ * eux est la provenance de `merchantId` (req.userId directement pour un marchand mobile
+ * authentifié, ou req.userId déjà mappé par authMerchantTill sur le marchand PROPRIÉTAIRE du
+ * guichet) — le corps de la requête (scannedCode/amountXaf/pin) et toute la logique
+ * métier/plafonds/frais/notifications restent identiques dans les deux cas.
  */
-router.post('/qr-scan', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+export async function executeQrCollection(merchantId: string, req: AuthRequest, res: Response) {
     try {
         const { scannedCode, amountXaf, pin } = req.body;
         // Le FCFA n'a aucune sous-unité (voir docs/AUTO_CRITIQUE_PROJET.md, Wallet.balance et
@@ -28,10 +32,8 @@ router.post('/qr-scan', authMiddleware, circuitBreakerMiddleware, async (req: Au
 
         if (!scannedCode) return res.status(400).json({ error: 'QR Code invalide.' });
         if (isNaN(amount) || amount <= 0) return res.status(400).json({ error: 'Montant invalide.' });
-        if (scannedCode === req.userId) return res.status(400).json({ error: 'Auto-paiement impossible.' });
+        if (scannedCode === merchantId) return res.status(400).json({ error: 'Auto-paiement impossible.' });
         if (!pin || typeof pin !== 'string') return res.status(400).json({ error: 'Code PIN du client requis pour autoriser le paiement.' });
-
-        const merchantId = req.userId!;
 
         // Le PIN appartient au CLIENT débité, pas au marchand qui scanne — sans ce contrôle,
         // n'importe quel compte authentifié pouvait prélever n'importe quel montant sur
@@ -157,6 +159,15 @@ router.post('/qr-scan', authMiddleware, circuitBreakerMiddleware, async (req: Au
         logger.error(`[Pay&Go QR] ${e.message}`);
         res.status(400).json({ error: friendlyErrorMessage(e) });
     }
+}
+
+/**
+ * POST /api/pay/qr-scan
+ * Used by Merchants to scan a customer's QR code and pull funds.
+ * In this mock, the QR code contains the customer's User ID.
+ */
+router.post('/qr-scan', authMiddleware, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+    return executeQrCollection(req.userId!, req, res);
 });
 
 export default router;

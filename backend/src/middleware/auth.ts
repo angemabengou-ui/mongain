@@ -16,20 +16,35 @@ if (!process.env.JWT_SECRET) {
 
 export const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
 
+// 4 niveaux de permission du portail web marchand géant (voir MerchantPortalMember.role,
+// schema.prisma) — ADMIN (tout, y compris gérer l'équipe), MANAGER (tout sauf gérer
+// l'équipe), OPERATOR (peut exécuter paiements/retraits/employés/guichets mais pas gérer
+// affiliations ni équipe), AUDITOR (lecture seule partout, ancien "VIEWER" — la migration
+// renomme les lignes existantes, voir migration.sql).
+export type PortalRole = 'ADMIN' | 'MANAGER' | 'OPERATOR' | 'AUDITOR';
+
 export interface AuthRequest extends Request {
     userId?: string;
 
     // Portail web marchand géant uniquement (voir authMerchantPortal ci-dessous) — niveau de
     // permission de la session courante : 'ADMIN' pour le géant lui-même (implicite, voir
-    // schema.prisma MerchantPortalMember) ou un membre d'équipe invité en rôle ADMIN, 'VIEWER'
-    // pour un membre en lecture seule. Absent en dehors du portail (authMiddleware/authCorp).
-    portalRole?: 'ADMIN' | 'VIEWER';
+    // schema.prisma MerchantPortalMember) ou la valeur du rôle d'un membre d'équipe invité.
+    // Absent en dehors du portail (authMiddleware/authCorp).
+    portalRole?: PortalRole;
     // Id de la ligne MerchantPortalMember à l'origine de la session, uniquement quand un
     // membre d'équipe (pas le géant lui-même) est connecté — sert à router la déconnexion et
     // la rotation de refresh token sur les bons champs (voir routes/merchant-portal.ts
     // /auth/logout et /auth/refresh, qui manipulent tokenVersion/refreshTokenHash du MEMBRE
-    // plutôt que ceux du géant dans ce cas).
+    // plutôt que ceux du géant dans ce cas), et à distinguer l'initiateur/l'approbateur d'un
+    // paiement de masse soumis à double validation (voir POST /merchant-portal/payouts et
+    // /payouts/:id/approve).
     portalMemberId?: string;
+
+    // Guichet/caisse (voir authMerchantTill ci-dessous, schema.prisma MerchantTill) — id de la
+    // ligne MerchantTill à l'origine de la session, uniquement présent sur ce canal. `userId`
+    // ci-dessus porte alors l'id du marchand PROPRIÉTAIRE du guichet (pas un id de guichet),
+    // pour que la logique d'encaissement existante crédite directement SON wallet.
+    tillId?: string;
 }
 
 // ─── Session longue durée (access token court + refresh token) ────────────
@@ -158,8 +173,13 @@ export const authMerchantPortal = async (req: AuthRequest, res: Response, next: 
                 return res.status(401).json({ error: 'Votre session a expiré car vous vous êtes connecté ailleurs.' });
             }
 
+            // La valeur stockée sur MerchantPortalMember.role est déjà contrainte à l'une des 4
+            // valeurs par les routes d'écriture (voir routes/merchant-portal.ts POST/PATCH
+            // /team) — repli défensif sur 'AUDITOR' (le niveau le moins privilégié, lecture
+            // seule) si une valeur inattendue devait malgré tout se retrouver en base.
+            const validRoles: PortalRole[] = ['ADMIN', 'MANAGER', 'OPERATOR', 'AUDITOR'];
             req.userId = giant.id;
-            req.portalRole = member.role === 'ADMIN' ? 'ADMIN' : 'VIEWER';
+            req.portalRole = validRoles.includes(member.role as PortalRole) ? (member.role as PortalRole) : 'AUDITOR';
             req.portalMemberId = member.id;
             return next();
         }
@@ -176,15 +196,68 @@ export const authMerchantPortal = async (req: AuthRequest, res: Response, next: 
     }
 };
 
-// Garde de rôle portail — réservée aux routes de mutation (création/modification/suppression)
-// de merchant-portal.ts ; les routes de simple lecture (dashboard, rapports, listes) restent
-// accessibles à un membre VIEWER. Toujours placée APRÈS authMerchantPortal dans la chaîne de
-// middlewares (dépend de req.portalRole, qu'elle seule renseigne).
-export const requirePortalAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (req.portalRole !== 'ADMIN') {
-        return res.status(403).json({ error: 'Action réservée aux administrateurs du portail (accès lecture seule).' });
+// Garde de rôle portail PARAMÉTRABLE — remplace l'ancien requirePortalAdmin (tout ou rien) :
+// chaque route de mutation de merchant-portal.ts précise désormais explicitement quels rôles
+// elle autorise (ex: requirePortalRole('ADMIN', 'MANAGER')) plutôt qu'un unique niveau ADMIN.
+// Les routes de simple lecture (dashboard, rapports, listes...) n'appliquent aucune garde de
+// ce type et restent accessibles aux 4 rôles via authMerchantPortal seul. Toujours placée
+// APRÈS authMerchantPortal dans la chaîne de middlewares (dépend de req.portalRole, qu'elle
+// seule renseigne).
+export const requirePortalRole = (...allowed: PortalRole[]) => (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.portalRole || !allowed.includes(req.portalRole)) {
+        return res.status(403).json({ error: `Action réservée aux rôles suivants : ${allowed.join(', ')}.` });
     }
     next();
+};
+
+// Guichets/caisses (marchand géant ou normal avec plusieurs points d'encaissement physiques —
+// voir schema.prisma MerchantTill) — chaîne d'authentification COMPLÈTEMENT SÉPARÉE des
+// précédentes : un guichet n'a pas de compte Mongain (pas de User), seulement une ligne
+// MerchantTill (téléphone + PIN propres). Le JWT porte {tillId, till: true, tillTokenVersion}
+// (jamais userId/jwtVersion/portal) — `req.userId` est renseigné APRÈS coup avec l'id du
+// marchand PROPRIÉTAIRE du guichet (till.merchantId), pas un id de guichet, pour que la
+// logique d'encaissement existante (routes/pay.ts, réutilisée telle quelle par
+// routes/till.ts POST /collect) crédite directement SON wallet sans aucune modification.
+export const authMerchantTill = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Token manquant ou invalide.' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as {
+            tillId?: string;
+            till?: boolean;
+            tillTokenVersion?: number;
+        };
+        if (!decoded.till || !decoded.tillId) {
+            return res.status(403).json({ error: 'Jeton refusé sur le canal guichet.' });
+        }
+
+        const till = await prisma.merchantTill.findUnique({
+            where: { id: decoded.tillId },
+            include: { merchant: { select: { id: true, role: true, accountStatus: true } } },
+        });
+        if (!till || !till.isActive) {
+            return res.status(401).json({ error: 'Votre session a expiré car ce guichet a été désactivé.' });
+        }
+        if (decoded.tillTokenVersion !== undefined && decoded.tillTokenVersion !== till.tokenVersion) {
+            return res.status(401).json({ error: 'Votre session a expiré car vous vous êtes connecté ailleurs.' });
+        }
+        // Le marchand PROPRIÉTAIRE est revérifié à chaque appel — un marchand suspendu ou
+        // rétrogradé coupe ainsi immédiatement l'accès de tous ses guichets, exactement comme
+        // authMerchantPortal le fait déjà pour les membres d'équipe du portail web.
+        if (!till.merchant || till.merchant.role !== 'MERCHANT' || till.merchant.accountStatus !== 'ACTIVE') {
+            return res.status(403).json({ error: 'Compte marchand propriétaire suspendu ou introuvable.' });
+        }
+
+        req.tillId = till.id;
+        req.userId = till.merchantId;
+        next();
+    } catch {
+        return res.status(401).json({ error: 'Token expiré ou invalide.' });
+    }
 };
 
 export const authCorp = async (req: AuthRequest, res: Response, next: NextFunction) => {

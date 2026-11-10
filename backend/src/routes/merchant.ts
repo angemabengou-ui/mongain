@@ -232,4 +232,33 @@ router.post('/affiliations/:id/respond', authMiddleware, async (req: AuthRequest
     }
 });
 
+// PATCH /api/merchant/affiliations/:id/auto-pay
+// Permet au petit marchand d'activer/désactiver le prélèvement automatique pour une affiliation
+router.patch('/affiliations/:id/auto-pay', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const { autoPayEnabled } = req.body;
+        if (typeof autoPayEnabled !== 'boolean') {
+            return res.status(400).json({ error: 'Le paramètre autoPayEnabled (booléen) est requis.' });
+        }
+
+        const affiliationId = req.params.id as string;
+        const affiliation = await prisma.merchantAffiliation.findUnique({
+            where: { id: affiliationId },
+        });
+
+        if (!affiliation) return res.status(404).json({ error: 'Affiliation introuvable.' });
+        if (affiliation.merchantId !== req.userId) return res.status(403).json({ error: 'Accès refusé.' });
+        if (affiliation.status !== 'ACCEPTED') return res.status(400).json({ error: 'Cette affiliation n\'est pas active.' });
+
+        const updated = await prisma.merchantAffiliation.update({
+            where: { id: affiliation.id },
+            data: { autoPayEnabled }
+        });
+
+        res.json({ success: true, affiliation: updated });
+    } catch (error: any) {
+        res.status(500).json({ error: friendlyErrorMessage(error) });
+    }
+});
+
 export default router;

@@ -536,6 +536,14 @@ tr:last-child td {
   color: var(--text-secondary);
 }
 
+/* Accent (cyan) — distinct des 4 autres variantes (succès/avertissement/danger/neutre) pour un
+   statut qui n'est ni bon ni mauvais mais mérite l'attention : rôle Manager, lot de paiement en
+   attente d'approbation (voir Team.tsx, EmployeePayouts.tsx). */
+.status-pill.info {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
 /* Utility Classes */
 .flex-between {
   display: flex;

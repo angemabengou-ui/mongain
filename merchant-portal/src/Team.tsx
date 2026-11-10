@@ -1,9 +1,16 @@
 import { Trash2, UserCog, UserPlus } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { apiRequest, ENDPOINTS, isPortalViewer } from './api';
+import { apiRequest, canManageTeam, ENDPOINTS, getPortalRole, type PortalRole } from './api';
 import { pickString } from './utils/format';
 
-type Role = 'ADMIN' | 'VIEWER';
+type Role = PortalRole;
+
+const ROLE_OPTIONS: { value: Role; label: string }[] = [
+    { value: 'ADMIN', label: 'Admin (tous les droits)' },
+    { value: 'MANAGER', label: "Manager (tout sauf gérer l'équipe)" },
+    { value: 'OPERATOR', label: 'Opérateur (paiements et retraits)' },
+    { value: 'AUDITOR', label: 'Auditeur (lecture seule)' },
+];
 
 type TeamMember = {
     id: string;
@@ -15,30 +22,44 @@ type TeamMember = {
 };
 
 // Membres d'équipe — GET/POST/PATCH/DELETE /api/merchant-portal/team, développées EN PARALLÈLE
-// par l'agent backend (voir le commentaire au-dessus de ENDPOINTS.team dans api.ts : ces routes
-// n'existent pas encore dans backend/src/routes/merchant-portal.ts au moment de l'écriture de
-// cet écran). Un membre 'ADMIN' a les mêmes droits que le géant ; un 'VIEWER' est en lecture
-// seule — le serveur renverrait 403 sur toute écriture tentée par un VIEWER, donc cet écran
-// masque entièrement les actions d'écriture pour lui plutôt que de les afficher désactivées.
+// par l'agent backend. À la date d'écriture de cet écran, ces routes acceptent encore
+// uniquement 'ADMIN'|'VIEWER' (vérifié dans backend/src/routes/merchant-portal.ts) : l'agent
+// backend doit encore les faire évoluer vers les 4 rôles documentés ci-dessous, en parallèle de
+// ce travail front. On développe donc contre la forme cible (4 rôles) ; normalizeMember reste
+// défensif sur toute valeur inattendue (repli sur 'AUDITOR', le plus restrictif).
 function normalizeMember(raw: any): TeamMember {
+    const rawRole = raw.role;
+    const role: Role = (rawRole === 'ADMIN' || rawRole === 'MANAGER' || rawRole === 'OPERATOR' || rawRole === 'AUDITOR')
+        ? rawRole
+        : 'AUDITOR'; // valeur inconnue (ou ancien 'VIEWER' pas encore migré) -> le plus restrictif, jamais ADMIN par défaut
     return {
         id: raw.id,
         name: pickString(raw, ['name']),
         phone: pickString(raw, ['phone']),
-        role: raw.role === 'ADMIN' ? 'ADMIN' : 'VIEWER',
+        role,
         isActive: typeof raw.isActive === 'boolean' ? raw.isActive : true,
         createdAt: raw.createdAt,
     };
 }
 
 function RoleBadge({ role }: { role: Role }) {
-    return role === 'ADMIN'
-        ? <span className="status-pill success">Admin</span>
-        : <span className="status-pill neutral">Lecture seule</span>;
+    switch (role) {
+        case 'ADMIN': return <span className="status-pill success">Admin</span>;
+        case 'MANAGER': return <span className="status-pill info">Manager</span>;
+        case 'OPERATOR': return <span className="status-pill warning">Opérateur</span>;
+        default: return <span className="status-pill neutral">Auditeur</span>;
+    }
 }
 
 export default function Team({ onSessionExpired }: { onSessionExpired: () => void }) {
-    const viewer = isPortalViewer();
+    // Seul un ADMIN gère l'équipe (inviter, changer de rôle, désactiver, supprimer) — MANAGER,
+    // OPERATOR et AUDITOR voient tous la liste en lecture seule, quels que soient leurs autres
+    // droits par ailleurs (ex: un MANAGER peut exécuter des paiements mais pas gérer l'équipe).
+    const canManage = canManageTeam();
+    // Bandeau "lecture seule" : QUE pour AUDITOR, jamais pour MANAGER/OPERATOR — ceux-ci ont des
+    // droits d'exécution ailleurs dans le portail, ce serait trompeur de les qualifier de
+    // "connectés en lecture seule" simplement parce qu'ils ne gèrent pas l'équipe.
+    const isAuditor = getPortalRole() === 'AUDITOR';
 
     const [members, setMembers] = useState<TeamMember[]>([]);
     const [loading, setLoading] = useState(true);
@@ -47,7 +68,7 @@ export default function Team({ onSessionExpired }: { onSessionExpired: () => voi
 
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
-    const [role, setRole] = useState<Role>('VIEWER');
+    const [role, setRole] = useState<Role>('AUDITOR');
     const [submitting, setSubmitting] = useState(false);
 
     // Ligne en cours de modification (changement de rôle / activation / suppression) — désactive
@@ -91,7 +112,7 @@ export default function Team({ onSessionExpired }: { onSessionExpired: () => voi
             });
             setName('');
             setPhone('');
-            setRole('VIEWER');
+            setRole('AUDITOR');
             setMessage('Membre invité avec succès.');
             await load();
         } catch (err: any) {
@@ -158,14 +179,14 @@ export default function Team({ onSessionExpired }: { onSessionExpired: () => voi
 
             {error && <div className="banner error mb-8">⚠️ {error}</div>}
             {message && <div className="banner success mb-8">{message}</div>}
-            {viewer && (
+            {isAuditor && (
                 <div className="banner info mb-8">
-                    Vous êtes connecté en lecture seule. Seul le géant principal ou un membre Admin peut gérer l'équipe.
+                    Vous êtes connecté en lecture seule. Seul un Admin peut gérer l'équipe.
                 </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: viewer ? '1fr' : '360px 1fr', gap: 32, alignItems: 'start' }}>
-                {!viewer && (
+            <div style={{ display: 'grid', gridTemplateColumns: canManage ? '360px 1fr' : '1fr', gap: 32, alignItems: 'start' }}>
+                {canManage && (
                     <form onSubmit={handleAdd} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Inviter un membre</h2>
                         <div>
@@ -179,8 +200,7 @@ export default function Team({ onSessionExpired }: { onSessionExpired: () => voi
                         <div>
                             <label>Rôle</label>
                             <select value={role} onChange={e => setRole(e.target.value as Role)}>
-                                <option value="VIEWER">Lecture seule</option>
-                                <option value="ADMIN">Admin (mêmes droits que vous)</option>
+                                {ROLE_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
                         </div>
                         <button type="submit" disabled={submitting || !name.trim() || !phone.trim()} className="btn-primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
@@ -196,7 +216,7 @@ export default function Team({ onSessionExpired }: { onSessionExpired: () => voi
                                 <th>Membre</th>
                                 <th>Rôle</th>
                                 <th>Statut</th>
-                                {!viewer && <th style={{ textAlign: 'right' }}>Actions</th>}
+                                {canManage && <th style={{ textAlign: 'right' }}>Actions</th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -210,7 +230,7 @@ export default function Team({ onSessionExpired }: { onSessionExpired: () => voi
                                     <td>
                                         <span className={`status-pill ${m.isActive ? 'success' : 'neutral'}`}>{m.isActive ? 'Actif' : 'Inactif'}</span>
                                     </td>
-                                    {!viewer && (
+                                    {canManage && (
                                         <td style={{ textAlign: 'right' }}>
                                             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap', alignItems: 'center' }}>
                                                 <select
@@ -219,8 +239,7 @@ export default function Team({ onSessionExpired }: { onSessionExpired: () => voi
                                                     onChange={e => handleRoleChange(m.id, e.target.value as Role)}
                                                     style={{ width: 'auto', padding: '8px 10px', fontSize: 12 }}
                                                 >
-                                                    <option value="VIEWER">Lecture seule</option>
-                                                    <option value="ADMIN">Admin</option>
+                                                    {ROLE_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                                                 </select>
                                                 <button className="btn-secondary" disabled={busyId === m.id} onClick={() => handleToggleActive(m)} style={{ padding: '8px 14px', fontSize: 12 }}>
                                                     {m.isActive ? 'Désactiver' : 'Réactiver'}
@@ -234,7 +253,7 @@ export default function Team({ onSessionExpired }: { onSessionExpired: () => voi
                                 </tr>
                             ))}
                             {!loading && members.length === 0 && (
-                                <tr><td colSpan={viewer ? 3 : 4} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>Aucun membre d'équipe pour le moment.</td></tr>
+                                <tr><td colSpan={canManage ? 4 : 3} style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>Aucun membre d'équipe pour le moment.</td></tr>
                             )}
                         </tbody>
                     </table>

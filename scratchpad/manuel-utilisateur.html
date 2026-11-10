@@ -1,0 +1,1170 @@
+<title>Manuel Mongain</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root{
+    --bg:#F6F3EC; --paper:#FFFFFF; --ink:#141A2E; --ink-soft:#4B5266; --line:#E4DFD3;
+    --blue:#2563FF; --blue-soft:#2563FF14; --orange:#C9781A; --purple:#7E3AF2; --green:#0E8F5B;
+    --shadow: 0 1px 2px rgba(20,26,46,.04), 0 8px 24px rgba(20,26,46,.06);
+    --app-dark:#0A0F1C; --app-surface:#151822; --app-border:#242a3a;
+    --app-light-bg:#F0FBF7; --app-light-surface:#ffffff; --app-light-border:#e2e8f5;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0A0F1C; --paper:#111729; --ink:#F3F4F8; --ink-soft:#A7ADC2; --line:#232B45;
+      --blue:#5B85FF; --blue-soft:#5B85FF22; --orange:#FFB020; --purple:#A382FF; --green:#22C58A;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0A0F1C; --paper:#111729; --ink:#F3F4F8; --ink-soft:#A7ADC2; --line:#232B45;
+    --blue:#5B85FF; --blue-soft:#5B85FF22; --orange:#FFB020; --purple:#A382FF; --green:#22C58A;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 30px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box}
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:'Outfit',ui-sans-serif,system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  h1,h2,h3{ font-family:'Outfit',sans-serif; font-weight:700; color:var(--ink); text-wrap:balance; letter-spacing:-0.01em; }
+  a{ color:var(--blue); }
+  svg.icon{ width:1em; height:1em; stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; vertical-align:-0.15em; }
+
+  .wrap{ max-width:1180px; margin:0 auto; padding:0 24px; }
+
+  .cover{ padding:64px 0 48px; border-bottom:1px solid var(--line); }
+  .eyebrow{ display:inline-flex; align-items:center; gap:8px; font-family:'IBM Plex Mono',monospace; font-size:.72rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--blue); background:var(--blue-soft); padding:6px 12px; border-radius:100px; margin-bottom:22px; }
+  .eyebrow::before{ content:'●'; font-size:.6rem; }
+  .cover h1{ font-size:clamp(2rem,4vw,3rem); line-height:1.08; margin:0 0 14px; }
+  .cover .tagline{ font-size:1.1rem; color:var(--ink-soft); max-width:60ch; line-height:1.55; margin:0 0 20px; }
+  .disclosure{ background:var(--blue-soft); border:1px solid color-mix(in srgb, var(--blue) 30%, transparent); border-radius:12px; padding:14px 16px; font-size:.85rem; color:var(--ink-soft); max-width:74ch; line-height:1.6; }
+  .disclosure p{ margin:0 0 8px; }
+  .disclosure p:last-child{ margin-bottom:0; }
+  .legend{ display:flex; flex-wrap:wrap; gap:10px; margin-top:26px; }
+
+  .layout{ display:grid; grid-template-columns:236px 1fr; gap:52px; padding:44px 0 100px; align-items:start; }
+  @media (max-width:900px){ .layout{ grid-template-columns:1fr; } .toc{ position:static !important; order:2; } }
+  .toc{ position:sticky; top:28px; max-height:calc(100vh - 56px); overflow-y:auto; }
+  .toc-label{ font-family:'IBM Plex Mono',monospace; font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:12px; }
+  .toc ol{ list-style:none; margin:0 0 18px; padding:0; display:flex; flex-direction:column; gap:2px; }
+  .toc a{ display:flex; gap:9px; text-decoration:none; color:var(--ink-soft); font-size:.85rem; padding:6px 9px; border-radius:8px; line-height:1.3; }
+  .toc a:hover{ background:var(--blue-soft); color:var(--ink); }
+  .toc a span.n{ font-family:'IBM Plex Mono',monospace; color:var(--blue); font-weight:600; flex-shrink:0; }
+  .toc a .soon{ font-family:'IBM Plex Mono',monospace; font-size:.6rem; color:var(--orange); margin-left:auto; padding-left:6px; flex-shrink:0; }
+
+  .content{ min-width:0; }
+  .section{ margin-bottom:76px; scroll-margin-top:24px; padding-bottom:56px; border-bottom:1px solid var(--line); }
+  .section:last-child{ border-bottom:none; }
+  .kicker{ font-family:'IBM Plex Mono',monospace; font-size:.78rem; font-weight:600; color:var(--blue); letter-spacing:.08em; margin-bottom:6px; }
+  .section h2{ font-size:1.5rem; margin:0 0 8px; }
+  .section .dek{ font-size:1.02rem; color:var(--ink-soft); max-width:62ch; line-height:1.6; margin:0 0 28px; }
+
+  .duo{ display:grid; grid-template-columns:280px 1fr; gap:36px; align-items:start; }
+  @media (max-width:760px){ .duo{ grid-template-columns:1fr; } .phone-slot{ justify-self:center; } }
+
+  .steps{ margin:0; padding:0; list-style:none; counter-reset:step; }
+  .steps li{ counter-increment:step; position:relative; padding:0 0 20px 40px; font-size:.98rem; line-height:1.6; color:var(--ink); }
+  .steps li::before{ content:counter(step); position:absolute; left:0; top:0; width:26px; height:26px; border-radius:50%; background:var(--blue); color:#fff; font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:.8rem; display:flex; align-items:center; justify-content:center; }
+  .steps li strong{ color:var(--ink); }
+  .steps li .sub{ display:block; color:var(--ink-soft); font-size:.9rem; margin-top:3px; }
+
+  .tip{ display:flex; gap:10px; background:var(--blue-soft); border:1px solid color-mix(in srgb, var(--blue) 30%, transparent); border-radius:12px; padding:14px 16px; margin-top:8px; font-size:.88rem; color:var(--ink); line-height:1.55; max-width:64ch; }
+  .tip .ic{ color:var(--blue); flex-shrink:0; font-size:1.1rem; margin-top:1px; }
+  .warn{ background:#FFB02018; border-color:color-mix(in srgb, var(--orange) 40%, transparent); }
+  .warn .ic{ color:var(--orange); }
+  .ok{ background:#0E8F5B14; border-color:color-mix(in srgb, var(--green) 35%, transparent); }
+  .ok .ic{ color:var(--green); }
+  .tip code{ font-family:'IBM Plex Mono',monospace; font-size:.85em; background:rgba(0,0,0,.06); padding:1px 5px; border-radius:5px; }
+  :root:not([data-theme="light"]) .tip code{ background:rgba(255,255,255,.08); }
+
+  /* ---- Phone mockup ---- */
+  .phone-slot{ position:sticky; top:28px; }
+  .phone{ width:260px; height:544px; border-radius:34px; background:#000; padding:8px; box-shadow:var(--shadow), 0 0 0 1px rgba(0,0,0,.06); position:relative; }
+  .phone .notch{ position:absolute; top:8px; left:50%; transform:translateX(-50%); width:90px; height:20px; background:#000; border-radius:0 0 14px 14px; z-index:5; }
+  .screen{ width:100%; height:100%; border-radius:28px; overflow:hidden; position:relative; font-size:11px; display:flex; flex-direction:column; }
+  .screen.dark{ background:var(--app-dark); color:#fff; }
+  .screen.light{ background:var(--app-light-bg); color:var(--app-dark, #0A0F1C); }
+  .caption{ text-align:center; font-size:.78rem; color:var(--ink-soft); margin-top:12px; font-family:'IBM Plex Mono',monospace; }
+
+  .statusbar{ height:24px; display:flex; align-items:center; justify-content:space-between; padding:0 16px; font-size:9px; font-weight:600; flex-shrink:0; }
+  .statusbar .dots{ display:flex; gap:3px; align-items:center; }
+
+  .sc-header{ padding:10px 14px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  .sc-body{ flex:1; overflow:hidden; padding:0 12px 10px; }
+  .sc-body.pad{ padding:10px 12px; }
+
+  .avatar-sm{ width:26px; height:26px; border-radius:13px; background:var(--blue); display:flex; align-items:center; justify-content:center; color:#fff; font-size:11px; }
+  .pill-btn{ background:var(--blue); color:#fff; border-radius:10px; padding:8px 10px; text-align:center; font-size:9.5px; font-weight:700; }
+  .card-mini{ background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:12px; }
+  .screen.light .card-mini{ background:#fff; border-color:var(--app-light-border); }
+
+  .balance-card{ background:#2563FF; border-radius:16px; padding:14px 14px 10px; color:#fff; margin-bottom:10px; }
+  .balance-amt{ font-size:19px; font-weight:700; margin:4px 0 8px; font-variant-numeric:tabular-nums; }
+  .qr-row{ border-top:1px solid rgba(255,255,255,.25); padding-top:8px; margin-top:6px; text-align:center; font-size:9px; font-weight:600; display:flex; align-items:center; justify-content:center; gap:5px; }
+
+  .grid5{ display:grid; grid-template-columns:repeat(5,1fr); gap:4px; margin:10px 0; }
+  .grid4{ display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:10px 0; }
+  .act-item{ display:flex; flex-direction:column; align-items:center; gap:4px; position:relative; }
+  .act-ic{ width:34px; height:34px; border-radius:11px; display:flex; align-items:center; justify-content:center; position:relative; }
+  .act-lbl{ font-size:8px; font-weight:600; text-align:center; }
+  .dot-badge{ position:absolute; top:-2px; right:-2px; width:8px; height:8px; border-radius:50%; border:1.5px solid #fff; }
+
+  .sec-title{ font-size:9.5px; font-weight:700; margin:12px 0 6px; opacity:.85; }
+  .row-item{ display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid rgba(255,255,255,.06); }
+  .screen.light .row-item{ border-color:var(--app-light-border); }
+  .row-ic{ width:26px; height:26px; border-radius:9px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .row-txt{ flex:1; min-width:0; }
+  .row-title{ font-size:9.5px; font-weight:700; }
+  .row-sub{ font-size:8px; opacity:.6; }
+  .row-amt{ font-size:9.5px; font-weight:700; font-variant-numeric:tabular-nums; }
+
+  .tabbar{ height:52px; flex-shrink:0; display:flex; align-items:center; justify-content:space-around; padding:0 6px; background:rgba(255,255,255,.85); backdrop-filter:blur(6px); border-top:1px solid rgba(0,0,0,.06); }
+  .screen.dark .tabbar{ background:rgba(21,24,34,.9); border-color:rgba(255,255,255,.06); }
+  .tab-ic{ display:flex; flex-direction:column; align-items:center; gap:2px; font-size:7px; font-weight:600; }
+  .tab-fab{ width:38px; height:38px; border-radius:19px; background:#2563FF; display:flex; align-items:center; justify-content:center; color:#fff; margin-top:-18px; box-shadow:0 4px 10px rgba(37,99,255,.4); }
+
+  .accent-tint{ border-radius:12px; padding:10px; margin-bottom:8px; }
+  .fund-input{ background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.15); border-radius:8px; padding:7px 9px; font-size:9px; margin-bottom:6px; }
+  .screen.light .fund-input{ background:#fff; border-color:var(--app-light-border); }
+  .toggle-row{ display:flex; gap:5px; margin-bottom:6px; }
+  .toggle-pill{ flex:1; text-align:center; padding:6px; border-radius:8px; font-size:8.5px; font-weight:700; border:1px solid rgba(255,255,255,.15); }
+
+  footer.doc{ padding:30px 0 60px; border-top:1px solid var(--line); margin-top:0; }
+  footer.doc p{ font-size:.82rem; color:var(--ink-soft); margin:0 0 6px; }
+
+  .badge-soon{ display:inline-flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:.68rem; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--orange); background:#C9781A14; border:1px solid color-mix(in srgb, var(--orange) 35%, transparent); padding:4px 10px; border-radius:100px; margin-left:10px; vertical-align:middle; white-space:nowrap; }
+  .badge-live{ display:inline-flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:.68rem; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--green); background:#0E8F5B14; border:1px solid color-mix(in srgb, var(--green) 35%, transparent); padding:4px 10px; border-radius:100px; margin-left:10px; vertical-align:middle; white-space:nowrap; }
+  .ribbon{ position:absolute; inset:0; border-radius:28px; background:rgba(10,12,20,.72); display:flex; align-items:center; justify-content:center; text-align:center; padding:20px; z-index:6; }
+  .ribbon-inner{ color:#fff; }
+  .ribbon-inner .badge-soon{ margin:0 0 10px; }
+  .ribbon-inner p{ font-size:.72rem; line-height:1.5; opacity:.85; margin:0; }
+
+  /* ---- new components for v2 ---- */
+  .modal-overlay{ position:absolute; inset:0; background:rgba(10,12,20,.55); display:flex; align-items:center; justify-content:center; padding:16px; z-index:8; }
+  .modal-card{ background:#fff; color:#0A0F1C; border-radius:14px; padding:14px; width:100%; }
+  .modal-card h4{ margin:0 0 8px; font-size:11px; font-weight:800; }
+  .modal-card p{ margin:0 0 12px; font-size:8.8px; line-height:1.5; opacity:.8; }
+  .modal-ok{ text-align:right; font-size:9.5px; font-weight:700; color:#0E8F5B; }
+
+  .amt-row{ display:flex; gap:4px; margin:8px 0; }
+  .amt-chip{ flex:1; text-align:center; background:#2563FF14; color:#2563FF; border-radius:100px; padding:6px 2px; font-size:8px; font-weight:700; }
+  .screen.dark .amt-chip{ background:rgba(255,255,255,.08); color:#fff; }
+
+  .fee-box{ background:#eef6f2; border-radius:10px; padding:8px 10px; margin:8px 0; font-size:8.5px; }
+  .screen.dark .fee-box{ background:rgba(255,255,255,.06); }
+  .fee-line{ display:flex; justify-content:space-between; padding:2px 0; }
+  .fee-total{ display:flex; justify-content:space-between; padding-top:5px; margin-top:3px; border-top:1px solid var(--app-light-border); font-weight:800; font-size:9.5px; }
+  .screen.dark .fee-total{ border-color:rgba(255,255,255,.12); }
+
+  .stat-two{ display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:12px; }
+  .stat-tile{ border-radius:12px; padding:9px 10px; }
+  .stat-tile .lbl{ font-size:7.5px; font-weight:700; margin-bottom:4px; }
+  .stat-tile .val{ font-size:12px; font-weight:800; font-variant-numeric:tabular-nums; }
+
+  .bar-track{ height:6px; border-radius:100px; background:rgba(0,0,0,.08); overflow:hidden; margin:5px 0 3px; }
+  .screen.dark .bar-track{ background:rgba(255,255,255,.12); }
+  .bar-fill{ height:100%; border-radius:100px; }
+
+  .keypad{ display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-top:8px; }
+  .key{ background:#fff; border:1px solid var(--app-light-border); border-radius:8px; text-align:center; padding:6px 0; font-size:10px; font-weight:700; }
+
+  .flag-chip{ width:16px; height:11px; border-radius:2px; overflow:hidden; display:inline-flex; flex-shrink:0; }
+
+  .check-circle{ width:38px; height:38px; border-radius:50%; background:#0E8F5B; display:flex; align-items:center; justify-content:center; color:#fff; margin:14px auto 8px; }
+
+  .qr-box{ width:100%; aspect-ratio:1; border-radius:10px; background:
+     repeating-conic-gradient(#0A0F1C 0% 25%, #fff 0% 50%) 0 0/10px 10px,
+     repeating-conic-gradient(#0A0F1C 0% 25%, #fff 0% 50%) 5px 5px/10px 10px;
+     position:relative; }
+  .qr-box::before, .qr-box::after{ content:''; position:absolute; width:22%; height:22%; border:5px solid #0A0F1C; border-radius:4px; background:#fff; }
+  .qr-box::before{ top:6%; left:6%; }
+  .qr-box::after{ bottom:6%; right:6%; border-radius:4px; }
+
+  .search-bar{ background:#fff; border:1px solid var(--app-light-border); border-radius:9px; padding:7px 10px; font-size:9px; opacity:.55; margin-bottom:8px; }
+  .contact-row{ display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--app-light-border); }
+  .contact-avatar{ width:28px; height:28px; border-radius:14px; background:#DCE8FF; color:#2563FF; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:10px; flex-shrink:0; }
+
+  .tab-strip{ display:flex; gap:5px; margin:8px 0 10px; }
+  .tab-chip{ flex:1; text-align:center; padding:6px 0; border-radius:100px; font-size:8.5px; font-weight:700; background:#fff; border:1px solid var(--app-light-border); }
+  .tab-chip.on{ background:#2563FF; color:#fff; border-color:#2563FF; }
+
+  @media print{
+    *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; color-adjust:exact !important; }
+    @page{ size:A4; margin:12mm 14mm; }
+    body{ background:#fff; }
+    .layout{ grid-template-columns:1fr !important; padding-top:18px; }
+    .toc{ position:static !important; max-height:none !important; overflow:visible !important; margin-bottom:28px; padding-bottom:20px; border-bottom:1px solid var(--line); }
+    .toc ol{ display:block !important; }
+    .toc li{ display:inline-block; width:48%; vertical-align:top; }
+    .phone-slot{ position:static !important; }
+    .duo{ grid-template-columns:230px 1fr; }
+    .section{ break-inside:avoid-page; margin-bottom:34px; padding-bottom:26px; }
+    .phone, .tip, .card-mini{ break-inside:avoid; }
+    a{ text-decoration:none; }
+  }
+</style>
+
+<svg width="0" height="0" style="position:absolute">
+<defs>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></symbol>
+  <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.5 5-6 8-6s7 1.5 8 6"/></symbol>
+  <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM19 14h2M14 19h2M19 19h2"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></symbol>
+  <symbol id="i-wallet" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="14" rx="2.5"/><path d="M2 10h20"/><circle cx="17" cy="15" r="1.5"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/></symbol>
+  <symbol id="i-people" viewBox="0 0 24 24"><circle cx="8" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M2 21c.7-3.6 3.4-5.5 6-5.5s5.3 1.9 6 5.5"/><path d="M14 15.8c2 .3 4 1.9 4.5 5.2"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 8 2 8H4s2-2 2-8"/><path d="M10 21a2 2 0 0 0 4 0"/></symbol>
+  <symbol id="i-headset" viewBox="0 0 24 24"><path d="M3 14v-2a9 9 0 0 1 18 0v2"/><rect x="2" y="14" width="5" height="7" rx="1.5"/><rect x="17" y="14" width="5" height="7" rx="1.5"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4z"/></symbol>
+  <symbol id="i-flash" viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></symbol>
+  <symbol id="i-phone2" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/></symbol>
+  <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 2s7 8 7 13a7 7 0 0 1-14 0c0-5 7-13 7-13z"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+  <symbol id="i-trend" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-9"/><path d="M15 6h6v6"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-gift" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="13" rx="1.5"/><path d="M3 12h18M12 8v13"/><path d="M12 8c-2 0-3-1.5-3-3s1-3 3-1c2-2 3 0 3 1s-1 3-3 3z"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 21h16"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13.5" r="3.5"/></symbol>
+  <symbol id="i-tv" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
+  <symbol id="i-print" viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="8" rx="1.5"/><path d="M6 17v4h12v-4"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.3 10.7l7.4-4.4M8.3 13.3l7.4 4.4"/></symbol>
+  <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 9.5c0-1.4 1.3-2.5 3-2.5s3 1.1 3 2.5-1.3 2-3 2.5-3 1.1-3 2.5 1.3 2.5 3 2.5 3-1.1 3-2.5"/></symbol>
+</defs>
+</svg>
+
+<div class="cover">
+  <div class="wrap">
+    <span class="eyebrow">Manuel d'utilisation</span>
+    <h1>Utiliser Mongain</h1>
+    <p class="tagline">Guide complet de l'application mobile : envoyer et recevoir de l'argent, retirer du cash, régler vos factures, épargner (tontines, caisses communes, staking), et gérer les comptes de vos enfants.</p>
+    <div class="disclosure">
+      <p><strong>À propos des captures :</strong> les écrans ci-dessous sont des reconstitutions fidèles de l'interface réelle (mêmes couleurs, mêmes textes, même agencement que l'application) — pas des photos prises sur un téléphone.</p>
+      <p><strong>À propos des statuts :</strong> chaque service porte une étiquette <span class="badge-live" style="margin-left:0">● Actif</span> ou <span class="badge-soon" style="margin-left:0">● Bientôt disponible</span>. Ce statut est vérifié directement dans la configuration du serveur Mongain (pas deviné depuis l'écran) — un service « Bientôt disponible » reste visible dans l'app mais tout essai réel se termine par un message d'erreur explicite, jamais par un faux succès.</p>
+    </div>
+  </div>
+</div>
+
+<div class="wrap layout">
+  <nav class="toc">
+    <div class="toc-label">Sommaire</div>
+    <ol>
+      <li><a href="#inscription"><span class="n">01</span>Créer un compte</a></li>
+      <li><a href="#connexion"><span class="n">02</span>Se connecter</a></li>
+      <li><a href="#accueil"><span class="n">03</span>Écran d'accueil</a></li>
+      <li><a href="#envoyer"><span class="n">04</span>Envoyer de l'argent</a></li>
+      <li><a href="#recevoir"><span class="n">05</span>Recevoir de l'argent</a></li>
+      <li><a href="#retirer"><span class="n">06</span>Retirer de l'argent</a></li>
+      <li><a href="#recharger"><span class="n">07</span>Recharger mon compte<span class="soon">bientôt</span></a></li>
+      <li><a href="#factures"><span class="n">08</span>Factures &amp; recharges<span class="soon">bientôt</span></a></li>
+      <li><a href="#cartes"><span class="n">09</span>Cartes virtuelles<span class="soon">bientôt</span></a></li>
+      <li><a href="#investir"><span class="n">10</span>Crédit &amp; Investissement</a></li>
+      <li><a href="#international"><span class="n">11</span>Transfert international<span class="soon">bientôt</span></a></li>
+      <li><a href="#historique"><span class="n">12</span>Historique &amp; notifications</a></li>
+      <li><a href="#enfant-hub"><span class="n">13</span>Comptes Enfant</a></li>
+      <li><a href="#enfant-create"><span class="n">14</span>Créer un compte enfant</a></li>
+      <li><a href="#enfant-detail"><span class="n">15</span>Gérer un enfant</a></li>
+      <li><a href="#profil"><span class="n">16</span>Mon profil</a></li>
+      <li><a href="#kyc"><span class="n">17</span>Vérification d'identité</a></li>
+      <li><a href="#securite"><span class="n">18</span>Sécurité &amp; PIN</a></li>
+      <li><a href="#depenses"><span class="n">19</span>Aperçu des dépenses</a></li>
+    </ol>
+  </nav>
+
+  <div class="content">
+
+    <!-- 01 INSCRIPTION -->
+    <section class="section" id="inscription">
+      <div class="kicker">01 — PREMIÈRE UTILISATION</div>
+      <h2>Créer un compte</h2>
+      <p class="dek">L'inscription se fait en deux étapes : vérification du numéro par SMS, puis vos informations et votre code PIN.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen dark" style="background:linear-gradient(135deg,#0F172A,#112240,#2563FF); justify-content:center; align-items:center; text-align:center; padding:0 20px;">
+              <div style="width:56px;height:56px;border-radius:16px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;margin-bottom:10px;"><svg class="icon" style="width:26px;height:26px"><use href="#i-wallet"/></svg></div>
+              <div style="font-size:17px;font-weight:800;margin-bottom:4px;">Mongain</div>
+              <div style="font-size:9px;opacity:.7;margin-bottom:22px;">Sécurité Anti-Fraude Garantie</div>
+              <div style="background:#fff;color:#0A0F1C;border-radius:18px;padding:16px;width:100%;text-align:left;">
+                <div style="font-weight:700;font-size:11px;margin-bottom:12px;">Nouveau compte</div>
+                <div style="font-size:8px;opacity:.55;margin-bottom:4px;">NUMÉRO DE TÉLÉPHONE</div>
+                <div style="border:1px solid #e2e8f5;border-radius:10px;padding:8px 10px;font-size:9.5px;display:flex;align-items:center;gap:6px;margin-bottom:12px;">
+                  <span style="opacity:.5;border-right:1px solid #e2e8f5;padding-right:6px;">+241</span> 77 00 00 00
+                </div>
+                <div class="pill-btn">Vérifier mon Numéro</div>
+              </div>
+            </div>
+          </div>
+          <div class="caption">auth/register.tsx — étape 1</div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>Ouvrez Mongain</strong> et touchez « Vous n'avez pas de compte ? Inscrivez-vous » depuis l'écran de connexion.
+              <span class="sub">Saisissez votre numéro de téléphone gabonais, sans le préfixe +241 (déjà pré-rempli).</span></li>
+            <li><strong>Touchez « Vérifier mon Numéro »</strong>.
+              <span class="sub">Un code à 4 chiffres est envoyé par SMS pour confirmer que ce numéro vous appartient bien.</span></li>
+            <li><strong>Saisissez le code reçu</strong>, votre nom complet, un pseudo unique (sans espaces), puis un code PIN à 4 chiffres — demandé deux fois pour confirmation.</li>
+            <li><strong>Touchez « Validation Finale »</strong> — vous êtes automatiquement connecté et redirigé vers l'écran d'accueil.</li>
+          </ol>
+          <div class="tip"><span class="ic">&#9432;</span>Votre code PIN protège votre compte à chaque virement, retrait ou paiement. Ne le partagez jamais, y compris avec le support Mongain.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 CONNEXION -->
+    <section class="section" id="connexion">
+      <div class="kicker">02 — À CHAQUE OUVERTURE</div>
+      <h2>Se connecter</h2>
+      <p class="dek">La connexion accepte votre numéro, votre pseudo ou votre e-mail, suivis d'un code de sécurité envoyé par SMS.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen dark" style="background:linear-gradient(135deg,#0F172A,#112240,#2563FF); justify-content:center; align-items:center; text-align:center; padding:0 20px;">
+              <div style="width:56px;height:56px;border-radius:16px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;margin-bottom:10px;"><svg class="icon" style="width:26px;height:26px"><use href="#i-wallet"/></svg></div>
+              <div style="font-size:17px;font-weight:800;margin-bottom:4px;">Mongain</div>
+              <div style="font-size:9px;opacity:.7;margin-bottom:22px;">L'argent mobile au Gabon</div>
+              <div style="background:#fff;color:#0A0F1C;border-radius:18px;padding:16px;width:100%;text-align:left;">
+                <div style="font-weight:700;font-size:11px;margin-bottom:12px;">Connexion</div>
+                <div style="border:1px solid #e2e8f5;border-radius:10px;padding:8px 10px;font-size:9.5px;margin-bottom:8px;">Téléphone, pseudo ou e-mail</div>
+                <div style="border:1px solid #e2e8f5;border-radius:10px;padding:8px 10px;font-size:9.5px;margin-bottom:12px;letter-spacing:3px;">••••</div>
+                <div class="pill-btn">Se connecter</div>
+              </div>
+            </div>
+          </div>
+          <div class="caption">auth/login.tsx</div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>Saisissez votre identifiant</strong> (numéro, pseudo ou e-mail) et votre code PIN.</li>
+            <li><strong>Touchez « Se connecter »</strong> — un code de sécurité vous est envoyé par SMS.</li>
+            <li><strong>Saisissez ce code</strong> sur l'écran suivant pour terminer la connexion.</li>
+          </ol>
+          <div class="tip"><span class="ic">&#9432;</span>Mongain garde votre session ouverte plusieurs semaines — vous n'avez à repasser par ce code que si vous vous déconnectez explicitement ou changez de téléphone.</div>
+          <div class="tip warn"><span class="ic">&#9888;</span>3 codes PIN incorrects bloquent temporairement votre compte 15 minutes, pour vous protéger contre une tentative frauduleuse.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 03 ACCUEIL -->
+    <section class="section" id="accueil">
+      <div class="kicker">03 — LE TABLEAU DE BORD</div>
+      <h2>Écran d'accueil</h2>
+      <p class="dek">Votre solde, vos actions les plus fréquentes, et vos dernières transactions — tout est visible en un coup d'œil dès l'ouverture.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen light">
+              <div class="statusbar"><span>23:40</span><div class="dots">●●●</div></div>
+              <div class="sc-header">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <div class="avatar-sm"><svg class="icon" style="width:13px;height:13px"><use href="#i-person"/></svg></div>
+                  <div><div style="font-size:8px;opacity:.55">Bonjour</div><div style="font-size:10.5px;font-weight:700">Ange</div></div>
+                </div>
+                <div style="display:flex;gap:10px;"><svg class="icon" style="width:15px;height:15px"><use href="#i-bell"/></svg><svg class="icon" style="width:15px;height:15px"><use href="#i-headset"/></svg><svg class="icon" style="width:15px;height:15px"><use href="#i-chat"/></svg></div>
+              </div>
+              <div class="sc-body">
+                <div class="balance-card">
+                  <div style="display:flex;justify-content:space-between;font-size:9px;opacity:.85;"><span>Solde principal ⌄</span><svg class="icon" style="width:12px;height:12px"><use href="#i-eye"/></svg></div>
+                  <div class="balance-amt">36 930 <span style="font-size:11px;font-weight:500;opacity:.8;">FCFA</span></div>
+                  <div class="qr-row"><svg class="icon" style="width:10px;height:10px"><use href="#i-qr"/></svg> Mon QR Code (Recevoir)</div>
+                </div>
+                <div class="sec-title">Actions rapides</div>
+                <div class="grid5">
+                  <div class="act-item"><div class="act-ic" style="background:#2563FF15"><svg class="icon" style="width:15px;height:15px;color:#2563FF"><use href="#i-send"/></svg></div><span class="act-lbl">Envoyer</span></div>
+                  <div class="act-item"><div class="act-ic" style="background:#00C27A15"><svg class="icon" style="width:15px;height:15px;color:#00C27A"><use href="#i-wallet"/></svg><span class="dot-badge" style="background:var(--orange)"></span></div><span class="act-lbl">Recharger</span></div>
+                  <div class="act-item"><div class="act-ic" style="background:#FFB02015"><svg class="icon" style="width:15px;height:15px;color:#FFB020"><use href="#i-lock"/></svg></div><span class="act-lbl">Retirer</span></div>
+                  <div class="act-item"><div class="act-ic" style="background:#7E3AF215"><svg class="icon" style="width:15px;height:15px;color:#7E3AF2"><use href="#i-card"/></svg><span class="dot-badge" style="background:var(--orange)"></span></div><span class="act-lbl">Cartes</span></div>
+                  <div class="act-item"><div class="act-ic" style="background:#EC489915"><svg class="icon" style="width:15px;height:15px;color:#EC4899"><use href="#i-people"/></svg></div><span class="act-lbl">Diviser</span></div>
+                </div>
+                <div class="card-mini" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                  <div style="width:26px;height:26px;border-radius:8px;background:#7E3AF215;display:flex;align-items:center;justify-content:center;"><svg class="icon" style="width:13px;height:13px;color:#7E3AF2"><use href="#i-wallet"/></svg></div>
+                  <div style="flex:1"><div style="font-size:9.5px;font-weight:700;">Mon épargne</div><div style="font-size:7.5px;opacity:.6;">Caisse commune et tontine, en un seul endroit</div></div>
+                  <svg class="icon" style="width:12px;height:12px;opacity:.5"><use href="#i-chevron"/></svg>
+                </div>
+                <div class="sec-title" style="display:flex;justify-content:space-between;">Services &amp; factures <span style="color:#2563FF;">Voir tout</span></div>
+                <div class="grid4">
+                  <div class="act-item"><div class="act-ic" style="background:#FFB02015;width:28px;height:28px;"><svg class="icon" style="width:13px;height:13px;color:#FFB020"><use href="#i-flash"/></svg></div><span class="act-lbl" style="font-size:7px;">Factures</span></div>
+                  <div class="act-item"><div class="act-ic" style="background:#2563FF15;width:28px;height:28px;"><svg class="icon" style="width:13px;height:13px;color:#2563FF"><use href="#i-phone2"/></svg></div><span class="act-lbl" style="font-size:7px;">Recharge</span></div>
+                  <div class="act-item"><div class="act-ic" style="background:#EF444415;width:28px;height:28px;"><svg class="icon" style="width:13px;height:13px;color:#EF4444"><use href="#i-drop"/></svg></div><span class="act-lbl" style="font-size:7px;">Eau</span></div>
+                  <div class="act-item"><div class="act-ic" style="background:#0E8F5B15;width:28px;height:28px;"><svg class="icon" style="width:13px;height:13px;color:#0E8F5B"><use href="#i-globe"/></svg></div><span class="act-lbl" style="font-size:7px;">Internat.</span></div>
+                </div>
+              </div>
+              <div class="tabbar">
+                <div class="tab-ic" style="color:#2563FF"><svg class="icon" style="width:15px;height:15px"><use href="#i-home"/></svg>Accueil</div>
+                <div class="tab-ic" style="color:#8892a6"><svg class="icon" style="width:15px;height:15px"><use href="#i-clock"/></svg>Historique</div>
+                <div class="tab-fab"><svg class="icon" style="width:16px;height:16px"><use href="#i-qr"/></svg></div>
+                <div class="tab-ic" style="color:#8892a6"><svg class="icon" style="width:15px;height:15px"><use href="#i-grid"/></svg>Services</div>
+                <div class="tab-ic" style="color:#8892a6"><svg class="icon" style="width:15px;height:15px"><use href="#i-person"/></svg>Profil</div>
+              </div>
+            </div>
+          </div>
+          <div class="caption">(tabs)/index.tsx</div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>Le solde</strong> tout en haut peut être masqué (icône œil) avant de montrer votre écran à quelqu'un ; l'icône de rafraîchissement à côté force une resynchronisation immédiate.</li>
+            <li><strong>« Mon QR Code »</strong> ouvre votre code personnel pour recevoir un paiement instantanément (détails section 05).</li>
+            <li><strong>Les actions rapides</strong> couvrent les gestes les plus fréquents : Envoyer et Retirer sont pleinement actifs ; Recharger et Cartes portent un petit point orange <span class="badge-soon" style="margin:0">● bientôt</span> ici sur la maquette car ils dépendent d'un partenaire externe pas encore branché (sections 07 et 09).</li>
+            <li><strong>« Mon épargne »</strong> regroupe vos Tontines et Caisses Communes en un seul endroit.</li>
+            <li><strong>« Services &amp; factures »</strong> ouvre Factures, Recharge de crédit, Eau et transferts Internationaux (« Internat. ») — voir section 08.</li>
+            <li>La <strong>barre du bas</strong> donne accès à l'Historique complet, au scanner QR (bouton central bleu), à l'onglet Services, et à votre Profil.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- 04 ENVOYER -->
+    <section class="section" id="envoyer">
+      <div class="kicker">04 — TRANSFERT P2P <span class="badge-live">● Actif</span></div>
+      <h2>Envoyer de l'argent</h2>
+      <p class="dek">Trois façons d'atteindre un destinataire — scanner son QR, choisir un contact Mongain, ou saisir son numéro — puis un montant confirmé par votre code PIN, frais toujours affichés avant validation.</p>
+      <div class="duo">
+        <div class="phone-slot" style="display:flex;flex-direction:column;gap:26px;">
+          <div>
+            <div class="phone" style="width:190px;height:398px;">
+              <div class="notch"></div>
+              <div class="screen dark" style="background:#05070c;justify-content:flex-start;">
+                <div class="statusbar"><span>23:41</span><div class="dots">●●●</div></div>
+                <div style="display:flex;justify-content:space-between;padding:4px 12px;">
+                  <div style="width:20px;height:20px;border-radius:10px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;">✕</div>
+                  <div style="width:20px;height:20px;border-radius:10px;background:#22C55E;display:flex;align-items:center;justify-content:center;"><svg class="icon" style="width:11px;height:11px"><use href="#i-camera"/></svg></div>
+                </div>
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;">
+                  <div style="width:64%;aspect-ratio:1;position:relative;">
+                    <div style="position:absolute;inset:0;background:repeating-linear-gradient(45deg,#2a2f38,#2a2f38 3px,#23262d 3px,#23262d 6px);border-radius:6px;opacity:.7;"></div>
+                    <div style="position:absolute;top:-2px;left:-2px;width:20px;height:20px;border-top:3px solid #2563FF;border-left:3px solid #2563FF;border-radius:6px 0 0 0;"></div>
+                    <div style="position:absolute;top:-2px;right:-2px;width:20px;height:20px;border-top:3px solid #2563FF;border-right:3px solid #2563FF;border-radius:0 6px 0 0;"></div>
+                    <div style="position:absolute;bottom:-2px;left:-2px;width:20px;height:20px;border-bottom:3px solid #2563FF;border-left:3px solid #2563FF;border-radius:0 0 0 6px;"></div>
+                    <div style="position:absolute;bottom:-2px;right:-2px;width:20px;height:20px;border-bottom:3px solid #2563FF;border-right:3px solid #2563FF;border-radius:0 0 6px 0;"></div>
+                  </div>
+                  <div style="color:#fff;font-size:9px;font-weight:600;opacity:.9;">Placez le code QR dans le cadre</div>
+                </div>
+                <div style="height:16px;"></div>
+              </div>
+            </div>
+            <div class="caption">transfer/scan-qr.tsx</div>
+          </div>
+          <div>
+            <div class="phone"><div class="notch"></div>
+              <div class="screen light">
+                <div class="statusbar"><span>23:41</span><div class="dots">●●●</div></div>
+                <div class="sc-header" style="background:#2563FF;color:#fff;margin:0 -12px;padding:10px 14px 16px;border-radius:0 0 20px 20px;">
+                  <svg class="icon" style="width:15px;height:15px"><use href="#i-back"/></svg>
+                  <div style="font-weight:700;font-size:11px;">Confirmation</div>
+                  <div style="width:15px"></div>
+                </div>
+                <div class="sc-body pad">
+                  <div class="card-mini" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                    <div class="contact-avatar">O</div>
+                    <div><div style="font-size:7.5px;opacity:.55;">Destinataire</div><div style="font-size:10px;font-weight:700;">Ous</div><div style="font-size:7.5px;opacity:.55;">+24177262483</div></div>
+                  </div>
+                  <div style="font-size:8px;opacity:.55;margin-bottom:4px;">MONTANT (FCFA)</div>
+                  <div class="card-mini" style="margin-bottom:0;"><div style="font-size:16px;font-weight:800;">FCFA <span style="font-weight:800;">2000</span></div></div>
+                  <div class="fee-box">
+                    <div class="fee-line"><span>Montant envoyé</span><strong>2 000 FCFA</strong></div>
+                    <div class="fee-line" style="color:#C9781A;"><span>Frais (1%)</span><strong>20 FCFA</strong></div>
+                    <div class="fee-total"><span>Total à débiter</span><span>2 020 FCFA</span></div>
+                  </div>
+                  <div class="amt-row"><div class="amt-chip">5 000</div><div class="amt-chip">10 000</div><div class="amt-chip">25 000</div><div class="amt-chip">50 000</div></div>
+                  <div style="font-size:8px;opacity:.55;margin:6px 0 4px;">CODE PIN</div>
+                  <div class="fund-input" style="letter-spacing:4px;display:flex;align-items:center;gap:6px;">🔒 ••••</div>
+                  <div class="pill-btn" style="margin-top:8px;">➤ Envoyer (PIN)</div>
+                </div>
+                <div class="tabbar" style="opacity:.3"></div>
+              </div>
+            </div>
+            <div class="caption">transfer/send.tsx → transfer/confirm.tsx</div>
+          </div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>Depuis l'accueil</strong>, touchez « Envoyer », puis choisissez « Scanner QR » (instantané — ouvre l'appareil photo avec le cadre « Placez le code QR dans le cadre », comme ci-contre), « Mes Contacts » (répertoire des proches déjà sur Mongain, avec recherche), ou saisissez un numéro à la main sous « Saisie manuelle » (indicatif +241 pré-rempli).</li>
+            <li><strong>Le destinataire trouvé</strong> s'affiche avec son nom pour confirmation — un contact sélectionné est coché d'un ✓ bleu — puis touchez « Continuer vers le montant ».</li>
+            <li><strong>Indiquez le montant</strong> (ou touchez un montant rapide : 5 000 / 10 000 / 25 000 / 50 000 FCFA) — les frais de 1 % et le total réellement débité s'affichent immédiatement, jamais après coup.</li>
+            <li><strong>Saisissez votre code PIN</strong> et touchez « Envoyer (PIN) ». Un reçu PDF partageable est proposé dès que le transfert est confirmé, avec votre nouveau solde affiché.</li>
+          </ol>
+          <div class="tip"><span class="ic">&#9432;</span>Le destinataire est notifié instantanément et l'opération apparaît aussitôt dans votre Historique (section 12).</div>
+          <div class="tip ok"><span class="ic">&#10003;</span>Un virement vers le compte de votre propre enfant (section 13) est toujours gratuit, sans le frais de 1 %.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 05 RECEVOIR -->
+    <section class="section" id="recevoir">
+      <div class="kicker">05 — ENCAISSER SANS FRAIS <span class="badge-live">● Actif</span></div>
+      <h2>Recevoir de l'argent</h2>
+      <p class="dek">Votre code QR personnel encode votre numéro Mongain : quiconque le scanne peut vous envoyer un montant sans jamais le saisir à la main.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen light">
+              <div class="statusbar"><span>23:45</span><div class="dots">●●●</div></div>
+              <div class="sc-header"><svg class="icon" style="width:15px;height:15px"><use href="#i-back"/></svg><div style="font-weight:700;font-size:11px;">Mon QR Code</div><div style="width:15px"></div></div>
+              <div class="sc-body pad" style="text-align:center;">
+                <div style="font-size:8px;opacity:.6;line-height:1.5;margin-bottom:12px;">Faites scanner ce code pour recevoir de l'argent instantanément.</div>
+                <div class="card-mini" style="text-align:left;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <div style="display:flex;align-items:center;gap:4px;font-weight:800;font-size:9.5px;color:#0E8F5B;"><svg class="icon" style="width:12px;height:12px"><use href="#i-wallet"/></svg>MONGAIN</div>
+                    <div class="pill-btn" style="padding:4px 9px;">Mon Code</div>
+                  </div>
+                  <div class="qr-box"></div>
+                  <div style="text-align:center;font-weight:800;font-size:11px;margin-top:10px;">Ange</div>
+                  <div style="text-align:center;font-size:8px;opacity:.55;">+241 62 78 18 78</div>
+                </div>
+                <div class="pill-btn" style="margin-top:10px;background:#7E3AF2;">⤴ Partager mon Numéro</div>
+                <div class="pill-btn" style="margin-top:6px;background:#0A0F1C;"><svg class="icon" style="width:10px;height:10px"><use href="#i-print"/></svg> Imprimer ce code</div>
+              </div>
+              <div class="tabbar" style="opacity:.3"></div>
+            </div>
+          </div>
+          <div class="caption">profile/qr-code.tsx</div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>Depuis l'accueil</strong>, touchez « Mon QR Code (Recevoir) » dans la carte de solde, ou depuis le Profil touchez « Mon code QR ».</li>
+            <li><strong>Présentez l'écran</strong> à la personne qui souhaite vous payer — elle le scanne avec son propre bouton « Scanner QR » (section 04) et votre nom apparaît automatiquement chez elle.</li>
+            <li><strong>« Partager mon Numéro »</strong> envoie votre numéro par SMS/WhatsApp à quelqu'un qui n'a pas son téléphone sous la main ; « Imprimer ce code » produit une version prête à coller sur un comptoir ou un stand.</li>
+          </ol>
+          <div class="tip"><span class="ic">&#9432;</span>Recevoir de l'argent est toujours gratuit — seul l'expéditeur paie d'éventuels frais de transfert.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 06 RETIRER -->
+    <section class="section" id="retirer">
+      <div class="kicker">06 — TRANSFORMER SON SOLDE EN CASH <span class="badge-live">● Actif (agence)</span></div>
+      <h2>Retirer de l'argent</h2>
+      <p class="dek">Deux façons de retirer du cash auprès d'un agent ou d'une agence Mongain — par QR ou par code secret ; les virements automatisés vers Airtel Money et Moov Africa restent en attente d'un partenaire externe.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen light">
+              <div class="statusbar"><span>23:43</span><div class="dots">●●●</div></div>
+              <div class="sc-header" style="background:#2563FF;color:#fff;margin:0 -12px;padding:10px 14px 16px;border-radius:0 0 20px 20px;">
+                <svg class="icon" style="width:15px;height:15px"><use href="#i-back"/></svg>
+                <div style="font-weight:700;font-size:11px;">Retrait</div>
+                <div style="width:15px"></div>
+              </div>
+              <div class="sc-body pad">
+                <div style="text-align:center;margin:8px 0 10px;">
+                  <div style="font-size:7.5px;opacity:.55;letter-spacing:.5px;">SOLDE RETIRABLE</div>
+                  <div style="font-size:18px;font-weight:800;">34 910 FCFA</div>
+                </div>
+                <div class="sec-title" style="opacity:.6;">PAR CODE QR</div>
+                <div class="row-item"><div class="row-ic" style="background:#FFB02015"><svg class="icon" style="width:13px;height:13px;color:#FFB020"><use href="#i-qr"/></svg></div><div class="row-txt"><div class="row-title">Scanner pour retirer</div><div class="row-sub">Saisissez vous-même le montant.</div></div><svg class="icon" style="width:11px;height:11px;opacity:.4"><use href="#i-chevron"/></svg></div>
+                <div class="sec-title" style="opacity:.6;">PAR CODE SECRET</div>
+                <div class="row-item"><div class="row-ic" style="background:#0E8F5B15"><svg class="icon" style="width:13px;height:13px;color:#0E8F5B"><use href="#i-lock"/></svg></div><div class="row-txt"><div class="row-title">Générer un Code (Guichet)</div><div class="row-sub">Donnez le code au caissier.</div></div><svg class="icon" style="width:11px;height:11px;opacity:.4"><use href="#i-chevron"/></svg></div>
+                <div class="sec-title" style="opacity:.6;">PORTEFEUILLES MOBILES ET BANQUES</div>
+                <div class="row-item"><div class="row-ic" style="background:#EF444415"><svg class="icon" style="width:13px;height:13px;color:#EF4444"><use href="#i-phone2"/></svg></div><div class="row-txt"><div class="row-title">Vers Airtel Money</div><div class="row-sub">Virement automatisé</div></div><span class="badge-soon" style="margin:0;padding:2px 6px;font-size:.55rem;">bientôt</span></div>
+                <div class="row-item"><div class="row-ic" style="background:#2563FF15"><svg class="icon" style="width:13px;height:13px;color:#2563FF"><use href="#i-phone2"/></svg></div><div class="row-txt"><div class="row-title">Vers Moov Africa</div><div class="row-sub">Virement automatisé</div></div><span class="badge-soon" style="margin:0;padding:2px 6px;font-size:.55rem;">bientôt</span></div>
+              </div>
+              <div class="tabbar" style="opacity:.3"></div>
+            </div>
+          </div>
+          <div class="caption">wallet/withdraw.tsx</div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>« Scanner pour retirer »</strong> : chez un agent partenaire, scannez son QR d'encaissement (même caméra « Placez le code QR dans le cadre » que pour un envoi, section 04) et saisissez vous-même le montant à retirer — l'agent voit la demande apparaître sur son propre terminal.</li>
+            <li><strong>« Générer un Code (Guichet) »</strong> : indiquez le montant à retirer, touchez « Générer le code » — un code s'affiche, à communiquer avec votre numéro au caissier d'une agence Mongain. Le montant n'est débité qu'une fois le retrait validé par l'agent ; « Annuler » abandonne la demande avant validation.</li>
+            <li><strong>« Vers Airtel Money » / « Vers Moov Africa »</strong> déclencheraient un virement automatique direct sans passer par un agent — cette passerelle attend encore la connexion réelle à Airtel/Moov (même partenaire que la section 07) et affiche pour l'instant un message d'erreur clair si vous essayez.</li>
+          </ol>
+          <div class="tip warn"><span class="ic">&#9888;</span>Le montant généré par un code Guichet reste réservé jusqu'à validation ou annulation — évitez de générer plusieurs codes pour le même retrait.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 07 RECHARGER -->
+    <section class="section" id="recharger">
+      <div class="kicker">07 — ALIMENTER SON SOLDE <span class="badge-soon">● Bientôt disponible</span></div>
+      <h2>Recharger mon compte</h2>
+      <p class="dek">Transférer des fonds depuis Airtel Money ou Moov Africa vers votre solde Mongain — cette passerelle attend la connexion réelle à l'opérateur mobile money.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen light" style="position:relative;">
+              <div class="statusbar"><span>23:42</span><div class="dots">●●●</div></div>
+              <div class="sc-header" style="background:#2563FF;color:#fff;margin:0 -12px;padding:10px 14px 16px;border-radius:0 0 20px 20px;">
+                <svg class="icon" style="width:14px;height:14px"><use href="#i-plus" transform="rotate(45 12 12)"/></svg>
+                <div style="font-weight:700;font-size:10.5px;">Dépôt par Airtel Money</div>
+                <div style="width:14px"></div>
+              </div>
+              <div class="sc-body pad">
+                <div style="background:#FBEAEA;border-radius:10px;padding:9px;margin-bottom:10px;">
+                  <div style="font-weight:800;font-size:8.5px;color:#C0392B;margin-bottom:3px;">Autorisation Airtel Money</div>
+                  <div style="font-size:7.5px;opacity:.75;line-height:1.4;">Les fonds seront prélevés de votre solde Mobile Money. Une pop-up s'affichera sur ce numéro pour validation.</div>
+                </div>
+                <div style="font-size:8px;opacity:.55;margin-bottom:4px;">NUMÉRO AIRTEL MONEY (À DÉBITER)</div>
+                <div class="fund-input">+241 &nbsp;62781878</div>
+                <div style="font-size:8px;opacity:.55;margin:6px 0 4px;">MONTANT À TRANSFÉRER VERS MONGAIN</div>
+                <div class="fund-input">FCFA &nbsp;0</div>
+                <div class="pill-btn" style="margin-top:8px;">Initier le Dépôt</div>
+                <div style="font-size:7px;opacity:.55;margin-top:8px;color:#0E8F5B;">🔒 Transaction chiffrée. Seul Airtel Money traite votre code pin.</div>
+              </div>
+              <div class="modal-overlay">
+                <div class="modal-card">
+                  <h4>Erreur de transaction</h4>
+                  <p>Le dépôt Mobile Money nécessite une intégration réelle avec Airtel/Moov. Cette fonctionnalité est désactivée tant que cette intégration n'est pas configurée.</p>
+                  <div class="modal-ok">OK</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="caption">wallet/deposit-mobilemoney.tsx</div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>Depuis l'accueil</strong>, touchez « Recharger » puis choisissez Airtel Money ou Moov Africa.</li>
+            <li><strong>Vérifiez le numéro</strong> à débiter et saisissez le montant à transférer vers votre solde Mongain.</li>
+            <li><strong>Touchez « Initier le Dépôt »</strong> — en théorie une validation apparaît sur votre téléphone Airtel/Moov.</li>
+          </ol>
+          <div class="tip warn"><span class="ic">&#9888;</span>Mongain n'a pas encore activé sa connexion réelle avec Airtel/Moov : toute tentative se termine aujourd'hui par le message <code>« Le dépôt Mobile Money nécessite une intégration réelle avec Airtel/Moov. Cette fonctionnalité est désactivée tant que cette intégration n'est pas configurée. »</code> — aucun fonds n'est prélevé.</div>
+          <div class="tip ok"><span class="ic">&#10003;</span>En attendant, utilisez un agent Mongain (section 06) pour convertir du cash en solde, ou demandez à un proche de vous envoyer de l'argent (section 04).</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 08 FACTURES -->
+    <section class="section" id="factures">
+      <div class="kicker">08 — QUOTIDIEN <span class="badge-soon">● Bientôt disponible</span></div>
+      <h2>Factures &amp; recharges</h2>
+      <p class="dek">Payer SEEG (électricité), Canal+, l'eau, ou recharger du crédit téléphonique et international directement depuis votre solde — ces quatre services attendent la connexion réelle à leurs fournisseurs respectifs.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen light">
+              <div class="statusbar" style="color:#fff"><span>23:44</span><div class="dots">●●●</div></div>
+              <div class="sc-header" style="background:#0E8F5B;color:#fff;margin:0 -12px;padding:10px 14px 20px;border-radius:0 0 20px 20px;flex-direction:column;align-items:flex-start;gap:4px;">
+                <svg class="icon" style="width:14px;height:14px"><use href="#i-back"/></svg>
+                <div style="font-weight:800;font-size:13px;">Payer une Facture</div>
+                <div style="font-size:8px;opacity:.85;">Payez SEEG et Canal+ via Mongain</div>
+              </div>
+              <div class="sc-body pad">
+                <div class="sec-title" style="opacity:.6;">FOURNISSEURS</div>
+                <div class="toggle-row">
+                  <div class="toggle-pill" style="background:#0E8F5B15;border-color:#0E8F5B;color:#0E8F5B;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px;"><svg class="icon" style="width:13px;height:13px"><use href="#i-flash"/></svg>SEEG (EDAN)</div>
+                  <div class="toggle-pill" style="border-color:var(--app-light-border);color:#8892a6;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px;"><svg class="icon" style="width:13px;height:13px"><use href="#i-tv"/></svg>CANAL+</div>
+                </div>
+                <div style="font-size:8px;opacity:.55;margin:8px 0 4px;">NUMÉRO COMPTEUR</div>
+                <div class="fund-input" style="opacity:.5;">Saisissez le N° SEEG</div>
+                <div style="font-size:8px;opacity:.55;margin:6px 0 4px;">MONTANT (FCFA)</div>
+                <div class="fund-input" style="opacity:.5;">Ex: 5000</div>
+                <div style="font-size:8px;opacity:.55;margin:6px 0 4px;">CODE PIN MONGAIN</div>
+                <div class="fund-input" style="opacity:.5;">••••</div>
+                <div class="pill-btn" style="margin-top:8px;background:#0E8F5B;">Valider le Paiement</div>
+              </div>
+              <div class="tabbar" style="opacity:.3"></div>
+            </div>
+          </div>
+          <div class="caption">services/pay-bill.tsx</div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>Depuis « Services &amp; factures »</strong> (accueil ou onglet Services), touchez Factures, Recharge, Eau ou Internat.</li>
+            <li><strong>Choisissez le fournisseur</strong> — SEEG (EDAN) demande un numéro de compteur, CANAL+ un numéro d'abonné, la recharge téléphonique un opérateur (Airtel/Moov).</li>
+            <li><strong>Indiquez le montant</strong> et votre code PIN Mongain, puis touchez « Valider le Paiement ».</li>
+          </ol>
+          <div class="tip warn"><span class="ic">&#9888;</span>Mongain n'a pas encore activé sa connexion réelle avec SEEG, Canal+ ni les opérateurs télécom : valider aujourd'hui renvoie le message <code>« Le paiement de factures nécessite une intégration réelle avec le fournisseur (SEEG/Canal+). Cette fonctionnalité est désactivée tant que cette intégration n'est pas en place. »</code> (message équivalent pour la recharge de crédit) — votre solde n'est jamais débité pour un service qui ne serait pas rendu.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 09 CARTES -->
+    <section class="section" id="cartes">
+      <div class="kicker">09 — PAIEMENTS EN LIGNE <span class="badge-soon">● Bientôt disponible</span></div>
+      <h2>Cartes virtuelles</h2>
+      <p class="dek">Une carte virtuelle rechargeable depuis votre solde, pensée pour payer chez n'importe quel marchand en ligne — l'émission de nouvelles cartes et leur rechargement attendent un émetteur de cartes réel.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen dark" style="background:#0A0F1C;">
+              <div class="statusbar"><span>23:45</span><div class="dots">●●●</div></div>
+              <div class="sc-body pad">
+                <div style="font-size:15px;font-weight:800;margin:6px 0 2px;">Mes Cartes</div>
+                <div style="font-size:8px;opacity:.55;margin-bottom:10px;">Payez en ligne partout dans le monde</div>
+                <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:14px;margin-bottom:8px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><span style="font-size:8px;letter-spacing:1px;opacity:.8;">MONGAIN VIRTUAL</span><svg class="icon" style="width:14px;height:14px"><use href="#i-card"/></svg></div>
+                  <div style="font-size:14px;font-weight:800;margin-bottom:14px;">0 XAF</div>
+                  <div style="font-family:monospace;letter-spacing:2px;font-size:10.5px;margin-bottom:16px;">4184 6060 2289 1815</div>
+                  <div style="display:flex;justify-content:space-between;font-size:8px;">
+                    <div><div style="opacity:.5;">EXP</div><div style="font-family:monospace">09/29</div></div>
+                    <div><div style="opacity:.5;">CVV</div><div style="font-family:monospace">*** 👁</div></div>
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;">
+                  <div class="pill-btn" style="flex:1;background:rgba(255,255,255,.1);">Recharger</div>
+                  <div class="pill-btn" style="flex:1;background:rgba(180,40,40,.5);color:#fca5a5;">Geler</div>
+                </div>
+              </div>
+              <div class="tabbar" style="opacity:.3"></div>
+            </div>
+          </div>
+          <div class="caption">wallet/cards.tsx</div>
+        </div>
+        <div>
+          <p style="font-size:.95rem; color:var(--ink-soft); line-height:1.65; max-width:56ch;">L'écran « Mes Cartes » liste vos cartes virtuelles avec leur numéro, date d'expiration et CVV masqué (icône œil pour révéler), et propose « Recharger » (transférer du solde Mongain vers la carte) et « Geler » (bloquer temporairement tout paiement).</p>
+          <div class="tip warn" style="margin-top:12px;"><span class="ic">&#9888;</span>Émettre une nouvelle carte ou la recharger renvoie aujourd'hui : <code>« Les cartes virtuelles nécessitent une intégration réelle avec un émetteur de cartes. Cette fonctionnalité est désactivée tant que cette intégration n'est pas en place. »</code> Aucune carte non fonctionnelle n'est donc jamais réellement utilisable chez un marchand tant que ce partenaire n'est pas connecté.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 10 INVESTIR -->
+    <section class="section" id="investir">
+      <div class="kicker">10 — FAIRE FRUCTIFIER OU EMPRUNTER</div>
+      <h2>Crédit &amp; Investissement</h2>
+      <p class="dek">Quatre produits accessibles depuis l'onglet Services, à des stades très différents : deux entièrement opérationnels, un en attente d'une bourse crypto réelle.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen light">
+              <div class="statusbar"><span>23:44</span><div class="dots">●●●</div></div>
+              <div class="sc-header" style="background:#2563FF;color:#fff;margin:0 -12px;padding:10px 14px 16px;border-radius:0 0 20px 20px;">
+                <svg class="icon" style="width:15px;height:15px"><use href="#i-back"/></svg>
+                <div style="font-weight:700;font-size:11px;">Crédit &amp; Investissement</div>
+                <div style="width:15px"></div>
+              </div>
+              <div class="sc-body pad">
+                <div class="grid4" style="margin-top:12px;">
+                  <div class="act-item"><div class="act-ic" style="background:#2563FF15;width:40px;height:40px;"><svg class="icon" style="width:18px;height:18px;color:#2563FF"><use href="#i-coin"/></svg><span class="dot-badge" style="background:#0E8F5B"></span></div><span class="act-lbl">Micro-crédit</span></div>
+                  <div class="act-item"><div class="act-ic" style="background:#FFB02015;width:40px;height:40px;"><svg class="icon" style="width:18px;height:18px;color:#FFB020"><use href="#i-card"/></svg><span class="dot-badge" style="background:#0E8F5B"></span></div><span class="act-lbl">Paiement x3</span></div>
+                  <div class="act-item"><div class="act-ic" style="background:#0E8F5B15;width:40px;height:40px;"><svg class="icon" style="width:18px;height:18px;color:#0E8F5B"><use href="#i-trend"/></svg><span class="dot-badge" style="background:var(--orange)"></span></div><span class="act-lbl">Crypto</span></div>
+                  <div class="act-item"><div class="act-ic" style="background:#FFB02015;width:40px;height:40px;"><svg class="icon" style="width:18px;height:18px;color:#FFB020"><use href="#i-lock"/></svg><span class="dot-badge" style="background:#0E8F5B"></span></div><span class="act-lbl">Staking</span></div>
+                </div>
+                <div style="display:flex;gap:10px;margin-top:14px;font-size:7px;"><span><span class="dot-badge" style="position:static;display:inline-block;background:#0E8F5B;border:none;vertical-align:middle;"></span> Actif</span><span><span class="dot-badge" style="position:static;display:inline-block;background:var(--orange);border:none;vertical-align:middle;"></span> Bientôt</span></div>
+              </div>
+              <div class="tabbar" style="opacity:.3"></div>
+            </div>
+          </div>
+          <div class="caption">(tabs)/invest.tsx</div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>Micro-crédit</strong> <span class="badge-live">● Actif</span> — un prêt court terme à 5 % d'intérêt fixe. Votre montant maximum dépend de votre niveau KYC (section 17, minimum niveau 1) et de vos Points Mongain (minimum 100 points) ; le plafond se calcule automatiquement et grimpe avec vos points, jusqu'à 500 000 FCFA.</li>
+            <li><strong>Paiement x3</strong> <span class="badge-live">● Actif</span> — un achat en plusieurs fois (BNPL), jusqu'à 50 000 FCFA étalés sur 1 à 4 mois. Une seule dette active à la fois.</li>
+            <li><strong>Staking</strong> <span class="badge-live">● Actif</span> — bloquez au moins 10 000 FCFA pendant 1 à 60 mois contre un rendement annuel de 5 % (8 % à partir de 12 mois), confirmé par votre code PIN.</li>
+            <li><strong>Crypto</strong> <span class="badge-soon">● Bientôt disponible</span> — l'écran affiche un marché (Bitcoin, Ethereum…) mais ce sont des cours de démonstration, sans bourse ni portefeuille blockchain réel derrière. L'achat renvoie le message <code>« L'achat de cryptomonnaies nécessite une intégration réelle avec une bourse/custodian. »</code></li>
+          </ol>
+          <div class="tip"><span class="ic">&#9432;</span>Micro-crédit, Paiement x3 et Staking débitent et créditent réellement votre solde Mongain — traitez-les avec la même prudence qu'un virement classique.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 11 INTERNATIONAL -->
+    <section class="section" id="international">
+      <div class="kicker">11 — ENVOI HORS GABON <span class="badge-soon">● Bientôt disponible</span></div>
+      <h2>Transfert international</h2>
+      <p class="dek">Envoyer des FCFA convertis vers un compte en euros, dollars, francs CFA ouest-africains ou nairas — cette route attend un partenaire de transfert international réel.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen light">
+              <div class="statusbar"><span>23:46</span><div class="dots">●●●</div></div>
+              <div class="sc-header" style="background:#2563FF;color:#fff;margin:0 -12px;padding:10px 14px 16px;border-radius:0 0 20px 20px;">
+                <svg class="icon" style="width:15px;height:15px"><use href="#i-back"/></svg>
+                <div style="font-weight:700;font-size:11px;">Transfert International</div>
+                <div style="width:15px"></div>
+              </div>
+              <div class="sc-body pad">
+                <div style="font-size:8px;opacity:.55;margin-bottom:4px;">MONTANT À ENVOYER (XAF)</div>
+                <div class="card-mini" style="text-align:center;margin-bottom:10px;"><span style="opacity:.4;font-size:11px;">ex: 50000</span></div>
+                <div class="sec-title" style="opacity:.6;">PAYS DESTINATAIRE</div>
+                <div class="grid4" style="grid-template-columns:repeat(2,1fr);margin-bottom:8px;">
+                  <div class="toggle-pill" style="border-color:#2563FF;color:#2563FF;display:flex;align-items:center;gap:5px;justify-content:flex-start;padding:8px;"><span class="flag-chip" style="background:linear-gradient(90deg,#0055A4 33%,#fff 33% 66%,#EF4135 66%)"></span>EUR</div>
+                  <div class="toggle-pill" style="border-color:var(--app-light-border);color:#8892a6;display:flex;align-items:center;gap:5px;justify-content:flex-start;padding:8px;"><span class="flag-chip" style="background:linear-gradient(180deg,#3C3B6E 40%,#B22234 40%)"></span>USD</div>
+                  <div class="toggle-pill" style="border-color:var(--app-light-border);color:#8892a6;display:flex;align-items:center;gap:5px;justify-content:flex-start;padding:8px;"><span class="flag-chip" style="background:linear-gradient(90deg,#00853F 33%,#FDEF42 33% 66%,#E31B23 66%)"></span>XOF</div>
+                  <div class="toggle-pill" style="border-color:var(--app-light-border);color:#8892a6;display:flex;align-items:center;gap:5px;justify-content:flex-start;padding:8px;"><span class="flag-chip" style="background:linear-gradient(90deg,#008751 33%,#fff 33% 66%,#008751 66%)"></span>NGN</div>
+                </div>
+                <div style="font-size:8px;opacity:.55;margin-bottom:4px;">IBAN OU NUMÉRO DU DESTINATAIRE</div>
+                <div class="fund-input" style="opacity:.5;">FR76 1234 5678...</div>
+                <div class="pill-btn" style="margin-top:8px;opacity:.55;">Initier le transfert</div>
+              </div>
+              <div class="tabbar" style="opacity:.3"></div>
+            </div>
+          </div>
+          <div class="caption">remit/international.tsx</div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>Choisissez la devise</strong> de destination (EUR, USD, XOF, NGN) puis saisissez le montant en FCFA à envoyer.</li>
+            <li><strong>Renseignez l'IBAN</strong> ou le numéro de compte du destinataire.</li>
+            <li><strong>Touchez « Initier le transfert »</strong> pour lancer l'envoi.</li>
+          </ol>
+          <div class="tip warn"><span class="ic">&#9888;</span>Mongain n'a pas encore activé de partenaire de remise internationale réel : initier un transfert renvoie aujourd'hui <code>« La remise internationale nécessite une intégration réelle avec un partenaire de transfert. Cette fonctionnalité est désactivée tant que cette intégration n'est pas en place. »</code></li>
+        </div>
+      </div>
+    </section>
+
+    <!-- 12 HISTORIQUE -->
+    <section class="section" id="historique">
+      <div class="kicker">12 — TOUT RETROUVER <span class="badge-live">● Actif</span></div>
+      <h2>Historique &amp; notifications</h2>
+      <p class="dek">Chaque mouvement d'argent est journalisé et vous alerte par notification — filtrable par sens, exportable, et remontant jusqu'à vos tout premiers mouvements.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen light">
+              <div class="statusbar" style="color:#fff"><span>23:44</span><div class="dots">●●●</div></div>
+              <div class="sc-header" style="background:#2563FF;color:#fff;margin:0 -12px;padding:10px 14px 14px;border-radius:0 0 20px 20px;">
+                <div style="font-weight:800;font-size:13px;">Historique</div>
+                <div style="width:22px;height:22px;border-radius:11px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;"><svg class="icon" style="width:11px;height:11px"><use href="#i-download"/></svg></div>
+              </div>
+              <div class="sc-body pad">
+                <div class="tab-strip"><div class="tab-chip on">Tout</div><div class="tab-chip">Envoyé</div><div class="tab-chip">Reçu</div></div>
+                <div style="font-size:7.5px;opacity:.55;margin-bottom:4px;">Ce mois-ci — 18 transaction(s)</div>
+                <div class="row-item"><div class="row-ic" style="background:#EF444415"><svg class="icon" style="width:12px;height:12px;color:#EF4444;transform:rotate(180deg)"><use href="#i-download"/></svg></div><div class="row-txt"><div class="row-title">Frais de service</div><div class="row-sub">Agence / Banque Centrale</div></div><div class="row-amt" style="color:#EF4444">-20</div></div>
+                <div class="row-item"><div class="row-ic" style="background:#EF444415"><svg class="icon" style="width:12px;height:12px;color:#EF4444;transform:rotate(180deg)"><use href="#i-download"/></svg></div><div class="row-txt"><div class="row-title">Transfert envoyé</div><div class="row-sub">Ous · 12 sept., 23:42</div></div><div class="row-amt" style="color:#EF4444">-2 000</div></div>
+                <div class="row-item"><div class="row-ic" style="background:#0E8F5B15"><svg class="icon" style="width:12px;height:12px;color:#0E8F5B"><use href="#i-download"/></svg></div><div class="row-txt"><div class="row-title">Transfert reçu</div><div class="row-sub">Ous · 12 sept., 23:22</div></div><div class="row-amt" style="color:#0E8F5B">+30 000</div></div>
+              </div>
+              <div class="tabbar">
+                <div class="tab-ic" style="color:#8892a6"><svg class="icon" style="width:15px;height:15px"><use href="#i-home"/></svg>Accueil</div>
+                <div class="tab-ic" style="color:#2563FF"><svg class="icon" style="width:15px;height:15px"><use href="#i-clock"/></svg>Historique</div>
+                <div class="tab-fab"><svg class="icon" style="width:16px;height:16px"><use href="#i-qr"/></svg></div>
+                <div class="tab-ic" style="color:#8892a6"><svg class="icon" style="width:15px;height:15px"><use href="#i-grid"/></svg>Services</div>
+                <div class="tab-ic" style="color:#8892a6"><svg class="icon" style="width:15px;height:15px"><use href="#i-person"/></svg>Profil</div>
+              </div>
+            </div>
+          </div>
+          <div class="caption">(tabs)/history.tsx</div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>L'onglet Historique</strong> (barre du bas) liste toutes vos opérations groupées par mois ; les filtres « Tout / Envoyé / Reçu » réduisent la liste, et l'icône de téléchargement en haut à droite exporte le relevé.</li>
+            <li><strong>La cloche</strong> sur l'accueil ouvre vos Notifications — un point bleu à côté d'une entrée signale qu'elle n'a pas encore été lue, et « Tout lire » les marque toutes comme vues.</li>
+            <li>Chaque envoi, réception, retrait, ou frais de service (comme les 20 FCFA de frais de virement) apparaît séparément, avec la date et l'heure exactes.</li>
+          </ol>
+          <div class="tip"><span class="ic">&#9432;</span>Vous êtes aussi notifié en temps réel de chaque dépense faite par un compte enfant que vous supervisez (section 15).</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 13 ENFANT HUB -->
+    <section class="section" id="enfant-hub">
+      <div class="kicker">13 — SUPERVISION FAMILIALE <span class="badge-live">● Actif</span></div>
+      <h2>Comptes Enfant</h2>
+      <p class="dek">Créez un compte à part entière pour votre enfant — son propre numéro, son propre code PIN — et gardez le contrôle : plafond de dépense, notifications en temps réel, historique complet.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen light">
+              <div class="statusbar"><span>23:45</span><div class="dots">●●●</div></div>
+              <div class="sc-header" style="background:#2563FF;color:#fff;margin:0 -12px;padding:10px 14px 16px;border-radius:0 0 20px 20px;">
+                <svg class="icon" style="width:15px;height:15px"><use href="#i-back"/></svg>
+                <div style="font-weight:700;font-size:11px;">Comptes Enfant</div>
+                <svg class="icon" style="width:15px;height:15px"><use href="#i-plus"/></svg>
+              </div>
+              <div class="sc-body pad">
+                <div style="font-size:8.5px;opacity:.6;line-height:1.4;margin-bottom:10px;">Créez un compte pour votre enfant, définissez son plafond, rechargez son solde.</div>
+                <div class="card-mini">
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <div style="width:30px;height:30px;border-radius:15px;background:#EC489915;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#EC4899;">M</div>
+                    <div style="flex:1;"><div style="font-size:10px;font-weight:700;">Marlyse</div><div style="font-size:8px;opacity:.6;">0 FCFA</div></div>
+                    <svg class="icon" style="width:12px;height:12px;opacity:.4"><use href="#i-chevron"/></svg>
+                  </div>
+                </div>
+              </div>
+              <div class="tabbar" style="opacity:.3"></div>
+            </div>
+          </div>
+          <div class="caption">family/index.tsx</div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>Depuis votre Profil</strong>, touchez « Comptes Enfant » (visible uniquement pour un compte parent).</li>
+            <li><strong>La liste</strong> affiche chaque enfant avec son solde actuel, teinté d'une couleur selon son profil.</li>
+            <li><strong>Touchez le « + »</strong> en haut à droite pour créer un nouveau compte enfant (section 14), ou touchez une carte existante pour la gérer (section 15).</li>
+          </ol>
+          <div class="tip"><span class="ic">&#9432;</span>Un compte enfant ne peut jamais créer ou gérer d'autres comptes enfant — seul un compte parent normal le peut.</div>
+          <div class="tip" style="margin-top:10px;"><span class="ic">&#9432;</span><strong>Ce que voit un compte enfant :</strong> tableau de bord, envoi/réception d'argent, Tontines, Caisses communes, paiement par QR code, factures et recharge de crédit. L'onglet Crédit &amp; Investissement (micro-crédit, Paiement x3, crypto, staking), les cartes virtuelles et les transferts internationaux restent invisibles sur son compte, quel que soit son âge ou son plafond.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 14 ENFANT CREATE -->
+    <section class="section" id="enfant-create">
+      <div class="kicker">14 — COMPTES ENFANT</div>
+      <h2>Créer un compte enfant</h2>
+      <p class="dek">Votre enfant reçoit un vrai compte, avec son propre numéro de téléphone et son propre code PIN de connexion.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen light">
+              <div class="statusbar"><span>9:41</span><div class="dots">●●●</div></div>
+              <div class="sc-header"><svg class="icon" style="width:15px;height:15px"><use href="#i-back"/></svg><div style="font-weight:700;font-size:11px;">Informations de l'enfant</div><div style="width:15px"></div></div>
+              <div class="sc-body pad">
+                <div style="font-size:8px;opacity:.55;margin-bottom:4px;">PRÉNOM ET NOM</div>
+                <div class="fund-input" style="margin-bottom:10px;">Marlyse</div>
+                <div style="font-size:8px;opacity:.55;margin-bottom:5px;">NUMÉRO DE TÉLÉPHONE</div>
+                <div class="fund-input" style="margin-bottom:10px;">+241 77 26 24 82</div>
+                <div style="font-size:8px;opacity:.55;margin-bottom:4px;">CODE PIN DE L'ENFANT</div>
+                <div class="fund-input" style="letter-spacing:4px;">••••</div>
+                <div class="pill-btn" style="margin-top:6px;background:#2563FF;">Créer le compte</div>
+              </div>
+              <div class="tabbar" style="opacity:.3"></div>
+            </div>
+          </div>
+          <div class="caption">family/create.tsx — étape 2</div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>Saisissez le numéro de téléphone</strong> réel de votre enfant et touchez « Vérifier ce numéro » — un SMS de vérification lui est associé.</li>
+            <li><strong>Saisissez le code reçu</strong> et le nom de l'enfant — sa couleur de profil est attribuée automatiquement.</li>
+            <li><strong>Définissez son code PIN</strong> (confirmé deux fois) — c'est celui que l'enfant utilisera pour se connecter à SON PROPRE compte.</li>
+            <li><strong>Touchez « Créer le compte »</strong> — l'enfant apparaît immédiatement dans votre liste, avec un solde à 0 FCFA.</li>
+          </ol>
+          <div class="tip warn"><span class="ic">&#9888;</span>Votre propre session ne change pas pendant cette création — aucun jeton de connexion de l'enfant n'est jamais partagé avec vous.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 15 ENFANT DETAIL -->
+    <section class="section" id="enfant-detail">
+      <div class="kicker">15 — COMPTES ENFANT</div>
+      <h2>Gérer un compte enfant</h2>
+      <p class="dek">Rechargez le solde sans frais, ajustez le plafond de dépense, et consultez l'historique complet de ce que dépense votre enfant.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen light">
+              <div class="statusbar"><span>23:45</span><div class="dots">●●●</div></div>
+              <div class="sc-header" style="background:#2563FF;color:#fff;margin:0 -12px;padding:10px 14px 16px;border-radius:0 0 20px 20px;">
+                <svg class="icon" style="width:15px;height:15px"><use href="#i-back"/></svg>
+                <div style="font-weight:700;font-size:11px;">Marlyse</div>
+                <div style="width:15px"></div>
+              </div>
+              <div class="sc-body pad">
+                <div class="accent-tint" style="background:#EC489912;display:flex;align-items:center;gap:8px;">
+                  <div style="width:26px;height:26px;border-radius:13px;background:#EC4899;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:800;">M</div>
+                  <div><div style="font-size:9.5px;font-weight:700;">Marlyse</div><div style="font-size:7.5px;opacity:.6;">+241 77 26 24 82</div></div>
+                </div>
+                <div class="card-mini" style="margin:8px 0;">
+                  <div style="font-size:8px;opacity:.55;">SOLDE DE L'ENFANT</div>
+                  <div style="font-size:15px;font-weight:800;">0 FCFA</div>
+                </div>
+                <div class="sec-title" style="opacity:.7;">Recharger le solde</div>
+                <div style="display:flex;gap:5px;margin-bottom:4px;">
+                  <div class="fund-input" style="flex:1;margin:0;opacity:.5;">Montant en FCFA</div>
+                  <div class="pill-btn" style="padding:7px 10px;background:#EC4899;">Recharger</div>
+                </div>
+                <div style="font-size:6.8px;opacity:.55;margin-bottom:8px;">Aucun frais n'est prélevé sur une recharge vers votre propre enfant.</div>
+                <div class="sec-title" style="opacity:.7;">Plafond de dépense</div>
+                <div class="toggle-row">
+                  <div class="toggle-pill" style="background:#EC489915;border-color:#EC4899;color:#EC4899;">Par jour</div>
+                  <div class="toggle-pill" style="border-color:var(--app-light-border);color:#8892a6;">Par semaine</div>
+                </div>
+              </div>
+              <div class="tabbar" style="opacity:.3"></div>
+            </div>
+          </div>
+          <div class="caption">family/[id].tsx</div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>« Recharger le solde »</strong> transfère un montant vers l'enfant depuis votre propre solde — sans aucun frais, contrairement à un virement classique.</li>
+            <li><strong>« Plafond de dépense »</strong> : choisissez Par jour ou Par semaine, indiquez le montant maximum, confirmez avec VOTRE code PIN (celui du parent, jamais celui de l'enfant). Ce plafond s'applique en plus des vérifications de sécurité habituelles — le plus restrictif des deux gagne.</li>
+            <li><strong>L'historique des transactions</strong> plus bas liste chaque dépense/réception de l'enfant, comme votre propre historique.</li>
+            <li>Vous recevez <strong>une notification</strong> à chaque dépense réelle de l'enfant, en plus de cet historique consultable à tout moment.</li>
+          </ol>
+          <div class="tip"><span class="ic">&#9432;</span>L'enfant voit aussi sa propre jauge de plafond sur son profil — il sait toujours combien il lui reste à dépenser, avant même qu'une transaction soit refusée.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 16 PROFIL -->
+    <section class="section" id="profil">
+      <div class="kicker">16 — VOTRE COMPTE</div>
+      <h2>Mon profil</h2>
+      <p class="dek">Votre solde, votre plafond journalier, vos Points Mongain convertibles en FCFA, et l'accès à toute la sécurité et la supervision familiale de votre compte.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen light">
+              <div class="statusbar" style="color:#fff"><span>23:45</span><div class="dots">●●●</div></div>
+              <div style="background:#2563FF;color:#fff;padding:6px 14px 16px;">
+                <div style="font-size:13px;font-weight:800;margin-bottom:10px;">Mon Profil</div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <div style="width:34px;height:34px;border-radius:17px;background:#fff;display:flex;align-items:center;justify-content:center;color:#2563FF;font-weight:800;font-size:12px;">A</div>
+                  <div style="font-size:11px;font-weight:700;">Ange</div>
+                </div>
+              </div>
+              <div class="sc-body pad" style="margin-top:-8px;background:var(--app-light-bg);border-radius:16px 16px 0 0;padding-top:12px;">
+                <div class="card-mini" style="margin-bottom:8px;">
+                  <div style="font-size:8px;opacity:.55;">SOLDE DU PORTEFEUILLE</div>
+                  <div style="font-size:15px;font-weight:800;">34 910 FCFA</div>
+                </div>
+                <div class="card-mini" style="margin-bottom:8px;">
+                  <div style="display:flex;justify-content:space-between;font-size:8.5px;font-weight:700;"><span>Plafond Journalier</span><span>4%</span></div>
+                  <div class="bar-track"><div class="bar-fill" style="width:4%;background:#0E8F5B;"></div></div>
+                  <div style="font-size:7.5px;opacity:.6;">Dépensé : 2 000 / 50 000 FCFA</div>
+                </div>
+                <div class="card-mini" style="background:#FFB02010;border-color:#FFB02040;margin-bottom:8px;">
+                  <div style="display:flex;align-items:center;gap:5px;font-size:9px;font-weight:700;color:#b45309;"><svg class="icon" style="width:11px;height:11px"><use href="#i-gift"/></svg> Points Mongain</div>
+                  <div style="font-size:14px;font-weight:800;margin:2px 0;">15 000 MP</div>
+                  <div class="pill-btn" style="background:#FFB020;margin-top:4px;">⇄ Convertir en FCFA</div>
+                </div>
+                <div class="row-item"><div class="row-ic" style="background:#2563FF15"><svg class="icon" style="width:12px;height:12px;color:#2563FF"><use href="#i-person"/></svg></div><div class="row-txt"><div class="row-title">Informations personnelles</div></div><svg class="icon" style="width:11px;height:11px;opacity:.4"><use href="#i-chevron"/></svg></div>
+                <div class="row-item"><div class="row-ic" style="background:#2563FF15"><svg class="icon" style="width:12px;height:12px;color:#2563FF"><use href="#i-qr"/></svg></div><div class="row-txt"><div class="row-title">Mon code QR</div></div><svg class="icon" style="width:11px;height:11px;opacity:.4"><use href="#i-chevron"/></svg></div>
+                <div class="row-item"><div class="row-ic" style="background:#7E3AF215"><svg class="icon" style="width:12px;height:12px;color:#7E3AF2"><use href="#i-trend"/></svg></div><div class="row-txt"><div class="row-title">Aperçu des dépenses</div></div><svg class="icon" style="width:11px;height:11px;opacity:.4"><use href="#i-chevron"/></svg></div>
+                <div class="row-item"><div class="row-ic" style="background:#8892a615"><svg class="icon" style="width:12px;height:12px;color:#8892a6"><use href="#i-bell"/></svg></div><div class="row-txt"><div class="row-title">Notifications</div></div><svg class="icon" style="width:11px;height:11px;opacity:.4"><use href="#i-chevron"/></svg></div>
+              </div>
+              <div class="tabbar" style="opacity:.3"></div>
+            </div>
+          </div>
+          <div class="caption">(tabs)/profile.tsx</div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>« Plafond Journalier »</strong> montre ce qu'il vous reste à dépenser aujourd'hui sur votre plafond de compte standard (50 000 FCFA/jour) — passez à un niveau KYC supérieur (section 17) pour l'augmenter.</li>
+            <li><strong>« Points Mongain »</strong> s'accumulent avec votre usage (10 points = 1 FCFA) et se convertissent en solde d'une simple pression sur « Convertir en FCFA ».</li>
+            <li><strong>« Comptes Enfant »</strong> et « Sécurité &amp; PIN » (plus bas dans le profil) n'apparaissent que pour un compte parent — raccourcis directs vers les sections 13 et 18.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- 17 KYC -->
+    <section class="section" id="kyc">
+      <div class="kicker">17 — LEVER VOTRE PLAFOND <span class="badge-live">● Actif</span></div>
+      <h2>Vérification d'identité (KYC)</h2>
+      <p class="dek">Un compte standard non vérifié est plafonné à 50 000 FCFA par jour ; l'envoi de vos documents d'identité augmente ce plafond.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen light">
+              <div class="statusbar"><span>23:45</span><div class="dots">●●●</div></div>
+              <div class="sc-header"><svg class="icon" style="width:15px;height:15px"><use href="#i-back"/></svg><div style="font-weight:700;font-size:11px;">Modifier mon profil</div><div style="width:15px"></div></div>
+              <div class="sc-body pad">
+                <div style="font-size:8px;opacity:.55;margin-bottom:4px;">NOM COMPLET</div>
+                <div class="fund-input">Ange</div>
+                <div style="font-size:8px;opacity:.55;margin:6px 0 4px;">PSEUDO UNIQUE</div>
+                <div class="fund-input" style="opacity:.5;">Ex: omar01</div>
+                <div style="font-size:8px;opacity:.55;margin:6px 0 4px;">E-MAIL (SÉCURITÉ FACULTATIVE)</div>
+                <div class="fund-input" style="opacity:.5;">Ex: omar@mongain.com</div>
+                <div style="font-size:7px;opacity:.5;margin-bottom:8px;">Votre numéro (+24162781878) vous sert d'identifiant principal et ne peut pas être modifié.</div>
+                <div class="card-mini">
+                  <div style="font-weight:700;font-size:9px;margin-bottom:3px;">Vérification d'Identité (KYC)</div>
+                  <div style="font-size:7.5px;opacity:.6;margin-bottom:8px;">Compte standard plafonné (Max 50.000 FCFA/jour). Envoyez vos documents pour l'augmenter.</div>
+                  <div style="display:flex;gap:5px;">
+                    <div style="flex:1;text-align:center;border:1px dashed var(--app-light-border);border-radius:8px;padding:8px 3px;font-size:6.8px;font-weight:700;"><svg class="icon" style="width:14px;height:14px;display:block;margin:0 auto 3px;"><use href="#i-card"/></svg>CNI Recto</div>
+                    <div style="flex:1;text-align:center;border:1px dashed var(--app-light-border);border-radius:8px;padding:8px 3px;font-size:6.8px;font-weight:700;"><svg class="icon" style="width:14px;height:14px;display:block;margin:0 auto 3px;"><use href="#i-card"/></svg>CNI Verso</div>
+                    <div style="flex:1;text-align:center;border:1px dashed var(--app-light-border);border-radius:8px;padding:8px 3px;font-size:6.8px;font-weight:700;"><svg class="icon" style="width:14px;height:14px;display:block;margin:0 auto 3px;"><use href="#i-camera"/></svg>Selfie</div>
+                  </div>
+                </div>
+              </div>
+              <div class="tabbar" style="opacity:.3"></div>
+            </div>
+          </div>
+          <div class="caption">profile/edit.tsx</div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>Depuis « Informations personnelles »</strong> (Profil), modifiez votre nom, votre pseudo unique ou ajoutez un e-mail — votre numéro de téléphone reste votre identifiant fixe.</li>
+            <li><strong>Sous « Vérification d'Identité »</strong>, photographiez le recto et le verso de votre carte d'identité, puis un selfie brut (sans filtre ni retouche).</li>
+            <li><strong>Envoyez le dossier</strong> — un agent Mongain l'examine et relève votre plafond journalier une fois validé.</li>
+          </ol>
+          <div class="tip"><span class="ic">&#9432;</span>Vos photos d'identité transitent uniquement vers l'équipe de vérification Mongain, jamais vers un tiers.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 18 SECURITE -->
+    <section class="section" id="securite">
+      <div class="kicker">18 — PROTÉGER VOTRE ARGENT <span class="badge-live">● Actif</span></div>
+      <h2>Sécurité &amp; PIN</h2>
+      <p class="dek">Changez votre code PIN à tout moment — l'ancien code reste exigé, pour qu'un téléphone emprunté ou volé ne suffise pas à le modifier.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen light">
+              <div class="statusbar"><span>23:46</span><div class="dots">●●●</div></div>
+              <div style="background:#2563FF;color:#fff;padding:16px 14px 20px;text-align:center;">
+                <svg class="icon" style="width:15px;height:15px;position:absolute;margin-top:-2px;"><use href="#i-back"/></svg>
+                <div style="font-weight:700;font-size:11px;margin-bottom:10px;">Sécurité &amp; PIN</div>
+                <div class="check-circle" style="margin:0 auto 6px;background:rgba(255,255,255,.18);"><svg class="icon" style="width:18px;height:18px"><use href="#i-shield"/></svg></div>
+                <div style="font-size:8px;opacity:.85;">Protégez votre portefeuille</div>
+              </div>
+              <div class="sc-body pad">
+                <div style="font-weight:800;font-size:10.5px;margin:8px 0;">Mise à jour du code PIN</div>
+                <div style="font-size:8px;opacity:.55;margin-bottom:4px;">ANCIEN CODE PIN</div>
+                <div class="fund-input" style="opacity:.5;">🔒 Ancien PIN (4 chiffres)</div>
+                <div style="font-size:8px;opacity:.55;margin:6px 0 4px;">NOUVEAU CODE PIN</div>
+                <div class="fund-input" style="opacity:.5;">🔑 Nouveau PIN (4 chiffres)</div>
+                <div style="font-size:8px;opacity:.55;margin:6px 0 4px;">CONFIRMEZ LE NOUVEAU PIN</div>
+                <div class="fund-input" style="opacity:.5;">✓ Confirmer nouveau PIN</div>
+                <div class="pill-btn" style="margin-top:8px;opacity:.5;">Valider la modification</div>
+              </div>
+              <div class="tabbar" style="opacity:.3"></div>
+            </div>
+          </div>
+          <div class="caption">security/pin.tsx</div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>Depuis le Profil</strong>, touchez « Sécurité &amp; PIN ».</li>
+            <li><strong>Saisissez votre ancien code PIN</strong>, puis le nouveau (2 fois, pour confirmation).</li>
+            <li><strong>Touchez « Valider la modification »</strong> — le nouveau code est actif immédiatement, y compris pour vos virements et retraits en cours.</li>
+          </ol>
+          <div class="tip warn"><span class="ic">&#9888;</span>Si vous avez oublié votre PIN, vous ne pouvez pas le réinitialiser depuis cet écran sans le connaître : contactez le support Mongain (icône casque sur l'accueil) muni d'une pièce d'identité.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 19 DEPENSES -->
+    <section class="section" id="depenses">
+      <div class="kicker">19 — COMPRENDRE VOS FLUX <span class="badge-live">● Actif</span></div>
+      <h2>Aperçu des dépenses</h2>
+      <p class="dek">Une répartition automatique de vos 100 dernières transactions par catégorie, pour repérer d'un coup d'œil où part votre argent ce mois-ci.</p>
+      <div class="duo">
+        <div class="phone-slot">
+          <div class="phone"><div class="notch"></div>
+            <div class="screen light">
+              <div class="statusbar"><span>23:45</span><div class="dots">●●●</div></div>
+              <div class="sc-header"><svg class="icon" style="width:15px;height:15px"><use href="#i-back"/></svg><div style="font-weight:700;font-size:11px;">Aperçu des dépenses</div><div style="width:15px"></div></div>
+              <div class="sc-body pad">
+                <div class="stat-two">
+                  <div class="stat-tile" style="background:#FBEAEA;"><div class="lbl" style="color:#C0392B;">DÉPENSÉ CE MOIS-CI</div><div class="val" style="color:#C0392B;">9 000 FCFA</div></div>
+                  <div class="stat-tile" style="background:#E7F6EE;"><div class="lbl" style="color:#0E8F5B;">REÇU CE MOIS-CI</div><div class="val" style="color:#0E8F5B;">44 000 FCFA</div></div>
+                </div>
+                <div style="font-weight:800;font-size:10px;margin-bottom:2px;">Répartition des dépenses</div>
+                <div style="font-size:7px;opacity:.55;margin-bottom:8px;">Basé sur vos 100 transactions les plus récentes.</div>
+                <div class="card-mini" style="margin-bottom:6px;">
+                  <div style="display:flex;justify-content:space-between;font-size:8.5px;font-weight:700;"><span>⇄ Transferts</span><span>7 000 FCFA</span></div>
+                  <div class="bar-track"><div class="bar-fill" style="width:78%;background:#2563FF;"></div></div>
+                  <div style="font-size:7.5px;opacity:.6;">78% · 4 transaction(s)</div>
+                </div>
+                <div class="card-mini">
+                  <div style="display:flex;justify-content:space-between;font-size:8.5px;font-weight:700;"><span>🛡 Caisse Commune</span><span>2 000 FCFA</span></div>
+                  <div class="bar-track"><div class="bar-fill" style="width:22%;background:#0E8F5B;"></div></div>
+                  <div style="font-size:7.5px;opacity:.6;">22% · 1 transaction(s)</div>
+                </div>
+              </div>
+              <div class="tabbar" style="opacity:.3"></div>
+            </div>
+          </div>
+          <div class="caption">profile/spending-overview.tsx</div>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><strong>Depuis le Profil</strong>, touchez « Aperçu des dépenses ».</li>
+            <li><strong>Les deux tuiles</strong> du haut totalisent ce que vous avez dépensé et reçu ce mois-ci.</li>
+            <li><strong>La répartition</strong> classe vos sorties d'argent par catégorie (Transferts, Caisse Commune, factures, etc.) avec leur part en pourcentage.</li>
+          </ol>
+          <div class="tip"><span class="ic">&#9432;</span>Cet écran ne couvre que vos 100 transactions les plus récentes — s'il vous en manque beaucoup ce mois-ci, consultez l'Historique complet (section 12) pour le détail exhaustif.</div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<footer class="doc">
+  <div class="wrap">
+    <p>Mongain — Manuel d'utilisation. Les montants affichés dans les captures sont des exemples à but illustratif.</p>
+    <p>Les statuts <span class="badge-live" style="margin-left:0">● Actif</span> / <span class="badge-soon" style="margin-left:0">● Bientôt disponible</span> reflètent la configuration du serveur au moment de la rédaction et évoluent au rythme des intégrations partenaires (Airtel/Moov, SEEG/Canal+, émetteur de cartes, bourse crypto, remise internationale).</p>
+  </div>
+</footer>

@@ -4,9 +4,12 @@ import { prisma } from '../prisma';
 import { LimitEngine } from '../services/LimitEngine';
 import { friendlyErrorMessage } from '../utils/errors';
 import logger from '../utils/logger';
+import { importEmployeesFromCsv } from '../utils/employeeCsv';
 import { GIANT_MOBILE_BLOCK_ERROR, isGiantMerchant } from '../utils/merchantTier';
 import { verifyUserPin } from '../utils/pinAuth';
+import { deliverWebhook } from '../utils/webhookDelivery';
 import { getSystemSettings } from './settings';
+import { createMerchantTill, deactivateMerchantTill, listMerchantTills } from './till';
 import { notifyParentOfChildSpend } from './wallet';
 
 const router = Router();
@@ -175,6 +178,27 @@ router.post('/invoices/:id/pay', authMiddleware, async (req: AuthRequest, res) =
 
         await notifyParentOfChildSpend(user.id, invoice.amount, 'paiement de facture B2B');
 
+        // Webhook sortant Mongain Connect (voir routes/gateway.ts, utils/webhookDelivery.ts) —
+        // uniquement si cette facture provient de ce parcours (integrationId non null ; null
+        // pour une facture B2B classique créée hors API publique, aucune notification à
+        // envoyer). JAMAIS awaité : le POST sortant peut prendre jusqu'à ~5s (timeout réseau),
+        // ne doit jamais retarder la réponse au client payeur.
+        if (invoice.integrationId) {
+            prisma.apiIntegration.findUnique({ where: { id: invoice.integrationId } })
+                .then((integration) => {
+                    if (integration) {
+                        deliverWebhook(integration, 'INVOICE_PAID', {
+                            invoiceId: invoice.id,
+                            status: 'PAID',
+                            amount: invoice.amount,
+                            customerPhone: invoice.customerPhone,
+                            paidAt: new Date().toISOString(),
+                        }).catch((e) => logger.error('[Webhook] Échec de livraison INVOICE_PAID', e));
+                    }
+                })
+                .catch((e) => logger.error('[Webhook] Échec de chargement de l\'intégration pour livraison webhook', e));
+        }
+
         res.json({ success: true, message: "Facture réglée avec succès." });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
@@ -201,6 +225,24 @@ router.post('/invoices/:id/reject', authMiddleware, async (req: AuthRequest, res
             where: { id: invoice.id },
             data: { status: 'CANCELLED' }
         });
+
+        // Webhook sortant Mongain Connect — voir commentaire équivalent sur /invoices/:id/pay
+        // ci-dessus, même logique de garde (integrationId non null) et même découplage
+        // (jamais awaité).
+        if (invoice.integrationId) {
+            prisma.apiIntegration.findUnique({ where: { id: invoice.integrationId } })
+                .then((integration) => {
+                    if (integration) {
+                        deliverWebhook(integration, 'INVOICE_CANCELLED', {
+                            invoiceId: invoice.id,
+                            status: 'CANCELLED',
+                            amount: invoice.amount,
+                            customerPhone: invoice.customerPhone,
+                        }).catch((e) => logger.error('[Webhook] Échec de livraison INVOICE_CANCELLED', e));
+                    }
+                })
+                .catch((e) => logger.error('[Webhook] Échec de chargement de l\'intégration pour livraison webhook', e));
+        }
 
         res.json({ success: true, message: "Facture rejetée." });
     } catch (e: any) {
@@ -422,8 +464,82 @@ router.delete('/employees/:id', authMiddleware, async (req: AuthRequest, res) =>
     }
 });
 
+// POST /api/b2b/employees/import — import CSV du répertoire ("nom,telephone", une ligne par
+// employé), voir utils/employeeCsv.ts. Même fonction réutilisée par
+// routes/merchant-portal.ts POST /employees/import (portail web, marchand géant).
+router.post('/employees/import', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const user = await getActiveUser(req.userId);
+        if (!user || user.role !== 'MERCHANT') {
+            return res.status(403).json({ error: "Réservé aux Marchands." });
+        }
+
+        const { csv } = req.body;
+        if (!csv || typeof csv !== 'string') {
+            return res.status(400).json({ error: 'Contenu CSV requis.' });
+        }
+
+        const result = await importEmployeesFromCsv(user.id, csv);
+        res.status(201).json({ success: true, ...result });
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+// ==========================================
+// GUICHETS / CAISSES (MARCHAND MOBILE, NORMAL OU GÉANT)
+// ==========================================
+// Logique métier factorée dans routes/till.ts (listMerchantTills/createMerchantTill/
+// deactivateMerchantTill), PARTAGÉE avec routes/merchant-portal.ts (portail web du géant) —
+// ces routes ne font que résoudre le marchand courant puis déléguer entièrement la
+// validation/l'écriture. Contrairement à /payouts, un marchand géant PEUT gérer ses guichets
+// depuis le mobile (ce n'est pas un mouvement d'argent, juste un identifiant physique
+// supplémentaire — aucune garde isGiantMerchant ici).
+
+router.get('/tills', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const user = await getActiveUser(req.userId);
+        if (!user || user.role !== 'MERCHANT') {
+            return res.status(403).json({ error: "Réservé aux Marchands." });
+        }
+
+        const tills = await listMerchantTills(user.id);
+        res.json({ success: true, tills });
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+router.post('/tills', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const user = await getActiveUser(req.userId);
+        if (!user || user.role !== 'MERCHANT') {
+            return res.status(403).json({ error: "Réservé aux Marchands." });
+        }
+
+        const { status, body } = await createMerchantTill(user.id, req.body);
+        res.status(status).json(body);
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+router.delete('/tills/:id', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const user = await getActiveUser(req.userId);
+        if (!user || user.role !== 'MERCHANT') {
+            return res.status(403).json({ error: "Réservé aux Marchands." });
+        }
+
+        const { status, body } = await deactivateMerchantTill(user.id, req.params.id as string);
+        res.status(status).json(body);
+    } catch (e: any) {
+        res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
 // Async processor wrapper
-async function processBulkAsync(bulkId: string, merchantId: string) {
+export async function processBulkAsync(bulkId: string, merchantId: string) {
     const bulk = await prisma.payoutBulk.findUnique({
         where: { id: bulkId },
         include: { entries: true }

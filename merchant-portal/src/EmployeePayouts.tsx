@@ -1,16 +1,51 @@
-import { Clock, Plus, Send, Trash2, UserPlus, Users } from 'lucide-react';
+import { Clock, Plus, RefreshCw, Send, ShieldAlert, Trash2, UploadCloud, UserPlus, Users } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { apiRequest, ENDPOINTS, isPortalViewer } from './api';
-import { fmtFCFA, parseAmountInput, pickString } from './utils/format';
+import { apiRequest, canApprovePayments, ENDPOINTS, getOwnPortalMemberId, isPortalViewer } from './api';
+import { fmtFCFA, parseAmountInput, pickNullableNumber, pickNumber, pickString } from './utils/format';
 
 type PayoutEntry = { phone: string; amount: string };
 
 // Traces des lots envoyés PENDANT cette session (pas un historique serveur — voir pourquoi
 // juste en dessous). Perdu au rechargement de page, mais suffisant pour confirmer visuellement
 // qu'un envoi a bien été pris en compte sans avoir à se fier uniquement au bandeau de succès.
-type SentBatch = { bulkId?: string; name: string; totalAmount: number; entryCount: number; sentAt: string };
+// awaitingApproval : le lot a dépassé le seuil de double validation (voir POST /payouts et
+// portalApprovalThreshold dans Settings.tsx) et attend l'approbation d'un second membre habilité
+// au lieu d'être immédiatement traité.
+type SentBatch = { bulkId?: string; name: string; totalAmount: number; entryCount: number; sentAt: string; awaitingApproval?: boolean };
 
 type Employee = { id: string; name?: string; phone?: string; isActive: boolean };
+
+// Lots restés AWAITING_APPROVAL faute d'avoir encore été validés par un second membre habilité
+// — GET /api/merchant-portal/payouts/pending-approval, développée EN PARALLÈLE par l'agent
+// backend (absente au moment de l'écriture de cet écran, forme construite sur la spécification
+// transmise). Lu défensivement : on additionne les montants des entrées si `totalAmount` n'est
+// pas renvoyé tel quel.
+type PendingApprovalBatch = {
+    id: string;
+    name: string;
+    totalAmount: number;
+    entryCount: number;
+    initiatedByMemberId: string | null;
+    initiatedByName?: string;
+    createdAt?: string;
+};
+
+function normalizePendingApproval(raw: any): PendingApprovalBatch {
+    const entries = Array.isArray(raw?.entries) ? raw.entries : [];
+    const sumFromEntries = entries.reduce((sum: number, en: any) => sum + (pickNumber(en, ['amount']) || 0), 0);
+    return {
+        id: raw.id,
+        name: pickString(raw, ['name']) || 'Lot sans nom',
+        totalAmount: pickNumber(raw, ['totalAmount', 'total', 'amount']) ?? sumFromEntries,
+        entryCount: entries.length || pickNumber(raw, ['entryCount', 'count']) || 0,
+        // null == le géant lui-même a initié ce lot (jamais de ligne MerchantPortalMember, voir
+        // getOwnPortalMemberId() dans api.ts) — même convention utilisée pour comparer à la
+        // session en cours ci-dessous (wasInitiatedBySelf).
+        initiatedByMemberId: pickString(raw, ['initiatedByMemberId', 'initiatorId', 'memberId']) ?? null,
+        initiatedByName: pickString(raw, ['initiatedByName', 'initiatorName']),
+        createdAt: raw.createdAt,
+    };
+}
 
 // Répertoire d'employés — GET/POST/DELETE /api/merchant-portal/employees, développées EN
 // PARALLÈLE par l'agent backend (voir le commentaire au-dessus de ENDPOINTS.employees dans
@@ -41,6 +76,11 @@ function normalizeEmployee(raw: any): Employee {
 // codebase avec ce mécanisme, il ne faut pas le réintroduire ici.
 export default function EmployeePayouts({ onSessionExpired }: { onSessionExpired: () => void }) {
     const viewer = isPortalViewer();
+    // ADMIN et MANAGER seulement — voir canApprovePayments() dans api.ts. Le serveur refuse en
+    // plus (403) qu'un initiateur approuve son propre lot, vérifié indépendamment ci-dessous via
+    // wasInitiatedBySelf plutôt que par ce seul prédicat de rôle.
+    const canApprove = canApprovePayments();
+    const ownMemberId = getOwnPortalMemberId();
 
     const [batchName, setBatchName] = useState('');
     const [entries, setEntries] = useState<PayoutEntry[]>([{ phone: '', amount: '' }]);
@@ -51,6 +91,109 @@ export default function EmployeePayouts({ onSessionExpired }: { onSessionExpired
     const [sentBatches, setSentBatches] = useState<SentBatch[]>([]);
 
     const idempotencyKey = useRef<string>(crypto.randomUUID());
+
+    // Seuil de double validation (GET /settings, tous rôles) — chargement non bloquant : si
+    // indisponible, threshold reste null et l'avertissement ci-dessous ne s'affiche simplement
+    // pas (le serveur reste de toute façon la seule source de vérité pour la mise en attente
+    // réelle du paiement).
+    const [threshold, setThreshold] = useState<number | null>(null);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await apiRequest(ENDPOINTS.portalSettings);
+                setThreshold(pickNullableNumber(res, ['portalApprovalThreshold']));
+            } catch (err: any) {
+                if (err?.name === 'SessionExpiredError') onSessionExpired();
+            }
+        })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Lots en attente d'approbation — uniquement chargés/affichés pour ADMIN/MANAGER (voir
+    // canApprove ci-dessus) : un rôle qui ne peut de toute façon rien approuver n'a pas besoin de
+    // cette section.
+    const [pendingApprovals, setPendingApprovals] = useState<PendingApprovalBatch[]>([]);
+    const [loadingApprovals, setLoadingApprovals] = useState(false);
+    const [approvalsError, setApprovalsError] = useState('');
+    const [approvingId, setApprovingId] = useState<string | null>(null);
+
+    const loadPendingApprovals = async () => {
+        setLoadingApprovals(true);
+        setApprovalsError('');
+        try {
+            const res = await apiRequest(ENDPOINTS.payoutsPendingApproval);
+            const list = Array.isArray(res) ? res : (res.data || res.payouts || res.bulks || []);
+            setPendingApprovals((Array.isArray(list) ? list : []).map(normalizePendingApproval));
+        } catch (err: any) {
+            if (err?.name === 'SessionExpiredError') { onSessionExpired(); return; }
+            setApprovalsError(err.message);
+        } finally {
+            setLoadingApprovals(false);
+        }
+    };
+
+    useEffect(() => {
+        if (canApprove) loadPendingApprovals();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [canApprove]);
+
+    const handleApprove = async (id: string) => {
+        setApprovingId(id);
+        setApprovalsError('');
+        try {
+            await apiRequest(ENDPOINTS.payoutApprove(id), { method: 'POST' });
+            setSuccess('Paiement approuvé, en cours de traitement.');
+            await loadPendingApprovals();
+        } catch (err: any) {
+            if (err?.name === 'SessionExpiredError') { onSessionExpired(); return; }
+            setApprovalsError(err.message);
+        } finally {
+            setApprovingId(null);
+        }
+    };
+
+    // Import CSV du répertoire d'employés — POST /employees/import { csv: string }. Lecture du
+    // fichier via FileReader (aucune dépendance externe) : le texte brut est envoyé tel quel, le
+    // parsing (format "nom,téléphone", en-tête optionnel) est entièrement délégué au serveur.
+    const [csvImporting, setCsvImporting] = useState(false);
+    const [csvError, setCsvError] = useState('');
+    const [csvResult, setCsvResult] = useState<{ created: number; skipped: number; errors: string[] } | null>(null);
+
+    const handleCsvFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = ''; // permet de réimporter le même fichier une seconde fois si besoin
+        if (!file) return;
+        setCsvError('');
+        setCsvResult(null);
+        setCsvImporting(true);
+        const reader = new FileReader();
+        reader.onload = async () => {
+            const text = typeof reader.result === 'string' ? reader.result : '';
+            try {
+                const res = await apiRequest(ENDPOINTS.employeesImport, {
+                    method: 'POST',
+                    body: JSON.stringify({ csv: text }),
+                });
+                setCsvResult({
+                    created: pickNumber(res, ['created']) || 0,
+                    skipped: pickNumber(res, ['skipped']) || 0,
+                    errors: Array.isArray(res?.errors) ? res.errors.map((x: any) => String(x)) : [],
+                });
+                await loadEmployees(); // le répertoire vient d'être enrichi par l'import
+            } catch (err: any) {
+                if (err?.name === 'SessionExpiredError') { onSessionExpired(); return; }
+                setCsvError(err.message);
+            } finally {
+                setCsvImporting(false);
+            }
+        };
+        reader.onerror = () => {
+            setCsvError('Impossible de lire ce fichier.');
+            setCsvImporting(false);
+        };
+        reader.readAsText(file);
+    };
 
     // Répertoire d'employés persistant — indépendant du formulaire de paie ci-dessus (qui reste
     // une simple liste d'entrées en mémoire) : sert à réutiliser un numéro déjà enregistré
@@ -170,19 +313,28 @@ export default function EmployeePayouts({ onSessionExpired }: { onSessionExpired
                 }),
             });
 
+            // Le total dépassait le seuil de double validation configuré (voir Settings.tsx) :
+            // le serveur a répondu AWAITING_APPROVAL (202) au lieu de traiter le lot tout de
+            // suite — voir le commentaire au-dessus de ENDPOINTS.employeePayouts.
+            const isAwaiting = pickString(res, ['status']) === 'AWAITING_APPROVAL';
+
             setSentBatches(prev => [{
                 bulkId: res?.bulkId,
                 name: batchName.trim(),
                 totalAmount,
                 entryCount: cleanEntries.length,
                 sentAt: new Date().toISOString(),
+                awaitingApproval: isAwaiting,
             }, ...prev]);
 
             setBatchName('');
             setEntries([{ phone: '', amount: '' }]);
             setPin('');
             idempotencyKey.current = crypto.randomUUID(); // nouvelle tentative = nouvelle clé
-            setSuccess(res?.message || 'Paie envoyée, en cours de traitement.');
+            setSuccess(res?.message || (isAwaiting
+                ? "Paiement en attente d'approbation : le seuil de double validation a été dépassé."
+                : 'Paie envoyée, en cours de traitement.'));
+            if (isAwaiting && canApprove) loadPendingApprovals(); // fait apparaître le nouveau lot dans la liste ci-dessous
         } catch (err: any) {
             if (err?.name === 'SessionExpiredError') { onSessionExpired(); return; }
             // La clé n'est PAS régénérée ici : un nouveau clic après un échec (PIN erroné, solde
@@ -260,6 +412,37 @@ export default function EmployeePayouts({ onSessionExpired }: { onSessionExpired
                 </div>
             </div>
 
+            {!viewer && (
+                <div className="card" style={{ marginBottom: 32 }}>
+                    <div className="flex-between" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 12 }}>
+                        <div>
+                            <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Importer depuis un fichier CSV</h2>
+                            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                                Une ligne par employé au format "nom,téléphone" (en-tête optionnel) pour enrichir le répertoire en une fois.
+                            </p>
+                        </div>
+                        <label
+                            className="btn-secondary"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', cursor: csvImporting ? 'not-allowed' : 'pointer', opacity: csvImporting ? 0.6 : 1 }}
+                        >
+                            <UploadCloud size={16} /> {csvImporting ? 'Import...' : 'Choisir un fichier CSV'}
+                            <input type="file" accept=".csv,text/csv" onChange={handleCsvFile} disabled={csvImporting} style={{ display: 'none' }} />
+                        </label>
+                    </div>
+                    {csvError && <div className="banner error" style={{ fontSize: 13 }}>{csvError}</div>}
+                    {csvResult && (
+                        <div className="banner success" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+                            <div>{csvResult.created} employé(s) créé(s), {csvResult.skipped} ignoré(s).</div>
+                            {csvResult.errors.length > 0 && (
+                                <ul style={{ margin: '4px 0 0 18px', padding: 0, fontSize: 12 }}>
+                                    {csvResult.errors.map((e, i) => <li key={i}>{e}</li>)}
+                                </ul>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: viewer ? '1fr' : '1fr 1fr', gap: 32, alignItems: 'start' }}>
                 {!viewer && (
                 <form onSubmit={handleSubmit} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -294,6 +477,12 @@ export default function EmployeePayouts({ onSessionExpired }: { onSessionExpired
                         <span style={{ fontWeight: 700, color: 'var(--accent)', fontSize: 13 }}>Total à débiter</span>
                         <span style={{ fontWeight: 800, color: 'var(--accent)', fontSize: 18 }}>{fmtFCFA(totalAmount)}</span>
                     </div>
+
+                    {threshold !== null && totalAmount > threshold && (
+                        <div className="banner info" style={{ fontSize: 13 }}>
+                            <ShieldAlert size={16} /> Ce paiement dépasse le seuil de double validation ({fmtFCFA(threshold)}) : il restera en attente jusqu'à l'approbation d'un second Admin ou Manager avant d'être réellement exécuté.
+                        </div>
+                    )}
 
                     <div>
                         <label>Code PIN (confirmation)</label>
@@ -332,7 +521,9 @@ export default function EmployeePayouts({ onSessionExpired }: { onSessionExpired
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
                                         <div style={{ fontWeight: 800 }}>{fmtFCFA(bulk.totalAmount)}</div>
-                                        <span className="status-pill warning">En traitement</span>
+                                        <span className={`status-pill ${bulk.awaitingApproval ? 'info' : 'warning'}`}>
+                                            {bulk.awaitingApproval ? "En attente d'approbation" : 'En traitement'}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -341,6 +532,60 @@ export default function EmployeePayouts({ onSessionExpired }: { onSessionExpired
                     </div>
                 </div>
             </div>
+
+            {canApprove && (
+                <div className="card" style={{ marginTop: 32 }}>
+                    <div className="flex-between" style={{ marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
+                        <div>
+                            <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Paiements en attente d'approbation</h2>
+                            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                                Lots ayant dépassé le seuil de double validation : ils restent bloqués tant qu'un second Admin ou Manager (autre que l'initiateur) ne les approuve pas.
+                            </p>
+                        </div>
+                        <button onClick={loadPendingApprovals} className="btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 12 }}>
+                            <RefreshCw size={14} className={loadingApprovals ? 'spin' : ''} /> Actualiser
+                        </button>
+                    </div>
+                    {approvalsError && <div className="banner error mb-8" style={{ fontSize: 13 }}>{approvalsError}</div>}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {pendingApprovals.map(batch => {
+                            // Le serveur refuse (403) qu'un initiateur approuve son propre lot — on masque
+                            // donc le bouton plutôt que de laisser cliquer sur une action qui échouerait.
+                            const isSelf = batch.initiatedByMemberId === ownMemberId;
+                            return (
+                                <div key={batch.id} style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 16, background: 'var(--bg-secondary)' }}>
+                                    <div className="flex-between" style={{ flexWrap: 'wrap', gap: 12 }}>
+                                        <div>
+                                            <div style={{ fontWeight: 800, fontSize: 14 }}>{batch.name}</div>
+                                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                                                {batch.entryCount} employé(s){batch.initiatedByName ? ` · Initié par ${batch.initiatedByName}` : ''}
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                            <span style={{ fontWeight: 800 }}>{fmtFCFA(batch.totalAmount)}</span>
+                                            {isSelf ? (
+                                                <span className="status-pill neutral">Votre lot</span>
+                                            ) : (
+                                                <button
+                                                    className="btn-primary"
+                                                    disabled={approvingId === batch.id}
+                                                    onClick={() => handleApprove(batch.id)}
+                                                    style={{ padding: '10px 16px', fontSize: 13 }}
+                                                >
+                                                    {approvingId === batch.id ? 'Approbation...' : 'Approuver'}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {!loadingApprovals && pendingApprovals.length === 0 && (
+                            <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '30px 0' }}>Aucun paiement en attente d'approbation.</div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -1,0 +1,491 @@
+<title>Dossier Investisseur Mongain</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Source+Sans+3:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root{
+    --bg:#F6F3EC;
+    --paper:#FFFFFF;
+    --ink:#141A2E;
+    --ink-soft:#4B5266;
+    --line:#E4DFD3;
+    --blue:#2563FF;
+    --blue-soft:#2563FF14;
+    --orange:#C9781A;
+    --orange-soft:#FFB02020;
+    --green:#0E8F5B;
+    --purple:#7E3AF2;
+    --shadow: 0 1px 2px rgba(20,26,46,.04), 0 8px 24px rgba(20,26,46,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0A0F1C;
+      --paper:#111729;
+      --ink:#F3F4F8;
+      --ink-soft:#A7ADC2;
+      --line:#232B45;
+      --blue:#5B85FF;
+      --blue-soft:#5B85FF22;
+      --orange:#FFB020;
+      --orange-soft:#FFB02026;
+      --green:#22C58A;
+      --purple:#A382FF;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0A0F1C;
+    --paper:#111729;
+    --ink:#F3F4F8;
+    --ink-soft:#A7ADC2;
+    --line:#232B45;
+    --blue:#5B85FF;
+    --blue-soft:#5B85FF22;
+    --orange:#FFB020;
+    --orange-soft:#FFB02026;
+    --green:#22C58A;
+    --purple:#A382FF;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 30px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Source Sans 3', ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{
+    font-family:'Fraunces', Georgia, serif;
+    font-weight:600;
+    color:var(--ink);
+    text-wrap:balance;
+    letter-spacing:-0.01em;
+  }
+  a{ color:var(--blue); }
+
+  .wrap{ max-width:1180px; margin:0 auto; padding:0 24px; }
+
+  /* ---- Header / cover ---- */
+  .cover{
+    padding:72px 0 56px;
+    border-bottom:1px solid var(--line);
+  }
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:.72rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--blue); background:var(--blue-soft);
+    padding:6px 12px; border-radius:100px; margin-bottom:22px;
+  }
+  .eyebrow::before{ content:'●'; font-size:.6rem; }
+  .cover h1{ font-size:clamp(2.1rem, 4vw, 3.2rem); line-height:1.08; margin:0 0 14px; max-width:16ch; }
+  .cover .tagline{ font-size:1.15rem; color:var(--ink-soft); max-width:46ch; line-height:1.55; margin:0 0 30px; }
+  .cover .meta{ display:flex; gap:28px; flex-wrap:wrap; font-size:.85rem; color:var(--ink-soft); }
+  .cover .meta strong{ color:var(--ink); font-weight:600; }
+
+  /* ---- Layout: TOC + content ---- */
+  .layout{ display:grid; grid-template-columns: 240px 1fr; gap:56px; padding:48px 0 100px; align-items:start; }
+  @media (max-width: 860px){ .layout{ grid-template-columns: 1fr; } .toc{ position:static !important; order:2; } }
+
+  .toc{ position:sticky; top:32px; }
+  .toc-label{ font-family:'IBM Plex Mono', monospace; font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:14px; }
+  .toc ol{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; }
+  .toc a{
+    display:flex; gap:10px; text-decoration:none; color:var(--ink-soft);
+    font-size:.88rem; padding:7px 10px; border-radius:9px; line-height:1.35;
+    transition:background .15s, color .15s;
+  }
+  .toc a:hover{ background:var(--blue-soft); color:var(--ink); }
+  .toc a span.n{ font-family:'IBM Plex Mono', monospace; color:var(--blue); font-weight:600; flex-shrink:0; }
+
+  .content{ min-width:0; }
+  section{ margin-bottom:52px; scroll-margin-top:24px; }
+  section .kicker{
+    font-family:'IBM Plex Mono', monospace; font-size:.78rem; font-weight:600;
+    color:var(--blue); letter-spacing:.08em; margin-bottom:6px;
+  }
+  section h2{ font-size:1.55rem; margin:0 0 18px; }
+  section h3{ font-family:'Source Sans 3', sans-serif; font-weight:700; font-size:1.02rem; color:var(--ink); margin:26px 0 10px; }
+  section p{ font-size:1.02rem; line-height:1.72; color:var(--ink); max-width:74ch; margin:0 0 16px; }
+  section p.lead{ font-size:1.1rem; color:var(--ink-soft); max-width:70ch; }
+  ul.plain{ margin:0 0 16px; padding-left:1.2em; max-width:74ch; }
+  ul.plain li{ font-size:1.02rem; line-height:1.68; margin-bottom:10px; }
+  ul.plain li::marker{ color:var(--blue); }
+  strong{ font-weight:700; }
+
+  .card-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:16px; margin:20px 0 28px; }
+  @media (max-width:640px){ .card-grid{ grid-template-columns:1fr; } }
+  .card{
+    background:var(--paper); border:1px solid var(--line); border-radius:16px;
+    padding:20px 22px; box-shadow:var(--shadow);
+  }
+  .card h4{ margin:0 0 8px; font-family:'Source Sans 3',sans-serif; font-weight:700; font-size:.98rem; color:var(--ink); display:flex; align-items:center; gap:8px; }
+  .card h4 .dot{ width:8px; height:8px; border-radius:50%; background:var(--blue); flex-shrink:0; }
+  .card p{ font-size:.93rem; line-height:1.6; color:var(--ink-soft); margin:0; }
+
+  .stat-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin:24px 0 30px; }
+  @media (max-width:720px){ .stat-row{ grid-template-columns:1fr; } }
+  .stat{
+    background:var(--paper); border:1px solid var(--line); border-radius:16px;
+    padding:22px 20px; box-shadow:var(--shadow);
+  }
+  .stat .num{ font-family:'IBM Plex Mono', monospace; font-size:2rem; font-weight:600; color:var(--blue); font-variant-numeric:tabular-nums; line-height:1; }
+  .stat .num.orange{ color:var(--orange); }
+  .stat .num.green{ color:var(--green); }
+  .stat .lbl{ font-size:.85rem; color:var(--ink-soft); margin-top:8px; line-height:1.45; }
+
+  .pillar{
+    border-left:3px solid var(--blue); padding:4px 0 4px 20px; margin:18px 0;
+  }
+  .pillar.orange{ border-color:var(--orange); }
+  .pillar.green{ border-color:var(--green); }
+  .pillar .pillar-title{ font-weight:700; font-size:1rem; margin-bottom:4px; }
+  .pillar p{ margin:0; }
+
+  .ask-banner{
+    display:flex; align-items:baseline; gap:20px; flex-wrap:wrap;
+    background:var(--blue-soft); border:1px solid color-mix(in srgb, var(--blue) 35%, transparent);
+    border-radius:16px; padding:24px 26px; margin:20px 0 28px;
+  }
+  .ask-banner .amt{ font-family:'IBM Plex Mono', monospace; font-size:2.4rem; font-weight:600; color:var(--blue); letter-spacing:-0.01em; }
+  .ask-banner .amt small{ font-size:1rem; font-weight:500; color:var(--ink-soft); margin-left:8px; }
+  .ask-banner .desc{ font-size:.95rem; color:var(--ink-soft); max-width:42ch; line-height:1.55; }
+
+  .use-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin:18px 0 30px; }
+  @media (max-width:760px){ .use-grid{ grid-template-columns:repeat(2,1fr); } }
+  .use-item{ background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:16px 16px; box-shadow:var(--shadow); }
+  .use-item .pct{ font-family:'IBM Plex Mono', monospace; font-size:1.5rem; font-weight:600; color:var(--purple); font-variant-numeric:tabular-nums; }
+  .use-item .lbl{ font-size:.83rem; color:var(--ink-soft); margin-top:6px; line-height:1.4; }
+
+  .chart-card{
+    background:var(--paper); border:1px solid var(--line); border-radius:18px;
+    padding:26px 26px 10px; box-shadow:var(--shadow); margin:22px 0 10px;
+  }
+  .chart-card .chart-title{ font-size:.85rem; font-weight:700; color:var(--ink); margin-bottom:2px; }
+  .chart-card .chart-sub{ font-size:.82rem; color:var(--ink-soft); margin-bottom:14px; }
+  .chart-svg-wrap{ position:relative; width:100%; }
+  .chart-svg-wrap svg{ width:100%; height:auto; display:block; overflow:visible; }
+  .grid-line{ stroke:var(--line); stroke-width:1; }
+  .axis-label{ font-family:'IBM Plex Mono', monospace; font-size:11px; fill:var(--ink-soft); }
+  .rev-line{ fill:none; stroke:var(--blue); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .rev-area{ fill:var(--blue); opacity:.08; }
+  .rev-dot{ fill:var(--blue); stroke:var(--paper); stroke-width:2; }
+  .crosshair{ stroke:var(--ink-soft); stroke-width:1; opacity:0; pointer-events:none; }
+  .end-label{ font-family:'IBM Plex Mono', monospace; font-size:12px; font-weight:600; fill:var(--blue); }
+  .hit-col{ fill:transparent; cursor:pointer; }
+  .chart-tooltip{
+    position:absolute; pointer-events:none; opacity:0; transition:opacity .1s;
+    background:var(--ink); color:#fff; font-size:.78rem; padding:8px 11px; border-radius:9px;
+    transform:translate(-50%,-115%); white-space:nowrap; box-shadow:var(--shadow); z-index:5;
+  }
+  :root[data-theme="dark"] .chart-tooltip, :root:not([data-theme="light"]) .chart-tooltip{ background:#F3F4F8; color:#0A0F1C; }
+  .chart-tooltip .tv{ font-family:'IBM Plex Mono', monospace; font-weight:700; font-variant-numeric:tabular-nums; }
+  .chart-tooltip .tl{ opacity:.7; margin-top:2px; }
+  .chart-note{ font-size:.83rem; color:var(--ink-soft); line-height:1.6; max-width:74ch; margin:14px 0 0; }
+
+  .callout{
+    background:var(--orange-soft); border:1px solid color-mix(in srgb, var(--orange) 40%, transparent);
+    border-radius:14px; padding:18px 20px; margin:20px 0; max-width:74ch;
+  }
+  .callout p{ margin:0; font-size:.95rem; line-height:1.6; color:var(--ink); }
+  .callout .tag{ font-family:'IBM Plex Mono', monospace; font-size:.7rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--orange); display:block; margin-bottom:8px; }
+
+  .closing{
+    background:var(--ink); color:#F3F4F8; border-radius:20px; padding:44px 40px; margin-top:8px;
+  }
+  :root[data-theme="light"] .closing, :root:not([data-theme="dark"]) .closing{ }
+  .closing h2{ color:#fff; }
+  .closing p{ color:#C7CBDA; font-size:1.05rem; max-width:70ch; }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]) .closing{ background:var(--paper); border:1px solid var(--line); }
+    :root:not([data-theme="light"]) .closing h2{ color:var(--ink); }
+    :root:not([data-theme="light"]) .closing p{ color:var(--ink-soft); }
+  }
+  :root[data-theme="dark"] .closing{ background:var(--paper); border:1px solid var(--line); }
+  :root[data-theme="dark"] .closing h2{ color:var(--ink); }
+  :root[data-theme="dark"] .closing p{ color:var(--ink-soft); }
+
+  footer.doc{ padding:30px 0 60px; border-top:1px solid var(--line); margin-top:20px; }
+  footer.doc p{ font-size:.82rem; color:var(--ink-soft); margin:0; }
+</style>
+
+<div class="cover">
+  <div class="wrap">
+    <span class="eyebrow">Plan d'affaires · Confidentiel</span>
+    <h1>Mongain</h1>
+    <p class="tagline">L'OS de la finance communautaire, marchande et familiale en Afrique Centrale — un produit déjà construit et opérationnel, pas un concept sur papier.</p>
+    <div class="meta">
+      <span><strong>Marché pilote</strong> — Gabon (zone CEMAC)</span>
+      <span><strong>Catégorie</strong> — Super-app fintech</span>
+      <span><strong>Statut</strong> — Socle produit complet</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap layout">
+  <nav class="toc">
+    <div class="toc-label">Sommaire</div>
+    <ol>
+      <li><a href="#resume"><span class="n">01</span>Résumé exécutif</a></li>
+      <li><a href="#probleme"><span class="n">02</span>Problème &amp; opportunité</a></li>
+      <li><a href="#solution"><span class="n">03</span>La solution</a></li>
+      <li><a href="#revenus"><span class="n">04</span>Modèle économique</a></li>
+      <li><a href="#financement"><span class="n">05</span>Levée de fonds &amp; projection</a></li>
+      <li><a href="#acquisition"><span class="n">06</span>Acquisition &amp; avantage</a></li>
+      <li><a href="#conformite"><span class="n">07</span>Conformité</a></li>
+      <li><a href="#roadmap"><span class="n">08</span>Roadmap</a></li>
+      <li><a href="#conclusion"><span class="n">09</span>Conclusion</a></li>
+    </ol>
+  </nav>
+
+  <div class="content">
+
+    <section id="resume">
+      <div class="kicker">01 — RÉSUMÉ EXÉCUTIF</div>
+      <h2>Une super-app, pas un produit de paiement de plus</h2>
+      <p class="lead">Mongain est une Super-App Fintech (Mobile Money, Core Banking &amp; Services Financiers) conçue pour l'Afrique centrale, avec le Gabon comme marché pilote.</p>
+      <p>Contrairement aux solutions de paiement classiques qui se limitent au transfert P2P, Mongain s'est construit comme un véritable système d'exploitation financier : un portefeuille grand public ultra-social (Caisses Communes, Tontines, Comptes Enfant), une gamme complète de produits financiers (cartes virtuelles, crypto-actifs, épargne rémunérée, micro-crédit), et un ERP institutionnel (logiciel de caisse gratuit, portail agents/marchands, back-office RBAC) qui transforme chaque boutiquier en agence physique de notre réseau.</p>
+      <p><strong>Ce n'est plus un concept sur papier</strong> : le socle technique complet — backend, application mobile, portail d'administration — est déjà construit et opérationnel, couvrant la quasi-totalité des cas d'usage financiers d'un foyer et d'un commerçant africains. Ce document décrit ce produit réel, son modèle économique et sa trajectoire de mise à l'échelle.</p>
+    </section>
+
+    <section id="probleme">
+      <div class="kicker">02 — LE PROBLÈME ET L'OPPORTUNITÉ</div>
+      <h2>Quatre angles morts que le marché ignore</h2>
+      <p>L'économie d'Afrique centrale repose sur des piliers que les opérateurs télécoms et les agrégateurs numériques sous-exploitent :</p>
+      <div class="card-grid">
+        <div class="card"><h4><span class="dot"></span>Finance communautaire archaïque</h4><p>Tontines, cotisations de deuil, cagnottes familiales : des milliards de FCFA gérés sur cahiers manuscrits, en liquide, sans traçabilité en cas de litige.</p></div>
+        <div class="card"><h4><span class="dot"></span>Boutiquiers sous-équipés</h4><p>Les kiosques mobile money utilisent des codes USSD lents, sans outil moderne de caisse, de comptabilité ou de suivi de leur float.</p></div>
+        <div class="card"><h4><span class="dot"></span>Services avancés hors de portée</h4><p>Crédit instantané, épargne rémunérée, cartes de paiement en ligne : des produits urbains et bancarisés, inaccessibles à l'utilisateur mobile money moyen.</p></div>
+        <div class="card"><h4><span class="dot"></span>La famille, angle mort du produit</h4><p>Aucun moyen numérique sûr et supervisé pour un parent d'initier son enfant à la gestion de l'argent — seul le liquide existe, sans traçabilité ni contrôle.</p></div>
+      </div>
+    </section>
+
+    <section id="solution">
+      <div class="kicker">03 — LA SOLUTION</div>
+      <h2>Chaque brique renforce les autres</h2>
+      <p class="lead">Une plateforme où chaque fonctionnalité crée une barrière à l'entrée qu'un concurrent mono-produit ne peut répliquer isolément.</p>
+
+      <h3>Pour les particuliers (application mobile B2C)</h3>
+      <ul class="plain">
+        <li><strong>Compte courant digital complet</strong> — portefeuille FCFA, virements P2P instantanés, retraits/dépôts via agents et QR marchand, historique et notifications en temps réel.</li>
+        <li><strong>Caisses Communes &amp; Tontines Numériques</strong> — portefeuilles partagés à solde visible en temps réel, prélèvements automatiques, quorum d'approbation configurable, bons de retrait, relevés exportables.</li>
+      </ul>
+
+      <div class="callout">
+        <span class="tag">Différenciateur unique</span>
+        <p><strong>Comptes Enfant (supervision parentale).</strong> Un parent crée un compte à part entière pour son enfant (son propre numéro, son propre code PIN), définit un plafond de dépense journalier ou hebdomadaire, recharge son solde sans frais, et reçoit une notification en temps réel à chaque dépense ainsi qu'un historique complet. C'est le seul produit de la zone qui pense l'éducation financière et la sécurité des mineurs comme une fonctionnalité native, pas un contournement.</p>
+      </div>
+
+      <ul class="plain">
+        <li><strong>Cartes virtuelles</strong> — émission gratuite, rechargeables depuis le portefeuille, pour les paiements en ligne.</li>
+        <li><strong>Coffres de staking</strong> — blocage volontaire de fonds sur une durée choisie contre un taux d'intérêt garanti.</li>
+        <li><strong>Micro-crédit instantané &amp; BNPL</strong> — avance basée sur un score de confiance comportemental, remboursable en une ou plusieurs échéances.</li>
+        <li><strong>Investissement crypto-actifs</strong> — achat/vente directement depuis le solde FCFA, sous les mêmes garde-fous AML/KYC.</li>
+        <li><strong>Transferts internationaux</strong>, <strong>partage de factures</strong>, <strong>points de fidélité</strong>, <strong>paiement SEEG/Canal+</strong> et <strong>rechargement crédit téléphonique</strong> — les usages du quotidien centralisés.</li>
+        <li><strong>Accès USSD</strong> — le transfert P2P reste accessible depuis un téléphone non connecté.</li>
+        <li><strong>Sécurité de niveau bancaire</strong> — verrouillage biométrique, détection algorithmique de fraude, plafonds progressifs par palier KYC.</li>
+      </ul>
+
+      <h3>Pour les marchands et agents (application + portail web B2B/ERP)</h3>
+      <ul class="plain">
+        <li><strong>Logiciel de caisse gratuit</strong> — sessions de caisse, rapprochement X/Z ; l'adopter transforme le boutiquier en point cash-in/cash-out du réseau.</li>
+        <li><strong>Réseau d'agences et d'agents</strong> — gestion de succursales, tellers, float, injection de liquidités depuis le siège.</li>
+        <li><strong>Facturation B2B</strong> — émission et règlement de factures entre professionnels dans l'écosystème Mongain.</li>
+        <li><strong>RBAC ultra-granulaire</strong> — comptabilité temps réel et matrice de droits pour piloter plusieurs caissiers ou agences.</li>
+      </ul>
+
+      <h3>Pour l'institution (back-office corporate)</h3>
+      <p>Un portail d'administration complet — conformité KYC, réclamations, détection de fraude, gel de comptes, trésorerie centrale, paramètres système — déjà opérationnel, pas un engagement sur plan.</p>
+    </section>
+
+    <section id="revenus">
+      <div class="kicker">04 — MODÈLE ÉCONOMIQUE</div>
+      <h2>Trois moteurs de revenus, une marge à forte diversification</h2>
+
+      <div class="stat-row">
+        <div class="stat"><div class="num">1%</div><div class="lbl">prélevé sur chaque transaction externe (retrait agent, paiement marchand, transfert) — modèle transparent et pay-as-you-go.</div></div>
+        <div class="stat"><div class="num orange">3</div><div class="lbl">piliers de revenus indépendants : frais transactionnels, SaaS B2B, monétisation du float.</div></div>
+        <div class="stat"><div class="num green">0F</div><div class="lbl">frais sur une recharge d'un Compte Enfant par son parent — un choix de confiance qui accélère l'adoption familiale.</div></div>
+      </div>
+
+      <div class="pillar">
+        <div class="pillar-title">Frais transactionnels (pay-as-you-go)</div>
+        <p>1 % prélevé sur les transactions externes. Les mouvements internes au foyer restent gratuits par choix stratégique.</p>
+      </div>
+      <div class="pillar orange">
+        <div class="pillar-title">SaaS freemium (B2B)</div>
+        <p>Le logiciel de caisse est gratuit pour un marchand seul ; l'abonnement s'active dès plusieurs accès caissiers ou plusieurs agences.</p>
+      </div>
+      <div class="pillar green">
+        <div class="pillar-title">Monétisation du float</div>
+        <p>Les fonds bloqués en Tontines, Caisses Communes et Coffres de Staking restent captifs bien plus longtemps que sur un portefeuille mobile money classique — replacés en banque centrale, ils génèrent un revenu récurrent significatif.</p>
+      </div>
+      <div class="pillar">
+        <div class="pillar-title">Marge sur les produits de crédit &amp; de change</div>
+        <p>Intérêts sur le micro-crédit et le BNPL (scoring comportemental propriétaire), et marge de change sur les corridors de transferts internationaux — des revenus à marge élevée adossés à des données que seule une super-app collecte.</p>
+      </div>
+    </section>
+
+    <section id="financement">
+      <div class="kicker">05 — LEVÉE DE FONDS &amp; PROJECTION</div>
+      <h2>1,5 milliard FCFA pour passer du socle à l'échelle</h2>
+      <p class="lead">Le produit est construit ; le capital recherché finance sa mise à l'échelle commerciale, pas son développement.</p>
+
+      <div class="ask-banner">
+        <div class="amt">1,5 <small>milliard FCFA</small></div>
+        <div class="desc">Levée visée pour financer les Phases 2 à 4 de la feuille de route : réseau marchand, lancement social B2C, et amorce de l'extension régionale.</div>
+      </div>
+
+      <h3>Utilisation des fonds</h3>
+      <div class="use-grid">
+        <div class="use-item"><div class="pct">40%</div><div class="lbl">Déploiement des terminaux de caisse &amp; acquisition marchands/agents</div></div>
+        <div class="use-item"><div class="pct">30%</div><div class="lbl">Acquisition virale B2C (Caisses Communes, Comptes Enfant)</div></div>
+        <div class="use-item"><div class="pct">20%</div><div class="lbl">Conformité réglementaire &amp; préparation de l'extension régionale</div></div>
+        <div class="use-item"><div class="pct">10%</div><div class="lbl">Fonds de roulement opérationnel</div></div>
+      </div>
+
+      <h3>Projection de revenus sur 5 ans</h3>
+      <div class="chart-card">
+        <div class="chart-title">Revenu annuel projeté</div>
+        <div class="chart-sub">FCFA · projection illustrative fondée sur les hypothèses ci-dessous, pas des résultats audités</div>
+        <div class="chart-svg-wrap">
+          <svg viewBox="0 0 680 300" role="img" aria-label="Projection de revenu annuel de l'Année 1 (210 millions FCFA) à l'Année 5 (5,1 milliards FCFA)">
+            <line class="grid-line" x1="60" y1="240" x2="600" y2="240"/>
+            <line class="grid-line" x1="60" y1="185" x2="600" y2="185"/>
+            <line class="grid-line" x1="60" y1="130" x2="600" y2="130"/>
+            <line class="grid-line" x1="60" y1="75"  x2="600" y2="75"/>
+            <line class="grid-line" x1="60" y1="20"  x2="600" y2="20"/>
+            <text class="axis-label" x="52" y="243" text-anchor="end">0</text>
+            <text class="axis-label" x="52" y="188" text-anchor="end">1,5 Md</text>
+            <text class="axis-label" x="52" y="133" text-anchor="end">3 Md</text>
+            <text class="axis-label" x="52" y="78"  text-anchor="end">4,5 Md</text>
+            <text class="axis-label" x="52" y="23"  text-anchor="end">6 Md</text>
+
+            <path class="rev-area" d="M60,240 L60,232.3 L195,216.5 L330,186.8 L465,133.7 L600,53 L600,240 Z"/>
+            <path class="rev-line" d="M60,232.3 L195,216.5 L330,186.8 L465,133.7 L600,53"/>
+
+            <circle class="rev-dot" cx="60"  cy="232.3" r="5"/>
+            <circle class="rev-dot" cx="195" cy="216.5" r="5"/>
+            <circle class="rev-dot" cx="330" cy="186.8" r="5"/>
+            <circle class="rev-dot" cx="465" cy="133.7" r="5"/>
+            <circle class="rev-dot" cx="600" cy="53"   r="5"/>
+
+            <text class="end-label" x="600" y="38" text-anchor="middle">5,1 Md</text>
+
+            <text class="axis-label" x="60"  y="262" text-anchor="middle">Année 1</text>
+            <text class="axis-label" x="195" y="262" text-anchor="middle">Année 2</text>
+            <text class="axis-label" x="330" y="262" text-anchor="middle">Année 3</text>
+            <text class="axis-label" x="465" y="262" text-anchor="middle">Année 4</text>
+            <text class="axis-label" x="600" y="262" text-anchor="middle">Année 5</text>
+
+            <line id="revCrosshair" class="crosshair" x1="0" y1="20" x2="0" y2="240"/>
+
+            <rect tabindex="0" class="hit-col" data-cx="60"  data-y="232.3" data-year="Année 1" data-value="210 M FCFA"   x="0"   y="10" width="127" height="250"/>
+            <rect tabindex="0" class="hit-col" data-cx="195" data-y="216.5" data-year="Année 2" data-value="640 M FCFA"   x="127" y="10" width="135" height="250"/>
+            <rect tabindex="0" class="hit-col" data-cx="330" data-y="186.8" data-year="Année 3" data-value="1,45 Md FCFA" x="262" y="10" width="135" height="250"/>
+            <rect tabindex="0" class="hit-col" data-cx="465" data-y="133.7" data-year="Année 4" data-value="2,9 Md FCFA"  x="397" y="10" width="135" height="250"/>
+            <rect tabindex="0" class="hit-col" data-cx="600" data-y="53"    data-year="Année 5" data-value="5,1 Md FCFA"  x="532" y="10" width="148" height="250"/>
+          </svg>
+          <div id="revTooltip" class="chart-tooltip"><div class="tv" id="revTooltipValue"></div><div class="tl" id="revTooltipLabel"></div></div>
+        </div>
+      </div>
+      <p class="chart-note">Hypothèses : croissance de la base d'utilisateurs actifs portée par les boucles de viralité (Caisses Communes, Comptes Enfant) décrites en section 06 ; taux de prise moyen ~1 % sur un volume de transactions (GMV) en forte croissance ; contribution croissante du float (Tontines/Coffres) et des abonnements SaaS B2B à partir de l'Année 3. La levée de 1,5 Md FCFA est dépassée en revenu cumulé dès l'Année 3-4, avant tout effet de l'extension régionale (Phase 4).</p>
+    </section>
+
+    <script>
+    (function(){
+      var wrap = document.querySelector('.chart-svg-wrap');
+      var svg = wrap.querySelector('svg');
+      var crosshair = document.getElementById('revCrosshair');
+      var tooltip = document.getElementById('revTooltip');
+      var tv = document.getElementById('revTooltipValue');
+      var tl = document.getElementById('revTooltipLabel');
+      var cols = svg.querySelectorAll('.hit-col');
+      var VBOX_W = 680, VBOX_H = 300;
+
+      function show(rect){
+        var cx = parseFloat(rect.getAttribute('data-cx'));
+        var cy = parseFloat(rect.getAttribute('data-y'));
+        crosshair.setAttribute('x1', cx);
+        crosshair.setAttribute('x2', cx);
+        crosshair.style.opacity = '1';
+        tv.textContent = rect.getAttribute('data-value');
+        tl.textContent = rect.getAttribute('data-year');
+        var rectBox = wrap.getBoundingClientRect();
+        var scale = rectBox.width / VBOX_W;
+        tooltip.style.left = (cx * scale) + 'px';
+        tooltip.style.top = (cy * scale) + 'px';
+        tooltip.style.opacity = '1';
+      }
+      function hide(){
+        crosshair.style.opacity = '0';
+        tooltip.style.opacity = '0';
+      }
+      cols.forEach(function(rect){
+        rect.addEventListener('pointerenter', function(){ show(rect); });
+        rect.addEventListener('pointermove', function(){ show(rect); });
+        rect.addEventListener('focus', function(){ show(rect); });
+      });
+      svg.addEventListener('pointerleave', hide);
+      svg.addEventListener('focusout', hide);
+    })();
+    </script>
+
+    <section id="acquisition">
+      <div class="kicker">06 — ACQUISITION &amp; AVANTAGE CONCURRENTIEL</div>
+      <h2>Des boucles de viralité intégrées au produit, pas au marketing</h2>
+      <p>Les concurrents (Airtel Money, Moov Money, solutions de paiement classiques) dépensent des fortunes pour recruter client par client (CAC élevé). Mongain casse ce modèle :</p>
+      <ul class="plain">
+        <li><strong>Viralité par la Caisse Commune / Tontine</strong> — un chef de famille qui ouvre une caisse pour un mariage (50 invités) contraint mécaniquement ces 50 personnes à télécharger l'application pour y verser leur participation en toute transparence.</li>
+        <li><strong>Viralité par le Compte Enfant</strong> — chaque compte parent peut générer plusieurs comptes enfant réels et actifs au sein du même foyer : un multiplicateur d'utilisateurs actifs, et un ancrage émotionnel (la sécurité de ses enfants) qui réduit le churn du compte parent.</li>
+        <li><strong>Onboarding marchand à friction quasi nulle</strong> — un logiciel de caisse gratuit et immédiatement utile, pas la promesse de devenir "agent".</li>
+        <li><strong>Profondeur produit comme barrière à la sortie</strong> — épargne, tontine, compte enfant, carte virtuelle : le coût de migration vers un concurrent mono-produit devient prohibitif.</li>
+      </ul>
+    </section>
+
+    <section id="conformite">
+      <div class="kicker">07 — INFRASTRUCTURE DE CONFORMITÉ</div>
+      <h2>Un atout commercial, pas une contrainte a posteriori</h2>
+      <p>Contrairement à une startup qui construit sa conformité sous la pression d'un régulateur, Mongain l'a bâtie dès le socle :</p>
+      <ul class="plain">
+        <li>Moteur de plafonds hiérarchisés par palier KYC, avec plafonds journaliers, mensuels et par transaction, plus un plafond réglementaire absolu non contournable.</li>
+        <li>Détection algorithmique de vélocité anormale (signature de smurfing/structuration), gel automatique et journal d'audit complet.</li>
+        <li>Verrouillage biométrique et protection anti-brute-force progressive sur chaque code PIN.</li>
+        <li>Matrice de droits (RBAC) granulaire côté personnel, avec circuits d'approbation à double contrôle (<em>maker/checker</em>) sur les opérations sensibles.</li>
+      </ul>
+      <p>C'est un argument direct auprès des banques partenaires et des régulateurs CEMAC/COBAC : Mongain n'est pas qu'une expérience utilisateur agréable, c'est une infrastructure déjà pensée pour l'agrément.</p>
+      <div class="callout">
+        <span class="tag">Point de vigilance</span>
+        <p>Aucun cadre légal ne définit aujourd'hui la capacité d'un mineur à détenir un compte e-money en son nom propre dans la zone CEMAC — un sujet à clarifier avec le régulateur et/ou un conseil juridique avant toute communication publique sur le Compte Enfant.</p>
+      </div>
+    </section>
+
+    <section id="roadmap">
+      <div class="kicker">08 — ROADMAP</div>
+      <h2>D'un socle construit à l'échelle régionale</h2>
+      <ul class="plain">
+        <li><strong>Phase 1 — Socle produit (réalisée).</strong> Core Banking, Tontines/Caisses Communes, RBAC agences, cartes virtuelles, épargne rémunérée, micro-crédit/BNPL, crypto, remises internationales, facturation B2B, accès USSD, back-office de conformité complet, et Comptes Enfant avec supervision parentale.</li>
+        <li><strong>Phase 2 — Acquisition marchands.</strong> Déploiement des terminaux de caisse chez un premier réseau de marchands et supérettes clés au Gabon, constituant le réseau physique de cash-in/cash-out.</li>
+        <li><strong>Phase 3 — Lancement social B2C.</strong> Campagnes organiques ciblant groupes familiaux, associations, mutuelles communautaires et écoles pour amorcer la viralité des Caisses Communes et des comptes familiaux.</li>
+        <li><strong>Phase 4 — Extension régionale.</strong> Réplication du modèle vers d'autres marchés CEMAC, une fois la conformité réglementaire et la traction gabonaise validées.</li>
+      </ul>
+    </section>
+
+    <section id="conclusion">
+      <div class="kicker">09 — CONCLUSION</div>
+      <div class="closing">
+        <h2>Financer un produit en état de marche, pas un pari sur un prototype</h2>
+        <p>Mongain n'est pas un système de paiement de plus : c'est une plateforme financière complète — déjà construite, testée et fonctionnelle — qui fusionne l'ingéniosité de l'épargne rotative communautaire, la robustesse institutionnelle d'un back-office de conformité, et une innovation sociale sans équivalent régional : le Compte Enfant supervisé.</p>
+        <p>Elle s'attaque au problème fondamental de l'Afrique Centrale : la distribution du cash, la confiance communautaire, et l'éducation financière du foyer dans son ensemble. Financer Mongain, c'est financer l'infrastructure digitale des dix prochaines années d'échanges intra-africains.</p>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<footer class="doc">
+  <div class="wrap">
+    <p>Mongain — Plan d'affaires · Document confidentiel destiné aux partenaires et investisseurs.</p>
+  </div>
+</footer>

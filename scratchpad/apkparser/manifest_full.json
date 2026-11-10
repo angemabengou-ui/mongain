@@ -1,0 +1,717 @@
+{
+  "versionCode": 1,
+  "versionName": "1.0.0",
+  "compileSdkVersion": 36,
+  "compileSdkVersionCodename": "16",
+  "package": "com.mongain.superapp",
+  "platformBuildVersionCode": 36,
+  "platformBuildVersionName": 16,
+  "usesPermissions": [
+    {
+      "name": "android.permission.CAMERA"
+    },
+    {
+      "name": "android.permission.INTERNET"
+    },
+    {
+      "name": "android.permission.READ_CONTACTS"
+    },
+    {
+      "name": "android.permission.READ_EXTERNAL_STORAGE",
+      "maxSdkVersion": 32
+    },
+    {
+      "name": "android.permission.RECORD_AUDIO"
+    },
+    {
+      "name": "android.permission.SYSTEM_ALERT_WINDOW"
+    },
+    {
+      "name": "android.permission.USE_BIOMETRIC"
+    },
+    {
+      "name": "android.permission.USE_FINGERPRINT"
+    },
+    {
+      "name": "android.permission.VIBRATE"
+    },
+    {
+      "name": "android.permission.WRITE_CONTACTS"
+    },
+    {
+      "name": "android.permission.WRITE_EXTERNAL_STORAGE",
+      "maxSdkVersion": 32
+    },
+    {
+      "name": "android.permission.ACCESS_NETWORK_STATE"
+    },
+    {
+      "name": "android.permission.RECEIVE_BOOT_COMPLETED"
+    },
+    {
+      "name": "android.permission.POST_NOTIFICATIONS"
+    },
+    {
+      "name": "android.permission.WAKE_LOCK"
+    },
+    {
+      "name": "com.google.android.c2dm.permission.RECEIVE"
+    },
+    {
+      "name": "com.mongain.superapp.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+    },
+    {
+      "name": "com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE"
+    },
+    {
+      "name": "com.sec.android.provider.badge.permission.READ"
+    },
+    {
+      "name": "com.sec.android.provider.badge.permission.WRITE"
+    },
+    {
+      "name": "com.htc.launcher.permission.READ_SETTINGS"
+    },
+    {
+      "name": "com.htc.launcher.permission.UPDATE_SHORTCUT"
+    },
+    {
+      "name": "com.sonyericsson.home.permission.BROADCAST_BADGE"
+    },
+    {
+      "name": "com.sonymobile.home.permission.PROVIDER_INSERT_BADGE"
+    },
+    {
+      "name": "com.anddoes.launcher.permission.UPDATE_COUNT"
+    },
+    {
+      "name": "com.majeur.launcher.permission.UPDATE_BADGE"
+    },
+    {
+      "name": "com.huawei.android.launcher.permission.CHANGE_BADGE"
+    },
+    {
+      "name": "com.huawei.android.launcher.permission.READ_SETTINGS"
+    },
+    {
+      "name": "com.huawei.android.launcher.permission.WRITE_SETTINGS"
+    },
+    {
+      "name": "android.permission.READ_APP_BADGE"
+    },
+    {
+      "name": "com.oppo.launcher.permission.READ_SETTINGS"
+    },
+    {
+      "name": "com.oppo.launcher.permission.WRITE_SETTINGS"
+    },
+    {
+      "name": "me.everything.badger.permission.BADGE_COUNT_READ"
+    },
+    {
+      "name": "me.everything.badger.permission.BADGE_COUNT_WRITE"
+    }
+  ],
+  "usesPermissionsSDK23": [],
+  "permissions": [
+    {
+      "name": "com.mongain.superapp.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+      "protectionLevel": 2
+    }
+  ],
+  "permissionTrees": [],
+  "permissionGroups": [],
+  "instrumentation": null,
+  "usesSdk": {
+    "minSdkVersion": 24,
+    "targetSdkVersion": 36
+  },
+  "usesConfiguration": null,
+  "usesFeatures": [],
+  "supportsScreens": null,
+  "compatibleScreens": [],
+  "supportsGlTextures": [],
+  "application": {
+    "label": [
+      "Mongain"
+    ],
+    "icon": [
+      "res/d2.webp",
+      "res/MO.webp",
+      "res/qs.webp",
+      "res/Sn.webp",
+      "res/sK.webp",
+      "res/BW.xml"
+    ],
+    "name": "com.mongain.superapp.MainApplication",
+    "allowBackup": true,
+    "supportsRtl": true,
+    "extractNativeLibs": false,
+    "fullBackupContent": [
+      "res/-K.xml"
+    ],
+    "roundIcon": [
+      "res/yw.webp",
+      "res/fq.webp",
+      "res/u5.webp",
+      "res/j_.webp",
+      "res/-6.webp",
+      "res/0K.xml"
+    ],
+    "appComponentFactory": "androidx.core.app.CoreComponentFactory",
+    "dataExtractionRules": [
+      "res/Hq.xml"
+    ],
+    "enableOnBackInvokedCallback": false,
+    "activities": [
+      {
+        "name": "com.mongain.superapp.MainActivity",
+        "exported": true,
+        "launchMode": 2,
+        "screenOrientation": 1,
+        "configChanges": -2147479632,
+        "windowSoftInputMode": 16,
+        "intentFilters": [
+          {
+            "actions": [
+              {
+                "name": "android.intent.action.MAIN"
+              }
+            ],
+            "categories": [
+              {
+                "name": "android.intent.category.LAUNCHER"
+              }
+            ],
+            "data": []
+          },
+          {
+            "actions": [
+              {
+                "name": "android.intent.action.VIEW"
+              }
+            ],
+            "categories": [
+              {
+                "name": "android.intent.category.DEFAULT"
+              },
+              {
+                "name": "android.intent.category.BROWSABLE"
+              }
+            ],
+            "data": [
+              {
+                "scheme": "mongain"
+              }
+            ]
+          }
+        ],
+        "metaData": []
+      },
+      {
+        "name": "com.canhub.cropper.CropImageActivity",
+        "exported": false,
+        "intentFilters": [],
+        "metaData": []
+      },
+      {
+        "name": "expo.modules.imagepicker.ExpoCropImageActivity",
+        "exported": false,
+        "intentFilters": [],
+        "metaData": []
+      },
+      {
+        "name": "expo.modules.notifications.service.NotificationForwarderActivity",
+        "exported": false,
+        "taskAffinity": "",
+        "excludeFromRecents": true,
+        "launchMode": 0,
+        "noHistory": true,
+        "intentFilters": [],
+        "metaData": []
+      },
+      {
+        "name": "expo.modules.webbrowser.BrowserProxyActivity",
+        "exported": false,
+        "taskAffinity": ".webContainer",
+        "launchMode": 1,
+        "intentFilters": [],
+        "metaData": []
+      },
+      {
+        "name": "com.google.mlkit.vision.codescanner.internal.GmsBarcodeScanningDelegateActivity",
+        "exported": false,
+        "screenOrientation": 1,
+        "intentFilters": [],
+        "metaData": []
+      },
+      {
+        "name": "com.google.android.gms.common.api.GoogleApiActivity",
+        "exported": false,
+        "intentFilters": [],
+        "metaData": []
+      }
+    ],
+    "activityAliases": [],
+    "launcherActivities": [
+      {
+        "name": "com.mongain.superapp.MainActivity",
+        "exported": true,
+        "launchMode": 2,
+        "screenOrientation": 1,
+        "configChanges": -2147479632,
+        "windowSoftInputMode": 16,
+        "intentFilters": [
+          {
+            "actions": [
+              {
+                "name": "android.intent.action.MAIN"
+              }
+            ],
+            "categories": [
+              {
+                "name": "android.intent.category.LAUNCHER"
+              }
+            ],
+            "data": []
+          },
+          {
+            "actions": [
+              {
+                "name": "android.intent.action.VIEW"
+              }
+            ],
+            "categories": [
+              {
+                "name": "android.intent.category.DEFAULT"
+              },
+              {
+                "name": "android.intent.category.BROWSABLE"
+              }
+            ],
+            "data": [
+              {
+                "scheme": "mongain"
+              }
+            ]
+          }
+        ],
+        "metaData": []
+      }
+    ],
+    "services": [
+      {
+        "name": "com.google.android.gms.metadata.ModuleDependencies",
+        "enabled": false,
+        "exported": false,
+        "intentFilters": [
+          {
+            "actions": [
+              {
+                "name": "com.google.android.gms.metadata.MODULE_DEPENDENCIES"
+              }
+            ],
+            "categories": [],
+            "data": []
+          }
+        ],
+        "metaData": [
+          {
+            "name": "photopicker_activity:0:required",
+            "value": ""
+          }
+        ]
+      },
+      {
+        "name": "expo.modules.notifications.service.ExpoFirebaseMessagingService",
+        "exported": false,
+        "intentFilters": [
+          {
+            "priority": -1,
+            "actions": [
+              {
+                "name": "com.google.firebase.MESSAGING_EVENT"
+              }
+            ],
+            "categories": [],
+            "data": []
+          }
+        ],
+        "metaData": []
+      },
+      {
+        "name": "androidx.camera.core.impl.MetadataHolderService",
+        "enabled": false,
+        "exported": false,
+        "intentFilters": [],
+        "metaData": [
+          {
+            "name": "androidx.camera.core.impl.MetadataHolderService.DEFAULT_CONFIG_PROVIDER",
+            "value": "androidx.camera.camera2.Camera2Config$DefaultProvider"
+          }
+        ]
+      },
+      {
+        "name": "androidx.room.MultiInstanceInvalidationService",
+        "exported": false,
+        "directBootAware": true,
+        "intentFilters": [],
+        "metaData": []
+      },
+      {
+        "name": "com.google.mlkit.common.internal.MlKitComponentDiscoveryService",
+        "exported": false,
+        "directBootAware": true,
+        "intentFilters": [],
+        "metaData": [
+          {
+            "name": "com.google.firebase.components:com.google.mlkit.vision.barcode.internal.BarcodeRegistrar",
+            "value": "com.google.firebase.components.ComponentRegistrar"
+          },
+          {
+            "name": "com.google.firebase.components:com.google.mlkit.vision.common.internal.VisionCommonRegistrar",
+            "value": "com.google.firebase.components.ComponentRegistrar"
+          },
+          {
+            "name": "com.google.firebase.components:com.google.mlkit.common.internal.CommonComponentRegistrar",
+            "value": "com.google.firebase.components.ComponentRegistrar"
+          }
+        ]
+      },
+      {
+        "name": "com.google.firebase.messaging.FirebaseMessagingService",
+        "exported": false,
+        "directBootAware": true,
+        "intentFilters": [
+          {
+            "priority": -500,
+            "actions": [
+              {
+                "name": "com.google.firebase.MESSAGING_EVENT"
+              }
+            ],
+            "categories": [],
+            "data": []
+          }
+        ],
+        "metaData": []
+      },
+      {
+        "name": "com.google.firebase.components.ComponentDiscoveryService",
+        "exported": false,
+        "directBootAware": true,
+        "intentFilters": [],
+        "metaData": [
+          {
+            "name": "com.google.firebase.components:com.google.firebase.messaging.FirebaseMessagingKtxRegistrar",
+            "value": "com.google.firebase.components.ComponentRegistrar"
+          },
+          {
+            "name": "com.google.firebase.components:com.google.firebase.messaging.FirebaseMessagingRegistrar",
+            "value": "com.google.firebase.components.ComponentRegistrar"
+          },
+          {
+            "name": "com.google.firebase.components:com.google.firebase.installations.FirebaseInstallationsKtxRegistrar",
+            "value": "com.google.firebase.components.ComponentRegistrar"
+          },
+          {
+            "name": "com.google.firebase.components:com.google.firebase.installations.FirebaseInstallationsRegistrar",
+            "value": "com.google.firebase.components.ComponentRegistrar"
+          },
+          {
+            "name": "com.google.firebase.components:com.google.firebase.FirebaseCommonKtxRegistrar",
+            "value": "com.google.firebase.components.ComponentRegistrar"
+          },
+          {
+            "name": "com.google.firebase.components:com.google.firebase.datatransport.TransportRegistrar",
+            "value": "com.google.firebase.components.ComponentRegistrar"
+          }
+        ]
+      },
+      {
+        "name": "com.google.android.datatransport.runtime.backends.TransportBackendDiscovery",
+        "exported": false,
+        "intentFilters": [],
+        "metaData": [
+          {
+            "name": "backend:com.google.android.datatransport.cct.CctBackendFactory",
+            "value": "cct"
+          }
+        ]
+      },
+      {
+        "name": "com.google.android.datatransport.runtime.scheduling.jobscheduling.JobInfoSchedulerService",
+        "permission": "android.permission.BIND_JOB_SERVICE",
+        "exported": false,
+        "intentFilters": [],
+        "metaData": []
+      }
+    ],
+    "receivers": [
+      {
+        "name": "expo.modules.notifications.service.NotificationsService",
+        "enabled": true,
+        "exported": false,
+        "intentFilters": [
+          {
+            "priority": -1,
+            "actions": [
+              {
+                "name": "expo.modules.notifications.NOTIFICATION_EVENT"
+              },
+              {
+                "name": "android.intent.action.BOOT_COMPLETED"
+              },
+              {
+                "name": "android.intent.action.REBOOT"
+              },
+              {
+                "name": "android.intent.action.QUICKBOOT_POWERON"
+              },
+              {
+                "name": "com.htc.intent.action.QUICKBOOT_POWERON"
+              },
+              {
+                "name": "android.intent.action.MY_PACKAGE_REPLACED"
+              }
+            ],
+            "categories": [],
+            "data": []
+          }
+        ],
+        "metaData": []
+      },
+      {
+        "name": "com.google.firebase.iid.FirebaseInstanceIdReceiver",
+        "permission": "com.google.android.c2dm.permission.SEND",
+        "exported": true,
+        "intentFilters": [
+          {
+            "actions": [
+              {
+                "name": "com.google.android.c2dm.intent.RECEIVE"
+              }
+            ],
+            "categories": [],
+            "data": []
+          }
+        ],
+        "metaData": [
+          {
+            "name": "com.google.android.gms.cloudmessaging.FINISHED_AFTER_HANDLED",
+            "value": true
+          }
+        ]
+      },
+      {
+        "name": "androidx.profileinstaller.ProfileInstallReceiver",
+        "permission": "android.permission.DUMP",
+        "enabled": true,
+        "exported": true,
+        "directBootAware": false,
+        "intentFilters": [
+          {
+            "actions": [
+              {
+                "name": "androidx.profileinstaller.action.INSTALL_PROFILE"
+              }
+            ],
+            "categories": [],
+            "data": []
+          },
+          {
+            "actions": [
+              {
+                "name": "androidx.profileinstaller.action.SKIP_FILE"
+              }
+            ],
+            "categories": [],
+            "data": []
+          },
+          {
+            "actions": [
+              {
+                "name": "androidx.profileinstaller.action.SAVE_PROFILE"
+              }
+            ],
+            "categories": [],
+            "data": []
+          },
+          {
+            "actions": [
+              {
+                "name": "androidx.profileinstaller.action.BENCHMARK_OPERATION"
+              }
+            ],
+            "categories": [],
+            "data": []
+          }
+        ],
+        "metaData": []
+      },
+      {
+        "name": "com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver",
+        "exported": false,
+        "intentFilters": [],
+        "metaData": []
+      }
+    ],
+    "providers": [
+      {
+        "name": "expo.modules.filesystem.FileSystemFileProvider",
+        "exported": false,
+        "authorities": "com.mongain.superapp.FileSystemFileProvider",
+        "grantUriPermissions": [],
+        "metaData": [
+          {
+            "name": "android.support.FILE_PROVIDER_PATHS",
+            "resource": [
+              "res/pT.xml"
+            ]
+          }
+        ],
+        "pathPermissions": []
+      },
+      {
+        "name": "expo.modules.sharing.SharingFileProvider",
+        "exported": false,
+        "authorities": "com.mongain.superapp.SharingFileProvider",
+        "grantUriPermissions": [],
+        "metaData": [
+          {
+            "name": "android.support.FILE_PROVIDER_PATHS",
+            "resource": [
+              "res/5_.xml"
+            ]
+          }
+        ],
+        "pathPermissions": []
+      },
+      {
+        "name": "expo.modules.imagepicker.fileprovider.ImagePickerFileProvider",
+        "exported": false,
+        "authorities": "com.mongain.superapp.ImagePickerFileProvider",
+        "grantUriPermissions": [],
+        "metaData": [
+          {
+            "name": "android.support.FILE_PROVIDER_PATHS",
+            "resource": [
+              "res/T7.xml"
+            ]
+          }
+        ],
+        "pathPermissions": []
+      },
+      {
+        "name": "com.canhub.cropper.CropFileProvider",
+        "exported": false,
+        "authorities": "com.mongain.superapp.cropper.fileprovider",
+        "grantUriPermissions": [],
+        "metaData": [
+          {
+            "name": "android.support.FILE_PROVIDER_PATHS",
+            "resource": [
+              "res/h2.xml"
+            ]
+          }
+        ],
+        "pathPermissions": []
+      },
+      {
+        "name": "com.google.mlkit.common.internal.MlKitInitProvider",
+        "exported": false,
+        "authorities": "com.mongain.superapp.mlkitinitprovider",
+        "initOrder": 99,
+        "grantUriPermissions": [],
+        "metaData": [],
+        "pathPermissions": []
+      },
+      {
+        "name": "com.google.firebase.provider.FirebaseInitProvider",
+        "exported": false,
+        "authorities": "com.mongain.superapp.firebaseinitprovider",
+        "initOrder": 100,
+        "directBootAware": true,
+        "grantUriPermissions": [],
+        "metaData": [],
+        "pathPermissions": []
+      },
+      {
+        "name": "androidx.startup.InitializationProvider",
+        "exported": false,
+        "authorities": "com.mongain.superapp.androidx-startup",
+        "grantUriPermissions": [],
+        "metaData": [
+          {
+            "name": "androidx.emoji2.text.EmojiCompatInitializer",
+            "value": "androidx.startup"
+          },
+          {
+            "name": "androidx.lifecycle.ProcessLifecycleInitializer",
+            "value": "androidx.startup"
+          },
+          {
+            "name": "androidx.profileinstaller.ProfileInstallerInitializer",
+            "value": "androidx.startup"
+          }
+        ],
+        "pathPermissions": []
+      }
+    ],
+    "usesLibraries": [
+      {
+        "name": "androidx.camera.extensions.impl",
+        "required": false
+      },
+      {
+        "name": "androidx.window.extensions",
+        "required": false
+      },
+      {
+        "name": "androidx.window.sidecar",
+        "required": false
+      }
+    ],
+    "metaData": [
+      {
+        "name": "expo.modules.updates.ENABLED",
+        "value": false
+      },
+      {
+        "name": "expo.modules.updates.ENABLE_BSDIFF_PATCH_SUPPORT",
+        "value": true
+      },
+      {
+        "name": "expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH",
+        "value": "ALWAYS"
+      },
+      {
+        "name": "expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS",
+        "value": 0
+      },
+      {
+        "name": "org.unimodules.core.AppLoader#react-native-headless",
+        "value": "expo.modules.adapters.react.apploader.RNHeadlessAppLoader"
+      },
+      {
+        "name": "com.facebook.soloader.enabled",
+        "value": true
+      },
+      {
+        "name": "com.google.mlkit.vision.DEPENDENCIES",
+        "value": "barcode_ui"
+      },
+      {
+        "name": "com.bumptech.glide.integration.okhttp3.OkHttpGlideModule",
+        "value": "GlideModule"
+      },
+      {
+        "name": "com.google.android.gms.version",
+        "value": [
+          "12451000"
+        ]
+      }
+    ]
+  },
+  "icon": "data:image/png;base64,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"
+}

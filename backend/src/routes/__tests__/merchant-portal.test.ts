@@ -19,13 +19,17 @@ import merchantPortalRoutes from '../merchant-portal';
 // __setMockPortalRole/__setMockPortalMemberId (réinitialisé à ADMIN/undefined dans le
 // beforeEach global) pour vérifier que requirePortalAdmin est bien câblé sur les bonnes routes
 // de merchant-portal.ts sans reproduire toute la logique du token dans ce fichier.
+// Type élargi à MANAGER/OPERATOR/AUDITOR (au-delà d'ADMIN/VIEWER historiques) — nécessaire
+// pour tester POST /payouts/:id/approve (requirePortalRole('ADMIN', 'MANAGER')) et le mapping
+// par rôle des nouvelles routes (settings, tills, employees/import).
+type MockPortalRole = 'ADMIN' | 'MANAGER' | 'OPERATOR' | 'AUDITOR' | 'VIEWER';
 jest.mock('../../middleware/auth', () => {
     const actual = jest.requireActual('../../middleware/auth');
-    let mockPortalRole: 'ADMIN' | 'VIEWER' = 'ADMIN';
+    let mockPortalRole: string = 'ADMIN';
     let mockPortalMemberId: string | undefined;
     return {
         ...actual,
-        __setMockPortalRole: (role: 'ADMIN' | 'VIEWER') => { mockPortalRole = role; },
+        __setMockPortalRole: (role: string) => { mockPortalRole = role; },
         __setMockPortalMemberId: (id: string | undefined) => { mockPortalMemberId = id; },
         authMerchantPortal: (req: any, _res: any, next: any) => {
             req.userId = 'giant_1';
@@ -36,7 +40,7 @@ jest.mock('../../middleware/auth', () => {
     };
 });
 const { __setMockPortalRole, __setMockPortalMemberId } = jest.requireMock('../../middleware/auth') as {
-    __setMockPortalRole: (role: 'ADMIN' | 'VIEWER') => void;
+    __setMockPortalRole: (role: MockPortalRole) => void;
     __setMockPortalMemberId: (id: string | undefined) => void;
 };
 
@@ -47,10 +51,16 @@ jest.mock('../../prisma', () => ({
         merchantAffiliation: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn() },
         merchantPortalMember: { findFirst: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn(), delete: jest.fn() },
         merchantEmployee: { findMany: jest.fn(), create: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
+        merchantTill: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+        payoutBulk: { create: jest.fn(), findUnique: jest.fn(), findMany: jest.fn(), update: jest.fn() },
         notification: { create: jest.fn() },
         transaction: { aggregate: jest.fn(), findFirst: jest.fn() },
         merchantPayoutRequest: { findMany: jest.fn() },
     },
+}));
+
+jest.mock('../../utils/employeeCsv', () => ({
+    importEmployeesFromCsv: jest.fn(),
 }));
 
 jest.mock('../../services/sms', () => ({
@@ -69,10 +79,14 @@ jest.mock('../wallet', () => ({
 // runMassPayout/createMerchantPayoutRequest ont déjà leur propre couverture complète dans
 // b2b.test.ts et merchant.test.ts — mockés ici pour vérifier uniquement que
 // merchant-portal.ts les appelle correctement (bon utilisateur chargé, bonne garde 404),
-// sans reproduire toute la logique métier de paiement.
+// sans reproduire toute la logique métier de paiement. processBulkAsync (traitement du lot
+// après approbation, voir POST /payouts/:id/approve) mocké de la même façon — sa propre
+// logique (mouvement de fonds ligne par ligne) a déjà sa couverture dans b2b.test.ts.
 const mockRunMassPayout = jest.fn((_user: any, _req: any, res: any) => res.status(202).json({ success: true, via: 'runMassPayout' }));
+const mockProcessBulkAsync = jest.fn().mockResolvedValue(undefined);
 jest.mock('../b2b', () => ({
     runMassPayout: (...args: any[]) => (mockRunMassPayout as any)(...args),
+    processBulkAsync: (...args: any[]) => (mockProcessBulkAsync as any)(...args),
 }));
 
 const mockCreateMerchantPayoutRequest = jest.fn();
@@ -525,11 +539,11 @@ describe('Merchant Portal Routes', () => {
         });
     });
 
-    describe('PATCH /merchant-portal/affiliations/:id/expected-frequency', () => {
+    describe('PATCH /merchant-portal/affiliations/:id/terms', () => {
         it('devrait retourner 400 si expectedFrequency est invalide', async () => {
             (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
 
-            const res = await request(app).patch('/merchant-portal/affiliations/aff1/expected-frequency').send({ expectedFrequency: 'DAILY' });
+            const res = await request(app).patch('/merchant-portal/affiliations/aff1/terms').send({ expectedFrequency: 'DAILY' });
 
             expect(res.status).toBe(400);
             expect(prisma.merchantAffiliation.update).not.toHaveBeenCalled();
@@ -539,7 +553,7 @@ describe('Merchant Portal Routes', () => {
             (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
             (prisma.merchantAffiliation.findUnique as jest.Mock).mockResolvedValue({ id: 'aff1', giantId: 'giant_1', status: 'PENDING' });
 
-            const res = await request(app).patch('/merchant-portal/affiliations/aff1/expected-frequency').send({ expectedFrequency: 'MONTHLY' });
+            const res = await request(app).patch('/merchant-portal/affiliations/aff1/terms').send({ expectedFrequency: 'MONTHLY' });
 
             expect(res.status).toBe(404);
         });
@@ -549,7 +563,7 @@ describe('Merchant Portal Routes', () => {
             (prisma.merchantAffiliation.findUnique as jest.Mock).mockResolvedValue({ id: 'aff1', giantId: 'giant_1', status: 'ACCEPTED' });
             (prisma.merchantAffiliation.update as jest.Mock).mockResolvedValue({ id: 'aff1', expectedFrequency: 'WEEKLY' });
 
-            const res = await request(app).patch('/merchant-portal/affiliations/aff1/expected-frequency').send({ expectedFrequency: 'WEEKLY' });
+            const res = await request(app).patch('/merchant-portal/affiliations/aff1/terms').send({ expectedFrequency: 'WEEKLY' });
 
             expect(res.status).toBe(200);
             expect(prisma.merchantAffiliation.update).toHaveBeenCalledWith({
@@ -563,7 +577,7 @@ describe('Merchant Portal Routes', () => {
             (prisma.merchantAffiliation.findUnique as jest.Mock).mockResolvedValue({ id: 'aff1', giantId: 'giant_1', status: 'ACCEPTED' });
             (prisma.merchantAffiliation.update as jest.Mock).mockResolvedValue({ id: 'aff1', expectedFrequency: null });
 
-            const res = await request(app).patch('/merchant-portal/affiliations/aff1/expected-frequency').send({ expectedFrequency: null });
+            const res = await request(app).patch('/merchant-portal/affiliations/aff1/terms').send({ expectedFrequency: null });
 
             expect(res.status).toBe(200);
         });
@@ -571,7 +585,7 @@ describe('Merchant Portal Routes', () => {
         it('devrait retourner 403 pour un membre VIEWER', async () => {
             __setMockPortalRole('VIEWER');
 
-            const res = await request(app).patch('/merchant-portal/affiliations/aff1/expected-frequency').send({ expectedFrequency: 'WEEKLY' });
+            const res = await request(app).patch('/merchant-portal/affiliations/aff1/terms').send({ expectedFrequency: 'WEEKLY' });
 
             expect(res.status).toBe(403);
         });
@@ -649,6 +663,238 @@ describe('Merchant Portal Routes', () => {
 
             expect(res.status).toBe(403);
             expect(mockRunMassPayout).not.toHaveBeenCalled();
+        });
+
+        // ==========================================
+        // SEUIL DE DOUBLE VALIDATION (User.portalApprovalThreshold)
+        // ==========================================
+        describe('Seuil de double validation', () => {
+            it('devrait créer un PayoutBulk AWAITING_APPROVAL SANS exécuter runMassPayout si le total atteint le seuil', async () => {
+                (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+                    id: 'giant_1', merchantTier: 'GIANT', wallet: { id: 'w1', balance: 1000000 }, portalApprovalThreshold: 5000,
+                });
+                (prisma.payoutBulk.create as jest.Mock).mockResolvedValue({ id: 'bulk_await', entries: [] });
+
+                const res = await request(app).post('/merchant-portal/payouts').send({
+                    name: 'Paie',
+                    entries: [{ phone: '077000001', amount: 5000 }],
+                });
+
+                expect(res.status).toBe(202);
+                expect(res.body.status).toBe('AWAITING_APPROVAL');
+                expect(mockRunMassPayout).not.toHaveBeenCalled();
+                expect(prisma.payoutBulk.create).toHaveBeenCalledWith(expect.objectContaining({
+                    data: expect.objectContaining({ status: 'AWAITING_APPROVAL', totalAmount: 5000, initiatedByMemberId: null }),
+                }));
+            });
+
+            it("devrait enregistrer initiatedByMemberId quand c'est un membre d'équipe (pas le géant) qui initie", async () => {
+                __setMockPortalMemberId('member_initiator');
+                (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+                    id: 'giant_1', merchantTier: 'GIANT', wallet: { id: 'w1', balance: 1000000 }, portalApprovalThreshold: 5000,
+                });
+                (prisma.payoutBulk.create as jest.Mock).mockResolvedValue({ id: 'bulk_await', entries: [] });
+
+                await request(app).post('/merchant-portal/payouts').send({
+                    entries: [{ phone: '077000001', amount: 5000 }],
+                });
+
+                expect(prisma.payoutBulk.create).toHaveBeenCalledWith(expect.objectContaining({
+                    data: expect.objectContaining({ initiatedByMemberId: 'member_initiator' }),
+                }));
+            });
+
+            it('devrait exécuter runMassPayout normalement si le total reste sous le seuil', async () => {
+                (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+                    id: 'giant_1', merchantTier: 'GIANT', wallet: { id: 'w1', balance: 1000000 }, portalApprovalThreshold: 100000,
+                });
+
+                const res = await request(app).post('/merchant-portal/payouts').send({
+                    entries: [{ phone: '077000001', amount: 5000 }], pin: '1234',
+                });
+
+                expect(res.status).toBe(202);
+                expect(res.body.via).toBe('runMassPayout');
+                expect(mockRunMassPayout).toHaveBeenCalled();
+                expect(prisma.payoutBulk.create).not.toHaveBeenCalled();
+            });
+
+            it("ne devrait pas recréer de lot AWAITING_APPROVAL pour une clé d'idempotence déjà utilisée", async () => {
+                (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+                    id: 'giant_1', merchantTier: 'GIANT', wallet: { id: 'w1', balance: 1000000 }, portalApprovalThreshold: 5000,
+                });
+                (prisma.payoutBulk.findUnique as jest.Mock).mockResolvedValue({ id: 'bulk_existant', status: 'AWAITING_APPROVAL' });
+
+                const res = await request(app).post('/merchant-portal/payouts').send({
+                    entries: [{ phone: '077000001', amount: 5000 }],
+                    idempotencyKey: 'clef-abc',
+                });
+
+                expect(res.status).toBe(202);
+                expect(res.body.bulkId).toBe('bulk_existant');
+                expect(prisma.payoutBulk.create).not.toHaveBeenCalled();
+            });
+
+            it('devrait refuser tout le lot si une entrée a un montant invalide, même sous garde de seuil', async () => {
+                (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+                    id: 'giant_1', merchantTier: 'GIANT', wallet: { id: 'w1', balance: 1000000 }, portalApprovalThreshold: 5000,
+                });
+
+                const res = await request(app).post('/merchant-portal/payouts').send({
+                    entries: [{ phone: '077000001', amount: -1 }],
+                });
+
+                expect(res.status).toBe(400);
+                expect(prisma.payoutBulk.create).not.toHaveBeenCalled();
+            });
+        });
+    });
+
+    describe('GET /merchant-portal/settings', () => {
+        it('devrait retourner le seuil configuré du géant', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT', portalApprovalThreshold: 250000 });
+
+            const res = await request(app).get('/merchant-portal/settings');
+
+            expect(res.status).toBe(200);
+            expect(res.body.portalApprovalThreshold).toBe(250000);
+        });
+    });
+
+    describe('PATCH /merchant-portal/settings', () => {
+        it('devrait retourner 403 pour un rôle non-ADMIN', async () => {
+            __setMockPortalRole('MANAGER');
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
+
+            const res = await request(app).patch('/merchant-portal/settings').send({ portalApprovalThreshold: 100000 });
+
+            expect(res.status).toBe(403);
+            expect(prisma.user.update).not.toHaveBeenCalled();
+        });
+
+        it('devrait rejeter un seuil négatif ou non numérique', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
+
+            const res = await request(app).patch('/merchant-portal/settings').send({ portalApprovalThreshold: -5 });
+
+            expect(res.status).toBe(400);
+            expect(prisma.user.update).not.toHaveBeenCalled();
+        });
+
+        it('devrait accepter null pour désactiver la double validation', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
+            (prisma.user.update as jest.Mock).mockResolvedValue({ portalApprovalThreshold: null });
+
+            const res = await request(app).patch('/merchant-portal/settings').send({ portalApprovalThreshold: null });
+
+            expect(res.status).toBe(200);
+            expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
+                where: { id: 'giant_1' },
+                data: { portalApprovalThreshold: null },
+            }));
+        });
+
+        it('devrait mettre à jour le seuil pour un ADMIN', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
+            (prisma.user.update as jest.Mock).mockResolvedValue({ portalApprovalThreshold: 300000 });
+
+            const res = await request(app).patch('/merchant-portal/settings').send({ portalApprovalThreshold: 300000 });
+
+            expect(res.status).toBe(200);
+            expect(res.body.portalApprovalThreshold).toBe(300000);
+        });
+    });
+
+    describe('GET /merchant-portal/payouts/pending-approval', () => {
+        it('devrait lister uniquement les lots AWAITING_APPROVAL du géant', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
+            const mockBulks = [{ id: 'bulk1', status: 'AWAITING_APPROVAL' }];
+            (prisma.payoutBulk.findMany as jest.Mock).mockResolvedValue(mockBulks);
+
+            const res = await request(app).get('/merchant-portal/payouts/pending-approval');
+
+            expect(res.status).toBe(200);
+            expect(res.body.bulks).toEqual(mockBulks);
+            expect(prisma.payoutBulk.findMany).toHaveBeenCalledWith(expect.objectContaining({
+                where: { merchantId: 'giant_1', status: 'AWAITING_APPROVAL' },
+            }));
+        });
+    });
+
+    describe('POST /merchant-portal/payouts/:id/approve', () => {
+        it('devrait retourner 403 pour un rôle OPERATOR (requirePortalRole ADMIN/MANAGER uniquement)', async () => {
+            __setMockPortalRole('OPERATOR');
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
+
+            const res = await request(app).post('/merchant-portal/payouts/bulk1/approve').send({});
+
+            expect(res.status).toBe(403);
+            expect(prisma.payoutBulk.update).not.toHaveBeenCalled();
+        });
+
+        it("devrait retourner 404 si le lot n'existe pas ou n'appartient pas à ce géant", async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
+            (prisma.payoutBulk.findUnique as jest.Mock).mockResolvedValue({ id: 'bulk1', merchantId: 'un_autre_geant', status: 'AWAITING_APPROVAL' });
+
+            const res = await request(app).post('/merchant-portal/payouts/bulk1/approve').send({});
+
+            expect(res.status).toBe(404);
+        });
+
+        it("devrait retourner 400 si le lot n'est plus AWAITING_APPROVAL", async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
+            (prisma.payoutBulk.findUnique as jest.Mock).mockResolvedValue({ id: 'bulk1', merchantId: 'giant_1', status: 'COMPLETED' });
+
+            const res = await request(app).post('/merchant-portal/payouts/bulk1/approve').send({});
+
+            expect(res.status).toBe(400);
+        });
+
+        it("devrait refuser 403 si l'approbateur est le même que l'initiateur (les deux étant le géant lui-même, memberId null des deux côtés)", async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
+            (prisma.payoutBulk.findUnique as jest.Mock).mockResolvedValue({ id: 'bulk1', merchantId: 'giant_1', status: 'AWAITING_APPROVAL', initiatedByMemberId: null });
+
+            const res = await request(app).post('/merchant-portal/payouts/bulk1/approve').send({});
+
+            expect(res.status).toBe(403);
+            expect(prisma.payoutBulk.update).not.toHaveBeenCalled();
+        });
+
+        it("devrait refuser 403 si l'approbateur (membre) est le même membre que l'initiateur", async () => {
+            __setMockPortalMemberId('member_1');
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
+            (prisma.payoutBulk.findUnique as jest.Mock).mockResolvedValue({ id: 'bulk1', merchantId: 'giant_1', status: 'AWAITING_APPROVAL', initiatedByMemberId: 'member_1' });
+
+            const res = await request(app).post('/merchant-portal/payouts/bulk1/approve').send({});
+
+            expect(res.status).toBe(403);
+        });
+
+        it("devrait approuver et déclencher processBulkAsync quand l'approbateur diffère de l'initiateur", async () => {
+            __setMockPortalMemberId('member_approver');
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
+            (prisma.payoutBulk.findUnique as jest.Mock).mockResolvedValue({ id: 'bulk1', merchantId: 'giant_1', status: 'AWAITING_APPROVAL', initiatedByMemberId: 'member_initiator' });
+            (prisma.payoutBulk.update as jest.Mock).mockResolvedValue({});
+
+            const res = await request(app).post('/merchant-portal/payouts/bulk1/approve').send({});
+
+            expect(res.status).toBe(202);
+            expect(prisma.payoutBulk.update).toHaveBeenCalledWith({
+                where: { id: 'bulk1' },
+                data: expect.objectContaining({ status: 'PROCESSING', approvedByMemberId: 'member_approver' }),
+            });
+            expect(mockProcessBulkAsync).toHaveBeenCalledWith('bulk1', 'giant_1');
+        });
+
+        it('devrait approuver quand le géant lui-même approuve un lot initié par un membre', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
+            (prisma.payoutBulk.findUnique as jest.Mock).mockResolvedValue({ id: 'bulk1', merchantId: 'giant_1', status: 'AWAITING_APPROVAL', initiatedByMemberId: 'member_initiator' });
+            (prisma.payoutBulk.update as jest.Mock).mockResolvedValue({});
+
+            const res = await request(app).post('/merchant-portal/payouts/bulk1/approve').send({});
+
+            expect(res.status).toBe(202);
+            expect(mockProcessBulkAsync).toHaveBeenCalledWith('bulk1', 'giant_1');
         });
     });
 
@@ -1056,6 +1302,99 @@ describe('Merchant Portal Routes', () => {
 
             expect(res.status).toBe(200);
             expect(prisma.merchantEmployee.update).toHaveBeenCalledWith({ where: { id: 'emp1' }, data: { isActive: false } });
+        });
+    });
+
+    describe('POST /merchant-portal/employees/import', () => {
+        it('devrait retourner 403 pour un membre AUDITOR', async () => {
+            __setMockPortalRole('AUDITOR');
+
+            const res = await request(app).post('/merchant-portal/employees/import').send({ csv: 'Jean,077000001' });
+
+            expect(res.status).toBe(403);
+        });
+
+        it('devrait retourner 400 si aucun CSV fourni', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
+
+            const res = await request(app).post('/merchant-portal/employees/import').send({});
+
+            expect(res.status).toBe(400);
+        });
+
+        it('devrait déléguer à importEmployeesFromCsv et renvoyer son résultat', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
+            const { importEmployeesFromCsv } = require('../../utils/employeeCsv');
+            (importEmployeesFromCsv as jest.Mock).mockResolvedValue({ created: 3, skipped: 0, errors: [] });
+
+            const res = await request(app).post('/merchant-portal/employees/import').send({ csv: 'Jean,077000001' });
+
+            expect(res.status).toBe(201);
+            expect(res.body).toEqual({ success: true, created: 3, skipped: 0, errors: [] });
+            expect(importEmployeesFromCsv).toHaveBeenCalledWith('giant_1', 'Jean,077000001');
+        });
+    });
+
+    // ==========================================
+    // GUICHETS / CAISSES (CÔTÉ GÉANT)
+    // ==========================================
+    describe('GET /merchant-portal/tills', () => {
+        it('devrait lister les guichets du géant', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
+            (prisma.merchantTill.findMany as jest.Mock).mockResolvedValue([{ id: 't1', name: 'Guichet 1' }]);
+
+            const res = await request(app).get('/merchant-portal/tills');
+
+            expect(res.status).toBe(200);
+            expect(res.body.tills).toEqual([{ id: 't1', name: 'Guichet 1' }]);
+        });
+    });
+
+    describe('POST /merchant-portal/tills', () => {
+        it('devrait retourner 403 pour un membre AUDITOR', async () => {
+            __setMockPortalRole('AUDITOR');
+
+            const res = await request(app).post('/merchant-portal/tills').send({ name: 'Guichet 1', phone: '077000009', pin: '1234' });
+
+            expect(res.status).toBe(403);
+            expect(prisma.merchantTill.create).not.toHaveBeenCalled();
+        });
+
+        it('devrait créer un guichet avec un PIN valide', async () => {
+            (prisma.user.findUnique as jest.Mock)
+                .mockResolvedValueOnce({ id: 'giant_1', merchantTier: 'GIANT' }) // loadGiant
+                .mockResolvedValueOnce(null); // vérification d'unicité dans createMerchantTill
+            (prisma.merchantTill.findUnique as jest.Mock).mockResolvedValue(null);
+            (prisma.merchantTill.create as jest.Mock).mockResolvedValue({ id: 't1', name: 'Guichet 1', phone: '077000009', isActive: true });
+
+            const res = await request(app).post('/merchant-portal/tills').send({ name: 'Guichet 1', phone: '077000009', pin: '1234' });
+
+            expect(res.status).toBe(201);
+        });
+    });
+
+    describe('DELETE /merchant-portal/tills/:id', () => {
+        it("devrait retourner 404 si le guichet n'appartient pas à ce géant", async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
+            (prisma.merchantTill.findUnique as jest.Mock).mockResolvedValue({ id: 't1', merchantId: 'un_autre_geant' });
+
+            const res = await request(app).delete('/merchant-portal/tills/t1');
+
+            expect(res.status).toBe(404);
+        });
+
+        it('devrait désactiver le guichet (isActive:false + tokenVersion incrémenté)', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'giant_1', merchantTier: 'GIANT' });
+            (prisma.merchantTill.findUnique as jest.Mock).mockResolvedValue({ id: 't1', merchantId: 'giant_1' });
+            (prisma.merchantTill.update as jest.Mock).mockResolvedValue({});
+
+            const res = await request(app).delete('/merchant-portal/tills/t1');
+
+            expect(res.status).toBe(200);
+            expect(prisma.merchantTill.update).toHaveBeenCalledWith({
+                where: { id: 't1' },
+                data: { isActive: false, tokenVersion: { increment: 1 } },
+            });
         });
     });
 });

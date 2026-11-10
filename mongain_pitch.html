@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mongain - Pitch Investisseur</title>
+  <style>
+    :root {
+      --primary: #0f172a;
+      --accent: #2563eb;
+      --teal: #0ea5e9;
+      --green: #16a34a;
+      --orange: #f59e0b;
+      --red: #dc2626;
+      --gray: #64748b;
+      --light: #f8fafc;
+      --border: #dfe7f1;
+      --white: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #edf2f7;
+      color: var(--primary);
+    }
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto 16px;
+      background: white;
+      box-shadow: 0 4px 10px rgba(0,0,0,.08);
+      padding: 18mm 16mm 14mm 16mm;
+      position: relative;
+    }
+    .header-band {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 26mm;
+      background: var(--accent);
+    }
+    .header-text {
+      position: relative;
+      z-index: 1;
+      color: white;
+      padding-top: 10mm;
+      font-weight: 700;
+      font-size: 10.5pt;
+      letter-spacing: 0.3px;
+    }
+    .content { position: relative; z-index: 1; padding-top: 22mm; }
+    h1, h2, h3 { margin: 0 0 8px; }
+    h1 { font-size: 28pt; color: var(--primary); }
+    h2 { font-size: 18pt; color: var(--primary); margin-top: 12px; }
+    h3 { font-size: 13pt; color: var(--primary); margin-top: 10px; }
+    p, li { font-size: 11pt; line-height: 1.55; }
+    ul { margin: 8px 0 10px 20px; padding: 0; }
+    .cover-title { font-size: 34pt; color: white; font-weight: 700; }
+    .cover-sub { font-size: 16pt; color: white; margin-top: 6px; }
+    .cover-tagline { font-size: 11pt; color: white; margin-top: 14px; }
+    .cover-boxes {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 18px;
+      max-width: 540px;
+    }
+    .box {
+      background: rgba(15,23,42,0.9);
+      border: 1px solid rgba(255,255,255,0.25);
+      color: white;
+      border-radius: 10px;
+      padding: 12px 14px;
+      min-height: 70px;
+    }
+    .box strong { display: block; font-size: 9pt; margin-bottom: 6px; color: #dbeafe; }
+    .box span { font-size: 11pt; }
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(100px, 1fr));
+      gap: 12px;
+      margin: 18px 0 10px;
+    }
+    .kpi {
+      background: var(--light);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 8px;
+      text-align: center;
+    }
+    .kpi .num { font-size: 24pt; font-weight: 700; color: var(--accent); }
+    .kpi .label { font-size: 9pt; color: var(--gray); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 10pt;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px 7px;
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      background: var(--primary);
+      color: white;
+      font-weight: 700;
+    }
+    tr:nth-child(even) td { background: var(--light); }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-top: 12px;
+    }
+    .chart-box {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: white;
+      padding: 12px;
+      min-height: 180px;
+    }
+    .bars { display: flex; align-items: flex-end; gap: 12px; height: 150px; margin-top: 12px; }
+    .bar {
+      flex: 1; border-radius: 8px 8px 0 0; position: relative; text-align: center; color: var(--primary);
+      font-size: 8pt; font-weight: 700;
+    }
+    .bar span { position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%); }
+    .bar-label { font-size: 8pt; color: var(--gray); }
+    .line-graph {
+      width: 100%; height: 150px; position: relative; margin-top: 10px;
+      border-left: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    }
+    .line-graph svg { width: 100%; height: 100%; display: block; }
+    .donut-wrap {
+      display: flex; align-items: center; justify-content: center; gap: 18px;
+      margin-top: 12px;
+    }
+    .donut {
+      width: 160px; height: 160px; border-radius: 50%;
+      background: conic-gradient(var(--accent) 0 30%, var(--teal) 30% 52%, var(--orange) 52% 73%, var(--green) 73% 93%, var(--red) 93% 100%);
+      position: relative;
+    }
+    .donut::before {
+      content: ""; position: absolute; inset: 26px; border-radius: 50%; background: white;
+    }
+    .legend { font-size: 9pt; }
+    .legend div { margin: 7px 0; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+    .footer-note {
+      margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border); color: var(--gray); font-size: 9pt;
+    }
+    .cover-page {
+      background: linear-gradient(135deg,#0f172a,#1d4ed8 70%, #2563eb 100%);
+      color: white;
+      padding: 22mm 16mm 14mm 16mm;
+      min-height: 297mm;
+      position: relative;
+    }
+    .cover-page .content { padding-top: 0; }
+    .small { font-size: 10pt; }
+  </style>
+</head>
+<body>
+  <div class="page cover-page">
+    <div class="content">
+      <div class="cover-title">MONGAIN</div>
+      <div class="cover-sub">Business Plan</div>
+      <div class="cover-tagline">Plateforme de paiement et services du quotidien en zone CEMAC</div>
+      <div class="cover-boxes">
+        <div class="box"><strong>Type</strong><span>Fintech / super-app</span></div>
+        <div class="box"><strong>Zone</strong><span>Gabon / CEMAC</span></div>
+        <div class="box"><strong>Levée visée</strong><span>5 milliards FCFA</span></div>
+        <div class="box"><strong>Objectif</strong><span>2 millions d’utilisateurs en 5 ans</span></div>
+      </div>
+      <div style="margin-top: 22px; max-width: 620px; font-size: 12pt; line-height: 1.6; color: white;">
+        Mongain a pour mission de digitaliser les paiements du quotidien, d’accroître l’inclusion financière et de créer une infrastructure numérique fiable pour les ménages, les commerçants et les PME de la zone CEMAC.
+      </div>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="header-band"></div>
+    <div class="header-text">Mongain - Business Plan</div>
+    <div class="content">
+      <h2>1. Résumé exécutif</h2>
+      <p>Mongain est une entreprise de technologie financière qui développe une super-app dédiée au paiement de proximité, aux services du quotidien et à l’inclusion financière. L’offre couvre les besoins récurrents de la vie quotidienne : paiement de biens et services, transferts, factures, recharge, tontines, caisses de groupe et comptes sécurisés pour familles et PME.</p>
+      <p>Le marché cible est caractérisé par une forte dépendance au cash, un fort besoin de sécurité et une faible digitalisation des petits montants. Cette réalité crée un espace d’opportunité élevé pour un acteur local capable d’offrir une solution simple, fiable, sociale et rentable.</p>
+      <p>Le modèle économique repose sur des commissions sur transactions, services associés, partenariats marchands, abonnements à des outils de gestion pour PME et intégration de services tiers. La monétisation s’appuie sur le volume de micro-paiements, ce qui garantit un potentiel de croissance rapide et régulier dès lors que la base d’utilisateurs est consolidée.</p>
+      <div class="kpi-row">
+        <div class="kpi"><div class="num">300k</div><div class="label">utilisateurs en Y1</div></div>
+        <div class="kpi"><div class="num">2M</div><div class="label">utilisateurs en Y5</div></div>
+        <div class="kpi"><div class="num">250 Md</div><div class="label">volume traité Y5</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="header-band"></div>
+    <div class="header-text">Mongain - Business Plan</div>
+    <div class="content">
+      <h2>2. Problème adressé</h2>
+      <p>Dans la zone CEMAC, la majorité des transactions du quotidien restent encore effectuées en liquide. Cette logique de paiement présente plusieurs limites :</p>
+      <ul>
+        <li>risque élevé de perte, de vol ou de fraude ;</li>
+        <li>manque de traçabilité des paiements du quotidien ;</li>
+        <li>difficulté pour les ménages et les commerçants de gérer leur budget ;</li>
+        <li>faible accessibilité à des services financiers adaptés aux micro-montants ;</li>
+        <li>pénurie de solutions locales simples pour la gestion des tontines, des caisses de groupe et des comptes familiaux.</li>
+      </ul>
+      <p>Le besoin est donc immédiat, présent chaque jour et répété à grande échelle. Ce n’est pas un marché de niche ; c’est une infrastructure de paiement fondamentale pour le quotidien.</p>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="header-band"></div>
+    <div class="header-text">Mongain - Business Plan</div>
+    <div class="content">
+      <h2>3. Analyse du marché</h2>
+      <p>Le Gabon et la zone CEMAC comptent une population urbaine grandissante, de nombreuses petites entreprises, un secteur informel structurant et une forte consommation de services de proximité. Les micro-transactions alimentent quotidiennement l’économie locale, mais restent largement non numériques.</p>
+      <table>
+        <tr><th>Segment</th><th>Caractéristique</th><th>Opportunité</th></tr>
+        <tr><td>Ménages</td><td>Paiements fréquents, faible montant, besoin de sécurité</td><td>Digitalisation des dépenses du quotidien</td></tr>
+        <tr><td>Petits commerçants</td><td>Transactions répétées, gestion manuelle</td><td>Flux de paiement plus rapides et traçables</td></tr>
+        <tr><td>Transport / taxi</td><td>Transactions courantes et de proximité</td><td>Usage quotidien, forte récurrence</td></tr>
+        <tr><td>PME / artisans</td><td>Besoin de trésorerie et d’outils simples</td><td>Gestion de caisse et de paiement intégrée</td></tr>
+        <tr><td>Secteur informel</td><td>Caisses collectives, tontines, échanges informels</td><td>Formalisation des pratiques sociales et financières</td></tr>
+      </table>
+      <p>Le marché est donc à la fois massif et fragmenté. Une solution simple et locale, pensée pour la vie réelle, a un potentiel de pénétration élevé.</p>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="header-band"></div>
+    <div class="header-text">Mongain - Business Plan</div>
+    <div class="content">
+      <h2>4. Solution proposée</h2>
+      <p>Mongain est une super-app qui centralise les usages financiers et de services du quotidien. Son objectif est de permettre à un utilisateur de gérer son portefeuille et ses dépenses courantes dans une seule application.</p>
+      <div class="two-col">
+        <div>
+          <h3>Fonctionnalités principales</h3>
+          <ul>
+            <li>Paiement de biens et services</li>
+            <li>Transferts P2P et paiement de proximité</li>
+            <li>Recharge mobile et paiements de factures</li>
+            <li>QR code pour commerce et transport</li>
+            <li>Portefeuille numérique personnel</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Fonctionnalités sociales et fintech</h3>
+          <ul>
+            <li>Compte enfant avec supervision parentale</li>
+            <li>Gestion de tontines et caisses de groupe</li>
+            <li>Suivi de budget familial</li>
+            <li>Gestion de caisse pour commerçant</li>
+            <li>Accès à des services financiers de base</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="header-band"></div>
+    <div class="header-text">Mongain - Business Plan</div>
+    <div class="content">
+      <h2>5. Modèle économique</h2>
+      <table>
+        <tr><th>Source de revenus</th><th>Description</th></tr>
+        <tr><td>Frais de transaction</td><td>Commission sur paiements, transferts et paiements QR</td></tr>
+        <tr><td>Recharge et services</td><td>Frais sur recharges, factures et services intégrés</td></tr>
+        <tr><td>Solutions marchandes</td><td>Abonnements et outils de gestion pour commerçants et PME</td></tr>
+        <tr><td>Partenariats</td><td>Accords avec transporteurs, opérateurs, distributeurs, PME</td></tr>
+        <tr><td>API / B2B</td><td>Services bancaires et de paiement intégrés dans des écosystèmes locaux</td></tr>
+      </table>
+      <p>Le modèle économique est construit pour exploiter la masse de micro-transactions. Il repose sur un large volume d’usage, avec des marges s’améliorant à mesure que la base d’utilisateurs et les partenariats s’accroissent.</p>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="header-band"></div>
+    <div class="header-text">Mongain - Business Plan</div>
+    <div class="content">
+      <h2>6. Stratégie de croissance</h2>
+      <p>La croissance de Mongain s’appuiera sur quatre leviers :</p>
+      <ul>
+        <li>Acquisition de consommateurs via marketing digital, terrain, influence locale et partenariats communautaires ;</li>
+        <li>Acquisition de commerçants et de PME pour la diffusion du QR code et des services de paiement ;</li>
+        <li>Déploiement de réseaux de distribution dans les zones très consommatrices et les secteurs de transport, commerce et services ;</li>
+        <li>Rétention par la fréquence d’usage, la simplicité d’interface et la valeur quotidienne du service.</li>
+      </ul>
+      <p>La stratégie prioritaire est de gagner des utilisateurs sur le besoin réel du quotidien, avec un service que l’on utilise chaque jour, et non seulement à l’occasion.</p>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="header-band"></div>
+    <div class="header-text">Mongain - Business Plan</div>
+    <div class="content">
+      <h2>7. Utilisation des fonds</h2>
+      <table>
+        <tr><th>Rubrique</th><th>Montant (FCFA)</th></tr>
+        <tr><td>Développement produit et sécurité</td><td>1 300 000 000</td></tr>
+        <tr><td>Marketing et acquisition</td><td>1 000 000 000</td></tr>
+        <tr><td>Salaires et équipe</td><td>900 000 000</td></tr>
+        <tr><td>Infrastructure, cloud, bureau et télécom</td><td>450 000 000</td></tr>
+        <tr><td>Conformité, juridique, audit et COBAC</td><td>650 000 000</td></tr>
+        <tr><td>Fonds de roulement</td><td>700 000 000</td></tr>
+        <tr><td>Total</td><td>5 000 000 000</td></tr>
+      </table>
+      <p>Ces fonds permettront de sécuriser la base technique, d’accélérer l’acquisition clients, de constituer une équipe solide et d’installer les structures de conformité et de gouvernance nécessaires.</p>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="header-band"></div>
+    <div class="header-text">Mongain - Business Plan</div>
+    <div class="content">
+      <h2>8. Plan d’exploitation</h2>
+      <table>
+        <tr><th>Poste</th><th>Coût mensuel estimé</th></tr>
+        <tr><td>Salaires</td><td>38 000 000 FCFA</td></tr>
+        <tr><td>Marketing terrain et digital</td><td>24 000 000 FCFA</td></tr>
+        <tr><td>Loyer, bureau, internet, téléphonie</td><td>10 000 000 FCFA</td></tr>
+        <tr><td>Support client et opérations</td><td>14 000 000 FCFA</td></tr>
+        <tr><td>Cloud, sécurité et infrastructure</td><td>6 000 000 FCFA</td></tr>
+        <tr><td>Total mensuel</td><td>92 000 000 FCFA</td></tr>
+      </table>
+      <p>Le plan de fonctionnement est volontairement lean au démarrage afin de préserver la liquidité de l’entreprise tout en accélérant la traction commerciale.</p>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="header-band"></div>
+    <div class="header-text">Mongain - Business Plan</div>
+    <div class="content">
+      <h2>9. Prévisions financières sur 5 ans</h2>
+      <table>
+        <tr><th>Année</th><th>Utilisateurs</th><th>Volume traité</th><th>Revenus</th><th>EBITDA</th></tr>
+        <tr><td>Y1</td><td>300 000</td><td>18 Md FCFA</td><td>540 M FCFA</td><td>-220 M FCFA</td></tr>
+        <tr><td>Y2</td><td>700 000</td><td>42 Md FCFA</td><td>1,5 Md FCFA</td><td>240 M FCFA</td></tr>
+        <tr><td>Y3</td><td>1 200 000</td><td>85 Md FCFA</td><td>3,1 Md FCFA</td><td>1,1 Md FCFA</td></tr>
+        <tr><td>Y4</td><td>1 700 000</td><td>150 Md FCFA</td><td>6,2 Md FCFA</td><td>2,8 Md FCFA</td></tr>
+        <tr><td>Y5</td><td>2 000 000</td><td>250 Md FCFA</td><td>10,5 Md FCFA</td><td>5,2 Md FCFA</td></tr>
+      </table>
+      <p>Ces hypothèses reposent sur une croissance progressive de la base utilisateur, l’augmentation du nombre de transactions et la montée en puissance du volume. Elles restent crédibles dans un marché où la digitalisation rapide des petites transactions est un moteur de croissance fort.</p>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="header-band"></div>
+    <div class="header-text">Mongain - Business Plan</div>
+    <div class="content">
+      <h2>10. Retour pour les investisseurs</h2>
+      <p>Le modèle financier est conçu autour d’un levier de croissance très puissant : le volume de transactions. Plus la base d’utilisateurs s’étend, plus les commissions et les services associés gagnent en importance. Cette logique est particulièrement adaptée à un marché où les dépenses quotidiennes sont répétées, fréquentes et de faible montant.</p>
+      <table>
+        <tr><th>Elément</th><th>Scénario crédible</th></tr>
+        <tr><td>Montant levé</td><td>5 milliards FCFA</td></tr>
+        <tr><td>Sortie potentielle</td><td>6x à 8x</td></tr>
+        <tr><td>Valeur d’entreprise cible</td><td>30 à 40 milliards FCFA</td></tr>
+        <tr><td>Rendement</td><td>Supérieur au placement financier classique</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="header-band"></div>
+    <div class="header-text">Mongain - Business Plan</div>
+    <div class="content">
+      <h2>11. Risques et facteurs de réussite</h2>
+      <ul>
+        <li>Conformité réglementaire et exigences COBAC ;</li>
+        <li>Adoption utilisateur et rétention ;</li>
+        <li>Construction d’un réseau de partenaires locaux crédibles ;</li>
+        <li>Déploiement rapide de la sécurité et des dispositifs anti-fraude ;</li>
+        <li>Capacité à gérer la croissance sans dégrader la qualité du service.</li>
+      </ul>
+      <p>Les risques sont maîtrisables grâce à une gouvernance solide, à une conformité proactive, à une organisation orientée customer experience et à une politique de sécurité efficace.</p>
+    </div>
+  </div>
+
+  <div class="page">
+    <div class="header-band"></div>
+    <div class="header-text">Mongain - Business Plan</div>
+    <div class="content">
+      <h2>12. Conclusion</h2>
+      <p>Mongain est bien plus qu’une application de paiement. C’est un projet de transformation digitale du quotidien en zone CEMAC. En répondant à un besoin réel, répété et massif, l’entreprise vise à devenir la plateforme de référence pour les micro-paiements, les services du quotidien et l’inclusion financière locale.</p>
+      <p>Le modèle de croissance repose sur la masse, la fréquence des usages et la confiance. Avec une stratégie claire, une exécution disciplinée et un capital d’investissement adéquat, Mongain offre une opportunité d’investissement sérieuse, réaliste et à fort potentiel de valorisation.</p>
+      <div class="footer-note">Mongain : financer le quotidien, sécuriser les transactions et créer une infrastructure financière adaptée au marché africain.</div>
+    </div>
+  </div>
+</body>
+</html>

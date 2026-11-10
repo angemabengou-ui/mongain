@@ -1,6 +1,6 @@
 import { CheckCircle2, Clock, FileClock, Plus, RefreshCw, ShieldOff, Users, XCircle } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';
-import { apiRequest, ENDPOINTS, isPortalViewer } from './api';
+import { apiRequest, canManageAffiliations, ENDPOINTS } from './api';
 import { fmtFCFA, pickNumber, pickString } from './utils/format';
 
 type ExpectedFrequency = 'MONTHLY' | 'WEEKLY' | null;
@@ -18,6 +18,8 @@ type Affiliation = {
     // (vérifié : pas de trace d'expectedFrequency/complianceStatus dans le fichier réel à cette
     // date). Formes construites sur la spécification transmise.
     expectedFrequency: ExpectedFrequency;
+    expectedAmount?: number;
+    autoPayEnabled?: boolean;
     complianceStatus: ComplianceStatus;
 };
 
@@ -33,6 +35,8 @@ function normalizeAffiliation(raw: any): Affiliation {
         createdAt: raw.createdAt,
         respondedAt: raw.respondedAt,
         expectedFrequency: raw.expectedFrequency === 'MONTHLY' || raw.expectedFrequency === 'WEEKLY' ? raw.expectedFrequency : null,
+        expectedAmount: typeof raw.expectedAmount === 'number' ? raw.expectedAmount : undefined,
+        autoPayEnabled: !!raw.autoPayEnabled,
         complianceStatus: raw.complianceStatus === 'OK' || raw.complianceStatus === 'LATE' ? raw.complianceStatus : null,
     };
 }
@@ -94,7 +98,11 @@ function normalizeCompliance(raw: any): ComplianceSummary {
 }
 
 export default function Affiliations({ onSessionExpired }: { onSessionExpired: () => void }) {
-    const viewer = isPortalViewer();
+    // ADMIN et MANAGER seulement — OPERATOR peut exécuter paiements/retraits mais pas gérer les
+    // affiliations, AUDITOR reste en lecture seule. Le serveur (requirePortalAdmin ou son
+    // équivalent enrichi une fois mergé, voir routes/merchant-portal.ts) renverrait 403 à ces
+    // deux rôles : masqué ici plutôt que désactivé, même principe que partout dans ce portail.
+    const canManage = canManageAffiliations();
 
     const [affiliations, setAffiliations] = useState<Affiliation[]>([]);
     const [loading, setLoading] = useState(true);
@@ -103,6 +111,7 @@ export default function Affiliations({ onSessionExpired }: { onSessionExpired: (
 
     const [newPhone, setNewPhone] = useState('');
     const [newFrequency, setNewFrequency] = useState<'' | 'MONTHLY' | 'WEEKLY'>('');
+    const [newAmount, setNewAmount] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
     const [revokingId, setRevokingId] = useState<string | null>(null);
@@ -112,11 +121,11 @@ export default function Affiliations({ onSessionExpired }: { onSessionExpired: (
     const [complianceError, setComplianceError] = useState('');
     const [compliance, setCompliance] = useState<ComplianceSummary | null>(null);
 
-    // Édition (définition initiale ou modification) de la fréquence attendue d'une affiliation
-    // déjà ACCEPTED — petit formulaire inline, même esprit que le panneau de conformité
-    // ci-dessus plutôt qu'un vrai composant modal (inutile dans ce portail).
+    // Édition (définition initiale ou modification) de la fréquence/montant attendu d'une affiliation
+    // déjà ACCEPTED — petit formulaire inline
     const [freqEditId, setFreqEditId] = useState<string | null>(null);
     const [freqValue, setFreqValue] = useState<'' | 'MONTHLY' | 'WEEKLY'>('');
+    const [amountValue, setAmountValue] = useState('');
     const [freqSubmitting, setFreqSubmitting] = useState(false);
 
     const handleAuthError = (err: any): boolean => {
@@ -148,12 +157,18 @@ export default function Affiliations({ onSessionExpired }: { onSessionExpired: (
         setError('');
         setMessage('');
         try {
+            const parsedAmount = parseInt(newAmount, 10);
             await apiRequest(ENDPOINTS.affiliations, {
                 method: 'POST',
-                body: JSON.stringify({ merchantPhone: newPhone.trim(), expectedFrequency: newFrequency || null }),
+                body: JSON.stringify({ 
+                    merchantPhone: newPhone.trim(), 
+                    expectedFrequency: newFrequency || null,
+                    expectedAmount: (parsedAmount > 0) ? parsedAmount : null 
+                }),
             });
             setNewPhone('');
             setNewFrequency('');
+            setNewAmount('');
             setMessage("Demande envoyée. Elle reste \"En attente\" tant que le marchand ne l'a pas acceptée depuis son application mobile — ce n'est pas automatique.");
             await load();
         } catch (err: any) {
@@ -202,17 +217,22 @@ export default function Affiliations({ onSessionExpired }: { onSessionExpired: (
         if (freqEditId === aff.id) { setFreqEditId(null); return; }
         setFreqEditId(aff.id);
         setFreqValue(aff.expectedFrequency || '');
+        setAmountValue(aff.expectedAmount ? aff.expectedAmount.toString() : '');
     };
 
     const handleSaveFrequency = async (id: string) => {
         setFreqSubmitting(true);
         setError('');
         try {
-            await apiRequest(ENDPOINTS.affiliationExpectedFrequency(id), {
+            const parsedAmount = parseInt(amountValue, 10);
+            await apiRequest(ENDPOINTS.affiliationTerms(id), {
                 method: 'PATCH',
-                body: JSON.stringify({ expectedFrequency: freqValue || null }),
+                body: JSON.stringify({ 
+                    expectedFrequency: freqValue || null,
+                    expectedAmount: (parsedAmount > 0) ? parsedAmount : null
+                }),
             });
-            setMessage('Fréquence de versement mise à jour.');
+            setMessage('Termes de versement mis à jour.');
             setFreqEditId(null);
             await load();
         } catch (err: any) {
@@ -240,14 +260,14 @@ export default function Affiliations({ onSessionExpired }: { onSessionExpired: (
 
             {error && <div className="banner error mb-8">⚠️ {error}</div>}
             {message && <div className="banner success mb-8">{message}</div>}
-            {viewer && (
+            {!canManage && (
                 <div className="banner info mb-8">
-                    Vous êtes connecté en lecture seule. Seul le géant principal ou un membre Admin peut affilier, révoquer ou modifier la fréquence attendue.
+                    Vous n'avez pas les droits pour gérer les affiliations. Seuls un Admin ou un Manager peuvent affilier, révoquer ou modifier la fréquence attendue.
                 </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: viewer ? '1fr' : '360px 1fr', gap: 32, alignItems: 'start' }}>
-                {!viewer && (
+            <div style={{ display: 'grid', gridTemplateColumns: canManage ? '360px 1fr' : '1fr', gap: 32, alignItems: 'start' }}>
+                {canManage && (
                     <form onSubmit={handleAdd} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                         <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Affilier un marchand</h2>
                         <div>
@@ -265,6 +285,14 @@ export default function Affiliations({ onSessionExpired }: { onSessionExpired: (
                                 <option value="MONTHLY">Mensuelle</option>
                                 <option value="WEEKLY">Hebdomadaire</option>
                             </select>
+                        </div>
+                        <div>
+                            <label>Montant exact attendu (FCFA)</label>
+                            <input
+                                type="number" inputMode="numeric" value={newAmount}
+                                onChange={e => setNewAmount(e.target.value)}
+                                placeholder="Ex: 5000 (optionnel)"
+                            />
                         </div>
                         <div className="banner info" style={{ fontSize: 13 }}>
                             <FileClock size={16} /> Le marchand doit accepter la demande depuis son application mobile. Elle restera "En attente" jusqu'à sa réponse.
@@ -311,12 +339,12 @@ export default function Affiliations({ onSessionExpired }: { onSessionExpired: (
                                                         {complianceId === aff.id ? 'Masquer' : 'Conformité'}
                                                     </button>
                                                 )}
-                                                {!viewer && aff.status === 'ACCEPTED' && (
+                                                {canManage && aff.status === 'ACCEPTED' && (
                                                     <button className="btn-secondary" onClick={() => openFreqEdit(aff)} style={{ padding: '8px 14px', fontSize: 12 }}>
                                                         {freqEditId === aff.id ? 'Fermer' : (aff.expectedFrequency ? 'Modifier la fréquence' : 'Définir la fréquence')}
                                                     </button>
                                                 )}
-                                                {!viewer && aff.status !== 'REVOKED' && (
+                                                {canManage && aff.status !== 'REVOKED' && (
                                                     <button
                                                         className="btn-danger"
                                                         disabled={revokingId === aff.id}
@@ -333,11 +361,17 @@ export default function Affiliations({ onSessionExpired }: { onSessionExpired: (
                                             <td colSpan={5} style={{ background: 'var(--bg-primary)', padding: 20 }}>
                                                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                                                     <label style={{ margin: 0, whiteSpace: 'nowrap' }}>Fréquence attendue</label>
-                                                    <select value={freqValue} onChange={e => setFreqValue(e.target.value as '' | 'MONTHLY' | 'WEEKLY')} style={{ width: 200 }}>
+                                                    <select value={freqValue} onChange={e => setFreqValue(e.target.value as '' | 'MONTHLY' | 'WEEKLY')} style={{ width: 160 }}>
                                                         <option value="">Aucune</option>
                                                         <option value="MONTHLY">Mensuelle</option>
                                                         <option value="WEEKLY">Hebdomadaire</option>
                                                     </select>
+                                                    <label style={{ margin: 0, whiteSpace: 'nowrap' }}>Montant</label>
+                                                    <input 
+                                                        type="number" inputMode="numeric" value={amountValue} 
+                                                        onChange={e => setAmountValue(e.target.value)} 
+                                                        placeholder="Ex: 5000" style={{ width: 140 }} 
+                                                    />
                                                     <button className="btn-primary" disabled={freqSubmitting} onClick={() => handleSaveFrequency(aff.id)} style={{ padding: '10px 18px' }}>
                                                         {freqSubmitting ? 'Enregistrement...' : 'Enregistrer'}
                                                     </button>

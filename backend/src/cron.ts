@@ -114,6 +114,149 @@ export async function checkOverdueBnpl() {
     }
 }
 
+/**
+ * Crée automatiquement une demande de déversement bancaire (MerchantPayoutRequest)
+ * pour la totalité du solde de tout Grand Marchand ayant activé l'option T+1.
+ */
+export async function executeAutoSettlements() {
+    logger.info('[Bank Settlements] Vérification des déversements automatiques (T+1)...');
+    try {
+        // Trouver tous les géants ayant activé l'option
+        const giants = await prisma.user.findMany({
+            where: { merchantTier: 'GIANT', autoSettlementEnabled: true, accountStatus: 'ACTIVE' },
+            include: { wallet: true }
+        });
+
+        for (const giant of giants) {
+            if (!giant.wallet || giant.wallet.balance <= 0) continue;
+
+            const amount = giant.wallet.balance;
+
+            // Éviter de créer une nouvelle demande s'il y a déjà une demande PENDING pour cet exact montant ou presque,
+            // ou s'il y a trop de demandes en attente (on laisse l'admin traiter d'abord)
+            const existingPending = await prisma.merchantPayoutRequest.findFirst({
+                where: { merchantId: giant.id, status: 'PENDING' }
+            });
+
+            if (existingPending) {
+                logger.info(`[Bank Settlements] Déversement ignoré pour ${giant.name} (demande PENDING existante).`);
+                continue;
+            }
+
+            try {
+                // On utilise la même logique que withdraw-to-agency : 
+                // Créer la demande PayoutRequest. L'admin la validera dans admin-web.
+                await prisma.merchantPayoutRequest.create({
+                    data: {
+                        merchantId: giant.id,
+                        sourceAccount: 'SALES',
+                        amount: amount,
+                        note: `Virement Automatique T+1 vers IBAN: ${giant.iban} (SWIFT: ${giant.swift}) - ${giant.bankName}`,
+                        status: 'PENDING',
+                    }
+                });
+
+                // On ne débite PAS le wallet ici. Le débit réel (transaction ledger + wallet) 
+                // se fera quand l'administrateur approuvera la demande via l'API admin (admin.merchants.ts).
+                
+                logger.info(`[Bank Settlements] Demande automatique créée pour ${giant.name} (${amount} FCFA).`);
+            } catch (e: any) {
+                logger.error(`[Bank Settlements] Échec demande automatique pour ${giant.name}: ${e.message}`);
+            }
+        }
+    } catch (e: any) {
+        logger.error(`[Bank Settlements Error] ${e.message}`);
+    }
+}
+
+/**
+ * Prélève automatiquement les taxes (expectedAmount) des petits marchands
+ * vers leurs grands marchands affiliés s'ils ont activé l'option (autoPayEnabled).
+ */
+export async function executeAffiliationAutoPay() {
+    logger.info('[Affiliations] Vérification des prélèvements automatiques de taxes...');
+    
+    // Import dynamique pour éviter les dépendances circulaires
+    const { startOfMonthInTimezone, startOfWeekInTimezone } = require('./utils/timezone');
+    const { executeTransfer } = require('./services/walletService'); // Supposant que c'est là, sinon on utilise transfert Prisma direct.
+    
+    try {
+        const affiliations = await prisma.merchantAffiliation.findMany({
+            where: {
+                status: 'ACCEPTED',
+                autoPayEnabled: true,
+                expectedAmount: { gt: 0 },
+                expectedFrequency: { not: null }
+            },
+            include: {
+                merchant: { include: { wallet: true } },
+                giant: { include: { wallet: true } }
+            }
+        });
+
+        for (const aff of affiliations) {
+            if (!aff.merchant.wallet || !aff.giant.wallet) continue;
+            
+            const timezone = 'Africa/Libreville'; // Fuseau horaire par défaut du système
+            const windowStart = aff.expectedFrequency === 'WEEKLY'
+                ? startOfWeekInTimezone(timezone)
+                : startOfMonthInTimezone(timezone);
+
+            // Vérifier s'il a DÉJÀ payé ce mois-ci/semaine-ci
+            const recentPayment = await prisma.transaction.findFirst({
+                where: {
+                    senderWalletId: aff.merchant.wallet.id,
+                    receiverWalletId: aff.giant.wallet.id,
+                    status: 'COMPLETED',
+                    createdAt: { gte: windowStart },
+                },
+            });
+
+            if (recentPayment) continue; // Déjà payé
+
+            const amount = aff.expectedAmount!;
+            if (aff.merchant.wallet.balance < amount) {
+                logger.warn(`[Affiliations] Échec prélèvement automatique: Solde insuffisant pour ${aff.merchant.phone} (${amount} FCFA attendus)`);
+                continue; // Pas assez d'argent
+            }
+
+            try {
+                // Débit du wallet du petit marchand et crédit du wallet du géant.
+                // On utilise une transaction Prisma pour garantir l'atomicité.
+                await prisma.$transaction(async (tx) => {
+                    await tx.wallet.update({
+                        where: { id: aff.merchant.wallet!.id },
+                        data: { balance: { decrement: amount } }
+                    });
+                    await tx.wallet.update({
+                        where: { id: aff.giant.wallet!.id },
+                        data: { balance: { increment: amount } }
+                    });
+                    
+                    const reference = `AUTOPAY-${aff.id.substring(0,8)}-${Date.now()}`;
+                    await tx.transaction.create({
+                        data: {
+                            reference,
+                            senderWalletId: aff.merchant.wallet!.id,
+                            receiverWalletId: aff.giant.wallet!.id,
+                            amount,
+                            fee: 0,
+                            type: 'TRANSFER',
+                            status: 'COMPLETED',
+                        }
+                    });
+                });
+
+                logger.info(`[Affiliations] Prélèvement automatique réussi: ${amount} FCFA de ${aff.merchant.phone} vers ${aff.giant.name}.`);
+            } catch (e: any) {
+                logger.error(`[Affiliations] Erreur de transaction pour ${aff.merchant.phone}: ${e.message}`);
+            }
+        }
+    } catch (e: any) {
+        logger.error(`[Affiliations Error] ${e.message}`);
+    }
+}
+
 export const initCronJobs = () => {
-    logger.info('[CRON] Prêt — executeTontineAutomations/checkOverdueLoans/checkOverdueBnpl sont déclenchés par les setInterval() de index.ts.');
+    logger.info('[CRON] Prêt — executeTontineAutomations/checkOverdueLoans/checkOverdueBnpl/executeAutoSettlements/executeAffiliationAutoPay sont déclenchés par les setInterval() de index.ts.');
 };

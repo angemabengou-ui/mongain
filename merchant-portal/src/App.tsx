@@ -1,26 +1,33 @@
-import { BarChart3, Banknote, LayoutDashboard, Landmark, LogOut, UserCog, Users } from 'lucide-react';
+import { Banknote, BarChart3, Code2, Landmark, LayoutDashboard, LogOut, Settings as SettingsIcon, Store, UserCog, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { apiRequest, clearSession, ENDPOINTS, getStoredUser, getToken, type PortalUser } from './api';
 import Affiliations from './Affiliations';
 import AgencyWithdrawal from './AgencyWithdrawal';
+import { apiRequest, clearSession, ENDPOINTS, getStoredUser, getToken, type PortalUser } from './api';
 import Dashboard from './Dashboard';
+import Developers from './Developers';
 import EmployeePayouts from './EmployeePayouts';
 import Login from './Login';
 import Reports from './Reports';
+import Settings from './Settings';
 import Team from './Team';
+import Tills from './Tills';
 
-type Tab = 'dashboard' | 'reports' | 'affiliations' | 'employee-payouts' | 'agency-withdrawal' | 'team';
+type Tab = 'dashboard' | 'reports' | 'affiliations' | 'employee-payouts' | 'agency-withdrawal' | 'tills' | 'team' | 'settings' | 'developers';
 
-// "Équipe" reste visible pour un membre VIEWER (lecture seule) — voir qui a accès au portail
-// est utile même sans pouvoir le modifier ; Team.tsx masque lui-même ses actions d'écriture
-// (inviter/changer de rôle/désactiver/supprimer) via isPortalViewer(), pas cet écran de nav.
+// "Équipe" et "Réglages" restent visibles pour un membre AUDITOR (lecture seule) — voir qui a
+// accès au portail, ou à partir de quel seuil une double validation s'applique, est utile même
+// sans pouvoir le modifier ; chaque écran masque lui-même ses actions d'écriture via les
+// prédicats de rôle dédiés d'api.ts, pas cet écran de nav.
 const NAV: { id: Tab; label: string; icon: any }[] = [
     { id: 'dashboard', label: 'Tableau de Bord', icon: <LayoutDashboard size={18} /> },
     { id: 'reports', label: 'Rapports', icon: <BarChart3 size={18} /> },
     { id: 'affiliations', label: 'Affiliations', icon: <Users size={18} /> },
     { id: 'employee-payouts', label: 'Paiement Employés', icon: <Banknote size={18} /> },
     { id: 'agency-withdrawal', label: 'Retrait Agence', icon: <Landmark size={18} /> },
+    { id: 'tills', label: 'Guichets', icon: <Store size={18} /> },
+    { id: 'developers', label: 'Développeurs (API)', icon: <Code2 size={18} /> },
     { id: 'team', label: 'Équipe', icon: <UserCog size={18} /> },
+    { id: 'settings', label: 'Réglages', icon: <SettingsIcon size={18} /> },
 ];
 
 export default function App() {
@@ -132,7 +139,10 @@ export default function App() {
                     {activeTab === 'affiliations' && <Affiliations onSessionExpired={handleSessionExpired} />}
                     {activeTab === 'employee-payouts' && <EmployeePayouts onSessionExpired={handleSessionExpired} />}
                     {activeTab === 'agency-withdrawal' && <AgencyWithdrawal onSessionExpired={handleSessionExpired} />}
+                    {activeTab === 'tills' && <Tills onSessionExpired={handleSessionExpired} />}
                     {activeTab === 'team' && <Team onSessionExpired={handleSessionExpired} />}
+                    {activeTab === 'developers' && <Developers onSessionExpired={handleSessionExpired} />}
+                    {activeTab === 'settings' && <Settings onSessionExpired={handleSessionExpired} />}
                 </main>
             </div>
         </div>

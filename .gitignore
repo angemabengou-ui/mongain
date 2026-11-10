@@ -67,3 +67,6 @@ backend/otps.json
 *out.txt
 *output.txt
 *.out
+
+# APK de build (135 Mo) : dépasse la limite de 100 Mo par fichier de GitHub
+scratchpad/app.apk

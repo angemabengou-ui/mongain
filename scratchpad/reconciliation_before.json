@@ -1,0 +1,86 @@
+◇ injected env (4) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+{
+  "Wallet": {
+    "count": "20",
+    "sum_balance": "99955000",
+    "non_integer": "0",
+    "sum_daily": "11000",
+    "sum_monthly": "62000"
+  },
+  "Transaction": {
+    "count": "29",
+    "sum_amount": "111217220",
+    "sum_fee": "15970",
+    "non_integer_amount": "0",
+    "non_integer_fee": "0"
+  },
+  "Branch": {
+    "count": "1",
+    "sum_balance": "1145000",
+    "nonint_balance": "0"
+  },
+  "Vault": {
+    "count": "1",
+    "sum_balance": "5000",
+    "nonint_balance": "0"
+  },
+  "TreasuryRequest": {
+    "count": "2",
+    "sum_amount": "110000000",
+    "nonint_amount": "0"
+  },
+  "RefundRequest": {
+    "count": "0",
+    "sum_amount": null,
+    "nonint_amount": null
+  },
+  "TontineCycle": {
+    "count": "0",
+    "sum_totalexpected": null,
+    "sum_totalcollected": null,
+    "nonint_totalexpected": null,
+    "nonint_totalcollected": null
+  },
+  "CashSession": {
+    "count": "3",
+    "sum_initialcash": "3020000",
+    "sum_finalcash": "2000000",
+    "sum_totalcashinvalue": "1150000",
+    "sum_totalcashoutvalue": "5000",
+    "nonint_initialcash": "0",
+    "nonint_finalcash": "0",
+    "nonint_totalcashinvalue": "0",
+    "nonint_totalcashoutvalue": "0"
+  },
+  "PayoutBulk": {
+    "count": "0",
+    "sum_totalamount": null,
+    "nonint_totalamount": null
+  },
+  "VirtualCard": {
+    "count": "8",
+    "sum_balance": "40000",
+    "sum_spendinglimit": "400000",
+    "nonint_balance": "0",
+    "nonint_spendinglimit": "0"
+  },
+  "Loan": {
+    "count": "0",
+    "sum_amount": null,
+    "sum_totalowed": null,
+    "nonint_amount": null,
+    "nonint_totalowed": null
+  },
+  "StakingVault": {
+    "count": "0",
+    "sum_amount": null,
+    "nonint_amount": null
+  },
+  "BnplContract": {
+    "count": "0",
+    "sum_totalamount": null,
+    "sum_remaining": null,
+    "nonint_totalamount": null,
+    "nonint_remaining": null
+  }
+}

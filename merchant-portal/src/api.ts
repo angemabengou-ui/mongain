@@ -8,6 +8,21 @@ const TOKEN_KEY = 'merchant_portal_token';
 const REFRESH_TOKEN_KEY = 'merchant_portal_refresh_token';
 const USER_KEY = 'merchant_portal_user';
 
+// Système de rôles à 4 niveaux (raffinement de l'ancien binaire ADMIN/VIEWER) — voir
+// backend/prisma/schema.prisma MerchantPortalMember.role (colonne String libre, pas un enum
+// SQL : n'importe laquelle des 4 valeurs y tient sans migration de schéma). Les anciennes
+// lignes 'VIEWER' ont déjà été migrées en base vers 'AUDITOR' par l'agent backend (même sens :
+// lecture seule) ; normalizePortalRole ci-dessous garde 'VIEWER' en repli défensif au cas où un
+// objet utilisateur mis en cache localStorage avant cette migration traînerait encore jusqu'à
+// la prochaine connexion.
+//   ADMIN    : tous les droits, y compris gérer l'équipe et les réglages du portail.
+//   MANAGER  : tout sauf gérer l'équipe (affiliations, paiements, retraits, employés, guichets).
+//   OPERATOR : peut exécuter paiements/retraits/employés/guichets, mais pas affiliations ni équipe.
+//   AUDITOR  : lecture seule partout (remplace l'ancien VIEWER, strictement même sens).
+export type PortalRole = 'ADMIN' | 'MANAGER' | 'OPERATOR' | 'AUDITOR';
+
+const KNOWN_PORTAL_ROLES: readonly string[] = ['ADMIN', 'MANAGER', 'OPERATOR', 'AUDITOR'];
+
 // Forme du user pas garantie à 100% (backend en cours de développement en parallèle) —
 // on ne dépend que de ce qui est nécessaire à l'affichage, tout le reste est optionnel.
 export type PortalUser = {
@@ -16,11 +31,16 @@ export type PortalUser = {
     businessName?: string;
     phone?: string;
     merchantTier?: string;
-    // Ajouté par la capacité "membres d'équipe" (agent backend, en parallèle) : le géant
-    // lui-même n'a jamais ce champ dans la réponse verify-otp (undefined), seuls les membres
-    // invités en ont un. isPortalViewer() ci-dessous traite donc "absent" comme "pas VIEWER"
-    // (= accès complet), ce qui correspond bien au compte géant.
-    role?: 'ADMIN' | 'VIEWER';
+    // Le champ RÉELLEMENT renvoyé par POST /auth/verify-otp (voir
+    // backend/src/routes/merchant-portal.ts) est `portalRole`, pas `role` — l'ancien code de ce
+    // fichier lisait `.role`, qui n'existe jamais sur cet objet ; isPortalViewer() ne détectait
+    // donc en pratique jamais un membre en lecture seule (bug corrigé ici). `role` reste lu en
+    // repli par getPortalRole() ci-dessous au cas où cette forme changerait encore. Absent pour
+    // le géant lui-même, qui n'a jamais de ligne MerchantPortalMember et garde donc les pleins
+    // droits (le serveur renvoie explicitement `portalRole: 'ADMIN'` pour lui, mais on ne
+    // dépend pas de cette présence pour rester robuste).
+    portalRole?: PortalRole;
+    role?: PortalRole;
     [key: string]: unknown;
 };
 
@@ -38,12 +58,91 @@ export function getStoredUser(): PortalUser | null {
     try { return JSON.parse(raw); } catch { return null; }
 }
 
-// true seulement pour un membre d'équipe explicitement 'VIEWER' — le géant lui-même (role
-// absent) et un membre 'ADMIN' ont les pleins droits. Utilisé partout dans l'UI pour masquer
-// (jamais juste désactiver) les actions d'écriture que le serveur refuserait de toute façon en
-// 403 : POST/PATCH/DELETE sur /team, /affiliations, /payouts, /withdraw-to-agency, /employees.
+// Rôle de la session actuellement connectée (géant ou membre). Absent (ni `portalRole` ni
+// `role` sur l'objet stocké) => le géant lui-même => pleins droits (ADMIN). Une valeur inconnue
+// ou l'ancien 'VIEWER' retombe sur 'AUDITOR', le plus restrictif — jamais sur ADMIN par défaut
+// pour une valeur qu'on ne reconnaît pas, à la différence du cas "champ absent" qui a un sens
+// métier précis et documenté ci-dessus.
+export function getPortalRole(): PortalRole {
+    const raw = getStoredUser()?.portalRole ?? getStoredUser()?.role;
+    if (raw === undefined || raw === null) return 'ADMIN';
+    if (typeof raw === 'string' && KNOWN_PORTAL_ROLES.includes(raw)) return raw as PortalRole;
+    return 'AUDITOR';
+}
+
+// Gestion de l'équipe (inviter/changer de rôle/désactiver/supprimer un membre) — ADMIN
+// uniquement, jamais délégable. Voir routes/merchant-portal.ts requirePortalAdmin sur
+// POST/PATCH/DELETE /team.
+export function canManageTeam(): boolean {
+    return getPortalRole() === 'ADMIN';
+}
+
+// Réglages du portail (seuil de double validation, PATCH /settings) — ADMIN uniquement, comme
+// canManageTeam() aujourd'hui, mais gardé comme prédicat séparé : "gérer l'équipe" et "gérer
+// les réglages" restent deux permissions conceptuellement distinctes côté serveur même si elles
+// se recoupent actuellement sur le seul rôle ADMIN.
+export function canManageSettings(): boolean {
+    return getPortalRole() === 'ADMIN';
+}
+
+// Affiliations (affilier un marchand, révoquer, modifier la fréquence attendue) — ADMIN et
+// MANAGER. Ni OPERATOR (exécution seulement) ni AUDITOR (lecture seule).
+export function canManageAffiliations(): boolean {
+    const role = getPortalRole();
+    return role === 'ADMIN' || role === 'MANAGER';
+}
+
+// Exécuter des mouvements : paiement des employés, retrait vers agence, répertoire d'employés
+// (ajout/suppression, import CSV), guichets (créer/désactiver). Tout rôle SAUF AUDITOR.
+export function canExecutePayments(): boolean {
+    return getPortalRole() !== 'AUDITOR';
+}
+
+// Approuver un paiement de masse resté AWAITING_APPROVAL (double validation) — ADMIN et MANAGER
+// uniquement, voir routes/merchant-portal.ts POST /payouts/:id/approve. Le serveur refuse en
+// plus qu'un initiateur approuve son propre lot (403), vérifié indépendamment de ce prédicat de
+// rôle — voir wasInitiatedBySelf() dans EmployeePayouts.tsx.
+export function canApprovePayments(): boolean {
+    const role = getPortalRole();
+    return role === 'ADMIN' || role === 'MANAGER';
+}
+
+// Rétro-compatibilité : conservé pour ne rien casser d'éventuel appelant restant, désormais
+// strictement équivalent à getPortalRole() === 'AUDITOR' (même sens que l'ancien VIEWER). Tous
+// les écrans de ce portail utilisent maintenant getPortalRole()/canXxx() ci-dessus plutôt que ce
+// booléen unique, devenu insuffisant pour distinguer 4 rôles.
 export function isPortalViewer(): boolean {
-    return getStoredUser()?.role === 'VIEWER';
+    return getPortalRole() === 'AUDITOR';
+}
+
+// Décodage SUPERFICIEL (pas de vérification de signature — jamais utilisé pour une décision de
+// sécurité, seulement pour une aide d'affichage) du payload d'un JWT portail, pour en extraire
+// `memberId` (voir routes/merchant-portal.ts POST /auth/verify-otp : posé uniquement pour une
+// session de MEMBRE, absent pour une session géant). Nécessaire car la réponse de connexion
+// elle-même ne renvoie pas cet identifiant dans `user` (seulement dans le JWT) : c'est pourtant
+// la seule façon, côté client, de savoir "suis-je l'initiateur de CE lot" sans que le serveur
+// n'ajoute un champ dédié à chaque paiement.
+function decodeTokenPayload(): Record<string, unknown> | null {
+    const token = getToken();
+    if (!token) return null;
+    try {
+        const parts = token.split('.');
+        if (parts.length !== 3) return null;
+        const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const json = decodeURIComponent(escape(atob(base64)));
+        return JSON.parse(json);
+    } catch {
+        return null;
+    }
+}
+
+// Identifiant MerchantPortalMember de la session en cours, ou null pour le géant lui-même
+// (jamais de ligne membre) — à comparer à PayoutBulk.initiatedByMemberId (également null quand
+// c'est le géant qui a initié) pour savoir si l'utilisateur connecté est l'initiateur d'un lot
+// donné. Voir EmployeePayouts.tsx.
+export function getOwnPortalMemberId(): string | null {
+    const id = decodeTokenPayload()?.memberId;
+    return typeof id === 'string' && id ? id : null;
 }
 
 export function saveSession(token: string, refreshToken?: string, user?: PortalUser) {
@@ -210,5 +309,47 @@ export const ENDPOINTS = {
     employees: '/api/merchant-portal/employees',
     employeeById: (id: string) => `/api/merchant-portal/employees/${id}`,
 
-    affiliationExpectedFrequency: (id: string) => `/api/merchant-portal/affiliations/${id}/expected-frequency`,
+    affiliationTerms: (id: string) => `/api/merchant-portal/affiliations/${id}/terms`,
+
+    // ── Routes des 4 nouvelles capacités (rôles enrichis, approbation à plusieurs, import CSV,
+    // guichets) développées EN PARALLÈLE par l'agent backend — absentes de
+    // backend/src/routes/merchant-portal.ts au moment de l'écriture de ce fichier (vérifié :
+    // seuls /team, /payouts, /employees "simples" existent à cette date, toujours gatés par
+    // l'ancien requirePortalAdmin binaire ADMIN/VIEWER). Formes construites sur la spécification
+    // transmise ; les écrans qui les consomment lisent leurs réponses défensivement, même
+    // pattern pickString/pickNumber qu'ailleurs dans ce portail.
+
+    // GET (tous rôles) / PATCH (ADMIN uniquement) { portalApprovalThreshold: number | null }.
+    portalSettings: '/api/merchant-portal/settings',
+
+    // GET (tous rôles) — liste des lots de paiement restés AWAITING_APPROVAL faute d'avoir
+    // dépassé le seuil configuré (portalApprovalThreshold) sans encore être validés par un
+    // second membre habilité.
+    payoutsPendingApproval: '/api/merchant-portal/payouts/pending-approval',
+
+    // POST (ADMIN, MANAGER) — exécute réellement le lot. Refuse (403) si l'appelant est le même
+    // membre que l'initiateur du lot.
+    payoutApprove: (id: string) => `/api/merchant-portal/payouts/${id}/approve`,
+
+    // POST { csv: string } (ADMIN, MANAGER, OPERATOR) — import en masse du répertoire
+    // d'employés depuis un texte "nom,téléphone" (une ligne par employé, en-tête optionnel).
+    // Réponse : { created, skipped, errors }.
+    employeesImport: '/api/merchant-portal/employees/import',
+
+    // GET (tous rôles) / POST { name, phone, pin } / DELETE (ADMIN, MANAGER, OPERATOR) — guichets
+    // physiques (login téléphone+PIN dédié à un terminal/caissier, PAS un accès au portail web).
+    tills: '/api/merchant-portal/tills',
+    tillById: (id: string) => `/api/merchant-portal/tills/${id}`,
+
+    // ── Open API (Mongain Connect)
+    gatewayKeys: '/api/gateway/keys',
+    gatewayKeyGenerate: '/api/gateway/keys/generate',
+    gatewayKeyUpdate: (id: string) => `/api/gateway/keys/${id}`,
+    gatewayKeyRotate: (id: string) => `/api/gateway/keys/${id}/rotate`,
+    gatewayWebhookDeliveries: '/api/gateway/webhook-deliveries',
 };
+
+// Gérer l'API Ouverte (Génération de clés secrètes, webhooks) — ADMIN uniquement.
+export function canManageDevelopers(): boolean {
+    return getPortalRole() === 'ADMIN';
+}

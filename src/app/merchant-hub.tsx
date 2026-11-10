@@ -191,6 +191,36 @@ export default function MerchantHubScreen() {
                         </TouchableOpacity>
                     )}
 
+                    {/* Guichets (MerchantTill, voir merchant-tills.tsx) et intégration API/webhooks
+                        (Mongain Connect, voir merchant-api-keys.tsx) — même condition que les
+                        affiliations ci-dessus : un marchand géant pilote ces deux fonctions depuis
+                        le portail web dédié (voir isGiantMerchant), jamais depuis ce mobile. */}
+                    {showAffiliationsEntry && (
+                        <TouchableOpacity
+                            style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border, marginBottom: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+                            onPress={() => router.push('/merchant-tills')}
+                        >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                <Ionicons name="storefront-outline" size={20} color={COLORS.primary} />
+                                <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', fontSize: 14 }}>Mes guichets</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                        </TouchableOpacity>
+                    )}
+
+                    {showAffiliationsEntry && (
+                        <TouchableOpacity
+                            style={[styles.card, { backgroundColor: COLORS.surface, borderColor: COLORS.border, marginBottom: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+                            onPress={() => router.push('/merchant-api-keys')}
+                        >
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                <Ionicons name="code-slash-outline" size={20} color={COLORS.primary} />
+                                <Text style={{ color: COLORS.textPrimary, fontFamily: 'Satoshi-SemiBold', fontWeight: 'bold', fontSize: 14 }}>Intégration API / Webhooks</Text>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={COLORS.textSecondary} />
+                        </TouchableOpacity>
+                    )}
+
                     {/* Seul point d'entrée vers pay.tsx (encaissement via code + PIN client,
                         POST /api/pay/qr-scan) — cet écran existait déjà, câblé à une vraie route
                         backend, mais était devenu inatteignable : l'onglet central de la tab bar

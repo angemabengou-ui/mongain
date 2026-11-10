@@ -5,23 +5,25 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import {
     ACCESS_TOKEN_TTL,
-    AuthRequest,
     authMerchantPortal,
+    AuthRequest,
     generateRefreshToken,
     hashRefreshToken,
     JWT_SECRET,
     REFRESH_TOKEN_TTL_MS,
-    requirePortalAdmin,
+    requirePortalRole,
 } from '../middleware/auth';
 import { circuitBreakerMiddleware } from '../middleware/circuitBreaker';
 import { prisma } from '../prisma';
 import { isSmsConfigured, sendSms } from '../services/sms';
+import { importEmployeesFromCsv } from '../utils/employeeCsv';
 import { friendlyErrorMessage } from '../utils/errors';
 import logger from '../utils/logger';
 import { startOfDayInTimezone, startOfMonthInTimezone, startOfWeekInTimezone } from '../utils/timezone';
+import { processBulkAsync, runMassPayout } from './b2b';
 import { createMerchantPayoutRequest, PayoutValidationError } from './merchant';
-import { runMassPayout } from './b2b';
 import { getSystemSettings } from './settings';
+import { createMerchantTill, deactivateMerchantTill, listMerchantTills } from './till';
 import { sendPush } from './wallet';
 
 // Portail web des marchands géants (mairie, impôts, grandes entreprises) — voir
@@ -441,12 +443,12 @@ async function computeComplianceStatus(
 }
 
 // POST /api/merchant-portal/affiliations
-router.post('/affiliations', authMerchantPortal, requirePortalAdmin, async (req: AuthRequest, res) => {
+router.post('/affiliations', authMerchantPortal, requirePortalRole('ADMIN', 'MANAGER'), async (req: AuthRequest, res) => {
     try {
         const giant = await loadGiant(req.userId);
         if (!giant) return res.status(404).json({ error: 'Compte introuvable.' });
 
-        const { merchantPhone, expectedFrequency } = req.body;
+        const { merchantPhone, expectedFrequency, expectedAmount } = req.body;
         if (!merchantPhone || typeof merchantPhone !== 'string') {
             return res.status(400).json({ error: 'Numéro de téléphone du marchand requis.' });
         }
@@ -454,6 +456,9 @@ router.post('/affiliations', authMerchantPortal, requirePortalAdmin, async (req:
         // voir computeComplianceStatus ci-dessus).
         if (expectedFrequency !== undefined && expectedFrequency !== null && !EXPECTED_FREQUENCIES.includes(expectedFrequency)) {
             return res.status(400).json({ error: "expectedFrequency doit être 'MONTHLY', 'WEEKLY' ou absent." });
+        }
+        if (expectedAmount !== undefined && expectedAmount !== null && (typeof expectedAmount !== 'number' || expectedAmount <= 0)) {
+            return res.status(400).json({ error: "expectedAmount doit être un nombre positif." });
         }
 
         // Même normalisation que le login (phoneNormalize) : sans elle, un géant saisissant
@@ -482,10 +487,10 @@ router.post('/affiliations', authMerchantPortal, requirePortalAdmin, async (req:
         const affiliation = existing
             ? await prisma.merchantAffiliation.update({
                 where: { id: existing.id },
-                data: { status: 'PENDING', respondedAt: null, revokedAt: null, expectedFrequency },
+                data: { status: 'PENDING', respondedAt: null, revokedAt: null, expectedFrequency, expectedAmount },
             })
             : await prisma.merchantAffiliation.create({
-                data: { giantId: giant.id, merchantId: merchant.id, status: 'PENDING', expectedFrequency },
+                data: { giantId: giant.id, merchantId: merchant.id, status: 'PENDING', expectedFrequency, expectedAmount },
             });
 
         const title = "Demande d'affiliation";
@@ -584,29 +589,33 @@ router.get('/affiliations/:id/compliance', authMerchantPortal, async (req: AuthR
     }
 });
 
-// PATCH /api/merchant-portal/affiliations/:id/expected-frequency — ajuste après coup la
-// fréquence de versement attendue d'une affiliation déjà ACCEPTED (voir POST /affiliations
-// ci-dessus pour la fixer dès la création/ré-affiliation).
-router.patch('/affiliations/:id/expected-frequency', authMerchantPortal, requirePortalAdmin, async (req: AuthRequest, res) => {
+// PATCH /api/merchant-portal/affiliations/:id/terms — ajuste après coup la
+// fréquence et le montant de versement attendus d'une affiliation déjà ACCEPTED.
+router.patch('/affiliations/:id/terms', authMerchantPortal, requirePortalRole('ADMIN', 'MANAGER'), async (req: AuthRequest, res) => {
     try {
         const giant = await loadGiant(req.userId);
         if (!giant) return res.status(404).json({ error: 'Compte introuvable.' });
 
-        const { expectedFrequency } = req.body;
-        if (expectedFrequency !== null && !EXPECTED_FREQUENCIES.includes(expectedFrequency)) {
+        const { expectedFrequency, expectedAmount } = req.body;
+        if (expectedFrequency !== undefined && expectedFrequency !== null && !EXPECTED_FREQUENCIES.includes(expectedFrequency)) {
             return res.status(400).json({ error: "expectedFrequency doit être 'MONTHLY', 'WEEKLY' ou null." });
+        }
+        if (expectedAmount !== undefined && expectedAmount !== null && (typeof expectedAmount !== 'number' || expectedAmount <= 0)) {
+            return res.status(400).json({ error: "expectedAmount doit être un nombre positif." });
         }
 
         const affiliation = await prisma.merchantAffiliation.findUnique({ where: { id: req.params.id as string } });
-        // Même principe que /compliance : 404 générique, ne distingue jamais "n'existe pas" de
-        // "appartient à un autre géant" ou "pas encore ACCEPTED".
         if (!affiliation || affiliation.giantId !== giant.id || affiliation.status !== 'ACCEPTED') {
             return res.status(404).json({ error: 'Affiliation introuvable.' });
         }
 
+        const dataToUpdate: any = {};
+        if (expectedFrequency !== undefined) dataToUpdate.expectedFrequency = expectedFrequency;
+        if (expectedAmount !== undefined) dataToUpdate.expectedAmount = expectedAmount;
+
         const updated = await prisma.merchantAffiliation.update({
             where: { id: affiliation.id },
-            data: { expectedFrequency },
+            data: dataToUpdate,
         });
 
         return res.json({ success: true, affiliation: updated });
@@ -616,7 +625,7 @@ router.patch('/affiliations/:id/expected-frequency', authMerchantPortal, require
 });
 
 // DELETE /api/merchant-portal/affiliations/:id
-router.delete('/affiliations/:id', authMerchantPortal, requirePortalAdmin, async (req: AuthRequest, res) => {
+router.delete('/affiliations/:id', authMerchantPortal, requirePortalRole('ADMIN', 'MANAGER'), async (req: AuthRequest, res) => {
     try {
         const giant = await loadGiant(req.userId);
         if (!giant) return res.status(404).json({ error: 'Compte introuvable.' });
@@ -648,24 +657,151 @@ router.delete('/affiliations/:id', authMerchantPortal, requirePortalAdmin, async
 });
 
 // ==========================================
+// PARAMÈTRES DU PORTAIL (SEUIL DE DOUBLE VALIDATION)
+// ==========================================
+// User.portalApprovalThreshold — voir schema.prisma : un paiement de masse dont le total
+// atteint ce seuil reste AWAITING_APPROVAL tant qu'un second membre habilité (différent de
+// l'initiateur) ne l'a pas approuvé (voir POST /payouts ci-dessous et POST
+// /payouts/:id/approve). Null/non défini = double validation désactivée (comportement
+// historique, aucun changement).
+
+// (Note: Les routes GET/PATCH /api/merchant-portal/settings complètes avec support banque et double validation sont définies en fin de fichier)
+
+
+// ==========================================
 // MOUVEMENTS D'ARGENT (SEULE VOIE POUR UN GÉANT)
 // ==========================================
 // circuitBreakerMiddleware appliqué route par route (pas au mount dans index.ts) : le
 // login/dashboard/rapports/affiliations doivent rester utilisables même en verrouillage
-// d'urgence (même principe que /api/auth, jamais gaté), seules ces deux routes déplacent
+// d'urgence (même principe que /api/auth, jamais gaté), seules ces routes déplacent
 // réellement de l'argent ou engagent un paiement de masse.
 
 // POST /api/merchant-portal/payouts — paiement de masse aux employés. Réutilise TELLE QUELLE
 // la logique métier de b2b.ts (runMassPayout), déjà factorée hors de sa route mobile pour
-// cette raison précise : voir le commentaire de choix de conception dans b2b.ts.
-router.post('/payouts', authMerchantPortal, requirePortalAdmin, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+// cette raison précise : voir le commentaire de choix de conception dans b2b.ts. SAUF si le
+// total du lot atteint le seuil de double validation configuré (User.portalApprovalThreshold)
+// : dans ce cas, un PayoutBulk AWAITING_APPROVAL est créé SANS exécuter runMassPayout — voir
+// POST /payouts/:id/approve ci-dessous pour la suite du parcours.
+router.post('/payouts', authMerchantPortal, requirePortalRole('ADMIN', 'MANAGER', 'OPERATOR'), circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         const user = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
         if (!user || user.merchantTier !== 'GIANT') return res.status(404).json({ error: 'Compte introuvable.' });
 
+        const { name, entries, idempotencyKey } = req.body;
+
+        if (user.portalApprovalThreshold && Array.isArray(entries) && entries.length > 0) {
+            // Même validation minimale que runMassPayout (b2b.ts) — un montant négatif ou non
+            // numérique ne doit jamais entrer dans le calcul du seuil, ni être stocké tel quel
+            // dans un lot AWAITING_APPROVAL qui sera exécuté plus tard sans repasser par cette
+            // vérification.
+            for (const entry of entries) {
+                const amt = Math.round(parseFloat(entry?.amount));
+                if (!entry?.phone || typeof entry.phone !== 'string' || !Number.isFinite(amt) || amt <= 0) {
+                    return res.status(400).json({ error: 'Chaque bénéficiaire doit avoir un téléphone et un montant positif valides.' });
+                }
+            }
+
+            const totalAmount = entries.reduce((sum: number, entry: any) => sum + Math.round(parseFloat(entry.amount)), 0);
+
+            if (totalAmount >= user.portalApprovalThreshold) {
+                // Idempotence — même principe que runMassPayout : un double-clic/retry sur ce
+                // bouton ne doit pas créer un second lot AWAITING_APPROVAL identique.
+                if (idempotencyKey) {
+                    const existingBulk = await prisma.payoutBulk.findUnique({ where: { idempotencyKey } });
+                    if (existingBulk) {
+                        return res.status(202).json({
+                            success: true,
+                            message: 'Paiement groupé déjà soumis.',
+                            bulkId: existingBulk.id,
+                            status: existingBulk.status,
+                        });
+                    }
+                }
+
+                const bulk = await prisma.payoutBulk.create({
+                    data: {
+                        merchantId: user.id,
+                        name: name || 'Paie groupée',
+                        totalAmount,
+                        status: 'AWAITING_APPROVAL',
+                        idempotencyKey: idempotencyKey || null,
+                        initiatedByMemberId: req.portalMemberId ?? null,
+                        entries: {
+                            create: entries.map((entry: any) => ({ phone: entry.phone, amount: Math.round(parseFloat(entry.amount)) })),
+                        },
+                    },
+                    include: { entries: true },
+                });
+
+                return res.status(202).json({
+                    success: true,
+                    message: "Ce paiement dépasse le seuil d'approbation configuré : un second membre habilité doit le valider avant exécution.",
+                    bulkId: bulk.id,
+                    status: 'AWAITING_APPROVAL',
+                });
+            }
+        }
+
         return runMassPayout(user, req, res);
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+// GET /api/merchant-portal/payouts/pending-approval
+router.get('/payouts/pending-approval', authMerchantPortal, async (req: AuthRequest, res) => {
+    try {
+        const giant = await loadGiant(req.userId);
+        if (!giant) return res.status(404).json({ error: 'Compte introuvable.' });
+
+        const bulks = await prisma.payoutBulk.findMany({
+            where: { merchantId: giant.id, status: 'AWAITING_APPROVAL' },
+            include: { entries: true },
+            orderBy: { createdAt: 'desc' },
+        });
+
+        return res.json({ success: true, bulks });
+    } catch (e: any) {
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+// POST /api/merchant-portal/payouts/:id/approve — l'approbateur ne peut jamais être
+// l'initiateur, y compris quand les deux sont le géant lui-même (initiatedByMemberId ET
+// req.portalMemberId valent alors tous deux null/undefined — normalisés à `null` avant
+// comparaison pour ne jamais laisser passer ce cas par un `!==` naïf entre `null` et
+// `undefined`).
+router.post('/payouts/:id/approve', authMerchantPortal, requirePortalRole('ADMIN', 'MANAGER'), circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+    try {
+        const giant = await prisma.user.findUnique({ where: { id: req.userId }, include: { wallet: true } });
+        if (!giant || giant.merchantTier !== 'GIANT') return res.status(404).json({ error: 'Compte introuvable.' });
+
+        const bulk = await prisma.payoutBulk.findUnique({ where: { id: req.params.id as string } });
+        if (!bulk || bulk.merchantId !== giant.id) return res.status(404).json({ error: 'Paiement groupé introuvable.' });
+        if (bulk.status !== 'AWAITING_APPROVAL') {
+            return res.status(400).json({ error: "Ce paiement groupé n'est pas en attente d'approbation." });
+        }
+
+        const approverMemberId = req.portalMemberId ?? null;
+        const initiatorMemberId = bulk.initiatedByMemberId ?? null;
+        if (approverMemberId === initiatorMemberId) {
+            return res.status(403).json({ error: 'Vous ne pouvez pas approuver un paiement groupé que vous avez vous-même initié.' });
+        }
+
+        await prisma.payoutBulk.update({
+            where: { id: bulk.id },
+            data: { status: 'PROCESSING', approvedByMemberId: approverMemberId, approvedAt: new Date() },
+        });
+
+        // Même garde que b2b.ts POST /payouts : .catch() obligatoire, un rejet de promesse non
+        // intercepté ici planterait tout le processus Node pour tous les utilisateurs.
+        processBulkAsync(bulk.id, giant.id).catch((e: any) => {
+            logger.error(`[Merchant Portal] Échec non intercepté pour le lot approuvé ${bulk.id}:`, e);
+        });
+
+        return res.status(202).json({ success: true, message: 'Paiement groupé approuvé, traitement en cours.', bulkId: bulk.id });
+    } catch (e: any) {
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
     }
 });
 
@@ -675,7 +811,7 @@ router.post('/payouts', authMerchantPortal, requirePortalAdmin, circuitBreakerMi
 // (pas un débit immédiat) exécutée manuellement par le staff via admin.merchants.ts, qui ne
 // discrimine déjà pas par merchantTier. Réutilisé tel quel plutôt que d'écrire une nouvelle
 // logique de débit.
-router.post('/withdraw-to-agency', authMerchantPortal, requirePortalAdmin, circuitBreakerMiddleware, async (req: AuthRequest, res) => {
+router.post('/withdraw-to-agency', authMerchantPortal, requirePortalRole('ADMIN', 'MANAGER', 'OPERATOR'), circuitBreakerMiddleware, async (req: AuthRequest, res) => {
     try {
         const giant = await loadGiant(req.userId);
         if (!giant) return res.status(404).json({ error: 'Compte introuvable.' });
@@ -713,7 +849,7 @@ router.get('/withdraw-to-agency', authMerchantPortal, async (req: AuthRequest, r
 // ==========================================
 // Le géant lui-même (son propre User.phone/PIN mobile) reste toujours ADMIN implicite et n'a
 // pas de ligne dans MerchantPortalMember — ces routes gèrent uniquement les membres INVITÉS.
-// Lecture ouverte à VIEWER comme ADMIN, écriture réservée à requirePortalAdmin (voir
+// Lecture ouverte à AUDITOR comme aux autres, écriture réservée aux rôles listés ci-dessous (voir
 // middleware/auth.ts) : un géant qui invite un comptable en lecture seule ou un directeur qui
 // peut payer n'a ainsi plus besoin de partager un seul et même identifiant.
 
@@ -735,7 +871,7 @@ router.get('/team', authMerchantPortal, async (req: AuthRequest, res) => {
 });
 
 // POST /api/merchant-portal/team
-router.post('/team', authMerchantPortal, requirePortalAdmin, async (req: AuthRequest, res) => {
+router.post('/team', authMerchantPortal, requirePortalRole('ADMIN'), async (req: AuthRequest, res) => {
     try {
         const giant = await loadGiant(req.userId);
         if (!giant) return res.status(404).json({ error: 'Compte introuvable.' });
@@ -777,7 +913,7 @@ router.post('/team', authMerchantPortal, requirePortalAdmin, async (req: AuthReq
 });
 
 // PATCH /api/merchant-portal/team/:id
-router.patch('/team/:id', authMerchantPortal, requirePortalAdmin, async (req: AuthRequest, res) => {
+router.patch('/team/:id', authMerchantPortal, requirePortalRole('ADMIN'), async (req: AuthRequest, res) => {
     try {
         const giant = await loadGiant(req.userId);
         if (!giant) return res.status(404).json({ error: 'Compte introuvable.' });
@@ -818,7 +954,7 @@ router.patch('/team/:id', authMerchantPortal, requirePortalAdmin, async (req: Au
 // DELETE /api/merchant-portal/team/:id — suppression réelle (pas de simple désactivation) :
 // MerchantPortalMember n'est référencé par aucune autre table (voir schema.prisma), rien à
 // préserver en historique en gardant une ligne inactive.
-router.delete('/team/:id', authMerchantPortal, requirePortalAdmin, async (req: AuthRequest, res) => {
+router.delete('/team/:id', authMerchantPortal, requirePortalRole('ADMIN'), async (req: AuthRequest, res) => {
     try {
         const giant = await loadGiant(req.userId);
         if (!giant) return res.status(404).json({ error: 'Compte introuvable.' });
@@ -841,7 +977,7 @@ router.delete('/team/:id', authMerchantPortal, requirePortalAdmin, async (req: A
 // ==========================================
 // Même modèle que routes/b2b.ts côté marchand normal (schema.prisma MerchantEmployee) — évite
 // de retaper toute la liste à chaque paie groupée (POST /payouts ci-dessus). Lecture ouverte à
-// VIEWER, écriture réservée à requirePortalAdmin.
+// AUDITOR, écriture réservée à ADMIN/MANAGER/OPERATOR.
 
 // GET /api/merchant-portal/employees
 router.get('/employees', authMerchantPortal, async (req: AuthRequest, res) => {
@@ -861,7 +997,7 @@ router.get('/employees', authMerchantPortal, async (req: AuthRequest, res) => {
 });
 
 // POST /api/merchant-portal/employees
-router.post('/employees', authMerchantPortal, requirePortalAdmin, async (req: AuthRequest, res) => {
+router.post('/employees', authMerchantPortal, requirePortalRole('ADMIN', 'MANAGER', 'OPERATOR'), async (req: AuthRequest, res) => {
     try {
         const giant = await loadGiant(req.userId);
         if (!giant) return res.status(404).json({ error: 'Compte introuvable.' });
@@ -888,7 +1024,7 @@ router.post('/employees', authMerchantPortal, requirePortalAdmin, async (req: Au
 
 // DELETE /api/merchant-portal/employees/:id — désactivation (pas de suppression) : garde
 // l'historique des paies groupées déjà effectuées vers cet employé.
-router.delete('/employees/:id', authMerchantPortal, requirePortalAdmin, async (req: AuthRequest, res) => {
+router.delete('/employees/:id', authMerchantPortal, requirePortalRole('ADMIN', 'MANAGER', 'OPERATOR'), async (req: AuthRequest, res) => {
     try {
         const giant = await loadGiant(req.userId);
         if (!giant) return res.status(404).json({ error: 'Compte introuvable.' });
@@ -901,6 +1037,143 @@ router.delete('/employees/:id', authMerchantPortal, requirePortalAdmin, async (r
         await prisma.merchantEmployee.update({ where: { id: employee.id }, data: { isActive: false } });
 
         return res.json({ success: true });
+    } catch (e: any) {
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+// POST /api/merchant-portal/employees/import — import CSV du répertoire, voir
+// utils/employeeCsv.ts. Même fonction réutilisée par routes/b2b.ts POST /employees/import
+// (marchand mobile normal).
+router.post('/employees/import', authMerchantPortal, requirePortalRole('ADMIN', 'MANAGER', 'OPERATOR'), async (req: AuthRequest, res) => {
+    try {
+        const giant = await loadGiant(req.userId);
+        if (!giant) return res.status(404).json({ error: 'Compte introuvable.' });
+
+        const { csv } = req.body;
+        if (!csv || typeof csv !== 'string') {
+            return res.status(400).json({ error: 'Contenu CSV requis.' });
+        }
+
+        const result = await importEmployeesFromCsv(giant.id, csv);
+        return res.status(201).json({ success: true, ...result });
+    } catch (e: any) {
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+// ==========================================
+// GUICHETS / CAISSES (CÔTÉ GÉANT)
+// ==========================================
+// Logique métier factorée dans routes/till.ts (listMerchantTills/createMerchantTill/
+// deactivateMerchantTill), PARTAGÉE avec routes/b2b.ts (marchand mobile normal ou géant) —
+// ces routes ne font que résoudre le géant courant puis déléguer entièrement la
+// validation/l'écriture. Lecture ouverte à AUDITOR, écriture réservée à
+// ADMIN/MANAGER/OPERATOR, même mapping que le reste de ce fichier (employees, affiliations).
+
+// GET /api/merchant-portal/tills
+router.get('/tills', authMerchantPortal, async (req: AuthRequest, res) => {
+    try {
+        const giant = await loadGiant(req.userId);
+        if (!giant) return res.status(404).json({ error: 'Compte introuvable.' });
+
+        const tills = await listMerchantTills(giant.id);
+        return res.json({ success: true, tills });
+    } catch (e: any) {
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+// POST /api/merchant-portal/tills
+router.post('/tills', authMerchantPortal, requirePortalRole('ADMIN', 'MANAGER', 'OPERATOR'), async (req: AuthRequest, res) => {
+    try {
+        const giant = await loadGiant(req.userId);
+        if (!giant) return res.status(404).json({ error: 'Compte introuvable.' });
+
+        const { status, body } = await createMerchantTill(giant.id, req.body);
+        return res.status(status).json(body);
+    } catch (e: any) {
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+// DELETE /api/merchant-portal/tills/:id — désactivation (voir deactivateMerchantTill).
+router.delete('/tills/:id', authMerchantPortal, requirePortalRole('ADMIN', 'MANAGER', 'OPERATOR'), async (req: AuthRequest, res) => {
+    try {
+        const giant = await loadGiant(req.userId);
+        if (!giant) return res.status(404).json({ error: 'Compte introuvable.' });
+
+        const { status, body } = await deactivateMerchantTill(giant.id, req.params.id as string);
+        return res.status(status).json(body);
+    } catch (e: any) {
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+// ==========================================
+// RÉGLAGES DU PORTAIL & DÉVERSEMENT BANCAIRE
+// ==========================================
+
+// GET /api/merchant-portal/settings
+router.get('/settings', authMerchantPortal, async (req: AuthRequest, res) => {
+    try {
+        const giant = await loadGiant(req.userId);
+        if (!giant) return res.status(404).json({ error: 'Compte introuvable.' });
+
+        return res.json({
+            success: true,
+            portalApprovalThreshold: giant.portalApprovalThreshold,
+            bankName: giant.bankName,
+            iban: giant.iban,
+            swift: giant.swift,
+            autoSettlementEnabled: giant.autoSettlementEnabled
+        });
+    } catch (e: any) {
+        return res.status(500).json({ error: friendlyErrorMessage(e) });
+    }
+});
+
+// PATCH /api/merchant-portal/settings
+router.patch('/settings', authMerchantPortal, requirePortalRole('ADMIN'), async (req: AuthRequest, res) => {
+    try {
+        const giant = await loadGiant(req.userId);
+        if (!giant) return res.status(404).json({ error: 'Compte introuvable.' });
+
+        const { portalApprovalThreshold, bankName, iban, swift, autoSettlementEnabled } = req.body;
+        const dataToUpdate: any = {};
+
+        if (portalApprovalThreshold !== undefined) {
+            if (portalApprovalThreshold !== null && (typeof portalApprovalThreshold !== 'number' || !Number.isInteger(portalApprovalThreshold) || portalApprovalThreshold < 0)) {
+                return res.status(400).json({ error: 'Le seuil doit être un entier positif ou nul.' });
+            }
+            dataToUpdate.portalApprovalThreshold = portalApprovalThreshold;
+        }
+        for (const [key, value] of Object.entries({ bankName, iban, swift })) {
+            if (value === undefined) continue;
+            if (value !== null && typeof value !== 'string') {
+                return res.status(400).json({ error: `${key} doit être une chaîne de caractères.` });
+            }
+            dataToUpdate[key] = value;
+        }
+        if (autoSettlementEnabled !== undefined) {
+            if (typeof autoSettlementEnabled !== 'boolean') {
+                return res.status(400).json({ error: 'autoSettlementEnabled doit être un booléen.' });
+            }
+            dataToUpdate.autoSettlementEnabled = autoSettlementEnabled;
+        }
+
+        if (Object.keys(dataToUpdate).length === 0) {
+            return res.status(400).json({ error: 'Aucune modification fournie.' });
+        }
+
+        // select explicite : renvoyer la ligne User entière exposerait le hash du PIN et les
+        // hash de refresh token au navigateur.
+        const updated = await prisma.user.update({
+            where: { id: giant.id },
+            data: dataToUpdate,
+            select: { portalApprovalThreshold: true, bankName: true, iban: true, swift: true, autoSettlementEnabled: true },
+        });
+
+        return res.json({ success: true, ...updated });
     } catch (e: any) {
         return res.status(500).json({ error: friendlyErrorMessage(e) });
     }

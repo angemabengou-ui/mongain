@@ -1,0 +1,48 @@
+{
+  "id": "4707e4b5-d223-4a74-a1b8-81a2b5b09071",
+  "status": "FINISHED",
+  "platform": "ANDROID",
+  "artifacts": {
+    "buildUrl": "https://expo.dev/artifacts/eas/OWILGvtgC5BzYjxrTk5t5WBI5G2AHs9b7Hu76dWPC44.apk",
+    "applicationArchiveUrl": "https://expo.dev/artifacts/eas/OWILGvtgC5BzYjxrTk5t5WBI5G2AHs9b7Hu76dWPC44.apk"
+  },
+  "fingerprint": {
+    "id": "01a0986b-53fc-7fc6-bc55-fd1b01838ee7",
+    "hash": "5d8df54629d1d99c1f9ec714b471a78d5457fd30"
+  },
+  "initiatingActor": {
+    "id": "c3706a56-4dd6-4fc1-bb37-0cda27753ac2",
+    "displayName": "ange1994"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/62c3cfa7-ad7e-4ec8-8c22-df55b5c34464/4707e4b5-d223-4a74-a1b8-81a2b5b09071/2026-09-13T01%3A39%3A26Z-4e48f2b2-f1c1-4317-82a2-9c54cc3a8c95.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260913%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260913T022413Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=5ceda4e95313928e139f2cd0c9044b0439351536430699af5376fd80fba84d63938b80633f12a3a16ac81d4b3b3b4f775411ea09011e088d0669c54edd71d1980b718f82cf7ad44600ab3fddb3ec386b25b67ece37182d5514a7bdb378b4f1e4bd740caa31b1954d1429a1c289993cf04b54e06c59ae4859871981f1226232a1ffabe16c7344533ce6fa37f42e0c7836f4bfdfbf27748e7e366c5ed1bf2734ca0ffa5ba1cc1d5fda181e923fe88b7948a8d2cef96bc4c69abf62efa0dbdb797589e83d6254bb84897c9141208749ed192b05f84c7a3268271607c7e3cc019c5131d987cf8d44b06402dea7f4a14d139401ab33a3d913e7843d2a669b1d23e112"
+  ],
+  "app": {
+    "id": "62c3cfa7-ad7e-4ec8-8c22-df55b5c34464",
+    "name": "mongain",
+    "slug": "mongain",
+    "ownerAccount": {
+      "id": "463475fb-6cde-4957-a7d2-ab58b410b2b8",
+      "name": "ange1994"
+    }
+  },
+  "distribution": "STORE",
+  "buildProfile": "preview",
+  "appIdentifier": "com.mongain.superapp",
+  "sdkVersion": "57.0.0",
+  "appVersion": "1.0.0",
+  "appBuildVersion": "1",
+  "gitCommitHash": "195d9f0e8752103fb136f746c7acf8d34914672a",
+  "gitCommitMessage": "Fix white screen on cold start with no stored session\n\nsrc/app/index.tsx rendered `return null` once AuthContext's isLoading\nflipped false but no token was present yet - the most common case on a\ncold start with no stored session, since restoreSession() resolves almost\ninstantly with nothing to restore. During that window this screen (\"/\")\nwas the only one mounted, waiting for _layout.tsx's own effect (which also\nwaits on fonts and router mount, not just the session) to redirect to\n/auth/login - so users saw React Native's default blank white background\ninstead of the login page, for anywhere from a few hundred ms to several\nseconds on a slower device or release build.\n\nNow shows the same loading indicator for both \"still restoring\" and\n\"restored, no token yet\" states, never an empty render. The actual\nredirect decision stays entirely in _layout.tsx.\n\nCo-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>",
+  "priority": "NORMAL_PLUS",
+  "createdAt": "2026-09-13T01:39:25.790Z",
+  "updatedAt": "2026-09-13T02:00:47.926Z",
+  "completedAt": "2026-09-13T02:00:47.759Z",
+  "expirationDate": "2026-10-13T01:39:25.812Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 402,
+    "buildQueueTime": 5206,
+    "buildDuration": 1276361
+  }
+}

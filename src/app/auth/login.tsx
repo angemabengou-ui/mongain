@@ -145,6 +145,14 @@ export default function LoginScreen() {
                                     </Text>
                                 </TouchableOpacity>
                             </View>
+
+                            {/* Lien discret vers la connexion guichet (MerchantTill) — un
+                                caissier n'a pas de compte Mongain personnel, seul ce lien lui
+                                permet d'atteindre till-login.tsx sans jamais passer par ce
+                                formulaire de connexion normal. */}
+                            <TouchableOpacity onPress={() => router.push('/till-login')} style={{ alignItems: 'center', marginTop: 20 }}>
+                                <Text style={styles.linkText}>Connexion guichet marchand</Text>
+                            </TouchableOpacity>
                         </View>
                     </ScrollView>
                     {insets.bottom > 0 && <View style={{ height: Math.max(insets.bottom, 20) }} />}

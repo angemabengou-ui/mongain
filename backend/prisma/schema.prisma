@@ -61,6 +61,13 @@ model User {
   portalRefreshTokenHash      String?   @unique
   portalRefreshTokenExpiresAt DateTime?
 
+  // Seuil de double validation pour un paiement de masse (portail marchand géant) — null/0 =
+  // désactivé (comportement actuel, exécution immédiate). Au-dessus de ce montant, un
+  // PayoutBulk reste AWAITING_APPROVAL tant qu'un second membre ADMIN/MANAGER (différent de
+  // l'initiateur) ne l'approuve pas. Réglage self-service du géant, pas staff-controlled —
+  // volontairement distinct de customDailyLimit/etc. (ceux-là restent maker/checker staff).
+  portalApprovalThreshold Int?
+
   // Rattachement agence (pertinent pour role=AGENT) — référence libre, cohérente avec
   // Transaction.branchId/tellerId (bounded context Ledger volontairement découplé, voir
   // Reclamation.branchId plus bas). Les opérations effectuées par un agent rattaché sont
@@ -93,6 +100,14 @@ model User {
   customMonthlyLimit   Int?
   customPerTxLimit     Int?
   customLimitExpiresAt DateTime?
+
+  // ==========================================
+  // INFORMATIONS BANCAIRES (DÉVERSEMENT AUTOMATIQUE / SETTLEMENT)
+  // ==========================================
+  bankName              String?
+  iban                  String?
+  swift                 String?
+  autoSettlementEnabled Boolean @default(false)
 
   // Comptes Enfant — auto-relation parent/enfant. Le CHILD garde son propre login (téléphone
   // réel + PIN, voir routes/family.ts) et son propre Wallet ; seul son parent peut ajuster
@@ -168,6 +183,30 @@ model User {
   // Répertoire d'employés (voir MerchantEmployee plus bas) — utilisable par tout marchand
   // (géant ou normal) pour éviter de ressaisir la liste à chaque paie groupée (b2b.ts /payouts).
   employees MerchantEmployee[] @relation("MerchantEmployees")
+
+  // Guichets/caisses (voir MerchantTill plus bas) — un marchand (géant ou normal) avec
+  // plusieurs points d'encaissement physiques peut créer un login dédié par guichet, sur le
+  // modèle du "SIM mère" d'Orange Money : chaque guichet encaisse en son nom mais crédite
+  // directement le wallet du marchand PROPRIÉTAIRE, jamais un wallet propre au guichet.
+  tills MerchantTill[] @relation("MerchantTills")
+}
+
+// Point d'encaissement rattaché à un marchand (géant ou normal) ayant plusieurs guichets
+// physiques (plusieurs bureaux d'une mairie, plusieurs caisses d'un commerce...). Login
+// dédié (téléphone + PIN propres, pas de compte Mongain séparé) via authMerchantTill — session
+// strictement limitée à l'encaissement (voir routes/till.ts), jamais aux mouvements de retrait
+// ni à la consultation du solde global. Tout encaissement crédite le wallet de `merchant`
+// directement ; un guichet n'a et n'aura jamais son propre wallet.
+model MerchantTill {
+  id           String   @id @default(uuid())
+  merchantId   String
+  merchant     User     @relation("MerchantTills", fields: [merchantId], references: [id])
+  name         String // ex: "Guichet 1", "Caisse Nord"
+  phone        String   @unique
+  pin          String // hashed, même convention que User.pin
+  isActive     Boolean  @default(true)
+  tokenVersion Int      @default(0)
+  createdAt    DateTime @default(now())
 }
 
 // Membre d'équipe du portail web d'un marchand géant — permet des "niveaux de permission"
@@ -233,6 +272,10 @@ model MerchantAffiliation {
   // taxe" (routes/merchant-portal.ts GET /affiliations, champ calculé isCompliant) plutôt que
   // de forcer le géant à interpréter lui-même un simple historique de montants.
   expectedFrequency String? // MONTHLY, WEEKLY, null
+
+  // NOUVEAU : Prélèvement Automatique (Taxes & Redevances)
+  expectedAmount    Int?    // Le montant exact attendu à chaque période (ex: 5000 FCFA pour la place au marché)
+  autoPayEnabled    Boolean @default(false) // Le petit marchand autorise le système à prélever ce montant automatiquement
 
   createdAt   DateTime  @default(now())
   respondedAt DateTime?
@@ -965,6 +1008,11 @@ model ApiIntegration {
   publicKey   String   @unique @default(uuid()) // Displayed freely
   secretHash  String // bcrypt hash — NEVER returned in API responses
   webhookUrl  String?
+  // Secret de signature HMAC des webhooks sortants — DISTINCT de secretHash : celui-ci doit
+  // rester en clair côté serveur (jamais haché) car il sert à SIGNER chaque livraison, pas
+  // seulement à la vérifier par comparaison de hash. Généré une fois à la création, affiché au
+  // marchand pour qu'il puisse valider la signature `X-Mongain-Signature` de son côté.
+  webhookSigningSecret String?
   isActive    Boolean  @default(true)
   permissions String   @default("PAYMENTS") // Comma-separated: PAYMENTS, REFUNDS, REPORTS
   description String?
@@ -972,9 +1020,33 @@ model ApiIntegration {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  logs ApiLog[]
+  logs              ApiLog[]
+  invoices          Invoice[]
+  webhookDeliveries ApiWebhookDelivery[]
 
   @@index([merchantId])
+}
+
+// Journal + file de livraison des webhooks sortants Mongain Connect (voir routes/gateway.ts,
+// routes/b2b.ts /invoices/:id/pay et /reject) — sans job de fond dans ce backend, la livraison
+// se fait en best-effort synchrone au moment de l'évènement (ne bloque jamais la réponse au
+// client final), avec un seul essai automatique ; l'échec est journalisé ici et reste
+// rejouable manuellement (voir POST /gateway/webhook-deliveries/:id/retry) plutôt que de
+// prétendre à une infrastructure de retry planifié qui n'existe pas.
+model ApiWebhookDelivery {
+  id            String   @id @default(uuid())
+  integrationId String
+  integration   ApiIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  eventType     String // INVOICE_PAID, INVOICE_CANCELLED
+  payload       String // JSON stringifié, tel qu'envoyé (utile pour un rejeu manuel identique)
+  status        String   @default("PENDING") // PENDING, DELIVERED, FAILED
+  httpStatus    Int?
+  lastError     String?
+  attempts      Int      @default(0)
+  createdAt     DateTime @default(now())
+  deliveredAt   DateTime?
+
+  @@index([integrationId, status])
 }
 
 model ApiLog {
@@ -1220,6 +1292,13 @@ model Invoice {
   paidAt        DateTime?
   updatedAt     DateTime  @updatedAt
 
+  // Non-null uniquement pour une facture créée via Mongain Connect (routes/gateway.ts
+  // POST /charge) — permet de retrouver l'intégration à notifier par webhook quand cette
+  // facture est payée/rejetée (voir ApiWebhookDelivery). Null pour une facture B2B classique
+  // créée hors de ce parcours (aucune notification webhook à envoyer dans ce cas).
+  integrationId String?
+  integration   ApiIntegration? @relation(fields: [integrationId], references: [id])
+
   merchant User @relation("MerchantInvoices", fields: [merchantId], references: [id])
 }
 
@@ -1228,12 +1307,25 @@ model PayoutBulk {
   merchantId     String
   name           String?
   totalAmount    Int       @default(0)
-  status         String    @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  // PENDING, PROCESSING, COMPLETED, FAILED — plus AWAITING_APPROVAL, ajouté pour la double
+  // validation optionnelle des paiements de masse (voir User.portalApprovalThreshold plus
+  // haut) : un lot dont le montant dépasse le seuil configuré par le marchand géant reste
+  // AWAITING_APPROVAL tant qu'un second membre habilité (différent de l'initiateur) ne l'a
+  // pas approuvé — voir routes/merchant-portal.ts POST /payouts/:id/approve.
+  status         String    @default("PENDING")
   // Optionnelle, fournie par le client (POST /api/b2b/payouts) : un double-clic ou un retry
   // réseau renvoyant la même clé retrouve ce lot déjà créé au lieu d'en recréer un second,
   // qui serait traité une deuxième fois par processBulkAsync (débit marchand + crédit de
   // chaque bénéficiaire en double). NULL pour les lots existants créés avant ce champ.
   idempotencyKey String?   @unique
+
+  // Double validation (portail marchand géant uniquement — null sur mobile/marchand normal,
+  // où l'approbation à plusieurs n'existe pas). L'initiateur ne peut jamais être son propre
+  // approbateur (vérifié en base, pas seulement côté UI).
+  initiatedByMemberId String?
+  approvedByMemberId  String?
+  approvedAt          DateTime?
+
   createdAt      DateTime  @default(now())
   completedAt    DateTime?
 

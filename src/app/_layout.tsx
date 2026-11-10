@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { InvoiceApprover } from '../components/InvoiceApprover';
 import { AuthProvider, useAuth } from '../context/AuthContext';
+import { getTillToken } from '../services/api';
 
 // Sans ce garde-fou, une erreur au tout premier rendu (ex: un hook de routage ou un module
 // natif qui se comporte différemment entre le dev client et un build APK autonome) laisse le
@@ -65,6 +66,30 @@ function RootLayoutNav() {
   const notReady = isLoading || !rootNavigationState?.key || (!fontsLoaded && !fontError);
   const [timedOut, setTimedOut] = useState(false);
 
+  // Session GUICHET (MerchantTill, voir getTillToken/saveTillToken, services/api.ts) —
+  // totalement indépendante d'AuthContext (pas de refresh token, pas de `user`) : un guichet
+  // peut être actif SANS aucune session utilisateur normale sur l'appareil, et vice versa.
+  // Relu à chaque changement de route (dépendance `segments`) plutôt qu'une seule fois au
+  // montage : c'est le seul moyen de détecter à la volée la connexion depuis till-login.tsx
+  // (saveTillToken) et la déconnexion depuis till-collect.tsx (deleteTillToken), aucune des
+  // deux ne passant par AuthContext pour notifier ce layout. Erreur → traitée comme "pas de
+  // session guichet" (jamais bloquant pour le reste du garde-fou ci-dessous).
+  const [tillToken, setTillToken] = useState<string | null>(null);
+  // Distinct de `tillToken` : reste faux tant que la PREMIÈRE lecture n'a pas abouti (succès
+  // OU échec) — sans lui, l'effet de redirection ci-dessous ne pourrait pas distinguer "pas de
+  // session guichet" (tillToken=null après lecture) de "pas encore su" (tillToken=null car
+  // encore sa valeur initiale), et redirigerait par erreur vers /auth/login avant même de
+  // savoir qu'un guichet est actif (flash confirmé par un test dédié, voir plus bas).
+  const [tillChecked, setTillChecked] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    getTillToken()
+      .then(t => { if (!cancelled) setTillToken(t); })
+      .catch(() => { if (!cancelled) setTillToken(null); })
+      .finally(() => { if (!cancelled) setTillChecked(true); });
+    return () => { cancelled = true; };
+  }, [segments]);
+
   useEffect(() => {
     const timeout = setTimeout(() => {
       SplashScreen.hideAsync().catch(() => { });
@@ -81,19 +106,50 @@ function RootLayoutNav() {
     // la garde ne bloquait plus — le routage se décidait sur token===null (valeur initiale) et
     // redirigeait vers /auth/login même pour un utilisateur déjà connecté, avant que
     // restoreSession() (AuthContext) n'ait fini de relire le token stocké.
-    if (notReady) return;
+    // Voir tillChecked ci-dessus : sans cette garde, ce guard s'exécuterait AVANT même de
+    // savoir si une session guichet est active, forçant à tort /auth/login pendant l'instant
+    // où tillToken vaut encore sa valeur initiale (null) — un flash de navigation réel, pas
+    // qu'un artefact de test (voir garde-fou session GUICHET, _layout.test.tsx).
+    if (notReady || !tillChecked) return;
 
     const inAuthGroup = segments[0] === 'auth';
+    // /till-login et /till-collect restent librement accessibles même sans AUCUNE session
+    // utilisateur normale sur l'appareil (un caissier n'a pas de compte Mongain) — sans cette
+    // exemption, `!token && !inAuthGroup` ci-dessous forcerait /auth/login dès l'arrivée sur
+    // till-login.tsx, empêchant toute connexion guichet. Le garde-fou dédié plus bas (basé sur
+    // tillToken) prend le relais une fois la session guichet effectivement active.
+    const inTillGroup = segments[0] === 'till-login' || segments[0] === 'till-collect';
 
-    if (!token && !inAuthGroup) {
-      router.replace('/auth/login');
-    } else if (token && inAuthGroup) {
-      router.replace('/');
+    // `!tillToken` ci-dessous (en plus de `!inTillGroup`) : une session guichet active doit
+    // bloquer TOUTE redirection décidée ici, même si la route actuelle n'est ni till-login ni
+    // till-collect (ex : un ancien lien profond vers une autre route) — c'est alors au seul
+    // garde-fou dédié plus bas (basé sur tillToken) de renvoyer vers /till-collect, jamais à
+    // celui-ci de renvoyer vers /auth/login entre-temps.
+    if (!inTillGroup && !tillToken) {
+      if (!token && !inAuthGroup) {
+        router.replace('/auth/login');
+      } else if (token && inAuthGroup) {
+        router.replace('/');
+      }
     }
 
     // Libérer l'écran de chargement natif une fois que le routage est décidé
     SplashScreen.hideAsync();
-  }, [token, isLoading, segments, rootNavigationState?.key]);
+  }, [token, isLoading, segments, rootNavigationState?.key, tillToken, tillChecked]);
+
+  // Garde-fou GUICHET — prioritaire sur tout le reste : tant qu'une session guichet est
+  // active (tillToken non nul), TOUT le reste de l'app reste inaccessible, quelle que soit la
+  // route visée (deep link, navigation programmée, historique...). Effet séparé de celui
+  // ci-dessus (jamais fusionné) : celui-ci ne dépend PAS de `notReady`/`isLoading`
+  // (AuthContext) — une session guichet n'a rien à voir avec la session utilisateur normale et
+  // ne doit jamais attendre sa résolution — seulement du routeur lui-même (rootNavigationState),
+  // sans quoi router.replace() ci-dessous pourrait s'exécuter avant que le Stack ne soit monté.
+  useEffect(() => {
+    if (!rootNavigationState?.key) return;
+    if (tillToken && segments[0] !== 'till-collect') {
+      router.replace('/till-collect');
+    }
+  }, [tillToken, segments, rootNavigationState?.key]);
 
   // Le filet de sécurité ci-dessus force le masquage du splash après 8s même si `notReady`
   // est encore vrai — sans cet écran, l'app affichait alors le contenu par défaut du Stack

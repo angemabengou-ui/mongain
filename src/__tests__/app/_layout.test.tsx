@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react-native';
+import { render, waitFor } from '@testing-library/react-native';
 import React from 'react';
 
 jest.mock('react-native-safe-area-context', () => require('react-native-safe-area-context/jest/mock').default);
@@ -49,7 +49,17 @@ jest.mock('../../components/SecurityWrapper', () => ({
     },
 }));
 
+// Session GUICHET (MerchantTill, voir getTillToken/saveTillToken, services/api.ts) — mockée
+// entièrement plutôt que de laisser _layout.tsx toucher le vrai expo-secure-store : par
+// défaut aucune session guichet (comportement neutre, identique à avant l'ajout de ce
+// garde-fou) pour ne rien changer aux 4 tests déjà en place ci-dessous ; les nouveaux tests
+// dédiés à ce garde-fou (plus bas) surchargent cette valeur par cas.
+jest.mock('../../services/api', () => ({
+    getTillToken: jest.fn(),
+}));
+
 import RootLayout from '../../app/_layout';
+import { getTillToken } from '../../services/api';
 
 describe('app/_layout (RootLayoutNav)', () => {
     beforeEach(() => {
@@ -58,6 +68,7 @@ describe('app/_layout (RootLayoutNav)', () => {
         mockSecurityWrapperCalls.length = 0;
         mockUseSegments.mockReturnValue([]);
         mockUseRootNavigationState.mockReturnValue({ key: 'root' } as any);
+        (getTillToken as jest.Mock).mockResolvedValue(null);
     });
 
     it('redirects to /auth/login when there is no token and not already in the auth group', async () => {
@@ -65,7 +76,10 @@ describe('app/_layout (RootLayoutNav)', () => {
 
         await render(<RootLayout />);
 
-        expect(mockReplace).toHaveBeenCalledWith('/auth/login');
+        // Attend la résolution (mockée) de la vérification de session guichet — voir
+        // tillChecked, _layout.tsx : la redirection ci-dessous n'est décidée qu'une fois
+        // celle-ci connue, jamais avant.
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/auth/login'));
     });
 
     it('redirects to / when a token exists but the user is still in the auth group', async () => {
@@ -74,7 +88,7 @@ describe('app/_layout (RootLayoutNav)', () => {
 
         await render(<RootLayout />);
 
-        expect(mockReplace).toHaveBeenCalledWith('/');
+        await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
     });
 
     it('does not redirect while auth is still loading', async () => {
@@ -93,5 +107,60 @@ describe('app/_layout (RootLayoutNav)', () => {
         const names = mockScreenCalls.map((c) => c.name);
         expect(names).toEqual(expect.arrayContaining(['(tabs)', 'transfer', 'transfer-confirm', 'auth/login', 'auth/register']));
         expect(mockSecurityWrapperCalls.length).toBeGreaterThan(0);
+    });
+
+    describe('garde-fou session GUICHET (MerchantTill)', () => {
+        it('redirects to /till-collect when a till session is active, regardless of the route targeted', async () => {
+            (getTillToken as jest.Mock).mockResolvedValue('till-tok-123');
+            mockUseAuth.mockReturnValue({ token: null, isLoading: false });
+            mockUseSegments.mockReturnValue(['merchant-hub']);
+
+            await render(<RootLayout />);
+
+            await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/till-collect'));
+        });
+
+        it('does not redirect away from /till-collect while the till session stays active', async () => {
+            (getTillToken as jest.Mock).mockResolvedValue('till-tok-123');
+            mockUseAuth.mockReturnValue({ token: null, isLoading: false });
+            mockUseSegments.mockReturnValue(['till-collect']);
+
+            await render(<RootLayout />);
+
+            await waitFor(() => expect(getTillToken).toHaveBeenCalled());
+            expect(mockReplace).not.toHaveBeenCalled();
+        });
+
+        it('takes priority over the normal auth redirect: no normal-user token is not forced to /auth/login while a till session is active', async () => {
+            (getTillToken as jest.Mock).mockResolvedValue('till-tok-123');
+            mockUseAuth.mockReturnValue({ token: null, isLoading: false });
+            mockUseSegments.mockReturnValue([]);
+
+            await render(<RootLayout />);
+
+            await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/till-collect'));
+            expect(mockReplace).not.toHaveBeenCalledWith('/auth/login');
+        });
+
+        it('leaves /till-login freely reachable without a normal user session (no forced /auth/login redirect)', async () => {
+            (getTillToken as jest.Mock).mockResolvedValue(null);
+            mockUseAuth.mockReturnValue({ token: null, isLoading: false });
+            mockUseSegments.mockReturnValue(['till-login']);
+
+            await render(<RootLayout />);
+
+            await waitFor(() => expect(getTillToken).toHaveBeenCalled());
+            expect(mockReplace).not.toHaveBeenCalled();
+        });
+
+        it('falls back to the normal auth redirect once no till session is found', async () => {
+            (getTillToken as jest.Mock).mockResolvedValue(null);
+            mockUseAuth.mockReturnValue({ token: null, isLoading: false });
+            mockUseSegments.mockReturnValue([]);
+
+            await render(<RootLayout />);
+
+            await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/auth/login'));
+        });
     });
 });

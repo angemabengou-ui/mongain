@@ -3,12 +3,23 @@ import request from 'supertest';
 import { prisma } from '../../prisma';
 import b2bRoutes from '../b2b';
 
-jest.mock('../../middleware/auth', () => ({
-    authMiddleware: (req: any, res: any, next: any) => {
-        req.userId = 'merchant_1';
-        next();
-    },
-}));
+// spread jest.requireActual : b2b.ts importe désormais aussi routes/till.ts (guichets), qui
+// référence authMerchantTill/JWT_SECRET au chargement du module (router.post('/collect',
+// authMerchantTill, ...)) — un mock ne définissant QUE authMiddleware laissait ces exports
+// `undefined`, faisant planter l'enregistrement de la route dès l'import de ce fichier de
+// test. Seul authMiddleware est réellement surchargé ici ; le reste (authMerchantTill,
+// requirePortalRole...) reste l'implémentation réelle, jamais exercée par les requêtes de ce
+// fichier (adressées à /b2b, jamais à un guichet).
+jest.mock('../../middleware/auth', () => {
+    const actual = jest.requireActual('../../middleware/auth');
+    return {
+        ...actual,
+        authMiddleware: (req: any, res: any, next: any) => {
+            req.userId = 'merchant_1';
+            next();
+        },
+    };
+});
 
 jest.mock('../../prisma', () => ({
     prisma: {
@@ -19,6 +30,8 @@ jest.mock('../../prisma', () => ({
         wallet: { findUnique: jest.fn(), update: jest.fn() },
         transaction: { create: jest.fn() },
         merchantEmployee: { findMany: jest.fn(), create: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
+        merchantTill: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+        apiIntegration: { findUnique: jest.fn() },
         $transaction: jest.fn((callback) => callback(prisma)),
     },
 }));
@@ -29,6 +42,14 @@ jest.mock('../../services/LimitEngine', () => ({
 
 jest.mock('../../utils/pinAuth', () => ({
     verifyUserPin: jest.fn().mockResolvedValue({ ok: true }),
+}));
+
+jest.mock('../../utils/webhookDelivery', () => ({
+    deliverWebhook: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('../../utils/employeeCsv', () => ({
+    importEmployeesFromCsv: jest.fn(),
 }));
 
 jest.mock('../settings', () => ({
@@ -297,6 +318,190 @@ describe('B2B Routes', () => {
 
             expect(res.status).toBe(200);
             expect(prisma.merchantEmployee.update).toHaveBeenCalledWith({ where: { id: 'emp1' }, data: { isActive: false } });
+        });
+    });
+
+    // ==========================================
+    // IMPORT CSV DU RÉPERTOIRE D'EMPLOYÉS (MARCHAND MOBILE)
+    // ==========================================
+    describe('POST /b2b/employees/import', () => {
+        const merchant = { id: 'merchant_1', role: 'MERCHANT', wallet: { id: 'w1' } };
+
+        it('devrait refuser un non-marchand', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'client_1', role: 'USER' });
+
+            const res = await request(app).post('/b2b/employees/import').send({ csv: 'Jean,074000001' });
+
+            expect(res.status).toBe(403);
+        });
+
+        it('devrait retourner 400 si aucun CSV fourni', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(merchant);
+
+            const res = await request(app).post('/b2b/employees/import').send({});
+
+            expect(res.status).toBe(400);
+        });
+
+        it("devrait déléguer à importEmployeesFromCsv et renvoyer son résultat", async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(merchant);
+            const { importEmployeesFromCsv } = require('../../utils/employeeCsv');
+            (importEmployeesFromCsv as jest.Mock).mockResolvedValue({ created: 2, skipped: 1, errors: [] });
+
+            const res = await request(app).post('/b2b/employees/import').send({ csv: 'Jean,074000001\nPaul,074000002' });
+
+            expect(res.status).toBe(201);
+            expect(res.body).toEqual({ success: true, created: 2, skipped: 1, errors: [] });
+            expect(importEmployeesFromCsv).toHaveBeenCalledWith('merchant_1', 'Jean,074000001\nPaul,074000002');
+        });
+    });
+
+    // ==========================================
+    // GUICHETS / CAISSES (MARCHAND MOBILE)
+    // ==========================================
+    describe('GET /b2b/tills', () => {
+        const merchant = { id: 'merchant_1', role: 'MERCHANT', wallet: { id: 'w1' } };
+
+        it('devrait refuser un non-marchand', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue({ id: 'client_1', role: 'USER' });
+
+            const res = await request(app).get('/b2b/tills');
+
+            expect(res.status).toBe(403);
+        });
+
+        it('devrait lister les guichets du marchand', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(merchant);
+            (prisma.merchantTill.findMany as jest.Mock).mockResolvedValue([{ id: 't1', name: 'Guichet 1' }]);
+
+            const res = await request(app).get('/b2b/tills');
+
+            expect(res.status).toBe(200);
+            expect(res.body.tills).toEqual([{ id: 't1', name: 'Guichet 1' }]);
+            expect(prisma.merchantTill.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { merchantId: 'merchant_1' } }));
+        });
+    });
+
+    describe('POST /b2b/tills', () => {
+        const merchant = { id: 'merchant_1', role: 'MERCHANT', wallet: { id: 'w1' } };
+
+        it('devrait créer un guichet avec un PIN valide', async () => {
+            (prisma.user.findUnique as jest.Mock)
+                .mockResolvedValueOnce(merchant) // getActiveUser (marchand courant)
+                .mockResolvedValueOnce(null); // vérification d'unicité dans createMerchantTill
+            (prisma.merchantTill.findUnique as jest.Mock).mockResolvedValue(null);
+            (prisma.merchantTill.create as jest.Mock).mockResolvedValue({ id: 't1', name: 'Guichet 1', phone: '074000009', isActive: true });
+
+            const res = await request(app).post('/b2b/tills').send({ name: 'Guichet 1', phone: '074000009', pin: '1234' });
+
+            expect(res.status).toBe(201);
+            expect(prisma.merchantTill.create).toHaveBeenCalled();
+        });
+
+        it('devrait retourner 409 si le téléphone est déjà utilisé par un client', async () => {
+            (prisma.user.findUnique as jest.Mock)
+                .mockResolvedValueOnce(merchant) // getActiveUser (marchand courant)
+                .mockResolvedValueOnce({ id: 'existing_user' }); // vérification d'unicité dans createMerchantTill
+            (prisma.merchantTill.findUnique as jest.Mock).mockResolvedValue(null);
+
+            const res = await request(app).post('/b2b/tills').send({ name: 'Guichet 1', phone: '074000009', pin: '1234' });
+
+            expect(res.status).toBe(409);
+            expect(prisma.merchantTill.create).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('DELETE /b2b/tills/:id', () => {
+        const merchant = { id: 'merchant_1', role: 'MERCHANT', wallet: { id: 'w1' } };
+
+        it("devrait retourner 404 si le guichet n'appartient pas à ce marchand", async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(merchant);
+            (prisma.merchantTill.findUnique as jest.Mock).mockResolvedValue({ id: 't1', merchantId: 'un_autre_marchand' });
+
+            const res = await request(app).delete('/b2b/tills/t1');
+
+            expect(res.status).toBe(404);
+        });
+
+        it('devrait désactiver le guichet (isActive:false + tokenVersion incrémenté)', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(merchant);
+            (prisma.merchantTill.findUnique as jest.Mock).mockResolvedValue({ id: 't1', merchantId: 'merchant_1' });
+            (prisma.merchantTill.update as jest.Mock).mockResolvedValue({});
+
+            const res = await request(app).delete('/b2b/tills/t1');
+
+            expect(res.status).toBe(200);
+            expect(prisma.merchantTill.update).toHaveBeenCalledWith({
+                where: { id: 't1' },
+                data: { isActive: false, tokenVersion: { increment: 1 } },
+            });
+        });
+    });
+
+    // ==========================================
+    // WEBHOOKS SORTANTS MONGAIN CONNECT (branchés sur /invoices/:id/pay et /reject)
+    // ==========================================
+    describe('Webhooks Mongain Connect sur les factures', () => {
+        const { deliverWebhook } = require('../../utils/webhookDelivery');
+        const customer = { id: 'cust_1', phone: '074000000', wallet: { id: 'wc1', balance: 100000 } };
+
+        it("ne devrait PAS déclencher de webhook pour une facture B2B classique (integrationId null)", async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(customer);
+            (prisma.invoice.findUnique as jest.Mock).mockResolvedValue({
+                id: 'inv1', status: 'PENDING', customerPhone: '074000000', merchantId: 'merchant_1', amount: 5000, integrationId: null,
+            });
+            (prisma.wallet.findUnique as jest.Mock)
+                .mockResolvedValueOnce({ id: 'wc1', balance: 100000 })
+                .mockResolvedValueOnce({ id: 'wm1' });
+
+            const res = await request(app).post('/b2b/invoices/inv1/pay').send({ pin: '1234' });
+
+            expect(res.status).toBe(200);
+            // Laisse les micro-tâches (then/catch) du fire-and-forget webhook s'exécuter avant
+            // d'affirmer qu'il n'a jamais été déclenché.
+            await new Promise((resolve) => setImmediate(resolve));
+            expect(prisma.apiIntegration.findUnique).not.toHaveBeenCalled();
+            expect(deliverWebhook).not.toHaveBeenCalled();
+        });
+
+        it('devrait déclencher un webhook INVOICE_PAID pour une facture Mongain Connect (integrationId non null)', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(customer);
+            (prisma.invoice.findUnique as jest.Mock).mockResolvedValue({
+                id: 'inv2', status: 'PENDING', customerPhone: '074000000', merchantId: 'merchant_1', amount: 5000, integrationId: 'integ_1',
+            });
+            (prisma.wallet.findUnique as jest.Mock)
+                .mockResolvedValueOnce({ id: 'wc1', balance: 100000 })
+                .mockResolvedValueOnce({ id: 'wm1' });
+            (prisma.apiIntegration.findUnique as jest.Mock).mockResolvedValue({ id: 'integ_1', webhookUrl: 'https://x.test/hook' });
+
+            const res = await request(app).post('/b2b/invoices/inv2/pay').send({ pin: '1234' });
+
+            expect(res.status).toBe(200);
+            await new Promise((resolve) => setImmediate(resolve));
+            expect(deliverWebhook).toHaveBeenCalledWith(
+                expect.objectContaining({ id: 'integ_1' }),
+                'INVOICE_PAID',
+                expect.objectContaining({ invoiceId: 'inv2', status: 'PAID', amount: 5000 })
+            );
+        });
+
+        it('devrait déclencher un webhook INVOICE_CANCELLED au rejet d\'une facture Mongain Connect', async () => {
+            (prisma.user.findUnique as jest.Mock).mockResolvedValue(customer);
+            (prisma.invoice.findUnique as jest.Mock).mockResolvedValue({
+                id: 'inv3', status: 'PENDING', customerPhone: '074000000', merchantId: 'merchant_1', amount: 5000, integrationId: 'integ_1',
+            });
+            (prisma.invoice.update as jest.Mock).mockResolvedValue({});
+            (prisma.apiIntegration.findUnique as jest.Mock).mockResolvedValue({ id: 'integ_1', webhookUrl: 'https://x.test/hook' });
+
+            const res = await request(app).post('/b2b/invoices/inv3/reject').send({});
+
+            expect(res.status).toBe(200);
+            await new Promise((resolve) => setImmediate(resolve));
+            expect(deliverWebhook).toHaveBeenCalledWith(
+                expect.objectContaining({ id: 'integ_1' }),
+                'INVOICE_CANCELLED',
+                expect.objectContaining({ invoiceId: 'inv3', status: 'CANCELLED', amount: 5000 })
+            );
         });
     });
 });

@@ -21,7 +21,11 @@ export default function SectionHeading({ colors, title, marginTop = 4, marginBot
         <View style={[styles.row, { marginTop }]}>
             <Text style={[styles.title, { color: colors.textPrimary, marginBottom }]}>{title}</Text>
             {actionIcon && onAction && (
-                <TouchableOpacity onPress={onAction}>
+                // accessibilityLabel=title : l'icône seule n'avait jusqu'ici aucun libellé
+                // (ni pour un lecteur d'écran, ni pour cibler ce bouton dans un test) — le titre
+                // affiché juste à côté n'est PAS un descendant de ce bouton (ligne flex, simples
+                // frères), donc jamais pressable lui-même malgré les apparences visuelles.
+                <TouchableOpacity onPress={onAction} accessibilityLabel={title}>
                     <Ionicons name={actionIcon} size={20} color={colors.primary} />
                 </TouchableOpacity>
             )}

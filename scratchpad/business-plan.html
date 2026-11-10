@@ -1,0 +1,609 @@
+<title>Business Plan Mongain</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Source+Sans+3:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root{
+    --bg:#F6F3EC;
+    --paper:#FFFFFF;
+    --ink:#141A2E;
+    --ink-soft:#4B5266;
+    --line:#E4DFD3;
+    --blue:#2563FF;
+    --blue-soft:#2563FF14;
+    --orange:#C9781A;
+    --orange-soft:#FFB02020;
+    --green:#0E8F5B;
+    --green-soft:#0E8F5B16;
+    --purple:#7E3AF2;
+    --shadow: 0 1px 2px rgba(20,26,46,.04), 0 8px 24px rgba(20,26,46,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0A0F1C; --paper:#111729; --ink:#F3F4F8; --ink-soft:#A7ADC2; --line:#232B45;
+      --blue:#5B85FF; --blue-soft:#5B85FF22; --orange:#FFB020; --orange-soft:#FFB02026;
+      --green:#22C58A; --green-soft:#22C58A1c; --purple:#A382FF;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0A0F1C; --paper:#111729; --ink:#F3F4F8; --ink-soft:#A7ADC2; --line:#232B45;
+    --blue:#5B85FF; --blue-soft:#5B85FF22; --orange:#FFB020; --orange-soft:#FFB02026;
+    --green:#22C58A; --green-soft:#22C58A1c; --purple:#A382FF;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 30px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box}
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:'Source Sans 3', ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing:antialiased; }
+  h1,h2,h3{ font-family:'Fraunces', Georgia, serif; font-weight:600; color:var(--ink); text-wrap:balance; letter-spacing:-0.01em; }
+  a{ color:var(--blue); }
+
+  .wrap{ max-width:1180px; margin:0 auto; padding:0 24px; }
+
+  .cover{ padding:72px 0 56px; border-bottom:1px solid var(--line); }
+  .eyebrow{ display:inline-flex; align-items:center; gap:8px; font-family:'IBM Plex Mono', monospace; font-size:.72rem; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--blue); background:var(--blue-soft); padding:6px 12px; border-radius:100px; margin-bottom:22px; }
+  .eyebrow::before{ content:'●'; font-size:.6rem; }
+  .cover h1{ font-size:clamp(2.1rem, 4vw, 3.2rem); line-height:1.08; margin:0 0 14px; max-width:16ch; }
+  .cover .tagline{ font-size:1.15rem; color:var(--ink-soft); max-width:52ch; line-height:1.55; margin:0 0 26px; }
+  .cover .meta{ display:flex; gap:28px; flex-wrap:wrap; font-size:.85rem; color:var(--ink-soft); margin-bottom:20px; }
+  .cover .meta strong{ color:var(--ink); font-weight:600; }
+  .cover .note{ font-size:.82rem; color:var(--ink-soft); max-width:74ch; line-height:1.6; border-top:1px solid var(--line); padding-top:16px; }
+
+  .layout{ display:grid; grid-template-columns: 240px 1fr; gap:56px; padding:48px 0 100px; align-items:start; }
+  @media (max-width: 860px){ .layout{ grid-template-columns: 1fr; } .toc{ position:static !important; order:2; } }
+
+  .toc{ position:sticky; top:32px; }
+  .toc-label{ font-family:'IBM Plex Mono', monospace; font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:14px; }
+  .toc ol{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; }
+  .toc a{ display:flex; gap:10px; text-decoration:none; color:var(--ink-soft); font-size:.88rem; padding:7px 10px; border-radius:9px; line-height:1.35; }
+  .toc a:hover{ background:var(--blue-soft); color:var(--ink); }
+  .toc a span.n{ font-family:'IBM Plex Mono', monospace; color:var(--blue); font-weight:600; flex-shrink:0; }
+
+  .content{ min-width:0; }
+  section{ margin-bottom:52px; scroll-margin-top:24px; }
+  section .kicker{ font-family:'IBM Plex Mono', monospace; font-size:.78rem; font-weight:600; color:var(--blue); letter-spacing:.08em; margin-bottom:6px; }
+  section h2{ font-size:1.55rem; margin:0 0 18px; }
+  section h3{ font-family:'Source Sans 3', sans-serif; font-weight:700; font-size:1.02rem; color:var(--ink); margin:26px 0 10px; }
+  section p{ font-size:1.02rem; line-height:1.72; color:var(--ink); max-width:74ch; margin:0 0 16px; }
+  section p.lead{ font-size:1.1rem; color:var(--ink-soft); max-width:70ch; }
+  ul.plain{ margin:0 0 16px; padding-left:1.2em; max-width:74ch; }
+  ul.plain li{ font-size:1.02rem; line-height:1.68; margin-bottom:10px; }
+  ul.plain li::marker{ color:var(--blue); }
+  strong{ font-weight:700; }
+
+  .card-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:16px; margin:20px 0 28px; }
+  @media (max-width:640px){ .card-grid{ grid-template-columns:1fr; } }
+  .card{ background:var(--paper); border:1px solid var(--line); border-radius:16px; padding:20px 22px; box-shadow:var(--shadow); }
+  .card h4{ margin:0 0 8px; font-family:'Source Sans 3',sans-serif; font-weight:700; font-size:.98rem; color:var(--ink); display:flex; align-items:center; gap:8px; }
+  .card h4 .dot{ width:8px; height:8px; border-radius:50%; background:var(--blue); flex-shrink:0; }
+  .card p{ font-size:.93rem; line-height:1.6; color:var(--ink-soft); margin:0; }
+
+  .stat-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin:24px 0 30px; }
+  @media (max-width:720px){ .stat-row{ grid-template-columns:1fr; } }
+  .stat{ background:var(--paper); border:1px solid var(--line); border-radius:16px; padding:22px 20px; box-shadow:var(--shadow); }
+  .stat .num{ font-family:'IBM Plex Mono', monospace; font-size:1.85rem; font-weight:600; color:var(--blue); font-variant-numeric:tabular-nums; line-height:1; }
+  .stat .num.orange{ color:var(--orange); }
+  .stat .num.green{ color:var(--green); }
+  .stat .lbl{ font-size:.85rem; color:var(--ink-soft); margin-top:8px; line-height:1.45; }
+  .stat .src{ font-size:.7rem; color:var(--ink-soft); opacity:.7; margin-top:6px; font-family:'IBM Plex Mono',monospace; }
+
+  .pillar{ border-left:3px solid var(--blue); padding:4px 0 4px 20px; margin:18px 0; }
+  .pillar.orange{ border-color:var(--orange); }
+  .pillar.green{ border-color:var(--green); }
+  .pillar.purple{ border-color:var(--purple); }
+  .pillar .pillar-title{ font-weight:700; font-size:1rem; margin-bottom:4px; display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .pillar .pillar-title .tag{ font-family:'IBM Plex Mono',monospace; font-size:.72rem; font-weight:700; color:var(--ink-soft); }
+  .pillar p{ margin:0; }
+
+  .ask-banner{ display:flex; align-items:baseline; gap:20px; flex-wrap:wrap; background:var(--blue-soft); border:1px solid color-mix(in srgb, var(--blue) 35%, transparent); border-radius:16px; padding:24px 26px; margin:20px 0 28px; }
+  .ask-banner .amt{ font-family:'IBM Plex Mono', monospace; font-size:2.4rem; font-weight:600; color:var(--blue); letter-spacing:-0.01em; }
+  .ask-banner .amt small{ font-size:1rem; font-weight:500; color:var(--ink-soft); margin-left:8px; }
+  .ask-banner .desc{ font-size:.95rem; color:var(--ink-soft); max-width:42ch; line-height:1.55; }
+
+  .use-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin:18px 0 30px; }
+  @media (max-width:760px){ .use-grid{ grid-template-columns:repeat(2,1fr); } }
+  .use-item{ background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:16px 16px; box-shadow:var(--shadow); }
+  .use-item .pct{ font-family:'IBM Plex Mono', monospace; font-size:1.4rem; font-weight:600; color:var(--purple); font-variant-numeric:tabular-nums; }
+  .use-item .amt3{ font-family:'IBM Plex Mono', monospace; font-size:.78rem; color:var(--ink-soft); margin-top:2px; }
+  .use-item .lbl{ font-size:.83rem; color:var(--ink-soft); margin-top:6px; line-height:1.4; }
+
+  .chart-card{ background:var(--paper); border:1px solid var(--line); border-radius:18px; padding:26px 26px 10px; box-shadow:var(--shadow); margin:22px 0 10px; }
+  .chart-card .chart-title{ font-size:.85rem; font-weight:700; color:var(--ink); margin-bottom:2px; }
+  .chart-card .chart-sub{ font-size:.82rem; color:var(--ink-soft); margin-bottom:14px; }
+  .chart-svg-wrap{ position:relative; width:100%; }
+  .chart-svg-wrap svg{ width:100%; height:auto; display:block; overflow:visible; }
+  .grid-line{ stroke:var(--line); stroke-width:1; }
+  .axis-label{ font-family:'IBM Plex Mono', monospace; font-size:11px; fill:var(--ink-soft); }
+  .rev-line{ fill:none; stroke:var(--blue); stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
+  .rev-area{ fill:var(--blue); opacity:.08; }
+  .rev-dot{ fill:var(--blue); stroke:var(--paper); stroke-width:2; }
+  .ebitda-line{ fill:none; stroke:var(--orange); stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:0; }
+  .ebitda-dot{ fill:var(--orange); stroke:var(--paper); stroke-width:2; }
+  .zero-line{ stroke:var(--ink-soft); stroke-width:1; stroke-dasharray:3 3; opacity:.6; }
+  .crosshair{ stroke:var(--ink-soft); stroke-width:1; opacity:0; pointer-events:none; }
+  .end-label{ font-family:'IBM Plex Mono', monospace; font-size:12px; font-weight:600; }
+  .hit-col{ fill:transparent; cursor:pointer; }
+  .legend-row{ display:flex; gap:20px; margin:0 0 6px; flex-wrap:wrap; }
+  .legend-item{ display:flex; align-items:center; gap:7px; font-size:.8rem; color:var(--ink-soft); }
+  .legend-swatch{ width:14px; height:3px; border-radius:2px; }
+  .chart-tooltip{ position:absolute; pointer-events:none; opacity:0; transition:opacity .1s; background:var(--ink); color:#fff; font-size:.76rem; padding:9px 12px; border-radius:9px; transform:translate(-50%,-118%); white-space:nowrap; box-shadow:var(--shadow); z-index:5; line-height:1.6; }
+  :root[data-theme="dark"] .chart-tooltip, :root:not([data-theme="light"]) .chart-tooltip{ background:#F3F4F8; color:#0A0F1C; }
+  .chart-tooltip .tv{ font-family:'IBM Plex Mono', monospace; font-weight:700; font-variant-numeric:tabular-nums; }
+  .chart-tooltip .tl{ opacity:.7; margin-bottom:2px; font-weight:700; }
+  .chart-note{ font-size:.83rem; color:var(--ink-soft); line-height:1.6; max-width:74ch; margin:14px 0 0; }
+
+  .bar-list{ margin:18px 0 8px; }
+  .bar-row{ display:grid; grid-template-columns:210px 1fr 100px; gap:14px; align-items:center; margin-bottom:11px; }
+  @media (max-width:600px){ .bar-row{ grid-template-columns:1fr; gap:4px; } .bar-row .amt3b{ text-align:left; } }
+  .bar-row .lbl2{ font-size:.88rem; color:var(--ink); }
+  .bar-track2{ height:11px; border-radius:6px; background:var(--blue-soft); overflow:hidden; }
+  .bar-fill2{ height:100%; background:var(--blue); border-radius:6px; }
+  .bar-row .amt3b{ font-family:'IBM Plex Mono', monospace; font-size:.8rem; text-align:right; color:var(--ink-soft); font-variant-numeric:tabular-nums; }
+
+  .tbl-wrap{ overflow-x:auto; margin:16px 0 8px; }
+  table.comp-table{ width:100%; border-collapse:collapse; font-size:.9rem; min-width:640px; }
+  .comp-table th{ text-align:left; font-family:'IBM Plex Mono',monospace; font-size:.66rem; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); padding:8px 14px 8px 0; border-bottom:1px solid var(--line); white-space:nowrap; }
+  .comp-table td{ padding:11px 14px 11px 0; border-bottom:1px solid var(--line); color:var(--ink); vertical-align:top; }
+  .comp-table tr:last-child td{ border-bottom:none; }
+  .comp-table td.num{ font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .comp-table td.muted{ color:var(--ink-soft); font-size:.85rem; }
+
+  .valuation-table{ width:100%; border-collapse:collapse; margin:14px 0 8px; font-size:.94rem; }
+  .valuation-table th{ text-align:right; font-family:'IBM Plex Mono',monospace; font-size:.68rem; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); padding:8px 10px; border-bottom:1px solid var(--line); }
+  .valuation-table th:first-child{ text-align:left; }
+  .valuation-table td{ padding:10px; text-align:right; border-bottom:1px solid var(--line); font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums; }
+  .valuation-table td:first-child{ text-align:left; font-family:'Source Sans 3',sans-serif; color:var(--ink); }
+  .valuation-table tr.total td{ font-weight:700; color:var(--ink); }
+  .valuation-table tr:last-child td{ border-bottom:none; }
+
+  .callout{ background:var(--orange-soft); border:1px solid color-mix(in srgb, var(--orange) 40%, transparent); border-radius:14px; padding:18px 20px; margin:20px 0; max-width:74ch; }
+  .callout p{ margin:0; font-size:.95rem; line-height:1.6; color:var(--ink); }
+  .callout .tag{ font-family:'IBM Plex Mono', monospace; font-size:.7rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--orange); display:block; margin-bottom:8px; }
+  .callout.green{ background:var(--green-soft); border-color:color-mix(in srgb, var(--green) 40%, transparent); }
+  .callout.green .tag{ color:var(--green); }
+
+  .foot-src{ font-size:.76rem; color:var(--ink-soft); line-height:1.7; max-width:80ch; margin-top:18px; padding-top:14px; border-top:1px solid var(--line); }
+  .foot-src strong{ color:var(--ink-soft); }
+
+  .closing{ background:var(--ink); color:#F3F4F8; border-radius:20px; padding:44px 40px; margin-top:8px; }
+  .closing h2{ color:#fff; }
+  .closing p{ color:#C7CBDA; font-size:1.05rem; max-width:70ch; }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]) .closing{ background:var(--paper); border:1px solid var(--line); }
+    :root:not([data-theme="light"]) .closing h2{ color:var(--ink); }
+    :root:not([data-theme="light"]) .closing p{ color:var(--ink-soft); }
+  }
+  :root[data-theme="dark"] .closing{ background:var(--paper); border:1px solid var(--line); }
+  :root[data-theme="dark"] .closing h2{ color:var(--ink); }
+  :root[data-theme="dark"] .closing p{ color:var(--ink-soft); }
+
+  footer.doc{ padding:30px 0 60px; border-top:1px solid var(--line); margin-top:20px; }
+  footer.doc p{ font-size:.82rem; color:var(--ink-soft); margin:0 0 4px; }
+</style>
+
+<div class="cover">
+  <div class="wrap">
+    <span class="eyebrow">Plan d'affaires · Confidentiel</span>
+    <h1>Mongain</h1>
+    <p class="tagline">L'OS de la finance communautaire, marchande et familiale en Afrique Centrale — un produit déjà construit et opérationnel, qui lève 1,8 milliard FCFA pour passer à l'échelle sur 5 ans.</p>
+    <div class="meta">
+      <span><strong>Marché pilote</strong> — Gabon (zone CEMAC)</span>
+      <span><strong>Catégorie</strong> — Super-app fintech</span>
+      <span><strong>Statut</strong> — Socle produit complet</span>
+      <span><strong>Levée</strong> — 1,8 Md FCFA / horizon 5 ans</span>
+    </div>
+    <p class="note">Les projections financières (sections 06 à 08) sont des estimations de modélisation fondées sur les mécaniques de monétisation réellement codées dans le produit (taux de commission, formules de crédit, taux d'épargne) et sur des hypothèses de croissance explicitées — pas des résultats audités ni des engagements. Les données de marché (section 04) sont sourcées ; chaque chiffre cite sa source en bas de section.</p>
+  </div>
+</div>
+
+<div class="wrap layout">
+  <nav class="toc">
+    <div class="toc-label">Sommaire</div>
+    <ol>
+      <li><a href="#resume"><span class="n">01</span>Résumé exécutif</a></li>
+      <li><a href="#probleme"><span class="n">02</span>Problème &amp; opportunité</a></li>
+      <li><a href="#solution"><span class="n">03</span>La solution</a></li>
+      <li><a href="#marche"><span class="n">04</span>Marché &amp; concurrence</a></li>
+      <li><a href="#revenus"><span class="n">05</span>Modèle économique</a></li>
+      <li><a href="#plan5ans"><span class="n">06</span>Plan financier 5 ans</a></li>
+      <li><a href="#financement"><span class="n">07</span>Levée &amp; emploi des fonds</a></li>
+      <li><a href="#rendement"><span class="n">08</span>Rendement investisseur</a></li>
+      <li><a href="#acquisition"><span class="n">09</span>Acquisition &amp; avantage</a></li>
+      <li><a href="#conformite"><span class="n">10</span>Conformité</a></li>
+      <li><a href="#roadmap"><span class="n">11</span>Roadmap</a></li>
+      <li><a href="#conclusion"><span class="n">12</span>Conclusion</a></li>
+    </ol>
+  </nav>
+
+  <div class="content">
+
+    <section id="resume">
+      <div class="kicker">01 — RÉSUMÉ EXÉCUTIF</div>
+      <h2>Une super-app, pas un produit de paiement de plus</h2>
+      <p class="lead">Mongain est une super-app fintech (mobile money, core banking et services financiers) conçue pour l'Afrique centrale, avec le Gabon comme marché pilote. Elle lève <strong>1,8 milliard FCFA</strong> pour financer sa mise à l'échelle sur 5 ans.</p>
+      <p>Contrairement aux solutions de paiement classiques limitées au transfert P2P, Mongain s'est construit comme un système d'exploitation financier complet : un portefeuille grand public ultra-social (Caisses Communes, Tontines, Comptes Enfant), une gamme de produits financiers actifs en production (micro-crédit, BNPL, épargne rémunérée par staking) et un ERP institutionnel (logiciel de caisse gratuit, portail agents/marchands, back-office RBAC) qui transforme chaque boutiquier en agence physique du réseau.</p>
+      <p><strong>Ce n'est pas un concept sur papier.</strong> Le socle technique — backend, application mobile, portail d'administration — est déjà construit et opérationnel. Ce document décrit ce produit réel, son marché, son modèle économique vérifié dans le code, un plan financier à 5 ans construit poste par poste, et le montant précis recherché pour l'exécuter.</p>
+      <div class="stat-row">
+        <div class="stat"><div class="num">1,8 Md</div><div class="lbl">FCFA recherchés, au-delà du plancher de 1,6 Md fixé par les besoins de trésorerie et de croissance (détail section 07).</div></div>
+        <div class="stat"><div class="num orange">11,1 Md</div><div class="lbl">FCFA de revenu annuel projeté en Année 5, contre 41 M en Année 1 (section 06).</div></div>
+        <div class="stat"><div class="num green">3,7x — 6,2x</div><div class="lbl">multiple de retour estimé sur 5 ans pour l'investisseur de ce tour, scénario prudent (section 08).</div></div>
+      </div>
+    </section>
+
+    <section id="probleme">
+      <div class="kicker">02 — LE PROBLÈME ET L'OPPORTUNITÉ</div>
+      <h2>Quatre angles morts que le marché ignore</h2>
+      <p>L'économie d'Afrique centrale repose sur des piliers que les opérateurs télécoms et les agrégateurs numériques sous-exploitent :</p>
+      <div class="card-grid">
+        <div class="card"><h4><span class="dot"></span>Finance communautaire archaïque</h4><p>Tontines, cotisations de deuil, cagnottes familiales : des milliards de FCFA gérés sur cahiers manuscrits, en liquide, sans traçabilité en cas de litige.</p></div>
+        <div class="card"><h4><span class="dot"></span>Boutiquiers sous-équipés</h4><p>Les kiosques mobile money utilisent des codes USSD lents, sans outil moderne de caisse, de comptabilité ou de suivi de leur float.</p></div>
+        <div class="card"><h4><span class="dot"></span>Services avancés hors de portée</h4><p>Crédit instantané, épargne rémunérée, cartes de paiement en ligne : des produits urbains et bancarisés, inaccessibles à l'utilisateur mobile money moyen.</p></div>
+        <div class="card"><h4><span class="dot"></span>La famille, angle mort du produit</h4><p>Aucun moyen numérique sûr et supervisé pour un parent d'initier son enfant à la gestion de l'argent — seul le liquide existe, sans traçabilité ni contrôle.</p></div>
+      </div>
+    </section>
+
+    <section id="solution">
+      <div class="kicker">03 — LA SOLUTION</div>
+      <h2>Chaque brique renforce les autres</h2>
+      <p class="lead">Une plateforme où chaque fonctionnalité crée une barrière à l'entrée qu'un concurrent mono-produit ne peut répliquer isolément.</p>
+
+      <h3>Pour les particuliers (application mobile B2C)</h3>
+      <ul class="plain">
+        <li><strong>Compte courant digital complet</strong> — portefeuille FCFA, virements P2P instantanés, retraits/dépôts via agents et QR marchand, historique et notifications en temps réel.</li>
+        <li><strong>Caisses Communes &amp; Tontines Numériques</strong> — portefeuilles partagés à solde visible en temps réel, prélèvements automatiques, quorum d'approbation configurable, bons de retrait, relevés exportables.</li>
+      </ul>
+
+      <div class="callout">
+        <span class="tag">Différenciateur unique</span>
+        <p><strong>Comptes Enfant (supervision parentale).</strong> Un parent crée un compte à part entière pour son enfant (son propre numéro, son propre code PIN), définit un plafond de dépense journalier ou hebdomadaire, recharge son solde sans frais, et reçoit une notification en temps réel à chaque dépense ainsi qu'un historique complet. Aucun autre produit de la zone ne traite l'éducation financière et la sécurité des mineurs comme une fonctionnalité native.</p>
+      </div>
+
+      <ul class="plain">
+        <li><strong>Micro-crédit &amp; BNPL en production</strong> — avance jusqu'à 500 000 FCFA sous condition de KYC et de points de fidélité, ou paiement en plusieurs fois jusqu'à 50 000 FCFA sur 1 à 4 mois.</li>
+        <li><strong>Coffres de staking</strong> — blocage volontaire de fonds (dès 10 000 FCFA, 1 à 60 mois) contre 5 à 8 % de rendement annuel garanti.</li>
+        <li><strong>Cartes virtuelles, crypto-actifs, transferts internationaux</strong> — construits et visibles dans l'app ; leur activation commerciale dépend d'un partenaire externe (émetteur de cartes, bourse, opérateur de remise) et est budgétée dans le plan de déploiement (sections 06-07).</li>
+        <li><strong>Factures, recharge de crédit, points de fidélité</strong> — les usages du quotidien centralisés, également en attente d'intégration partenaire (SEEG, Canal+, Airtel/Moov).</li>
+        <li><strong>Accès USSD</strong> — le transfert P2P reste accessible depuis un téléphone non connecté.</li>
+        <li><strong>Sécurité de niveau bancaire</strong> — verrouillage biométrique, détection algorithmique de fraude, plafonds progressifs par palier KYC (50 000 / 2 000 000 / 5 000 000 FCFA par jour).</li>
+      </ul>
+
+      <h3>Pour les marchands et agents (application + portail web B2B/ERP)</h3>
+      <ul class="plain">
+        <li><strong>Logiciel de caisse gratuit</strong> — sessions de caisse, rapprochement X/Z ; l'adopter transforme le boutiquier en point cash-in/cash-out du réseau.</li>
+        <li><strong>Réseau d'agences et d'agents</strong> — gestion de succursales, tellers, float, injection de liquidités depuis le siège.</li>
+        <li><strong>RBAC ultra-granulaire</strong> — comptabilité temps réel et matrice de droits pour piloter plusieurs caissiers ou agences.</li>
+      </ul>
+
+      <h3>Pour l'institution (back-office corporate)</h3>
+      <p>Un portail d'administration complet — conformité KYC, réclamations, détection de fraude, gel de comptes, trésorerie centrale, paramètres système — déjà opérationnel, pas un engagement sur plan.</p>
+    </section>
+
+    <section id="marche">
+      <div class="kicker">04 — MARCHÉ &amp; CONCURRENCE</div>
+      <h2>Un marché mobile-first, en forte croissance, sans concurrent financé</h2>
+      <p class="lead">Le Gabon affiche la meilleure base d'adoption mobile money d'Afrique centrale ; la zone CEMAC reste dominée par des filiales d'opérateurs télécoms, pas par des startups indépendantes.</p>
+
+      <div class="stat-row">
+        <div class="stat"><div class="num">1,62 M</div><div class="lbl">comptes mobile money actifs au Gabon (+26 % sur un an), sur une population de 2,57 M.</div><div class="src">DGEPF, via Direct Infos Gabon, janv. 2025</div></div>
+        <div class="stat"><div class="num orange">18,1 M</div><div class="lbl">comptes mobile money actifs estimés dans toute la zone CEMAC (51,3 M comptes enregistrés, +28 % sur un an).</div><div class="src">Rapport BEAC 2024, via 4M Legal &amp; Tax</div></div>
+        <div class="stat"><div class="num green">91 %</div><div class="lbl">taux d'urbanisation du Gabon — le plus élevé d'Afrique centrale, terrain favorable à un produit mobile-first.</div><div class="src">Banque mondiale, 2024</div></div>
+      </div>
+
+      <h3>Cadrage TAM / SAM / SOM</h3>
+      <p>Le marché total adressable (TAM) au Gabon correspond directement à la base active mobile money actuelle. Le marché obtenable à 5 ans (SOM) est une hypothèse de pénétration à valider par le plan commercial réel, pas une donnée de marché :</p>
+      <div class="bar-list">
+        <div class="bar-row"><span class="lbl2"><strong>TAM Gabon</strong> — comptes mobile money actifs</span><div class="bar-track2"><div class="bar-fill2" style="width:100%;background:var(--blue);"></div></div><span class="amt3b">1,6 M pers.</span></div>
+        <div class="bar-row"><span class="lbl2"><strong>SAM</strong> — Gabon urbain + 1-2 marchés CEMAC limitrophes (5 ans)</span><div class="bar-track2"><div class="bar-fill2" style="width:100%;background:var(--orange);"></div></div><span class="amt3b">2,3 — 3,1 M pers.</span></div>
+        <div class="bar-row"><span class="lbl2"><strong>SOM</strong> — objectif Gabon-first à 5 ans (10-20 % du TAM)</span><div class="bar-track2"><div class="bar-fill2" style="width:20%;background:var(--green);"></div></div><span class="amt3b">160k — 320k pers.</span></div>
+      </div>
+      <p class="chart-note">Le plan financier (section 06) retient une hypothèse médiane de 580 000 utilisateurs actifs mensuels en Année 5 sur une base de 1 000 000 d'inscrits cumulés, cohérente avec le SOM ci-dessus une fois le compte tenu du multi-comptes par foyer (Comptes Enfant) et de l'expansion régionale early-stage.</p>
+
+      <h3>Paysage concurrentiel</h3>
+      <p>Le marché gabonais du mobile money est un duopole opérateur : <strong>Airtel Money</strong> (≈58 % de part de marché), <strong>Moov Money/Moov Africa</strong> (≈37 %) et BGFIMobile, adossé à BGFIBank (≈5 %). À l'échelle CEMAC, Airtel Money est le seul acteur présent dans les six pays de la zone, le Cameroun concentrant 65 % des comptes régionaux. Aucun de ces acteurs n'opère de super-app communautaire ; ce sont des portefeuilles mobile money classiques adossés à un réseau télécom, sans Caisses Communes, Comptes Enfant, crédit intégré ni logiciel de caisse marchand.</p>
+      <p><strong>Les fintechs indépendantes financées sont quasi absentes de la zone CEMAC.</strong> Le seul comparable géographique direct est Maviance (Cameroun), une opération d'amorçage de 3 M USD, très en-deçà de l'ambition de Mongain. Les comparables les plus pertinents viennent donc de la zone UEMOA francophone voisine ou d'Afrique pan-continentale :</p>
+
+      <div class="tbl-wrap">
+        <table class="comp-table">
+          <thead><tr><th>Société</th><th>Marché</th><th>Tour</th><th>Montant</th><th>Valorisation</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Wave</strong></td><td class="muted">Sénégal / UEMOA</td><td class="muted">Série A (2021)</td><td class="num">200 M USD</td><td class="num">1,7 Md USD</td></tr>
+            <tr><td><strong>Djamo</strong></td><td class="muted">Côte d'Ivoire / UEMOA</td><td class="muted">Série B (2025)</td><td class="num">17 M USD</td><td class="muted">non divulguée</td></tr>
+            <tr><td><strong>Chipper Cash</strong></td><td class="muted">Pan-africain</td><td class="muted">Ext. Série C (2021)</td><td class="num">150 M USD</td><td class="num">&gt;2 Md USD (pic)</td></tr>
+            <tr><td><strong>PalmPay</strong></td><td class="muted">Nigeria</td><td class="muted">Série A (2021)</td><td class="num">100 M USD</td><td class="muted">proche licorne</td></tr>
+            <tr><td><strong>MFS Africa</strong></td><td class="muted">Pan-africain (infra B2B)</td><td class="muted">Série C (2021-22)</td><td class="num">200 M USD</td><td class="muted">non divulguée</td></tr>
+            <tr><td><strong>Maviance</strong></td><td class="muted">Cameroun / CEMAC</td><td class="muted">Amorçage (2021)</td><td class="num">3 M USD</td><td class="muted">non divulguée</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="foot-src"><strong>Sources :</strong> DGEPF/Direct Infos Gabon (2025) ; Rapport BEAC sur les services de paiement 2024, via 4M Legal &amp; Tax et Business in Cameroon (2025) ; Banque mondiale (population, urbanisation, PIB, 2024) ; CB Insights et FinTech Futures sur Wave (2021) ; TechCrunch sur Djamo (2025), Chipper Cash (2021) et PalmPay (2022) ; TechCabal sur MFS Africa et Maviance (2021-22). Liste complète des 28 sources et notes de confiance disponible dans le dossier de travail interne <code>market-research.md</code>.</p>
+    </section>
+
+    <section id="revenus">
+      <div class="kicker">05 — MODÈLE ÉCONOMIQUE</div>
+      <h2>Cinq mécaniques de revenu, déjà codées et actives</h2>
+      <p class="lead">Chaque taux cité ci-dessous est le taux réel appliqué par le backend en production aujourd'hui — pas une hypothèse marketing.</p>
+
+      <div class="pillar">
+        <div class="pillar-title">Frais de transfert <span class="tag">1 % · pay-as-you-go</span></div>
+        <p>Prélevé sur chaque transfert P2P et retrait/dépôt agent externe. Gratuit pour une recharge d'un parent vers le compte de son enfant — un choix de confiance qui accélère l'adoption familiale.</p>
+      </div>
+      <div class="pillar orange">
+        <div class="pillar-title">Micro-crédit &amp; BNPL <span class="tag">5 % flat sur chaque produit</span></div>
+        <p>Micro-crédit : jusqu'à 500 000 FCFA, sous condition de KYC niveau 1+ et 100+ points de fidélité. BNPL (« Paiement x3 ») : jusqu'à 50 000 FCFA, remboursable sur 1 à 4 mois, une dette active à la fois. Intérêt/frais flat de 5 % sur les deux produits.</p>
+      </div>
+      <div class="pillar green">
+        <div class="pillar-title">Spread sur l'épargne bloquée <span class="tag">Staking, 5-8 % APY versé</span></div>
+        <p>L'utilisateur perçoit 5 % (8 % si blocage ≥12 mois) ; les fonds bloqués transitent par la Trésorerie Centrale, où leur redéploiement génère un spread qui devient une ligne de revenu à mesure que l'encours grossit.</p>
+      </div>
+      <div class="pillar purple">
+        <div class="pillar-title">SaaS B2B freemium <span class="tag">Abonnement multi-caisse</span></div>
+        <p>Le logiciel de caisse est gratuit pour un marchand mono-poste ; l'abonnement s'active dès plusieurs accès caissiers ou plusieurs agences.</p>
+      </div>
+      <div class="pillar">
+        <div class="pillar-title">Passerelles partenaires <span class="tag">Mobile Money, factures, cartes, remises, crypto</span></div>
+        <p>Construites et visibles dans l'app, en attente d'intégration commerciale (voir section 06) : chacune devient une ligne de revenu supplémentaire dès son activation, sans développement produit additionnel.</p>
+      </div>
+
+      <table class="valuation-table" style="margin-top:22px;">
+        <thead><tr><th>Palier KYC</th><th>Plafond portefeuille / jour</th></tr></thead>
+        <tbody>
+          <tr><td>Tier 0 (standard, non vérifié)</td><td>50 000 FCFA</td></tr>
+          <tr><td>Tier 1 (identité vérifiée)</td><td>2 000 000 FCFA</td></tr>
+          <tr><td>Tier 2 (vérification renforcée)</td><td>5 000 000 FCFA</td></tr>
+        </tbody>
+      </table>
+      <p class="chart-note">La montée en palier KYC est le principal levier d'ARPU du modèle (section 06) : elle déplafonne le volume de transactions qu'un utilisateur peut faire transiter, sans changer le taux de commission appliqué.</p>
+    </section>
+
+    <section id="plan5ans">
+      <div class="kicker">06 — PLAN FINANCIER 5 ANS</div>
+      <h2>De 41 M à 11,1 Md FCFA de revenu annuel</h2>
+      <p class="lead">Le modèle est construit poste par poste (utilisateurs × ARPU × taux de prise), pas extrapolé d'un pourcentage de croissance arbitraire. Le détail complet (GMV par flux, charges par catégorie) figure dans le modèle financier de travail.</p>
+
+      <div class="chart-card">
+        <div class="chart-title">Revenu et EBITDA annuels projetés</div>
+        <div class="chart-sub">M FCFA · Année 1 à Année 5 — projection illustrative, hypothèses détaillées ci-dessous</div>
+        <div class="legend-row">
+          <div class="legend-item"><span class="legend-swatch" style="background:var(--blue);"></span>Revenu total</div>
+          <div class="legend-item"><span class="legend-swatch" style="background:var(--orange);"></span>EBITDA</div>
+        </div>
+        <div class="chart-svg-wrap">
+          <svg viewBox="0 0 680 300" role="img" aria-label="Revenu total croissant de 41 millions FCFA en Année 1 à 11,1 milliards en Année 5 ; EBITDA négatif en Années 1-2 (-480 puis -300 millions), positif dès l'Année 3 et atteignant 8,1 milliards en Année 5">
+            <line class="grid-line" x1="60" y1="20"  x2="600" y2="20"/>
+            <line class="grid-line" x1="60" y1="75.38" x2="600" y2="75.38"/>
+            <line class="grid-line" x1="60" y1="130.77" x2="600" y2="130.77"/>
+            <line class="grid-line" x1="60" y1="186.15" x2="600" y2="186.15"/>
+            <line class="zero-line" x1="60" y1="241.54" x2="600" y2="241.54"/>
+            <text class="axis-label" x="52" y="23" text-anchor="end">12 Md</text>
+            <text class="axis-label" x="52" y="78" text-anchor="end">9 Md</text>
+            <text class="axis-label" x="52" y="134" text-anchor="end">6 Md</text>
+            <text class="axis-label" x="52" y="189" text-anchor="end">3 Md</text>
+            <text class="axis-label" x="52" y="245" text-anchor="end">0</text>
+
+            <path class="rev-area" d="M60,241.54 L60,240.78 L195,232.77 L330,204.41 L465,139.54 L600,36.17 L600,241.54 Z"/>
+            <path class="rev-line" d="M60,240.78 L195,232.77 L330,204.41 L465,139.54 L600,36.17"/>
+            <path class="ebitda-line" d="M60,250.4 L195,247.08 L330,229.24 L465,177.77 L600,91.11"/>
+
+            <circle class="rev-dot" cx="60"  cy="240.78" r="4.5"/>
+            <circle class="rev-dot" cx="195" cy="232.77" r="4.5"/>
+            <circle class="rev-dot" cx="330" cy="204.41" r="4.5"/>
+            <circle class="rev-dot" cx="465" cy="139.54" r="4.5"/>
+            <circle class="rev-dot" cx="600" cy="36.17"  r="5"/>
+
+            <circle class="ebitda-dot" cx="60"  cy="250.4"  r="4.5"/>
+            <circle class="ebitda-dot" cx="195" cy="247.08" r="4.5"/>
+            <circle class="ebitda-dot" cx="330" cy="229.24" r="4.5"/>
+            <circle class="ebitda-dot" cx="465" cy="177.77" r="4.5"/>
+            <circle class="ebitda-dot" cx="600" cy="91.11"  r="5"/>
+
+            <text class="end-label" x="600" y="24" text-anchor="middle" fill="var(--blue)">11,1 Md</text>
+            <text class="end-label" x="600" y="108" text-anchor="middle" fill="var(--orange)">8,1 Md</text>
+
+            <text class="axis-label" x="60"  y="262" text-anchor="middle">Année 1</text>
+            <text class="axis-label" x="195" y="262" text-anchor="middle">Année 2</text>
+            <text class="axis-label" x="330" y="262" text-anchor="middle">Année 3</text>
+            <text class="axis-label" x="465" y="262" text-anchor="middle">Année 4</text>
+            <text class="axis-label" x="600" y="262" text-anchor="middle">Année 5</text>
+
+            <line id="p5Crosshair" class="crosshair" x1="0" y1="10" x2="0" y2="255"/>
+
+            <rect tabindex="0" class="hit-col" data-cx="60"  data-year="Année 1" data-rev="41 M FCFA"     data-eb="-480 M FCFA" x="0"   y="10" width="127" height="250"/>
+            <rect tabindex="0" class="hit-col" data-cx="195" data-year="Année 2" data-rev="475 M FCFA"    data-eb="-300 M FCFA" x="127" y="10" width="135" height="250"/>
+            <rect tabindex="0" class="hit-col" data-cx="330" data-year="Année 3" data-rev="2 011 M FCFA"  data-eb="666 M FCFA"  x="262" y="10" width="135" height="250"/>
+            <rect tabindex="0" class="hit-col" data-cx="465" data-year="Année 4" data-rev="5 525 M FCFA"  data-eb="3 454 M FCFA" x="397" y="10" width="135" height="250"/>
+            <rect tabindex="0" class="hit-col" data-cx="600" data-year="Année 5" data-rev="11 124 M FCFA" data-eb="8 148 M FCFA" x="532" y="10" width="148" height="250"/>
+          </svg>
+          <div id="p5Tooltip" class="chart-tooltip"><div class="tl" id="p5TooltipYear"></div><div class="tv" id="p5TooltipRev"></div><div class="tv" id="p5TooltipEb" style="color:var(--orange);"></div></div>
+        </div>
+      </div>
+      <p class="chart-note">Le point bas de trésorerie se situe fin Année 2 (720 M FCFA restants sur la levée), toujours positif. L'EBITDA bascule positif dès l'Année 3 (marge de 33 %) et atteint 73 % de marge en Année 5, porté par l'activation progressive de la passerelle Mobile Money (Année 2), des factures/airtime (Année 2), des cartes et remises (Année 3) et de la crypto (Année 4, pondération volontairement marginale).</p>
+
+      <h3>Utilisateurs et volume de transactions (GMV)</h3>
+      <div class="bar-list">
+        <div class="bar-row"><span class="lbl2">Année 1 — 35k inscrits, 12k MAU</span><div class="bar-track2"><div class="bar-fill2" style="width:3.9%;"></div></div><span class="amt3b">3,7 Md GMV</span></div>
+        <div class="bar-row"><span class="lbl2">Année 2 — 140k inscrits, 60k MAU</span><div class="bar-track2"><div class="bar-fill2" style="width:14.6%;"></div></div><span class="amt3b">43 Md GMV</span></div>
+        <div class="bar-row"><span class="lbl2">Année 3 — 350k inscrits, 175k MAU</span><div class="bar-track2"><div class="bar-fill2" style="width:37.8%;"></div></div><span class="amt3b">178,9 Md GMV</span></div>
+        <div class="bar-row"><span class="lbl2">Année 4 — 650k inscrits, 360k MAU</span><div class="bar-track2"><div class="bar-fill2" style="width:65.5%;"></div></div><span class="amt3b">477,6 Md GMV</span></div>
+        <div class="bar-row"><span class="lbl2">Année 5 — 1,0 M inscrits, 580k MAU</span><div class="bar-track2"><div class="bar-fill2" style="width:100%;"></div></div><span class="amt3b">945,4 Md GMV</span></div>
+      </div>
+      <p class="chart-note">Le taux de prise composite (revenu/GMV) passe de 1,1 % à 1,18 % à mesure que le mix se déplace vers les lignes à marge plus élevée (crédit, SaaS). La croissance des inscrits est portée par deux boucles virales déjà intégrées au produit : une Caisse Commune ouverte pour un événement familial recrute mécaniquement ses participants ; chaque parent peut créer plusieurs Comptes Enfant réels au sein du même foyer.</p>
+
+      <div class="callout green">
+        <span class="tag">Ce qui est simplifié dans ce modèle</span>
+        <p>Le livre de micro-crédit/BNPL est traité comme financé par l'encours de staking croissant plutôt que modélisé avec un bilan de pertes sur créances détaillé ; le capex du réseau d'agents est passé en charge l'année de déploiement plutôt qu'amorti. Un modèle de bilan complet est la prochaine itération recommandée avant un tour de série A.</p>
+      </div>
+    </section>
+
+    <section id="financement">
+      <div class="kicker">07 — LEVÉE DE FONDS &amp; EMPLOI DES FONDS</div>
+      <h2>1,8 milliard FCFA pour couvrir le creux et amorcer le crédit</h2>
+      <p class="lead">Le produit est construit ; le capital recherché finance sa mise à l'échelle commerciale et le passage des passerelles partenaires à l'état actif, pas le développement du socle.</p>
+
+      <div class="ask-banner">
+        <div class="amt">1,8 <small>milliard FCFA</small></div>
+        <div class="desc">Construit de bas en haut : 1 078 M FCFA pour couvrir le creux de trésorerie Année 1-2, 300 M FCFA de fonds de roulement pour amorcer le crédit/BNPL, 620 M FCFA de réserve de sécurité — soit 9 mois de charges au rythme de l'Année 2, sans recours à un financement relais.</div>
+      </div>
+
+      <h3>Répartition de la levée par catégorie</h3>
+      <div class="use-grid">
+        <div class="use-item"><div class="pct">34 %</div><div class="amt3">620 M FCFA</div><div class="lbl">Réserve de trésorerie (coussin de sécurité, mobilisable si l'exécution prend du retard)</div></div>
+        <div class="use-item"><div class="pct">21 %</div><div class="amt3">380 M FCFA</div><div class="lbl">Effectifs — équipe technique, conformité, opérations (Années 1-2)</div></div>
+        <div class="use-item"><div class="pct">14 %</div><div class="amt3">250 M FCFA</div><div class="lbl">Fonds de roulement — amorçage du livre micro-crédit/BNPL/float</div></div>
+        <div class="use-item"><div class="pct">10 %</div><div class="amt3">180 M FCFA</div><div class="lbl">Marketing &amp; acquisition (CAC) — avant que les boucles virales prennent le relais</div></div>
+        <div class="use-item"><div class="pct">9 %</div><div class="amt3">160 M FCFA</div><div class="lbl">Intégrations partenaires — passerelle Mobile Money en priorité, puis factures/cartes</div></div>
+        <div class="use-item"><div class="pct">6 %</div><div class="amt3">115 M FCFA</div><div class="lbl">Conformité &amp; licences — agrément BEAC/COBAC, audits, dispositif AML</div></div>
+        <div class="use-item"><div class="pct">3 %</div><div class="amt3">55 M FCFA</div><div class="lbl">Réseau d'agents — déploiement capex Années 1-2</div></div>
+        <div class="use-item"><div class="pct">2 %</div><div class="amt3">40 M FCFA</div><div class="lbl">Cloud &amp; infrastructure</div></div>
+      </div>
+
+      <h3>Réconciliation : dépense totale sur 5 ans</h3>
+      <table class="valuation-table">
+        <thead><tr><th>Poste</th><th>Total 5 ans</th><th>dont levée</th><th>dont autofinancé</th></tr></thead>
+        <tbody>
+          <tr><td>Effectifs / RH</td><td>4 558 M</td><td>380 M</td><td>4 178 M</td></tr>
+          <tr><td>Marketing &amp; CAC</td><td>1 130 M</td><td>180 M</td><td>950 M</td></tr>
+          <tr><td>Réseau d'agents</td><td>460 M</td><td>55 M</td><td>405 M</td></tr>
+          <tr><td>Conformité &amp; licences</td><td>440 M</td><td>115 M</td><td>325 M</td></tr>
+          <tr><td>Cloud / infrastructure</td><td>825 M</td><td>40 M</td><td>785 M</td></tr>
+          <tr><td>Intégrations partenaires</td><td>275 M</td><td>160 M</td><td>115 M</td></tr>
+          <tr><td>Fonds de roulement</td><td>450 M</td><td>250 M</td><td>200 M</td></tr>
+          <tr><td>Réserve de trésorerie</td><td>—</td><td>620 M</td><td>—</td></tr>
+          <tr class="total"><td>Total</td><td>8 138 M</td><td>1 800 M</td><td>6 958 M</td></tr>
+        </tbody>
+      </table>
+      <p class="chart-note">Sur un besoin cumulé de 8,1 Mds FCFA de charges et de fonds de roulement sur 5 ans, 1,8 Md (22 %) provient de la levée et 6,96 Mds (78 %) est autofinancé par les revenus d'exploitation générés en cours de route, essentiellement à partir de l'Année 3.</p>
+    </section>
+
+    <section id="rendement">
+      <div class="kicker">08 — RENDEMENT INVESTISSEUR</div>
+      <h2>Un scénario prudent, pas une promesse</h2>
+      <p class="lead">Méthode : multiple du revenu Année 2 pour la valorisation d'entrée, multiple du revenu Année 5 pour la sortie. Ces multiples ne sont pas recoupés avec des transactions comparables en temps réel — à valider avant toute négociation.</p>
+
+      <h3>Valorisation à l'entrée</h3>
+      <table class="valuation-table">
+        <thead><tr><th></th><th>Bas</th><th>Haut</th></tr></thead>
+        <tbody>
+          <tr><td>Revenu Année 2 (base)</td><td>475 M FCFA</td><td>475 M FCFA</td></tr>
+          <tr><td>Multiple appliqué</td><td>6x</td><td>10x</td></tr>
+          <tr class="total"><td>Valorisation pré-money</td><td>2 850 M FCFA</td><td>4 750 M FCFA</td></tr>
+          <tr><td>+ Levée</td><td>1 800 M FCFA</td><td>1 800 M FCFA</td></tr>
+          <tr class="total"><td>Valorisation post-money</td><td>4 650 M FCFA</td><td>6 550 M FCFA</td></tr>
+          <tr><td>% détenu par ce tour</td><td>38,7 %</td><td>27,5 %</td></tr>
+        </tbody>
+      </table>
+      <p class="chart-note">Point médian retenu : pré-money ≈3,8 Md FCFA, post-money ≈5,6 Md FCFA, soit environ <strong>32 %</strong> détenus par les investisseurs de ce tour.</p>
+
+      <h3>Scénario de sortie à 5 ans</h3>
+      <table class="valuation-table">
+        <thead><tr><th></th><th>Bas</th><th>Haut</th></tr></thead>
+        <tbody>
+          <tr><td>Revenu Année 5</td><td>11 124 M FCFA</td><td>11 124 M FCFA</td></tr>
+          <tr><td>Multiple de sortie (conservateur)</td><td>3x</td><td>5x</td></tr>
+          <tr class="total"><td>Valeur d'entreprise à la sortie</td><td>33 372 M FCFA</td><td>55 620 M FCFA</td></tr>
+          <tr><td>Dilution supposée (tours ultérieurs)</td><td colspan="2" style="text-align:center;">32 % → ~20 %</td></tr>
+          <tr class="total"><td>Valeur de la participation de ce tour</td><td>6 674 M FCFA</td><td>11 124 M FCFA</td></tr>
+          <tr class="total"><td>Multiple de retour</td><td>3,7x</td><td>6,2x</td></tr>
+          <tr><td>TRI implicite (5 ans)</td><td>≈30 %</td><td>≈44 %</td></tr>
+        </tbody>
+      </table>
+      <p class="chart-note">Scénario délibérément prudent : multiple de sortie bas (3-5x, pas 8-10x), deux tours de dilution intermédiaires supposés, EBITDA Année 5 non capitalisé à sa pleine valeur. Un ordre de grandeur cohérent avec le plan d'activité de la section 06, à affiner avec des comparables de marché réels au moment de la négociation.</p>
+    </section>
+
+    <section id="acquisition">
+      <div class="kicker">09 — ACQUISITION &amp; AVANTAGE CONCURRENTIEL</div>
+      <h2>Des boucles de viralité intégrées au produit, pas au marketing</h2>
+      <p>Les concurrents (Airtel Money, Moov Money, solutions de paiement classiques) dépensent des fortunes pour recruter client par client. Mongain casse ce modèle, et le CAC modélisé (section 06) baisse de 2 500 FCFA en Année 1 à 800 FCFA en Année 5 à mesure que ces boucles prennent le relais :</p>
+      <ul class="plain">
+        <li><strong>Viralité par la Caisse Commune / Tontine</strong> — un chef de famille qui ouvre une caisse pour un mariage (50 invités) contraint mécaniquement ces 50 personnes à télécharger l'application pour y verser leur participation en toute transparence.</li>
+        <li><strong>Viralité par le Compte Enfant</strong> — chaque compte parent peut générer plusieurs comptes enfant réels et actifs au sein du même foyer : un multiplicateur d'utilisateurs actifs, et un ancrage émotionnel qui réduit le churn du compte parent.</li>
+        <li><strong>Onboarding marchand à friction quasi nulle</strong> — un logiciel de caisse gratuit et immédiatement utile, pas la promesse de devenir « agent ».</li>
+        <li><strong>Profondeur produit comme barrière à la sortie</strong> — épargne, tontine, compte enfant, crédit : le coût de migration vers un concurrent mono-produit devient prohibitif.</li>
+      </ul>
+    </section>
+
+    <section id="conformite">
+      <div class="kicker">10 — INFRASTRUCTURE DE CONFORMITÉ</div>
+      <h2>Un atout commercial, pas une contrainte a posteriori</h2>
+      <p>Contrairement à une startup qui construit sa conformité sous la pression d'un régulateur, Mongain l'a bâtie dès le socle :</p>
+      <ul class="plain">
+        <li>Moteur de plafonds hiérarchisés par palier KYC (50 000 / 2 000 000 / 5 000 000 FCFA par jour), plus un plafond réglementaire absolu non contournable.</li>
+        <li>Détection algorithmique de vélocité anormale (signature de smurfing/structuration), gel automatique et journal d'audit complet.</li>
+        <li>Verrouillage biométrique et protection anti-brute-force progressive sur chaque code PIN.</li>
+        <li>Matrice de droits (RBAC) granulaire côté agences, avec circuits d'approbation à double contrôle (<em>maker/checker</em>) sur les opérations sensibles.</li>
+      </ul>
+      <p>C'est un argument direct auprès des banques partenaires et des régulateurs CEMAC/COBAC : Mongain n'est pas qu'une expérience utilisateur agréable, c'est une infrastructure déjà pensée pour l'agrément.</p>
+      <div class="callout">
+        <span class="tag">Point de vigilance</span>
+        <p>Aucun cadre légal ne définit aujourd'hui la capacité d'un mineur à détenir un compte e-money en son nom propre dans la zone CEMAC — un sujet à clarifier avec le régulateur et/ou un conseil juridique avant toute communication publique élargie sur le Compte Enfant.</p>
+      </div>
+    </section>
+
+    <section id="roadmap">
+      <div class="kicker">11 — ROADMAP</div>
+      <h2>Calendrier de déblocage aligné sur le plan financier</h2>
+      <ul class="plain">
+        <li><strong>Phase 1 — Socle produit (réalisée).</strong> Core banking, Tontines/Caisses Communes, RBAC agences, micro-crédit/BNPL, staking, back-office de conformité complet, et Comptes Enfant avec supervision parentale.</li>
+        <li><strong>Année 1-2 — Passerelle Mobile Money &amp; factures.</strong> Négociation commerciale et intégration technique avec Airtel/Moov (priorité n°1 d'usage des fonds), puis paiement de factures (SEEG, Canal+, eau) et recharge de crédit sur le même rail. Déploiement du réseau d'agents (150 → 500) et lancement social B2C ciblant groupes familiaux, associations et écoles.</li>
+        <li><strong>Année 3 — Cartes &amp; remises internationales.</strong> Partenariat émetteur de cartes/sponsor BIN et partenaire de remise de fonds ; l'EBITDA bascule positif (33 % de marge).</li>
+        <li><strong>Année 4-5 — Crypto &amp; extension régionale.</strong> Activation mesurée de l'achat de crypto-actifs (pondération volontairement faible) et réplication du modèle vers un ou deux marchés CEMAC limitrophes, une fois la conformité réglementaire et la traction gabonaise validées.</li>
+      </ul>
+    </section>
+
+    <section id="conclusion">
+      <div class="kicker">12 — CONCLUSION</div>
+      <div class="closing">
+        <h2>Financer un produit en état de marche, pas un pari sur un prototype</h2>
+        <p>Mongain n'est pas un système de paiement de plus : c'est une plateforme financière complète, déjà construite et fonctionnelle, sur un marché où la base mobile money active croît de 26 à 33 % par an et où aucun concurrent financé n'opère de super-app communautaire.</p>
+        <p>1,8 milliard FCFA couvre le creux de trésorerie jusqu'à l'Année 3, finance l'activation des passerelles Mobile Money, factures et cartes, et laisse une réserve de sécurité de 9 mois — pour un scénario de retour estimé entre 3,7x et 6,2x sur 5 ans. Financer Mongain, c'est financer l'infrastructure digitale des dix prochaines années d'échanges intra-africains.</p>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  var wrap = document.querySelectorAll('.chart-svg-wrap')[0];
+  if(!wrap) return;
+  var svg = wrap.querySelector('svg');
+  var crosshair = document.getElementById('p5Crosshair');
+  var tooltip = document.getElementById('p5Tooltip');
+  var ty = document.getElementById('p5TooltipYear');
+  var tr = document.getElementById('p5TooltipRev');
+  var te = document.getElementById('p5TooltipEb');
+  var cols = svg.querySelectorAll('.hit-col');
+  var VBOX_W = 680;
+
+  function show(rect){
+    var cx = parseFloat(rect.getAttribute('data-cx'));
+    crosshair.setAttribute('x1', cx);
+    crosshair.setAttribute('x2', cx);
+    crosshair.style.opacity = '1';
+    ty.textContent = rect.getAttribute('data-year');
+    tr.textContent = 'Revenu : ' + rect.getAttribute('data-rev');
+    te.textContent = 'EBITDA : ' + rect.getAttribute('data-eb');
+    var rectBox = wrap.getBoundingClientRect();
+    var scale = rectBox.width / VBOX_W;
+    tooltip.style.left = (cx * scale) + 'px';
+    tooltip.style.top = '90px';
+    tooltip.style.opacity = '1';
+  }
+  function hide(){
+    crosshair.style.opacity = '0';
+    tooltip.style.opacity = '0';
+  }
+  cols.forEach(function(rect){
+    rect.addEventListener('pointerenter', function(){ show(rect); });
+    rect.addEventListener('pointermove', function(){ show(rect); });
+    rect.addEventListener('focus', function(){ show(rect); });
+  });
+  svg.addEventListener('pointerleave', hide);
+  svg.addEventListener('focusout', hide);
+})();
+</script>
+
+<footer class="doc">
+  <div class="wrap">
+    <p>Mongain — Plan d'affaires · Document confidentiel destiné aux partenaires et investisseurs.</p>
+    <p>Modèle financier et données de marché préparés le 13/09/2026 ; à recouper avec des données de marché à jour avant toute négociation finale.</p>
+  </div>
+</footer>

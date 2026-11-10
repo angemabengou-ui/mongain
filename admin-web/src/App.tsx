@@ -12,6 +12,7 @@ import CryptoAdmin from './CryptoAdmin';
 import Dashboard from './Dashboard';
 import DevPortal from './DevPortal';
 import ErrorLogs from './ErrorLogs';
+import GiantsOverview from './GiantsOverview';
 import KycMod from './KycMod';
 import Ledger from './Ledger';
 import Login from './Login';
@@ -165,6 +166,15 @@ export default function App() {
         // ne connaissait pas déjà l'identifiant d'onglet exact.
         { id: 'b2b-hub', label: 'Espace B2B', reqPerms: ['perm_merchant_view'] },
         { id: 'dev-portal', label: 'Portail Développeur', reqPerms: ['perm_merchant_view'] },
+      ]
+    },
+
+    // 2b. SUPERVISION MARCHANDS — Vue présidentielle des grands marchands
+    {
+      id: 'supervision-marchands', label: 'SUPERVISION MARCHANDS', icon: <Store size={18} />,
+      reqPerms: ['perm_analytics_view'],
+      items: [
+        { id: 'giants-overview', label: '👑 Dashboard Président', reqPerms: ['perm_analytics_view'] },
       ]
     },
 
@@ -375,6 +385,7 @@ export default function App() {
           {activeTab === 'vaults' && hasPerm(['perm_vault_view']) && <Vaults token={token} hasPerm={hasPerm} initialSelectedId={searchTarget?.tab === 'vaults' ? searchTarget.id : undefined} />}
           {activeTab === 'tontines' && hasPerm(['perm_tontine_view']) && <Tontines token={token} hasPerm={hasPerm} initialSelectedId={searchTarget?.tab === 'tontines' ? searchTarget.id : undefined} />}
           {activeTab === 'merchants' && hasPerm(['perm_merchant_view']) && <Merchants token={token} hasPerm={hasPerm} initialSelectedId={searchTarget?.tab === 'merchants' ? searchTarget.id : undefined} />}
+          {activeTab === 'giants-overview' && hasPerm(['perm_analytics_view']) && <GiantsOverview token={token} hasPerm={hasPerm} />}
 
           {activeTab === 'reclamations' && hasPerm(['perm_ticket_view', 'perm_ticket_resolve']) && <SupportCenter token={token} hasPerm={hasPerm} staffId={staffId} />}
           {activeTab === 'branch-dash' && hasPerm(['perm_branch_view']) && <BranchDashboard token={token} hasPerm={hasPerm} onNavigateToTreasury={hasPerm(['perm_treasury_view']) ? () => setActiveTab('treasury') : undefined} />}
@@ -408,6 +419,7 @@ export default function App() {
             // s'affichait EN PLUS du contenu réel dès que l'un de ces 8 onglets était actif.
             'system-monitor', 'push-center', 'risk-scoring', 'virtual-cards', 'crypto-desk',
             'b2b-hub', 'dev-portal', 'wealth-manager',
+            'giants-overview',
           ].includes(activeTab) && (
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Configuration demandée non disponible avec vos droits d'accès.</div>
             )}
