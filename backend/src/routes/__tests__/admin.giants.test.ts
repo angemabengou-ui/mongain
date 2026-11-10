@@ -44,7 +44,13 @@ const GIANT = {
 
 function mockRevenue() {
     (prisma.user.findMany as jest.Mock).mockResolvedValue([GIANT]);
-    (prisma.transaction.groupBy as jest.Mock).mockImplementation(({ by }: { by: string[] }) => {
+    (prisma.transaction.groupBy as jest.Mock).mockImplementation(({ by, _max }: { by: string[]; _max?: unknown }) => {
+        if (_max) {
+            return Promise.resolve([
+                { senderWalletId: 'wm1', receiverWalletId: 'wg1', _max: { createdAt: new Date('2026-11-02') } },
+                { senderWalletId: 'wm2', receiverWalletId: 'wg1', _max: { createdAt: new Date('2026-08-15') } },
+            ]);
+        }
         if (by.length === 2) {
             return Promise.resolve([{ senderWalletId: 'wm1', receiverWalletId: 'wg1', _sum: { amount: 5000 }, _count: { _all: 1 } }]);
         }
@@ -91,6 +97,11 @@ describe('Admin Giants Routes (Dashboard Président)', () => {
                 taxCount: 1,
                 otherIn: 100000,
             });
+            expect(res.body.unpaid).toEqual([{
+                affiliationId: 'a2', name: 'Boutique B', phone: '+24177000003', expectedAmount: 3000,
+                expectedFrequency: 'MONTHLY', lastPaymentAt: new Date('2026-08-15').toISOString(),
+                giant: { id: 'g1', name: 'Mairie' },
+            }]);
             // Aucune donnée de sortie ni technique ne doit sortir de cette route.
             expect(Object.keys(res.body.giants[0]).sort()).toEqual(
                 ['affiliateCount', 'id', 'inCount', 'lateCount', 'name', 'otherIn', 'phone', 'taxCount', 'taxIn', 'totalIn']);

@@ -79,7 +79,7 @@ async function computeGiantRevenue(giantIds: string[] | null, period: Period, ti
     const weekStart = startOfWeekInTimezone(timezone);
     const windowStart = monthStart < weekStart ? monthStart : weekStart;
 
-    const [inflows, taxPairs, recentTaxTxs] = giantWalletIds.length === 0 ? [[], [], []] : await Promise.all([
+    const [inflows, taxPairs, recentTaxTxs, lastPayments] = giantWalletIds.length === 0 ? [[], [], [], []] : await Promise.all([
         prisma.transaction.groupBy({
             by: ['receiverWalletId'],
             where: { ...inPeriod, receiverWalletId: { in: giantWalletIds } },
@@ -98,10 +98,18 @@ async function computeGiantRevenue(giantIds: string[] | null, period: Period, ti
             where: { status: 'COMPLETED', createdAt: { gte: windowStart }, receiverWalletId: { in: giantWalletIds }, senderWalletId: { in: affiliateWalletIds } },
             select: { senderWalletId: true, receiverWalletId: true, createdAt: true },
         }),
+        // Date du dernier versement de chaque affilié, toutes périodes confondues — pour dire
+        // au Président depuis quand un commerçant n'a plus rien payé.
+        affiliateWalletIds.length === 0 ? [] : prisma.transaction.groupBy({
+            by: ['senderWalletId', 'receiverWalletId'],
+            where: { status: 'COMPLETED', receiverWalletId: { in: giantWalletIds }, senderWalletId: { in: affiliateWalletIds } },
+            _max: { createdAt: true },
+        }),
     ]);
 
     const inByWallet = new Map(inflows.map(r => [r.receiverWalletId, r]));
     const taxByPair = new Map(taxPairs.map(r => [pairKey(r.senderWalletId, r.receiverWalletId), r]));
+    const lastEverByPair = new Map(lastPayments.map(r => [pairKey(r.senderWalletId, r.receiverWalletId), r._max.createdAt]));
     const lastPaidByPair = new Map<string, Date>();
     for (const t of recentTaxTxs) {
         const key = pairKey(t.senderWalletId, t.receiverWalletId);
@@ -131,6 +139,7 @@ async function computeGiantRevenue(giantIds: string[] | null, period: Period, ti
                 expectedAmount: a.expectedAmount,
                 taxPaid: tax?._sum.amount || 0,
                 taxCount: tax?._count._all || 0,
+                lastPaymentAt: (key && lastEverByPair.get(key)) || null,
                 compliance,
             };
         });
@@ -184,6 +193,19 @@ router.get('/overview', authMiddleware, async (req: AuthRequest, res) => {
                 otherIn: sum(g => g.otherIn),
             },
             giants: giants.map(({ affiliates, walletId, ...g }) => g),
+            // Tous les commerçants affiliés qui n'ont pas encore payé leur période en cours,
+            // tous grands commerçants confondus.
+            unpaid: giants.flatMap(g => g.affiliates
+                .filter(a => a.compliance === 'LATE')
+                .map(a => ({
+                    affiliationId: a.affiliationId,
+                    name: a.name,
+                    phone: a.phone,
+                    expectedAmount: a.expectedAmount,
+                    expectedFrequency: a.expectedFrequency,
+                    lastPaymentAt: a.lastPaymentAt,
+                    giant: { id: g.id, name: g.name },
+                }))),
         });
     } catch (e: any) {
         res.status(500).json({ error: friendlyErrorMessage(e) });
