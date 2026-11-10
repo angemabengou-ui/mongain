@@ -1303,7 +1303,7 @@ router.post('/staff', authMiddleware, async (req: AuthRequest, res) => {
             email: z.string().email(),
             name: z.string().min(2),
             password: z.string().min(6),
-            role: z.enum(['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER', 'BRANCH_MANAGER', 'TELLER']),
+            role: z.enum(['SUPER_ADMIN', 'PRESIDENT', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER', 'BRANCH_MANAGER', 'TELLER']),
             matricule: z.string().min(2),
             cni: z.string().min(2),
             phone: z.string().min(8),
@@ -1385,7 +1385,7 @@ router.put('/staff/:id/approve', authMiddleware, async (req: AuthRequest, res) =
     }
 });
 
-const STAFF_ROLES = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER', 'BRANCH_MANAGER', 'TELLER'];
+const STAFF_ROLES = ['SUPER_ADMIN', 'PRESIDENT', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER', 'BRANCH_MANAGER', 'TELLER'];
 
 router.put('/staff/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {

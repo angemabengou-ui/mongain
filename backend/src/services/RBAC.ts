@@ -47,6 +47,7 @@ export const ALL_PERMISSIONS = [
     // ── Marchands ──────────────────────────────────────────────────────────
     'perm_merchant_view',           // Voir les comptes marchands (soldes, transactions, demandes)
     'perm_merchant_manage',         // Approuver/rejeter une demande de retrait marchand
+    'perm_president_view',          // Voir les recettes des grands commerçants (Dashboard Président)
     // ── Marketplace C2C ──────────────────────────────────────────────────────
     'perm_market_view',             // Voir les annonces et séquestres marketplace (lecture admin)
     'perm_market_manage',           // Trancher un séquestre bloqué (livrer au vendeur / rembourser l'acheteur)
@@ -83,6 +84,9 @@ export type Permission = typeof ALL_PERMISSIONS[number];
 export const ROLE_DEFAULT_PERMISSIONS: Record<string, Permission[]> = {
     SUPER_ADMIN: [...ALL_PERMISSIONS], // Accès total
     ADMIN: [...ALL_PERMISSIONS],       // Tolérance pour les anciens comptes non migrés
+    // Président : uniquement les recettes des grands commerçants — aucun menu technique
+    // (trésorerie, KYC, paramètres, logs...) ne doit lui apparaître.
+    PRESIDENT: ['perm_president_view'],
 
     BRANCH_MANAGER: [
         'perm_customer_view',
@@ -245,7 +249,7 @@ export const PERMISSION_GROUPS: { label: string; perms: Permission[] }[] = [
     },
     {
         label: 'Marchands',
-        perms: ['perm_merchant_view', 'perm_merchant_manage'],
+        perms: ['perm_merchant_view', 'perm_merchant_manage', 'perm_president_view'],
     },
     {
         label: 'Marketplace C2C',

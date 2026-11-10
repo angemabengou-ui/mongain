@@ -27,7 +27,7 @@ export default function Login({ setToken }: { setToken: (token: string, role: st
             throw new Error("Réponse du serveur inattendue pour cette version du portail. Rafraîchissez la page (Ctrl+Maj+R) ; si le problème persiste après ça, le portail et le serveur ne sont probablement pas sur la même version — contactez le support technique.");
         }
 
-        const allowedRoles = ['SUPER_ADMIN', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER', 'BRANCH_MANAGER', 'TELLER'];
+        const allowedRoles = ['SUPER_ADMIN', 'PRESIDENT', 'RISK', 'COMPLIANCE_CHECKER', 'SUPPORT_MAKER', 'BRANCH_MANAGER', 'TELLER'];
         if (!allowedRoles.includes(data.user.role)) {
             throw new Error(`Accès refusé. Expulsé par le portail Corporate.`);
         }

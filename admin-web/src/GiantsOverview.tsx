@@ -1,72 +1,56 @@
 import { useEffect, useMemo, useState } from 'react';
 import { API_URL } from './config';
 
-// Supervision Président : entrées / sorties / taxes de tous les grands commerçants.
-// Données : backend/src/routes/admin.giants.ts (GET /api/admin/giants/overview et /:id).
+// Dashboard Président : recettes (argent qui entre) de tous les grands commerçants.
+// Données : backend/src/routes/admin.giants.ts — volontairement sans sorties, frais, soldes ni
+// détails techniques de transaction.
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 interface Totals {
     giantCount: number;
     affiliateCount: number;
+    lateCount: number;
+    totalIn: number;
+    inCount: number;
     taxIn: number;
     taxCount: number;
     otherIn: number;
-    totalIn: number;
-    totalOut: number;
-    feesOut: number;
-    net: number;
-    balance: number;
-    lateCount: number;
-    complianceRate: number | null;
 }
 
 interface GiantRow {
     id: string;
     name: string;
     phone: string;
-    accountStatus: string;
-    balance: number;
     affiliateCount: number;
     lateCount: number;
+    totalIn: number;
+    inCount: number;
     taxIn: number;
     taxCount: number;
     otherIn: number;
-    totalIn: number;
-    inCount: number;
-    totalOut: number;
-    feesOut: number;
-    outCount: number;
-    net: number;
 }
 
 interface Affiliate {
     affiliationId: string;
     name: string;
     phone: string;
-    accountStatus: string;
     expectedFrequency: 'MONTHLY' | 'WEEKLY' | null;
     expectedAmount: number | null;
-    autoPayEnabled: boolean;
     taxPaid: number;
-    taxCount: number;
     compliance: 'OK' | 'LATE' | null;
 }
 
-interface Movement {
+interface Payment {
     id: string;
     date: string;
-    direction: 'IN' | 'OUT';
-    category: 'TAX' | 'IN' | 'OUT';
-    type: string;
     amount: number;
-    fee: number;
-    reference: string;
-    counterparty: { name: string; phone: string } | null;
+    isTax: boolean;
+    payer: { name: string; phone: string } | null;
 }
 
 interface GiantDetail {
     giant: GiantRow & { affiliates: Affiliate[] };
-    movements: Movement[];
+    payments: Payment[];
     truncated: boolean;
 }
 
@@ -82,48 +66,36 @@ const PRESETS: Array<{ label: string; from: () => string }> = [
     { label: 'Cette année', from: () => dayStr(new Date(new Date().getFullYear(), 0, 1)) },
 ];
 
-const CATEGORY_LABEL: Record<Movement['category'], string> = { TAX: 'Taxe', IN: 'Entrée', OUT: 'Sortie' };
-const FREQ_LABEL: Record<string, string> = { MONTHLY: 'Mensuelle', WEEKLY: 'Hebdomadaire' };
-
-function downloadCsv(filename: string, header: string[], rows: Array<Array<string | number>>) {
-    const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
-    const csv = [header, ...rows].map(r => r.map(esc).join(';')).join('\r\n');
-    const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-}
+const FREQ_LABEL: Record<string, string> = { MONTHLY: 'par mois', WEEKLY: 'par semaine' };
 
 const card: React.CSSProperties = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12 };
 const th: React.CSSProperties = { padding: '10px 12px', textAlign: 'left', fontSize: 12, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5, whiteSpace: 'nowrap' };
-const td: React.CSSProperties = { padding: '10px 12px', whiteSpace: 'nowrap' };
+const td: React.CSSProperties = { padding: '12px', whiteSpace: 'nowrap' };
 const num: React.CSSProperties = { ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
 const btn: React.CSSProperties = { background: 'var(--bg-card)', border: '1px solid var(--border)', color: 'var(--text-primary)', borderRadius: 8, padding: '6px 12px', cursor: 'pointer' };
 
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
     return (
-        <div style={{ ...card, padding: '18px 22px', flex: '1 1 180px', minWidth: 170 }}>
+        <div style={{ ...card, padding: '18px 22px', flex: '1 1 200px', minWidth: 190 }}>
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: color || 'var(--text-primary)' }}>{value}</div>
-            {sub && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>{sub}</div>}
+            <div style={{ fontSize: 26, fontWeight: 700, color: color || 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+            {sub && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{sub}</div>}
         </div>
     );
 }
 
-function ComplianceBadge({ value }: { value: Affiliate['compliance'] }) {
+function PaidBadge({ value }: { value: Affiliate['compliance'] }) {
     if (value === null) return <span style={{ color: 'var(--text-secondary)' }}>—</span>;
     const ok = value === 'OK';
     return (
-        <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 600, background: ok ? 'var(--success-bg)' : 'var(--danger-bg)', color: ok ? 'var(--success)' : 'var(--danger)' }}>
-            {ok ? 'À jour' : 'En retard'}
+        <span style={{ padding: '2px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, background: ok ? 'var(--success-bg)' : 'var(--danger-bg)', color: ok ? 'var(--success)' : 'var(--danger)' }}>
+            {ok ? 'A payé' : 'Pas encore payé'}
         </span>
     );
 }
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
-export default function GiantsOverview({ token, hasPerm }: { token: string | null; hasPerm: (p?: string[]) => boolean }) {
+export default function GiantsOverview({ token }: { token: string | null; hasPerm?: (p?: string[]) => boolean }) {
     const [from, setFrom] = useState(PRESETS[0].from());
     const [to, setTo] = useState(today());
     const [totals, setTotals] = useState<Totals | null>(null);
@@ -135,9 +107,7 @@ export default function GiantsOverview({ token, hasPerm }: { token: string | nul
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [detail, setDetail] = useState<GiantDetail | null>(null);
     const [loadingDetail, setLoadingDetail] = useState(false);
-    const [mvFilter, setMvFilter] = useState<'ALL' | Movement['category']>('ALL');
 
-    const canViewDetail = hasPerm(['perm_merchant_view']);
     const query = `from=${from}&to=${to}`;
 
     useEffect(() => {
@@ -184,60 +154,53 @@ export default function GiantsOverview({ token, hasPerm }: { token: string | nul
                     {p.label}
                 </button>
             ))}
-            <input type="date" value={from} max={to} onChange={e => setFrom(e.target.value)} style={btn} />
-            <span style={{ color: 'var(--text-secondary)' }}>→</span>
-            <input type="date" value={to} min={from} onChange={e => setTo(e.target.value)} style={btn} />
+            <input type="date" value={from} max={to} onChange={e => setFrom(e.target.value)} style={btn} aria-label="Du" />
+            <span style={{ color: 'var(--text-secondary)' }}>au</span>
+            <input type="date" value={to} min={from} onChange={e => setTo(e.target.value)} style={btn} aria-label="Au" />
         </div>
     );
 
-    // ── VUE DÉTAIL D'UN GRAND COMMERÇANT ─────────────────────────────────────
+    // ── RECETTES D'UN GRAND COMMERÇANT ───────────────────────────────────────
     if (selectedId) {
         const g = detail?.giant;
-        const movements = (detail?.movements || []).filter(m => mvFilter === 'ALL' || m.category === mvFilter);
         return (
             <div style={{ padding: 24 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
-                    <button style={btn} onClick={() => { setSelectedId(null); setMvFilter('ALL'); }}>← Tous les grands commerçants</button>
+                    <button style={btn} onClick={() => setSelectedId(null)}>← Tous les grands commerçants</button>
                     {periodBar}
                 </div>
                 {error && <div style={{ color: 'var(--danger)', marginBottom: 16 }}>{error}</div>}
                 {loadingDetail && !g ? <div style={{ color: 'var(--text-secondary)' }}>Chargement…</div> : g && (
                     <>
-                        <div style={{ marginBottom: 20 }}>
-                            <h2 style={{ margin: 0 }}>{g.name}</h2>
-                            <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>{g.phone} · Grand commerçant · {g.accountStatus}</div>
-                        </div>
+                        <h2 style={{ margin: '0 0 20px' }}>{g.name}</h2>
 
                         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24 }}>
-                            <StatCard label="Taxes perçues" value={fmt(g.taxIn)} sub={`${g.taxCount} paiement(s)`} color="var(--success)" />
-                            <StatCard label="Autres entrées" value={fmt(g.otherIn)} />
-                            <StatCard label="Sorties" value={fmt(g.totalOut)} sub={`${g.outCount} opération(s) · frais ${fmt(g.feesOut)}`} color="var(--danger)" />
-                            <StatCard label="Solde net période" value={fmt(g.net)} color={g.net >= 0 ? 'var(--success)' : 'var(--danger)'} />
-                            <StatCard label="Solde wallet actuel" value={fmt(g.balance)} />
+                            <StatCard label="Recettes de la période" value={fmt(g.totalIn)} sub={`${g.inCount} paiement(s) reçu(s)`} color="var(--success)" />
+                            <StatCard label="Dont taxes des affiliés" value={fmt(g.taxIn)} sub={`${g.taxCount} versement(s)`} />
+                            <StatCard label="Autres encaissements" value={fmt(g.otherIn)} />
                         </div>
 
                         <div style={{ ...card, marginBottom: 24 }}>
                             <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>
-                                Affiliés ({g.affiliates.length}) — {g.lateCount} en retard sur leur période en cours
+                                Marchands affiliés ({g.affiliates.length}){g.lateCount > 0 && <span style={{ color: 'var(--danger)', fontWeight: 500 }}> — {g.lateCount} n'ont pas encore payé</span>}
                             </div>
                             <div style={{ overflowX: 'auto' }}>
                                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                     <thead><tr style={{ background: 'var(--bg-secondary)' }}>
-                                        <th style={th}>Marchand</th><th style={th}>Téléphone</th><th style={{ ...th, textAlign: 'right' }}>Taxe payée (période)</th>
-                                        <th style={{ ...th, textAlign: 'right' }}>Montant attendu</th><th style={th}>Fréquence</th><th style={th}>Prélèvement auto</th><th style={th}>Conformité</th>
+                                        <th style={th}>Marchand</th>
+                                        <th style={{ ...th, textAlign: 'right' }}>Versé sur la période</th>
+                                        <th style={{ ...th, textAlign: 'right' }}>Montant attendu</th>
+                                        <th style={th}>Ce mois / cette semaine</th>
                                     </tr></thead>
                                     <tbody>
                                         {g.affiliates.length === 0 ? (
-                                            <tr><td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--text-secondary)' }}>Aucun affilié actif</td></tr>
+                                            <tr><td colSpan={4} style={{ ...td, textAlign: 'center', color: 'var(--text-secondary)' }}>Aucun marchand affilié</td></tr>
                                         ) : g.affiliates.map(a => (
                                             <tr key={a.affiliationId} style={{ borderTop: '1px solid var(--border)' }}>
-                                                <td style={{ ...td, fontWeight: 600 }}>{a.name}</td>
-                                                <td style={{ ...td, color: 'var(--text-secondary)' }}>{a.phone}</td>
-                                                <td style={num}>{fmt(a.taxPaid)}</td>
-                                                <td style={num}>{a.expectedAmount ? fmt(a.expectedAmount) : '—'}</td>
-                                                <td style={td}>{a.expectedFrequency ? FREQ_LABEL[a.expectedFrequency] : '—'}</td>
-                                                <td style={td}>{a.autoPayEnabled ? 'Oui' : 'Non'}</td>
-                                                <td style={td}><ComplianceBadge value={a.compliance} /></td>
+                                                <td style={td}><div style={{ fontWeight: 600 }}>{a.name}</div><div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{a.phone}</div></td>
+                                                <td style={{ ...num, fontWeight: 600 }}>{fmt(a.taxPaid)}</td>
+                                                <td style={num}>{a.expectedAmount ? `${fmt(a.expectedAmount)} ${a.expectedFrequency ? FREQ_LABEL[a.expectedFrequency] : ''}` : '—'}</td>
+                                                <td style={td}><PaidBadge value={a.compliance} /></td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -246,38 +209,23 @@ export default function GiantsOverview({ token, hasPerm }: { token: string | nul
                         </div>
 
                         <div style={card}>
-                            <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                <span style={{ fontWeight: 600, marginRight: 'auto' }}>Mouvements du wallet ({detail!.movements.length}{detail!.truncated ? '+, liste tronquée' : ''})</span>
-                                {(['ALL', 'TAX', 'IN', 'OUT'] as const).map(f => (
-                                    <button key={f} style={{ ...btn, ...(mvFilter === f ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : {}) }} onClick={() => setMvFilter(f)}>
-                                        {f === 'ALL' ? 'Tout' : f === 'TAX' ? 'Taxes' : f === 'IN' ? 'Autres entrées' : 'Sorties'}
-                                    </button>
-                                ))}
-                                <button style={btn} onClick={() => downloadCsv(`mouvements_${g.name}_${from}_${to}.csv`,
-                                    ['Date', 'Catégorie', 'Type', 'Contrepartie', 'Téléphone', 'Montant', 'Frais', 'Référence'],
-                                    movements.map(m => [new Date(m.date).toLocaleString('fr-FR'), CATEGORY_LABEL[m.category], m.type, m.counterparty?.name || '', m.counterparty?.phone || '', m.direction === 'IN' ? m.amount : -m.amount, m.fee, m.reference]))}>
-                                    Export CSV
-                                </button>
+                            <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>
+                                Paiements reçus ({detail!.payments.length}{detail!.truncated ? ' plus récents' : ''})
                             </div>
                             <div style={{ overflowX: 'auto' }}>
                                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                     <thead><tr style={{ background: 'var(--bg-secondary)' }}>
-                                        <th style={th}>Date</th><th style={th}>Catégorie</th><th style={th}>Contrepartie</th>
-                                        <th style={{ ...th, textAlign: 'right' }}>Montant</th><th style={{ ...th, textAlign: 'right' }}>Frais</th><th style={th}>Référence</th>
+                                        <th style={th}>Date</th><th style={th}>Payé par</th><th style={th}>Nature</th><th style={{ ...th, textAlign: 'right' }}>Montant</th>
                                     </tr></thead>
                                     <tbody>
-                                        {movements.length === 0 ? (
-                                            <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: 'var(--text-secondary)' }}>Aucun mouvement sur la période</td></tr>
-                                        ) : movements.map(m => (
-                                            <tr key={m.id} style={{ borderTop: '1px solid var(--border)' }}>
-                                                <td style={td}>{new Date(m.date).toLocaleString('fr-FR')}</td>
-                                                <td style={td}>{CATEGORY_LABEL[m.category]}</td>
-                                                <td style={td}>{m.counterparty ? `${m.counterparty.name} · ${m.counterparty.phone}` : '—'}</td>
-                                                <td style={{ ...num, fontWeight: 600, color: m.direction === 'IN' ? 'var(--success)' : 'var(--danger)' }}>
-                                                    {m.direction === 'IN' ? '+' : '−'}{fmt(m.amount)}
-                                                </td>
-                                                <td style={num}>{m.fee ? fmt(m.fee) : '—'}</td>
-                                                <td style={{ ...td, color: 'var(--text-secondary)', fontSize: 12 }}>{m.reference}</td>
+                                        {detail!.payments.length === 0 ? (
+                                            <tr><td colSpan={4} style={{ ...td, textAlign: 'center', color: 'var(--text-secondary)' }}>Aucun paiement reçu sur la période</td></tr>
+                                        ) : detail!.payments.map(p => (
+                                            <tr key={p.id} style={{ borderTop: '1px solid var(--border)' }}>
+                                                <td style={td}>{new Date(p.date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</td>
+                                                <td style={td}>{p.payer ? `${p.payer.name} · ${p.payer.phone}` : '—'}</td>
+                                                <td style={td}>{p.isTax ? 'Taxe d\'un affilié' : 'Encaissement'}</td>
+                                                <td style={{ ...num, fontWeight: 600, color: 'var(--success)' }}>{fmt(p.amount)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -290,13 +238,13 @@ export default function GiantsOverview({ token, hasPerm }: { token: string | nul
         );
     }
 
-    // ── VUE D'ENSEMBLE : TOUS LES GRANDS COMMERÇANTS ─────────────────────────
+    // ── RECETTES DE TOUS LES GRANDS COMMERÇANTS ──────────────────────────────
     return (
         <div style={{ padding: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
                 <div>
-                    <h2 style={{ margin: 0 }}>Supervision Président — Grands commerçants</h2>
-                    <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Entrées, sorties et taxes perçues par chaque grand commerçant sur la période.</div>
+                    <h2 style={{ margin: 0 }}>Recettes des grands commerçants</h2>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>L'argent encaissé par chaque grand commerçant sur la période choisie.</div>
                 </div>
                 {periodBar}
             </div>
@@ -304,49 +252,40 @@ export default function GiantsOverview({ token, hasPerm }: { token: string | nul
 
             {totals && (
                 <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 24, opacity: loading ? 0.5 : 1 }}>
-                    <StatCard label="Taxes perçues" value={fmt(totals.taxIn)} sub={`${totals.taxCount} paiement(s) d'affiliés`} color="var(--success)" />
-                    <StatCard label="Entrées totales" value={fmt(totals.totalIn)} sub={`dont autres entrées ${fmt(totals.otherIn)}`} />
-                    <StatCard label="Sorties totales" value={fmt(totals.totalOut)} sub={`frais ${fmt(totals.feesOut)}`} color="var(--danger)" />
-                    <StatCard label="Solde net période" value={fmt(totals.net)} color={totals.net >= 0 ? 'var(--success)' : 'var(--danger)'} />
-                    <StatCard label="Conformité affiliés" value={totals.complianceRate === null ? '—' : `${totals.complianceRate} %`}
-                        sub={`${totals.lateCount} en retard / ${totals.affiliateCount} affiliés`} color={totals.lateCount > 0 ? 'var(--warning)' : undefined} />
-                    <StatCard label="Solde cumulé des wallets" value={fmt(totals.balance)} sub={`${totals.giantCount} grand(s) commerçant(s)`} />
+                    <StatCard label="Recettes totales" value={fmt(totals.totalIn)} sub={`${totals.inCount} paiement(s) reçu(s)`} color="var(--success)" />
+                    <StatCard label="Dont taxes des affiliés" value={fmt(totals.taxIn)} sub={`${totals.taxCount} versement(s)`} />
+                    <StatCard label="Autres encaissements" value={fmt(totals.otherIn)} />
+                    <StatCard label="Affiliés pas encore payés" value={`${totals.lateCount} / ${totals.affiliateCount}`}
+                        sub={`${totals.giantCount} grand(s) commerçant(s)`} color={totals.lateCount > 0 ? 'var(--danger)' : undefined} />
                 </div>
             )}
 
             <div style={card}>
                 <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 600, marginRight: 'auto' }}>Grands commerçants ({visibleGiants.length})</span>
-                    <input placeholder="Rechercher nom ou téléphone" value={search} onChange={e => setSearch(e.target.value)} style={{ ...btn, minWidth: 220, cursor: 'text' }} />
-                    <button style={btn} onClick={() => downloadCsv(`grands_commercants_${from}_${to}.csv`,
-                        ['Nom', 'Téléphone', 'Statut', 'Affiliés', 'En retard', 'Taxes perçues', 'Autres entrées', 'Entrées totales', 'Sorties', 'Frais', 'Net', 'Solde wallet'],
-                        visibleGiants.map(g => [g.name, g.phone, g.accountStatus, g.affiliateCount, g.lateCount, g.taxIn, g.otherIn, g.totalIn, g.totalOut, g.feesOut, g.net, g.balance]))}>
-                        Export CSV
-                    </button>
+                    <input placeholder="Rechercher un nom ou un numéro" value={search} onChange={e => setSearch(e.target.value)} style={{ ...btn, minWidth: 240, cursor: 'text' }} />
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead><tr style={{ background: 'var(--bg-secondary)' }}>
-                            <th style={th}>Grand commerçant</th><th style={th}>Statut</th><th style={{ ...th, textAlign: 'right' }}>Affiliés</th>
-                            <th style={{ ...th, textAlign: 'right' }}>Taxes perçues</th><th style={{ ...th, textAlign: 'right' }}>Autres entrées</th>
-                            <th style={{ ...th, textAlign: 'right' }}>Sorties</th><th style={{ ...th, textAlign: 'right' }}>Net</th><th style={{ ...th, textAlign: 'right' }}>Solde wallet</th>
+                            <th style={th}>Grand commerçant</th>
+                            <th style={{ ...th, textAlign: 'right' }}>Recettes</th>
+                            <th style={{ ...th, textAlign: 'right' }}>Dont taxes</th>
+                            <th style={{ ...th, textAlign: 'right' }}>Autres encaissements</th>
+                            <th style={{ ...th, textAlign: 'right' }}>Affiliés</th>
                         </tr></thead>
                         <tbody>
                             {loading && giants.length === 0 ? (
-                                <tr><td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--text-secondary)' }}>Chargement…</td></tr>
+                                <tr><td colSpan={5} style={{ ...td, textAlign: 'center', color: 'var(--text-secondary)' }}>Chargement…</td></tr>
                             ) : visibleGiants.length === 0 ? (
-                                <tr><td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--text-secondary)' }}>Aucun grand commerçant</td></tr>
+                                <tr><td colSpan={5} style={{ ...td, textAlign: 'center', color: 'var(--text-secondary)' }}>Aucun grand commerçant</td></tr>
                             ) : visibleGiants.map(g => (
-                                <tr key={g.id} onClick={canViewDetail ? () => setSelectedId(g.id) : undefined}
-                                    style={{ borderTop: '1px solid var(--border)', cursor: canViewDetail ? 'pointer' : 'default' }}>
+                                <tr key={g.id} onClick={() => setSelectedId(g.id)} style={{ borderTop: '1px solid var(--border)', cursor: 'pointer' }}>
                                     <td style={td}><div style={{ fontWeight: 600 }}>{g.name}</div><div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{g.phone}</div></td>
-                                    <td style={td}>{g.accountStatus}</td>
-                                    <td style={num}>{g.affiliateCount}{g.lateCount > 0 && <span style={{ color: 'var(--danger)' }}> ({g.lateCount} en retard)</span>}</td>
-                                    <td style={{ ...num, color: 'var(--success)', fontWeight: 600 }}>{fmt(g.taxIn)}</td>
+                                    <td style={{ ...num, fontWeight: 700, color: 'var(--success)' }}>{fmt(g.totalIn)}</td>
+                                    <td style={num}>{fmt(g.taxIn)}</td>
                                     <td style={num}>{fmt(g.otherIn)}</td>
-                                    <td style={{ ...num, color: 'var(--danger)' }}>{fmt(g.totalOut)}</td>
-                                    <td style={{ ...num, fontWeight: 600 }}>{fmt(g.net)}</td>
-                                    <td style={num}>{fmt(g.balance)}</td>
+                                    <td style={num}>{g.affiliateCount}{g.lateCount > 0 && <span style={{ color: 'var(--danger)' }}> ({g.lateCount} pas payé)</span>}</td>
                                 </tr>
                             ))}
                         </tbody>

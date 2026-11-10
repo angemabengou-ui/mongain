@@ -12,6 +12,7 @@ const ROLES = [
     { value: 'COMPLIANCE_CHECKER', label: 'Conformité' },
     { value: 'RISK', label: 'Analyste Risque' },
     { value: 'SUPPORT_MAKER', label: 'Support Client' },
+    { value: 'PRESIDENT', label: 'Président (recettes des grands commerçants uniquement)' },
     { value: 'SUPER_ADMIN', label: 'Super Administrateur' },
 ];
 
@@ -43,6 +44,7 @@ const PERM_LABELS: Record<string, string> = {
     perm_tontine_manage: 'Mettre en pause, forcer/relancer un cycle',
     perm_merchant_view: 'Voir les comptes marchands',
     perm_merchant_manage: 'Approuver/rejeter un retrait marchand',
+    perm_president_view: 'Voir les recettes des grands commerçants (Dashboard Président)',
     perm_treasury_view: 'Voir la masse monétaire globale',
     perm_treasury_mint: 'Émettre de la monnaie (Mint)',
     perm_treasury_allocate: 'Allouer des fonds à une agence',

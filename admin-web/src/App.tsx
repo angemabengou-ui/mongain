@@ -56,6 +56,7 @@ export default function App() {
 
   const defaultTabForRole = (r: string) =>
     r === 'SUPPORT_MAKER' ? 'reclamations'
+      : r === 'PRESIDENT' ? 'giants-overview'
       : ['TELLER', 'BRANCH_MANAGER'].includes(r) ? 'teller-terminal'
         : 'dashboard';
 
@@ -172,9 +173,9 @@ export default function App() {
     // 2b. SUPERVISION MARCHANDS — Vue présidentielle des grands marchands
     {
       id: 'supervision-marchands', label: 'SUPERVISION MARCHANDS', icon: <Store size={18} />,
-      reqPerms: ['perm_analytics_view'],
+      reqPerms: ['perm_president_view'],
       items: [
-        { id: 'giants-overview', label: '👑 Dashboard Président', reqPerms: ['perm_analytics_view'] },
+        { id: 'giants-overview', label: '👑 Recettes des grands commerçants', reqPerms: ['perm_president_view'] },
       ]
     },
 
@@ -246,7 +247,7 @@ export default function App() {
   ];
 
   const ROLE_LABELS: Record<string, string> = {
-    SUPER_ADMIN: 'Super Administrateur', RISK: 'Analyste Risque',
+    SUPER_ADMIN: 'Super Administrateur', PRESIDENT: 'Président', RISK: 'Analyste Risque',
     COMPLIANCE_CHECKER: 'Conformité', SUPPORT_MAKER: 'Support Client', BRANCH_MANAGER: 'Responsable d\'Agence',
     TELLER: 'Caissier'
   };
@@ -385,7 +386,7 @@ export default function App() {
           {activeTab === 'vaults' && hasPerm(['perm_vault_view']) && <Vaults token={token} hasPerm={hasPerm} initialSelectedId={searchTarget?.tab === 'vaults' ? searchTarget.id : undefined} />}
           {activeTab === 'tontines' && hasPerm(['perm_tontine_view']) && <Tontines token={token} hasPerm={hasPerm} initialSelectedId={searchTarget?.tab === 'tontines' ? searchTarget.id : undefined} />}
           {activeTab === 'merchants' && hasPerm(['perm_merchant_view']) && <Merchants token={token} hasPerm={hasPerm} initialSelectedId={searchTarget?.tab === 'merchants' ? searchTarget.id : undefined} />}
-          {activeTab === 'giants-overview' && hasPerm(['perm_analytics_view']) && <GiantsOverview token={token} hasPerm={hasPerm} />}
+          {activeTab === 'giants-overview' && hasPerm(['perm_president_view']) && <GiantsOverview token={token} hasPerm={hasPerm} />}
 
           {activeTab === 'reclamations' && hasPerm(['perm_ticket_view', 'perm_ticket_resolve']) && <SupportCenter token={token} hasPerm={hasPerm} staffId={staffId} />}
           {activeTab === 'branch-dash' && hasPerm(['perm_branch_view']) && <BranchDashboard token={token} hasPerm={hasPerm} onNavigateToTreasury={hasPerm(['perm_treasury_view']) ? () => setActiveTab('treasury') : undefined} />}
